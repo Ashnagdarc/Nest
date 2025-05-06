@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%; /* White */
+    --foreground: 240 10% 3.9%; /* Dark Gray */
+
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 240 10% 3.9%; /* Dark Gray */
+
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 240 10% 3.9%; /* Dark Gray */
+
+    --primary: 23 100% 50%; /* #ff6300 Orange */
+    --primary-foreground: 0 0% 100%; /* White */
+
+    --secondary: 210 9% 47%; /* #6C757D Gray */
+    --secondary-foreground: 0 0% 100%; /* White */
+
+    --muted: 210 40% 96.1%; /* Light Gray */
+    --muted-foreground: 215 20.2% 65.1%; /* Mid Gray */
+
+    --accent: 23 100% 95%; /* Light Orange */
+    --accent-foreground: 23 100% 40%; /* Darker Orange for text on light accent */
+
+    --destructive: 0 84.2% 60.2%; /* Red */
+    --destructive-foreground: 0 0% 98%; /* Light Gray */
+
+    --border: 214.3 31.8% 91.4%; /* Light Gray */
+    --input: 214.3 31.8% 91.4%; /* Light Gray */
+    --ring: 23 100% 50%; /* #ff6300 Orange */
+
+    --radius: 0.5rem;
+
+    --chart-1: 23 100% 50%; /* Orange */
+    --chart-2: 210 9% 47%; /* Gray */
+    --chart-3: 215 20.2% 65.1%; /* Mid Gray */
+    --chart-4: 0 84.2% 60.2%; /* Red */
+    --chart-5: 211 100% 50%; /* Blue */
+
+    --sidebar-background: 240 4.8% 95.9%; /* Very Light Gray */
+    --sidebar-foreground: 240 10% 3.9%; /* Dark Gray */
+    --sidebar-primary: 23 100% 50%; /* Orange */
+    --sidebar-primary-foreground: 0 0% 100%; /* White */
+    --sidebar-accent: 23 100% 95%; /* Light Orange Accent */
+    --sidebar-accent-foreground: 23 100% 40%; /* Darker Orange */
+    --sidebar-border: 214.3 31.8% 91.4%; /* Light Gray Border */
+    --sidebar-ring: 23 100% 50%; /* Orange Ring */
+  }
+
+  .dark {
+    --background: 240 10% 3.9%; /* Dark Gray */
+    --foreground: 0 0% 98%; /* Light Gray */
+
+    --card: 240 10% 3.9%; /* Dark Gray */
+    --card-foreground: 0 0% 98%; /* Light Gray */
+
+    --popover: 240 10% 3.9%; /* Dark Gray */
+    --popover-foreground: 0 0% 98%; /* Light Gray */
+
+    --primary: 23 100% 60%; /* Lighter Orange */
+    --primary-foreground: 23 100% 5%; /* Very Dark Orange/Brown for contrast */
+
+    --secondary: 210 9% 30%; /* Darker Gray */
+    --secondary-foreground: 0 0% 98%; /* Light Gray */
+
+    --muted: 240 3.7% 15.9%; /* Very Dark Gray */
+    --muted-foreground: 240 5% 64.9%; /* Mid Gray */
+
+    --accent: 23 100% 20%; /* Dark Orange */
+    --accent-foreground: 23 100% 70%; /* Brighter Orange for text */
+
+    --destructive: 0 62.8% 50.6%; /* Adjusted Red for dark mode */
+    --destructive-foreground: 0 0% 98%; /* Light Gray */
+
+    --border: 240 3.7% 15.9%; /* Very Dark Gray */
+    --input: 240 3.7% 15.9%; /* Very Dark Gray */
+    --ring: 23 100% 60%; /* Lighter Orange */
+
+    --chart-1: 23 100% 60%; /* Lighter Orange */
+    --chart-2: 210 9% 60%; /* Lighter Gray */
+    --chart-3: 240 5% 64.9%; /* Mid Gray */
+    --chart-4: 0 62.8% 50.6%; /* Adjusted Red */
+    --chart-5: 211 100% 60%; /* Lighter Blue */
+
+    --sidebar-background: 240 5.9% 10%; /* Darker Gray */
+    --sidebar-foreground: 0 0% 98%; /* Light Gray */
+    --sidebar-primary: 23 100% 60%; /* Lighter Orange */
+    --sidebar-primary-foreground: 23 100% 5%; /* Very Dark Orange/Brown */
+    --sidebar-accent: 23 100% 20%; /* Dark Orange Accent */
+    --sidebar-accent-foreground: 23 100% 70%; /* Brighter Orange */
+    --sidebar-border: 240 3.7% 15.9%; /* Very Dark Gray Border */
+    --sidebar-ring: 23 100% 60%; /* Lighter Orange Ring */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
