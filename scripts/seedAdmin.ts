@@ -1,13 +1,14 @@
+import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 
 // Set your admin credentials here
-const adminEmail = 'admin@yourdomain.com';
-const adminPassword = 'AdminPassword123!';
+const adminEmail = 'adira@edenoasisrealty.com';
+const adminPassword = 'Edenoasis123';
 const adminFullName = 'Admin User';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
     throw new Error('Missing Supabase environment variables');
@@ -62,5 +63,8 @@ async function insertProfile(userId: string) {
     });
     if (profileError) throw profileError;
 }
+
+console.log('URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+console.log('KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 seedAdmin(); 

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster"; // Import Toaster
 import { ReactQueryProvider } from '@/components/providers/react-query-provider'; // Import ReactQueryProvider
 import { ThemeProvider } from 'next-themes';
 import { NotificationProvider } from "@/components/notifications/NotificationProvider";
+import { SupabaseErrorBoundary } from "@/components/supabase-error-boundary";
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -32,7 +33,9 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <NotificationProvider>
             <ReactQueryProvider>
-              {children}
+              <SupabaseErrorBoundary>
+                {children}
+              </SupabaseErrorBoundary>
               <Toaster />
             </ReactQueryProvider>
           </NotificationProvider>

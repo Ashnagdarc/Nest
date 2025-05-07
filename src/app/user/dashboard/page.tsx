@@ -9,6 +9,8 @@ import UserLayout from '../layout'; // Assume UserLayout handles sidebar/header
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+// Temporarily comment out Joyride
+// import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
 
 export default function UserDashboardPage() {
   const supabase = createClient();
@@ -17,10 +19,31 @@ export default function UserDashboardPage() {
     { title: 'Overdue Gears', value: 0, icon: Clock, color: 'text-red-500', link: '/user/check-in' },
   ]);
   const [notificationCount, setNotificationCount] = useState(0);
+  // Temporarily comment out tour state
+  // const [showTour, setShowTour] = useState(false);
+  // const steps: Step[] = [
+  //   {
+  //     target: '.user-stats-cards',
+  //     content: 'See your checked out and overdue gear at a glance.',
+  //     disableBeacon: true,
+  //   },
+  //   {
+  //     target: '.user-notifications-btn',
+  //     content: 'Check your notifications here.',
+  //   },
+  //   {
+  //     target: '.user-quick-actions',
+  //     content: 'Quickly browse, request, or check-in gear.',
+  //   },
+  // ];
 
   useEffect(() => {
     fetchUserStats();
     fetchNotificationCount();
+    // Temporarily comment out tour initialization
+    // if (typeof window !== 'undefined' && !localStorage.getItem('user_dashboard_tour_done')) {
+    //   setShowTour(true);
+    // }
   }, []);
 
   async function fetchUserStats() {
@@ -70,8 +93,28 @@ export default function UserDashboardPage() {
     }),
   };
 
+  // Temporarily comment out tour callback
+  // const handleTourCallback = (data: CallBackProps) => {
+  //   const { status } = data;
+  //   if (status === 'finished' || status === 'skipped') {
+  //     setShowTour(false);
+  //     localStorage.setItem('user_dashboard_tour_done', '1');
+  //   }
+  // };
+
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
+      {/* Temporarily comment out Joyride component */}
+      {/* {showTour && (
+        <Joyride
+          steps={steps}
+          continuous
+          showSkipButton
+          showProgress
+          callback={handleTourCallback}
+          styles={{ options: { zIndex: 10000 } }}
+        />
+      )} */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -82,7 +125,7 @@ export default function UserDashboardPage() {
           User Dashboard
         </h1>
         <Link href="/user/notifications" passHref>
-          <Button variant="ghost" size="icon" className="relative">
+          <Button variant="ghost" size="icon" className="relative user-notifications-btn">
             <Bell className="h-6 w-6" />
             {notificationCount > 0 && (
               <Badge
@@ -98,7 +141,7 @@ export default function UserDashboardPage() {
       </motion.div>
 
       {/* User Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 user-stats-cards">
         {userStats.map((stat, index) => (
           <motion.div key={stat.title} custom={index} initial="hidden" animate="visible" variants={cardVariants}>
             <Link href={stat.link} passHref>
@@ -123,16 +166,17 @@ export default function UserDashboardPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4, duration: 0.5 }}
+        className="user-quick-actions"
       >
         <Card>
           <CardHeader>
             <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col sm:flex-row gap-4">
-            <Link href="/user/browse" passHref legacyBehavior>
+            <Link href="/user/browse" passHref>
               <Button className="w-full sm:w-auto">Browse & Request Gear</Button>
             </Link>
-            <Link href="/user/check-in" passHref legacyBehavior>
+            <Link href="/user/check-in">
               <Button variant="outline" className="w-full sm:w-auto">Check-in Gear</Button>
             </Link>
           </CardContent>

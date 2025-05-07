@@ -13,7 +13,6 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
-import type { Database } from '@/types/supabase';
 
 type WeeklyUsage = {
   week: string;
@@ -57,20 +56,22 @@ export default function ReportsPage() {
       .order('created_at', { ascending: true });
 
     if (!usageError && usageData) {
-      // Process usage data into weekly format
-      const weeklyData = processWeeklyData(usageData);
+      const weeklyData = (dateRange && dateRange.from && dateRange.to)
+        ? processWeeklyData(usageData, dateRange)
+        : processWeeklyData(usageData);
       setWeeklyUsage(weeklyData);
     }
 
     // Fetch popular gears
     const { data: gearData, error: gearError } = await supabase
       .from('requests')
-      .select('gear_id, gears(name)')
+      .select('gear_id, gears(name), created_at')
       .order('created_at', { ascending: false });
 
     if (!gearError && gearData) {
-      // Process gear data into popular format
-      const popularData = processPopularGears(gearData);
+      const popularData = (dateRange && dateRange.from && dateRange.to)
+        ? processPopularGears(gearData, dateRange)
+        : processPopularGears(gearData);
       setPopularGears(popularData);
     }
 
@@ -111,14 +112,46 @@ export default function ReportsPage() {
     }
   }
 
-  function processWeeklyData(data: any[]): WeeklyUsage[] {
-    // Implementation to process raw data into weekly format
-    return [];
+  function processWeeklyData(data: any[], dateRange?: DateRange): WeeklyUsage[] {
+    // Group requests by week, count requests and damages
+    const weeks: { [key: string]: { requests: number; damage: number } } = {};
+    data.forEach((item) => {
+      const date = new Date(item.created_at);
+      if (dateRange && dateRange.from && dateRange.to) {
+        if (date < dateRange.from || date > dateRange.to) return;
+      }
+      // Get week string (e.g., '2024-W23')
+      const week = `${date.getFullYear()}-W${Math.ceil(
+        (date.getTime() - new Date(date.getFullYear(), 0, 1).getTime()) / 604800000
+      )}`;
+      if (!weeks[week]) weeks[week] = { requests: 0, damage: 0 };
+      weeks[week].requests++;
+      if (item.status && item.status.toLowerCase().includes('damage')) {
+        weeks[week].damage++;
+      }
+    });
+    // Convert to array and sort by week
+    return Object.entries(weeks)
+      .map(([week, v]) => ({ week, ...v }))
+      .sort((a, b) => a.week.localeCompare(b.week));
   }
 
-  function processPopularGears(data: any[]): PopularGear[] {
-    // Implementation to process raw data into popular gears format
-    return [];
+  function processPopularGears(data: any[], dateRange?: DateRange): PopularGear[] {
+    // Count requests per gear
+    const gearCounts: { [key: string]: number } = {};
+    data.forEach((item) => {
+      const date = new Date(item.created_at);
+      if (dateRange && dateRange.from && dateRange.to) {
+        if (date < dateRange.from || date > dateRange.to) return;
+      }
+      const name = item.gears?.name || 'Unknown';
+      if (!gearCounts[name]) gearCounts[name] = 0;
+      gearCounts[name]++;
+    });
+    return Object.entries(gearCounts)
+      .map(([name, requests]) => ({ name, requests }))
+      .sort((a, b) => b.requests - a.requests)
+      .slice(0, 5);
   }
 
   const cardVariants = {
@@ -231,7 +264,7 @@ export default function ReportsPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Requests (Period)</CardTitle>
               <Package className="h-5 w-5 text-blue-500" />
             </CardHeader>
-            <CardContent><div className="text-2xl font-bold">185</div></CardContent> {/* Mock Value */}
+            <CardContent><div className="text-2xl font-bold">{weeklyUsage.reduce((sum, w) => sum + w.requests, 0)}</div></CardContent>
           </Card>
         </motion.div>
         <motion.div custom={1} initial="hidden" animate="visible" variants={cardVariants}>

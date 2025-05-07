@@ -18,11 +18,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LayoutDashboard, Search, PlusSquare, ListChecks, UploadCloud, History, Bell, Settings, LogOut, PanelLeft } from 'lucide-react';
+import { LayoutDashboard, Search, PlusSquare, ListChecks, UploadCloud, History, Bell, Settings, LogOut, PanelLeft, Calendar } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client'; // Import Supabase client
-import type { Database } from '@/types/supabase'; // Import Supabase types
 import ThemeToggle from '@/components/ThemeToggle';
 
 const userNavItems = [
@@ -31,12 +30,13 @@ const userNavItems = [
   { href: '/user/request', label: 'Request Gear', icon: PlusSquare },
   { href: '/user/my-requests', label: 'My Requests', icon: ListChecks },
   { href: '/user/check-in', label: 'Check-in Gear', icon: UploadCloud },
+  { href: '/user/calendar', label: 'Book Calendar', icon: Calendar },
   { href: '/user/history', label: 'History', icon: History },
   { href: '/user/notifications', label: 'Notifications', icon: Bell },
   { href: '/user/settings', label: 'Settings', icon: Settings },
 ];
 
-type Profile = Database['public']['Tables']['profiles']['Row']; // Type alias for profile
+type Profile = any;
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -146,9 +146,13 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
       <Sidebar>
         <SidebarHeader className="items-center justify-center p-4">
           <div className="flex items-center justify-between w-full">
-            <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary">
-              <span>GearFlow</span>
-            </Link>
+            <div className="flex items-center gap-2">
+              {/* Hamburger icon for mobile */}
+              <SidebarTrigger className="md:hidden mr-2" />
+              <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary">
+                <span>GearFlow User</span>
+              </Link>
+            </div>
             <ThemeToggle />
           </div>
         </SidebarHeader>
@@ -158,18 +162,16 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
             <SidebarMenu>
               {userNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <Link href={item.href} passHref legacyBehavior>
-                    <SidebarMenuButton
-                      isActive={pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/user/dashboard')}
-                      tooltip={item.label}
-                      asChild
-                    >
-                      <a>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </a>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SidebarMenuButton
+                    isActive={pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/user/dashboard')}
+                    tooltip={item.label}
+                    asChild
+                  >
+                    <Link href={item.href} className="flex items-center gap-2">
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
@@ -211,7 +213,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
         {/* Header for mobile view with hamburger trigger */}
         <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-background px-4 md:hidden">
           <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-primary">
-            <span>GearFlow</span>
+            <span>GearFlow User</span>
           </Link>
           <SidebarTrigger className="ml-auto" />
         </div>

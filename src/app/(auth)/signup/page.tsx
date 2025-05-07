@@ -14,7 +14,6 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client'; // Import Supabase client creation function
-import type { Database } from '@/types/supabase'; // Import Supabase types
 import dynamic from 'next/dynamic';
 
 // Dynamically import Lottie
@@ -34,7 +33,7 @@ const signupSchema = z.object({
   department: z.string().optional(),
   password: z.string().min(8, { message: 'Password must be at least 8 characters.' }),
   confirmPassword: z.string(),
-  profilePicture: z.instanceof(FileList).optional(), // Use proper type for file input
+  profilePicture: z.any().optional(), // Use any to avoid SSR FileList error
   terms: z.boolean().refine(val => val === true, { message: 'You must accept the terms and conditions.' }),
 }).refine(data => data.password === data.confirmPassword, {
   message: 'Passwords do not match.',
@@ -42,7 +41,7 @@ const signupSchema = z.object({
 });
 
 type SignupFormValues = z.infer<typeof signupSchema>;
-type ProfileInsert = Database['public']['Tables']['profiles']['Insert']; // Type alias for profile insert
+type ProfileInsert = any; // Temporary type until Database type is defined
 
 export default function SignupPage() {
   const router = useRouter();
@@ -159,8 +158,7 @@ export default function SignupPage() {
       // Use upsert to handle cases where the trigger might have been slow or failed
       const { error: profileError } = await supabase
         .from('profiles')
-        .update(profileData) // Update existing row created by trigger
-        .eq('id', authData.user.id); // Match the user ID
+        .upsert(profileData, { onConflict: 'id' });
 
       if (profileError) {
         console.error("[Signup Attempt Failed] Error updating Supabase profile:", profileError);

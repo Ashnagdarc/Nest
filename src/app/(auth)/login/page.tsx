@@ -13,14 +13,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client'; // Import Supabase client creation function
-import type { Database } from '@/types/supabase'; // Import Supabase type definitions
 import dynamic from 'next/dynamic';
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 
 // Dynamically import Lottie
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
-
-// Import Lottie animation JSON
-import successAnimation from "@/../public/animations/success.json";
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -217,7 +214,7 @@ export default function LoginPage() {
     }
   };
 
-  // Memoize the Lottie component
+  // Memoize the DotLottieReact animation component
   const SuccessAnimationComponent = useMemo(() => {
     return showSuccessAnimation ? (
       <motion.div
@@ -226,11 +223,11 @@ export default function LoginPage() {
         className="flex flex-col items-center justify-center p-10"
         style={{ minHeight: '300px' }}
       >
-        <Lottie
-          animationData={successAnimation}
-          loop={false}
+        <DotLottieReact
+          src="https://lottie.host/7b3dbab2-79c3-4502-ad70-d2ac4f2019fd/w0NcTSsIly.lottie"
+          loop
+          autoplay
           style={{ width: 150, height: 150 }}
-          aria-label="Login successful animation"
         />
         <p className="mt-4 text-lg font-semibold text-primary">Login Successful!</p>
         <p className="text-muted-foreground text-sm">Redirecting...</p>

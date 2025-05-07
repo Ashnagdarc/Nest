@@ -31,7 +31,7 @@ import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import type { Database } from '@/types/supabase';
+import { createSystemNotification } from '@/lib/notifications';
 
 // --- Dynamically import Lottie ---
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -43,12 +43,7 @@ import rejectAnimation from "@/../public/animations/reject.json";
 type StatusHistory = { status: string; timestamp: Date; note?: string }[];
 type GearDetail = { name: string; description: string; specs: string };
 
-type Request = Database['public']['Tables']['requests']['Row'] & {
-  userName: string;
-  userEmail?: string;
-  gearNames: string[];
-  statusHistory?: StatusHistory;
-};
+type Request = any;
 
 // Mock Data - Replace with actual data fetching
 // Added more diverse statuses and dates
@@ -102,58 +97,15 @@ export default function ManageRequestsPage() {
     const fetchRequests = async () => {
       setLoading(true);
       setFetchError(null);
-      const { data, error } = await supabase
-        .from('requests')
-        .select(`
-          id,
-          user_id,
-          status,
-          reason,
-          destination,
-          duration,
-          admin_notes,
-          rejection_reason,
-          requested_at,
-          approved_at,
-          checked_out_at,
-          checked_in_at,
-          due_date,
-          gears (
-            id,
-            name,
-            description,
-            specs
-          ),
-          users:profiles (
-            id,
-            full_name,
-            email
-          )
-        `)
-        .order('requested_at', { ascending: false });
-      if (error) {
-        setFetchError('Failed to fetch requests.');
-        setLoading(false);
-        return;
-      }
-      setRequests(
-        (data || []).map((r: any) => ({
-          id: r.id,
-          userName: r.users?.full_name || 'Unknown',
-          userEmail: r.users?.email,
-          gearNames: r.gears?.map((g: any) => g.name) || [],
-          requestDate: r.requested_at ? new Date(r.requested_at) : null,
-          duration: r.duration,
-          reason: r.reason,
-          destination: r.destination,
-          status: r.status,
-          adminNotes: r.admin_notes,
-          rejectionReason: r.rejection_reason,
-          checkoutDate: r.checked_out_at ? new Date(r.checked_out_at) : null,
-          dueDate: r.due_date ? new Date(r.due_date) : null,
-          checkinDate: r.checked_in_at ? new Date(r.checked_in_at) : null,
-        }))
-      );
+      // Test 1: Minimal query (id only)
+      const test1 = await supabase.from('requests').select('id').limit(1);
+      console.log('Test 1 (id only):', test1.error, test1.data);
+      // Test 2: id + user:profiles
+      const test2 = await supabase.from('requests').select('id, user:profiles (id, full_name, email)').limit(1);
+      console.log('Test 2 (user:profiles):', test2.error, test2.data);
+      // Test 3: id + profiles
+      const test3 = await supabase.from('requests').select('id, profiles (id, full_name, email)').limit(1);
+      console.log('Test 3 (profiles):', test3.error, test3.data);
       setLoading(false);
     };
     fetchRequests();
@@ -232,12 +184,11 @@ export default function ManageRequestsPage() {
     const { data: reqData } = await supabase.from('requests').select('user_id, gears(name)').eq('id', requestId).single();
     const gearNames = reqData?.gears?.map((g: any) => g.name).join(', ') || 'gear';
     // After updating request status and inserting status history
-    await supabase.from('notifications').insert({
-      user_id: reqData?.user_id,
-      type: 'request_approved',
-      content: `Your request for ${gearNames} has been approved.`,
-      link: `/user/my-requests`,
-    });
+    await createSystemNotification(
+      reqData?.user_id,
+      'Request Approved',
+      `Your request for ${gearNames} has been approved.`
+    );
     setShowAnimation({ type: 'approve', id: null });
   };
 
@@ -264,12 +215,11 @@ export default function ManageRequestsPage() {
     const { data: reqData } = await supabase.from('requests').select('user_id, gears(name)').eq('id', requestId).single();
     const gearNames = reqData?.gears?.map((g: any) => g.name).join(', ') || 'gear';
     // After updating request status and inserting status history
-    await supabase.from('notifications').insert({
-      user_id: reqData?.user_id,
-      type: 'request_rejected',
-      content: `Your request for ${gearNames} was rejected. Reason: ${rejectionReason}`,
-      link: `/user/my-requests`,
-    });
+    await createSystemNotification(
+      reqData?.user_id,
+      'Request Rejected',
+      `Your request for ${gearNames} was rejected. Reason: ${rejectionReason}`
+    );
     setShowAnimation({ type: 'reject', id: null });
   };
 
@@ -603,7 +553,7 @@ export default function ManageRequestsPage() {
                           <a href={`mailto:${selectedRequest.userEmail}`} title="Email user" className="ml-2 text-primary hover:underline flex items-center"><Mail className="h-4 w-4 mr-1" />Email</a>
                         )}
                       </div>
-                      <div><b>Gear(s):</b> {selectedRequest.gearNames.map(gear => (
+                      <div><b>Gear(s):</b> {selectedRequest.gearNames.map((gear: string) => (
                         <Popover key={gear}>
                           <PopoverTrigger asChild>
                             <Button variant="link" className="p-0 h-auto align-baseline text-primary underline text-sm">{gear}</Button>

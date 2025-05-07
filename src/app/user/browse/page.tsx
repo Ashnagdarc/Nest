@@ -130,7 +130,7 @@ export default function BrowseGearsPage() {
     >
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-bold text-foreground">Browse Gear</h1>
-        <Link href="/user/request" passHref legacyBehavior>
+        <Link href="/user/request">
           <Button>
             <PackagePlus className="mr-2 h-4 w-4" /> Request Gear
           </Button>
@@ -227,7 +227,7 @@ export default function BrowseGearsPage() {
                   {/* <Button variant="outline" size="sm" disabled>
                     <Eye className="mr-1 h-4 w-4" /> Details
                   </Button> */}
-                  <Link href={`/user/request?gearId=${gear.id}`} passHref legacyBehavior>
+                  <Link href={`/user/request?gearId=${gear.id}`}>
                     <Button size="sm" disabled={gear.status !== 'Available'}>
                       <PackagePlus className="mr-1 h-4 w-4" /> Request
                     </Button>

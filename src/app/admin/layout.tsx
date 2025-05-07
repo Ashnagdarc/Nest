@@ -18,11 +18,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Home, Package, ListChecks, UserCog, Upload, BarChart2, Settings, Bell, LogOut, PanelLeft } from 'lucide-react';
+import { Home, Package, ListChecks, UserCog, Upload, BarChart2, Settings, Bell, LogOut, PanelLeft, Calendar } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
-import type { Database } from '@/types/supabase';
 import ThemeToggle from '@/components/ThemeToggle';
 
 const adminNavItems = [
@@ -31,13 +30,14 @@ const adminNavItems = [
   { href: '/admin/manage-requests', label: 'Manage Requests', icon: ListChecks },
   { href: '/admin/manage-checkins', label: 'Manage Check-ins', icon: Upload },
   { href: '/admin/manage-users', label: 'Manage Users', icon: UserCog },
+  { href: '/admin/calendar', label: 'Book Calendar', icon: Calendar },
   { href: '/admin/announcements', label: 'Announcements', icon: Bell },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart2 },
   { href: '/admin/notifications', label: 'Notifications', icon: Bell }, // Assuming notifications exist
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
-type Profile = Database['public']['Tables']['profiles']['Row']; // Type alias for profile
+type Profile = any;
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -155,9 +155,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <Sidebar>
         <SidebarHeader className="items-center justify-center p-4">
           <div className="flex items-center justify-between w-full">
-            <Link href="/admin/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary">
-              <span>GearFlow Admin</span>
-            </Link>
+            <div className="flex items-center gap-2">
+              {/* Hamburger icon for mobile */}
+              <SidebarTrigger className="md:hidden mr-2" />
+              <Link href="/admin/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary">
+                <span>GearFlow Admin</span>
+              </Link>
+            </div>
             <ThemeToggle />
           </div>
         </SidebarHeader>
@@ -167,18 +171,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <SidebarMenu>
               {adminNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <Link href={item.href} passHref legacyBehavior>
-                    <SidebarMenuButton
-                      isActive={pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/admin/dashboard')}
-                      tooltip={item.label}
-                      asChild
-                    >
-                      <a>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </a>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SidebarMenuButton
+                    isActive={pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/admin/dashboard')}
+                    tooltip={item.label}
+                    asChild
+                  >
+                    <Link href={item.href} className="flex items-center gap-2">
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>

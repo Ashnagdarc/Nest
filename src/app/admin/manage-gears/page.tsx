@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PlusCircle, Filter, Edit, Trash2 } from 'lucide-react';
+import { PlusCircle, Filter, Edit, Trash2, Download, Upload, CheckSquare, Square, Wrench } from 'lucide-react';
 // Import Dialog components if using for Add/Edit form
 import {
   Dialog,
@@ -26,9 +26,11 @@ import AddGearForm from '@/components/admin/add-gear-form';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from "@/hooks/use-toast";
 import { createGearNotification } from '@/lib/notifications';
-import type { Database } from '@/types/supabase';
+import { QRCodeCanvas } from 'qrcode.react';
+import Papa from 'papaparse';
+import { useForm } from 'react-hook-form';
 
-type Gear = Database['public']['Tables']['gears']['Row'];
+type Gear = any;
 
 export default function ManageGearsPage() {
   const supabase = createClient();
@@ -45,6 +47,22 @@ export default function ManageGearsPage() {
     category: '',
     status: 'Available',
     serial: '',
+  });
+  const [selectedGearIds, setSelectedGearIds] = useState<string[]>([]);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [maintenanceModalOpen, setMaintenanceModalOpen] = useState(false);
+  const [selectedGear, setSelectedGear] = useState<Gear | null>(null);
+  const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>([]);
+  const [loadingMaintenance, setLoadingMaintenance] = useState(false);
+
+  // Maintenance form state and logic
+  const maintenanceForm = useForm({
+    defaultValues: {
+      status: 'Completed',
+      description: '',
+      date: new Date().toISOString().slice(0, 16), // yyyy-MM-ddTHH:mm
+    },
   });
 
   useEffect(() => {
@@ -211,6 +229,150 @@ export default function ManageGearsPage() {
     }
   };
 
+  // Handle select all
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedGearIds(filteredGears.map(g => g.id));
+    } else {
+      setSelectedGearIds([]);
+    }
+  };
+
+  // Handle select one
+  const handleSelectOne = (id: string, checked: boolean) => {
+    setSelectedGearIds(prev => checked ? [...prev, id] : prev.filter(gid => gid !== id));
+  };
+
+  // Export gears as CSV
+  const handleExport = () => {
+    const csv = Papa.unparse(gears);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'gears_export.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Import dialog handlers (logic to be implemented)
+  const handleImportDialogOpen = () => setImportDialogOpen(true);
+  const handleImportDialogClose = () => {
+    setImportDialogOpen(false);
+    setImportFile(null);
+  };
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setImportFile(e.target.files[0]);
+    }
+  };
+
+  // Import CSV logic
+  const handleImport = async () => {
+    if (!importFile) return;
+    Papa.parse(importFile, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results: Papa.ParseResult<any>) => {
+        const parsedData = results.data;
+        if (!Array.isArray(parsedData) || parsedData.length === 0) {
+          toast({ title: 'Import Error', description: 'No data found in CSV.', variant: 'destructive' });
+          return;
+        }
+        setLoading(true);
+        // Upsert (insert or update by primary key)
+        const { error } = await supabase.from('gears').upsert(parsedData, { onConflict: 'id' });
+        setLoading(false);
+        if (error) {
+          toast({ title: 'Import Error', description: error.message, variant: 'destructive' });
+        } else {
+          toast({ title: 'Import Success', description: 'Gear data imported successfully.' });
+          fetchGears();
+          handleImportDialogClose();
+        }
+      },
+      error: (err) => {
+        toast({ title: 'Import Error', description: err.message, variant: 'destructive' });
+      }
+    });
+  };
+
+  // Batch delete selected gears
+  const handleBatchDelete = async () => {
+    if (selectedGearIds.length === 0) return;
+    setLoading(true);
+    const { error } = await supabase.from('gears').delete().in('id', selectedGearIds);
+    setLoading(false);
+    if (error) {
+      toast({ title: 'Batch Delete Error', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Batch Delete Success', description: 'Selected gears deleted.' });
+      setSelectedGearIds([]);
+      fetchGears();
+    }
+  };
+
+  // Batch update status
+  const handleBatchUpdateStatus = async (status: string) => {
+    if (selectedGearIds.length === 0) return;
+    setLoading(true);
+    const { error } = await supabase.from('gears').update({ status, updated_at: new Date().toISOString() }).in('id', selectedGearIds);
+    setLoading(false);
+    if (error) {
+      toast({ title: 'Batch Update Error', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: `Batch Update Success`, description: `Selected gears marked as ${status}.` });
+      setSelectedGearIds([]);
+      fetchGears();
+    }
+  };
+
+  // Fetch maintenance records for a gear
+  const fetchMaintenanceRecords = async (gearId: string) => {
+    setLoadingMaintenance(true);
+    const { data, error } = await supabase
+      .from('gear_maintenance')
+      .select('*')
+      .eq('gear_id', gearId)
+      .order('date', { ascending: false });
+    setLoadingMaintenance(false);
+    if (!error) setMaintenanceRecords(data || []);
+    else setMaintenanceRecords([]);
+  };
+
+  // Open maintenance modal for a gear
+  const handleOpenMaintenance = (gear: Gear) => {
+    setSelectedGear(gear);
+    setMaintenanceModalOpen(true);
+    fetchMaintenanceRecords(gear.id);
+  };
+  const handleCloseMaintenance = () => {
+    setMaintenanceModalOpen(false);
+    setSelectedGear(null);
+    setMaintenanceRecords([]);
+  };
+
+  // Maintenance form logic
+  const handleAddMaintenance = async (values: any) => {
+    if (!selectedGear) return;
+    setLoadingMaintenance(true);
+    const { error } = await supabase.from('gear_maintenance').insert({
+      gear_id: selectedGear.id,
+      status: values.status,
+      description: values.description,
+      date: values.date,
+      // performed_by: ... (optional, if you want to add user info)
+    });
+    setLoadingMaintenance(false);
+    if (error) {
+      toast({ title: 'Add Maintenance Error', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Maintenance Logged', description: 'Maintenance event added.' });
+      maintenanceForm.reset({ status: 'Completed', description: '', date: new Date().toISOString().slice(0, 16) });
+      fetchMaintenanceRecords(selectedGear.id);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -220,25 +382,54 @@ export default function ManageGearsPage() {
     >
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-bold text-foreground">Manage Gears</h1>
-        <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Gear
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[625px]">
-            <DialogHeader>
-              <DialogTitle>Add New Gear</DialogTitle>
-              <DialogDescription>
-                Fill in the details for the new equipment.
-              </DialogDescription>
-            </DialogHeader>
-            {/* Pass the submit handler to the form */}
-            <AddGearForm onSubmit={handleAddGear} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="mr-2 h-4 w-4" /> Export CSV
+          </Button>
+          <Button variant="outline" onClick={handleImportDialogOpen}>
+            <Upload className="mr-2 h-4 w-4" /> Import CSV
+          </Button>
+          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Import Gear CSV</DialogTitle>
+                <DialogDescription>Upload a CSV file to import gear data. Existing records with matching IDs will be updated.</DialogDescription>
+              </DialogHeader>
+              <Input type="file" accept=".csv" onChange={handleImportFileChange} />
+              <DialogFooter>
+                <Button variant="secondary" onClick={handleImportDialogClose}>Cancel</Button>
+                <Button disabled={!importFile} onClick={handleImport}>Import</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <PlusCircle className="mr-2 h-4 w-4" /> Add New Gear
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[625px]">
+              <DialogHeader>
+                <DialogTitle>Add New Gear</DialogTitle>
+                <DialogDescription>
+                  Fill in the details for the new equipment.
+                </DialogDescription>
+              </DialogHeader>
+              {/* Pass the submit handler to the form */}
+              <AddGearForm onSubmit={handleAddGear} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
-
+      {/* Batch actions bar */}
+      {selectedGearIds.length > 0 && (
+        <div className="flex items-center gap-4 bg-muted px-4 py-2 rounded-md">
+          <span>{selectedGearIds.length} selected</span>
+          <Button size="sm" variant="destructive" onClick={handleBatchDelete}>Delete Selected</Button>
+          <Button size="sm" onClick={() => handleBatchUpdateStatus('Available')}>Mark as Available</Button>
+          <Button size="sm" onClick={() => handleBatchUpdateStatus('Damaged')}>Mark as Damaged</Button>
+        </div>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Gear List</CardTitle>
@@ -291,30 +482,45 @@ export default function ManageGearsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>
+                    <input
+                      type="checkbox"
+                      checked={selectedGearIds.length === filteredGears.length && filteredGears.length > 0}
+                      onChange={e => handleSelectAll(e.target.checked)}
+                    />
+                  </TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Serial No.</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Condition</TableHead>
+                  <TableHead>QR Code</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>{/* Removed potential whitespace */}
+              <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center">
+                    <TableCell colSpan={8} className="text-center">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : filteredGears.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center">
+                    <TableCell colSpan={8} className="text-center">
                       No gears found matching your filters.
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredGears.map((gear) => (
                     <motion.tr key={gear.id} variants={itemVariants}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={selectedGearIds.includes(gear.id)}
+                          onChange={e => handleSelectOne(gear.id, e.target.checked)}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{gear.name}</TableCell>
                       <TableCell>{gear.category}</TableCell>
                       <TableCell>{gear.serial}</TableCell>
@@ -330,6 +536,9 @@ export default function ManageGearsPage() {
                         </span>
                       </TableCell>
                       <TableCell>{gear.condition}</TableCell>
+                      <TableCell>
+                        <QRCodeCanvas value={gear.id} size={48} />
+                      </TableCell>
                       <TableCell className="text-right space-x-2">
                         <Button variant="ghost" size="icon" onClick={() => handleUpdateGear(gear, { status: 'Available' })}>
                           <Edit className="h-4 w-4" />
@@ -343,6 +552,10 @@ export default function ManageGearsPage() {
                           <Trash2 className="h-4 w-4" />
                           <span className="sr-only">Delete</span>
                         </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenMaintenance(gear)}>
+                          <Wrench className="h-4 w-4" />
+                          <span className="sr-only">Maintenance</span>
+                        </Button>
                       </TableCell>
                     </motion.tr>
                   ))
@@ -352,6 +565,77 @@ export default function ManageGearsPage() {
           </motion.div>
         </CardContent>
       </Card>
+      {/* Maintenance Modal */}
+      <Dialog open={maintenanceModalOpen} onOpenChange={setMaintenanceModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Maintenance for {selectedGear?.name}</DialogTitle>
+            <DialogDescription>View and log maintenance events for this gear.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <h4 className="font-semibold">Maintenance History</h4>
+            {loadingMaintenance ? (
+              <div>Loading...</div>
+            ) : maintenanceRecords.length === 0 ? (
+              <div className="text-muted-foreground">No maintenance records found.</div>
+            ) : (
+              <ul className="space-y-2 max-h-48 overflow-y-auto">
+                {maintenanceRecords.map((rec) => (
+                  <li key={rec.id} className="border rounded p-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">{rec.status}</span>
+                      <span className="text-xs text-muted-foreground">{new Date(rec.date).toLocaleString()}</span>
+                    </div>
+                    <div className="text-sm mt-1">{rec.description}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {/* Maintenance form will go here */}
+            <form
+              className="space-y-2 border-t pt-4 mt-4"
+              onSubmit={maintenanceForm.handleSubmit(handleAddMaintenance)}
+            >
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <Label>Status</Label>
+                  <select
+                    className="w-full border rounded px-2 py-1 mt-1"
+                    {...maintenanceForm.register('status', { required: true })}
+                  >
+                    <option value="Scheduled">Scheduled</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <Label>Date</Label>
+                  <Input
+                    type="datetime-local"
+                    className="w-full mt-1"
+                    {...maintenanceForm.register('date', { required: true })}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Description</Label>
+                <Textarea
+                  className="w-full mt-1"
+                  rows={3}
+                  {...maintenanceForm.register('description', { required: true })}
+                  placeholder="Describe the maintenance performed..."
+                />
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={loadingMaintenance}>Log Maintenance</Button>
+              </DialogFooter>
+            </form>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={handleCloseMaintenance}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }

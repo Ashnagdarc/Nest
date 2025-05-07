@@ -1,4 +1,3 @@
-
 -- Supabase Schema for GearFlow
 
 -- ** Extensions **
@@ -7,10 +6,10 @@ create extension if not exists "uuid-ossp" with schema extensions;
 
 -- ** Custom Types (Enums) **
 -- Drop existing types if they exist to avoid conflicts during re-runs
-drop type if exists public.role;
-drop type if exists public.gear_status;
-drop type if exists public.request_status;
-drop type if exists public.user_status;
+drop type if exists public.role cascade;
+drop type if exists public.gear_status cascade;
+drop type if exists public.request_status cascade;
+drop type if exists public.user_status cascade;
 
 -- Create custom types
 create type public.role as enum ('Admin', 'User');
@@ -21,66 +20,64 @@ create type public.user_status as enum ('Active', 'Inactive');
 -- ** Tables **
 
 -- 1. Profiles Table (linked to auth.users)
-create table if not exists public.profiles (
-  id uuid not null references auth.users on delete cascade,
-  updated_at timestamp with time zone,
+drop table if exists public.profiles cascade;
+create table public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  updated_at timestamptz default timezone('utc', now()),
   full_name text,
-  email text unique, -- Denormalized email, ensure it stays synced or use trigger
+  email text unique,
   phone text,
   department text,
   avatar_url text,
-  role public.role default 'User'::public.role not null,
-  status public.user_status default 'Active'::public.user_status not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-
-  primary key (id),
-  constraint email_validation check (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'),
-  constraint status_check check (status in ('Active', 'Inactive')),
-  constraint role_check check (role in ('Admin', 'User'))
+  role public.role default 'User' not null,
+  status public.user_status default 'Active' not null,
+  created_at timestamptz default timezone('utc', now()) not null
 );
 comment on table public.profiles is 'Stores user profile information, extending auth.users.';
 comment on column public.profiles.id is 'Links to auth.users.id';
 
+-- Drop the old constraint (replace constraint name as needed)
+alter table public.profiles drop constraint if exists profiles_id_fkey;
+
+-- Add the correct constraint
+alter table public.profiles
+add constraint profiles_id_fkey
+foreign key (id) references auth.users(id) on delete cascade;
+
 -- 2. Gears Table
-create table if not exists public.gears (
-  id uuid default extensions.uuid_generate_v4() not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+drop table if exists public.gears cascade;
+create table public.gears (
+  id uuid default extensions.uuid_generate_v4() primary key,
+  created_at timestamptz default timezone('utc', now()) not null,
   name text not null,
   category text,
   description text,
-  serial_number text unique, -- Assuming serial numbers should be unique if they exist
+  serial_number text unique,
   purchase_date date,
   image_url text,
-  condition text, -- e.g., 'Good', 'Excellent', 'Fair', 'Needs Repair'
-  status public.gear_status default 'Available'::public.gear_status not null,
-  -- current_request_id uuid references public.requests on delete set null, -- If a gear can only be in one active request
-
-  primary key (id),
-   constraint status_check check (status in ('Available', 'Booked', 'Damaged', 'Under Repair', 'New'))
+  condition text,
+  status public.gear_status default 'Available' not null
 );
 comment on table public.gears is 'Stores information about each piece of equipment.';
--- comment on column public.gears.current_request_id is 'Reference to the active request this gear is part of, if any.';
 
 -- 3. Requests Table
-create table if not exists public.requests (
-  id uuid default extensions.uuid_generate_v4() not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  user_id uuid not null references public.profiles on delete cascade,
+drop table if exists public.requests cascade;
+create table public.requests (
+  id uuid default extensions.uuid_generate_v4() primary key,
+  created_at timestamptz default timezone('utc', now()) not null,
+  user_id uuid not null references public.profiles(id) on delete cascade,
   reason text,
   destination text,
-  duration text, -- Consider using start_date/end_date TIMESTAMPTZ instead for better querying
-  team_members text, -- Consider using JSONB or TEXT[] if structure is needed
-  status public.request_status default 'Pending'::public.request_status not null,
+  duration text,
+  team_members text,
+  status public.request_status default 'Pending' not null,
   admin_notes text,
-  checkout_date timestamp with time zone,
-  due_date timestamp with time zone, -- Changed from DATE to TIMESTAMPTZ for consistency
-  checkin_date timestamp with time zone, -- Record actual check-in time here directly
-  is_damaged_on_checkin boolean default false, -- Record damage status here
-  damage_description_on_checkin text, -- Record damage details here
-  checkin_notes text, -- Record check-in notes here
-
-  primary key (id),
-  constraint status_check check (status in ('Pending', 'Approved', 'Rejected', 'Checked Out', 'Checked In', 'Overdue', 'Cancelled'))
+  checkout_date timestamptz,
+  due_date timestamptz,
+  checkin_date timestamptz,
+  is_damaged_on_checkin boolean default false,
+  damage_description_on_checkin text,
+  checkin_notes text
 );
 comment on table public.requests is 'Records user requests for gear.';
 comment on column public.requests.user_id is 'The user who made the request.';
@@ -90,35 +87,33 @@ comment on column public.requests.damage_description_on_checkin is 'Details of d
 comment on column public.requests.checkin_notes is 'Notes added during the check-in process for this request.';
 
 -- 4. Request_Gears Join Table (Many-to-Many relationship between Requests and Gears)
-create table if not exists public.request_gears (
-    request_id uuid not null references public.requests on delete cascade,
-    gear_id uuid not null references public.gears on delete cascade,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-
-    primary key (request_id, gear_id)
+drop table if exists public.request_gears cascade;
+create table public.request_gears (
+  request_id uuid not null references public.requests(id) on delete cascade,
+  gear_id uuid not null references public.gears(id) on delete cascade,
+  created_at timestamptz default timezone('utc', now()) not null,
+  primary key (request_id, gear_id)
 );
 comment on table public.request_gears is 'Join table linking requests to the specific gears requested.';
 
 -- 5. Announcements Table
-create table if not exists public.announcements (
-  id uuid default extensions.uuid_generate_v4() not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  author_id uuid references public.profiles on delete set null, -- Admin who posted
+drop table if exists public.announcements cascade;
+create table public.announcements (
+  id uuid default extensions.uuid_generate_v4() primary key,
+  created_at timestamptz default timezone('utc', now()) not null,
+  author_id uuid references public.profiles(id) on delete set null,
   title text not null,
-  content text not null,
-
-  primary key (id)
+  content text not null
 );
 comment on table public.announcements is 'Stores announcements made by administrators.';
 comment on column public.announcements.author_id is 'The admin user who created the announcement.';
 
 -- 6. App Settings Table (Key-Value Store)
-create table if not exists public.app_settings (
-  key text not null,
+drop table if exists public.app_settings cascade;
+create table public.app_settings (
+  key text primary key,
   value text,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
-
-  primary key (key)
+  updated_at timestamptz default timezone('utc', now()) not null
 );
 comment on table public.app_settings is 'Stores general application settings like logo URL.';
 
@@ -136,6 +131,7 @@ create index if not exists idx_announcements_created_at on public.announcements(
 -- ** Functions **
 
 -- Function to get user role (useful for RLS policies)
+drop function if exists public.get_user_role cascade;
 create or replace function public.get_user_role(user_id uuid)
 returns public.role
 language sql
@@ -146,6 +142,7 @@ as $$
 $$;
 
 -- Function to check if user is admin
+drop function if exists public.is_admin cascade;
 create or replace function public.is_admin(user_id uuid)
 returns boolean
 language sql
@@ -200,6 +197,11 @@ create policy "Allow user to update their own profile" on public.profiles
 -- Policy: Admins can manage all profiles (bypass other policies for admins)
 create policy "Allow admin users to manage all profiles" on public.profiles
   for all using (public.is_admin(auth.uid())) with check (public.is_admin(auth.uid()));
+
+-- Add policy to allow users to insert their own profile
+drop policy if exists "Allow users to insert their own profile" on public.profiles;
+create policy "Allow users to insert their own profile" on public.profiles
+  for insert with check (auth.uid() = id);
 
 -- 2. Gears Table RLS
 alter table public.gears enable row level security;
@@ -332,43 +334,28 @@ create policy "Allow admins to manage branding" on storage.objects
 -- DO NOT include raw passwords directly in version-controlled SQL.
 -- Consider using environment variables or a seeding script.
 -- This function requires the `supabase_admin` role or similar privileges.
+drop function if exists public.create_default_admin cascade;
 create or replace function public.create_default_admin()
 returns void
 language plpgsql
-security definer -- Run as the function owner (superuser)
+security definer
 as $$
 declare
   admin_user_id uuid;
-  admin_email text := 'admin@gearflow.app'; -- CHANGE THIS if needed
-  admin_password text := 'Admin123!'; -- !! CHANGE THIS TO A STRONG PASSWORD & MANAGE SECURELY !!
+  admin_email text := 'admin@gearflow.app';
+  admin_password text := 'Admin123!';
 begin
   -- Check if the admin user already exists in auth.users
   select id into admin_user_id from auth.users where email = admin_email;
 
-  -- If user doesn't exist, create them in auth.users
+  -- If user doesn't exist, create them using auth.create_user
   if admin_user_id is null then
-    admin_user_id := extensions.uuid_generate_v4(); -- Generate a new UUID
-
-    insert into auth.users (id, email, password, role, email_confirmed_at, instance_id, aud)
-    values (
-      admin_user_id,
-      admin_email,
-      crypt(admin_password, gen_salt('bf')), -- Hash the password
-      'authenticated',
-      now(), -- Mark email as confirmed
-      '00000000-0000-0000-0000-000000000000', -- Default instance ID, check yours if different
-      'authenticated'
+    select id into admin_user_id from auth.create_user(
+      email := admin_email,
+      password := admin_password,
+      email_confirm := true,
+      data := jsonb_build_object('full_name', 'Adira')
     );
-
-     -- Optional: Add identity if needed
-     insert into auth.identities (id, user_id, identity_data, provider, last_sign_in_at)
-     values (
-        extensions.uuid_generate_v4(),
-        admin_user_id,
-        jsonb_build_object('sub', admin_user_id::text, 'email', admin_email),
-        'email',
-        now()
-     );
 
     raise notice 'Admin user created in auth.users with ID: %', admin_user_id;
   else
@@ -380,20 +367,19 @@ begin
   values (
     admin_user_id,
     admin_email,
-    'Adira', -- Default admin name
+    'Adira',
     'Admin'::public.role,
     'Active'::public.user_status,
     now()
   )
   on conflict (id) do update set
     role = excluded.role,
-    status = excluded.status, -- Ensure admin is active on update
-    full_name = coalesce(public.profiles.full_name, excluded.full_name), -- Keep existing name if exists
-    email = coalesce(public.profiles.email, excluded.email),       -- Keep existing email
+    status = excluded.status,
+    full_name = coalesce(public.profiles.full_name, excluded.full_name),
+    email = coalesce(public.profiles.email, excluded.email),
     updated_at = now();
 
   raise notice 'Profile for admin user ID % ensured/updated with Admin role.', admin_user_id;
-
 end;
 $$;
 
@@ -410,3 +396,70 @@ values
 on conflict (key) do nothing; -- Don't overwrite if they already exist
 
 commit;
+
+-- Maintenance table
+drop table if exists public.gear_maintenance cascade;
+create table public.gear_maintenance (
+  id uuid primary key default extensions.uuid_generate_v4(),
+  gear_id uuid references public.gears(id) on delete cascade,
+  date timestamptz not null default now(),
+  description text not null,
+  status text not null,
+  performed_by uuid references public.profiles(id),
+  attachments text[],
+  next_due timestamptz,
+  created_at timestamptz not null default now()
+);
+
+-- Update handle_new_user trigger function
+drop function if exists public.handle_new_user cascade;
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  full_name_value text;
+begin
+  -- Extract full_name from raw_user_meta_data, defaulting to email if not present
+  full_name_value := coalesce(
+    (new.raw_user_meta_data->>'full_name')::text,
+    split_part(new.email, '@', 1)
+  );
+
+  -- Insert with explicit role and status
+  insert into public.profiles (
+    id,
+    email,
+    full_name,
+    role,
+    status,
+    created_at,
+    updated_at
+  )
+  values (
+    new.id,
+    new.email,
+    full_name_value,
+    'User'::public.role,
+    'Active'::public.user_status,
+    now(),
+    now()
+  )
+  on conflict (id) do update
+  set
+    email = excluded.email,
+    full_name = coalesce(public.profiles.full_name, excluded.full_name),
+    updated_at = now()
+  where public.profiles.id = excluded.id;
+
+  return new;
+end;
+$$;
+
+-- Reattach trigger to auth.users
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
