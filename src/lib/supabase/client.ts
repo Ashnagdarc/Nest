@@ -1,8 +1,9 @@
 import { createBrowserClient } from '@supabase/ssr';
 import type { Database } from '@/types/supabase'; // Import your generated types
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Get environment variables with fallback values for development
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ymtufeymduajgxsgebyr.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltdHVmZXltZHVhamd4c2dlYnlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU5OTc3MTUsImV4cCI6MjA2MTU3MzcxNX0.2xc3M7x4mUuyZ8u3YTrOYmo627OKdC5BQIdEa2RFdGo';
 
 export class SupabaseConfigError extends Error {
     constructor(message: string) {
@@ -11,26 +12,26 @@ export class SupabaseConfigError extends Error {
     }
 }
 
-// Validate environment variables
-let supabaseInitializationError: string | null = null;
-
-if (!supabaseUrl) {
-    supabaseInitializationError = "Supabase URL is required. Check your .env.local file.";
-} else if (!supabaseAnonKey) {
-    supabaseInitializationError = "Supabase Anon Key is required. Check your .env.local file.";
-}
+// Create a singleton instance
+let supabaseInstance: ReturnType<typeof createBrowserClient<Database>> | null = null;
 
 export const createClient = () => {
-    if (supabaseInitializationError) {
-        throw new SupabaseConfigError(supabaseInitializationError);
+    if (supabaseInstance) {
+        return supabaseInstance;
     }
 
     try {
-        const client = createBrowserClient<Database>(
-            supabaseUrl!,
-            supabaseAnonKey!
+        supabaseInstance = createBrowserClient<Database>(
+            supabaseUrl,
+            supabaseAnonKey,
+            {
+                auth: {
+                    persistSession: true,
+                    autoRefreshToken: true,
+                }
+            }
         );
-        return client;
+        return supabaseInstance;
     } catch (error) {
         console.error("Error creating Supabase browser client:", error);
         throw new SupabaseConfigError(
@@ -40,4 +41,4 @@ export const createClient = () => {
 }
 
 // Export initialization status for components that need it
-export const isSupabaseConfigured = !supabaseInitializationError;
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);

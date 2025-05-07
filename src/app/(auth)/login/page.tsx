@@ -70,74 +70,31 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     setShowSuccessAnimation(false);
-    console.log("LoginPage: Attempting login for:", data.email);
-
     try {
-      // Sign in with Supabase Auth
-      console.log("LoginPage: Calling Supabase signInWithPassword...");
+      // Direct client-side login
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       });
 
       if (authError) {
-        // Log the specific Supabase Auth error
-        console.error(`[Login Attempt Failed] Supabase Auth Error: Code [${authError.code || 'N/A'}] Status [${authError.status || 'N/A'}] Message [${authError.message}]`);
-
-        // Handle specific Supabase Auth errors and re-throw a user-friendly message
-        if (authError.message.includes('Invalid login credentials')) {
-          throw new Error('Invalid email or password. Please check your credentials.');
-        } else if (authError.message.includes('Email not confirmed')) {
-          throw new Error('Please verify your email address before logging in.');
-          // Optionally, provide a link/button to resend verification
-        }
-        // Add more specific error handling if needed (e.g., rate limits)
-        throw new Error(authError.message || 'An unexpected authentication error occurred.');
+        throw new Error(authError.message || 'Login failed.');
       }
-
       if (!authData.user) {
-        console.error("[Login Attempt Failed] Supabase login successful but user data missing.");
-        throw new Error('Authentication succeeded but essential user data is missing.');
+        throw new Error('Login succeeded but user data missing.');
       }
 
-      console.log("[Login Attempt Success] Supabase login successful for:", authData.user.email, "User ID:", authData.user.id);
-
-      // --- User is authenticated, fetch their profile from Supabase 'profiles' table ---
-      console.log("[Login Attempt] Fetching profile from Supabase for user ID:", authData.user.id);
+      // Fetch profile as the authenticated user
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('*') // Select all columns or specify needed ones: 'role, status, full_name'
+        .select('*')
         .eq('id', authData.user.id)
-        .maybeSingle(); // Use maybeSingle() to return null instead of error if not found
+        .maybeSingle();
 
-      // Handle profile fetching errors separately
-      if (profileError) {
-        console.error("LoginPage: Supabase Profile Error:", profileError.message);
-        // Log the user out as we can't determine their role/status
-        await supabase.auth.signOut();
-        throw new Error('Login successful but could not retrieve user profile information. Please contact support.');
+      if (profileError || !profile) {
+        throw new Error('Could not fetch user profile.');
       }
 
-      // After maybeSingle(), check if profile is null (meaning no profile found for the user ID)
-      if (!profile) {
-        console.error("[Login Attempt Failed] Profile data is null for user ID:", authData.user.id, ". The profile might not have been created during signup or the handle_new_user trigger failed. Logging out.");
-        // Log the user out as profile is essential
-        await supabase.auth.signOut();
-        // Throw a specific error for missing profile
-        throw new Error('Login successful, but your user profile could not be found. Please ensure your account setup is complete or contact support.');
-      }
-
-      console.log("[Login Attempt] User profile fetched successfully:", profile);
-
-      // Check if profile status is Active (assuming 'status' field exists)
-      if (profile.status !== 'Active') {
-        console.warn("[Login Attempt Aborted] User account is not active. Status:", profile.status, " Logging out.");
-        await supabase.auth.signOut();
-        throw new Error(`Your account is currently ${profile.status}. Please contact support.`);
-      }
-      console.log("[Login Attempt] User status verified as Active.");
-
-      // Show success animation and toast *before* redirecting
       setIsLoading(false);
       setShowSuccessAnimation(true);
       toast({
@@ -145,28 +102,16 @@ export default function LoginPage() {
         description: `Redirecting to ${profile.role} Dashboard...`,
         variant: 'success',
       });
-
-      // Wait for animation/toast visibility
       await new Promise(resolve => setTimeout(resolve, 1800));
-
-      // Redirect based on role
-      console.log("[Login Attempt] Redirecting to", profile.role === 'Admin' ? '/admin/dashboard' : '/user/dashboard');
       redirectToDashboard(authData.user.id);
-
     } catch (error: unknown) {
-      console.error("[Login Attempt Failed] Overall login process failed. Message:", error instanceof Error ? error.message : 'Unknown error');
       setIsLoading(false);
-
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
-
-      console.log("[Login Attempt Failed] Displaying toast with message:", errorMessage);
-
       toast({
         title: "Login Failed",
         description: errorMessage,
         variant: "destructive",
       });
-      // Reset only the password field on failed attempt
       form.reset({ email: form.getValues('email'), password: '' });
       form.setError('password', { type: 'manual', message: ' ' });
     }

@@ -1,22 +1,23 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from 'react'; // Import useMemo and useCallback
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+import { createClient } from '@/lib/supabase/client';
+import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { UploadCloud, PackageCheck, AlertCircle } from 'lucide-react';
+import { UploadCloud, PackageCheck } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import Image from 'next/image';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge'; // Import Badge component
 import dynamic from 'next/dynamic';
-import { QrReader } from '@blackbox-vision/react-qr-reader';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
-import { createClient } from '@/lib/supabase/client';
 
 // --- Dynamically import Lottie ---
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -38,6 +39,9 @@ export default function CheckInGearPage() {
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false); // State for animation
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [qrError, setQrError] = useState<string | null>(null);
+  const [scannedCode, setScannedCode] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [scannerInitialized, setScannerInitialized] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -63,6 +67,35 @@ export default function CheckInGearPage() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [supabase, userId]);
+
+  useEffect(() => {
+    if (!scannerInitialized && !scannedCode) {
+      const scanner = new Html5QrcodeScanner("qr-reader", {
+        qrbox: {
+          width: 250,
+          height: 250,
+        },
+        fps: 5,
+      }, false);
+
+      scanner.render(
+        (decodedText) => {
+          setScannedCode(decodedText);
+          scanner.clear();
+        },
+        (error) => {
+          console.warn(error);
+          setQrError("Failed to read QR code. Please try again.");
+        }
+      );
+
+      setScannerInitialized(true);
+
+      return () => {
+        scanner.clear();
+      };
+    }
+  }, [scannerInitialized, scannedCode]);
 
   const handleCheckboxChange = (gearId: string, checked: boolean | string) => {
     if (checked === true) { // Ensure it's strictly boolean true
@@ -179,6 +212,19 @@ export default function CheckInGearPage() {
       }
     }
   }, [checkedOutGears, setSelectedGears, toast]);
+
+  const handleCheckIn = async () => {
+    if (!scannedCode) return;
+
+    try {
+      // Here you would handle the check-in logic with the scanned code
+      console.log("Checking in with code:", scannedCode);
+      setIsDialogOpen(true);
+    } catch (error) {
+      console.error("Error during check-in:", error);
+      setQrError("Failed to process check-in. Please try again.");
+    }
+  };
 
   return (
     <motion.div
@@ -339,16 +385,39 @@ export default function CheckInGearPage() {
             <DialogTitle>Scan Gear QR Code</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4">
-            <QrReader
-              constraints={{ facingMode: 'environment' }}
-              onResult={handleScan}
-              containerStyle={{ width: '100%' }}
-            />
+            <div id="qr-reader" className="w-full max-w-md mx-auto"></div>
+            {scannedCode && (
+              <div className="mt-4">
+                <Badge variant="secondary" className="text-lg">
+                  Code: {scannedCode}
+                </Badge>
+                <Button
+                  className="mt-4 w-full"
+                  onClick={handleCheckIn}
+                >
+                  Complete Check-In
+                </Button>
+              </div>
+            )}
             {qrError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{qrError}</AlertDescription></Alert>}
             <DialogClose asChild>
               <Button variant="secondary">Close</Button>
             </DialogClose>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Check-In Successful</DialogTitle>
+          </DialogHeader>
+          <p>Equipment has been successfully checked in.</p>
+          <DialogClose asChild>
+            <Button className="mt-4" onClick={() => setScannedCode(null)}>
+              Close
+            </Button>
+          </DialogClose>
         </DialogContent>
       </Dialog>
     </motion.div>

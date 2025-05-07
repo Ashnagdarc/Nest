@@ -1,19 +1,18 @@
-import { type NextRequest, NextResponse } from 'next/server';
-import { updateSession } from '@/lib/supabase/middleware'; // Import Supabase middleware
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
-  // Update Supabase session
-  return await updateSession(request);
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next();
+  const supabase = createMiddlewareClient({ req, res });
 
-  // Previous Firebase/pass-through logic removed:
-  // console.log(`Middleware processing: ${request.nextUrl.pathname}`);
-  // return NextResponse.next({
-  //   request: {
-  //     headers: request.headers,
-  //   },
-  // });
+  // Refresh session if expired - required for Server Components
+  await supabase.auth.getSession();
+
+  return res;
 }
 
+// Specify which routes should be protected
 export const config = {
   matcher: [
     /*
@@ -21,8 +20,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
+     * - public (public files)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public).*)',
   ],
-};
+}

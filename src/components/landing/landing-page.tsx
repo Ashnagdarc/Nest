@@ -6,48 +6,28 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
-// Removed Supabase client import
-// import { createClient } from '@/lib/supabase/client';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // Import Alert
-import { AlertCircle } from 'lucide-react'; // Import Icon
-
-// Placeholder for Firebase status check (as Firebase was removed)
-const firebaseInitialized = false; // Assume false since Firebase is removed
-const firebaseInitError = "Firebase configuration has been removed. Using Supabase."; // Placeholder error
+import { createClient } from '@/lib/supabase/client';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from 'lucide-react';
 
 export default function LandingPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [isLoadingLogo, setIsLoadingLogo] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
-  // const supabase = createClient(); // Keep if needed for fetching settings from Supabase
+  const supabase = createClient();
 
   useEffect(() => {
-    // Show a warning if Firebase config is still expected but missing
-    if (!firebaseInitialized && firebaseInitError) {
-      // If you intend to use ONLY Supabase, this check might be irrelevant.
-      // If you want to support either, you need logic to check which one is configured.
-      // For now, we assume Supabase is the intended backend.
-      console.warn("LandingPage: Firebase checks are present but Firebase is not configured.");
-      setConfigError(null); // Clear Firebase error as Supabase is intended
-    }
-
-
-    // Fetch logo from Supabase app_settings if needed
     const fetchLogo = async () => {
       setIsLoadingLogo(true);
-      // Replace this with your Supabase fetching logic if the logo URL is stored there
-      // Example placeholder:
       try {
-        // const { data, error } = await supabase
-        //     .from('app_settings')
-        //     .select('value')
-        //     .eq('key', 'logoUrl')
-        //     .single();
-        // if (error) throw error;
-        // setLogoUrl(data?.value || null);
-        setLogoUrl(null); // Set to null for now as fetch logic needs Supabase client
-        console.warn("LandingPage: Logo fetching logic needs to be implemented using Supabase client.");
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'logoUrl')
+          .single();
 
+        if (error) throw error;
+        setLogoUrl(data?.value || null);
       } catch (fetchError) {
         console.error("Error fetching Supabase settings for logo:", fetchError);
         setConfigError("Could not fetch application settings.");
@@ -58,8 +38,7 @@ export default function LandingPage() {
     };
 
     fetchLogo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Dependency array might need adjustment based on Supabase client stability
+  }, [supabase]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10 p-4">
@@ -97,7 +76,7 @@ export default function LandingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center space-y-6">
-            {configError ? ( // Display error if Supabase fetch failed
+            {configError ? (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Configuration Error</AlertTitle>
