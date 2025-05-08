@@ -35,6 +35,9 @@ const gearSchema = z.object({
   status: z.enum(["Available", "Damaged", "Under Repair", "New"], {
     required_error: "Please select an initial status.",
   }),
+  image: z.instanceof(FileList).optional().transform(val =>
+    val && val.length > 0 ? Array.from(val)[0] : undefined
+  ),
 });
 
 type GearFormValues = z.infer<typeof gearSchema>;
@@ -57,6 +60,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
       purchase_date: "",
       initial_condition: "",
       status: "Available",
+      image: undefined,
     },
   });
 
@@ -202,6 +206,27 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
                   <SelectItem value="Under Repair">Under Repair</SelectItem>
                 </SelectContent>
               </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="image"
+          render={({ field: { value, onChange, ...fieldProps } }) => (
+            <FormItem>
+              <FormLabel>Gear Image</FormLabel>
+              <FormControl>
+                <Input
+                  {...fieldProps}
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => onChange(event.target.files)}
+                  className="cursor-pointer"
+                />
+              </FormControl>
+              <FormDescription>Upload an image of the gear (JPG, PNG).</FormDescription>
               <FormMessage />
             </FormItem>
           )}

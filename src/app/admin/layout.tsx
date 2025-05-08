@@ -15,6 +15,7 @@ import {
   SidebarMenuButton,
   SidebarInset,
 } from '@/components/ui/sidebar';
+import CustomHamburger from '@/components/CustomHamburger';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -23,6 +24,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
 import ThemeToggle from '@/components/ThemeToggle';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 const adminNavItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: Home },
@@ -45,6 +48,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const supabase = createClient(); // Create Supabase client instance
   const [adminUser, setAdminUser] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isMobile = useIsMobile();
+
+  // Track hamburger state separately from sidebar
+  const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
+
+  // Toggle function for hamburger and sidebar sync
+  const toggleSidebar = () => {
+    setIsHamburgerOpen(!isHamburgerOpen);
+    // Any additional sidebar toggle logic if needed
+  };
 
   useEffect(() => {
     const fetchAdminData = async (userId: string) => {
@@ -90,7 +104,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     };
 
     // Listen for Supabase Auth state changes
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       if (event === 'SIGNED_IN' && session?.user) {
         console.log("AdminLayout: Auth state change - SIGNED_IN");
         fetchAdminData(session.user.id);
@@ -111,7 +125,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     });
 
     // Initial check in case the listener doesn't fire immediately
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       if (session?.user && !adminUser) { // Fetch only if user exists and not already loaded
         console.log("AdminLayout: Initial session check found user, fetching data.");
         fetchAdminData(session.user.id);
@@ -121,7 +135,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         // Redirect might happen via listener, or could be added here too
       }
     });
-
 
     // Cleanup subscription on unmount
     return () => {
@@ -151,13 +164,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : 'A';
 
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider defaultOpen={!isMobile}>
       <Sidebar>
         <SidebarHeader className="items-center justify-center p-4">
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
-              {/* Hamburger icon for mobile */}
-              <SidebarTrigger className="md:hidden mr-2" />
+              <div className="md:hidden">
+                <SidebarTrigger>
+                  <CustomHamburger
+                    size={20}
+                    direction="right"
+                    toggled={isHamburgerOpen}
+                    toggle={toggleSidebar}
+                  />
+                </SidebarTrigger>
+              </div>
               <Link href="/admin/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary">
                 <span>GearFlow Admin</span>
               </Link>
@@ -219,12 +240,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        {/* Header for mobile view with hamburger trigger */}
         <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-background px-4 md:hidden">
           <Link href="/admin/dashboard" className="flex items-center gap-2 font-semibold text-primary">
             <span>GearFlow Admin</span>
           </Link>
-          <SidebarTrigger className="ml-auto" />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <SidebarTrigger>
+              <CustomHamburger
+                size={20}
+                direction="right"
+                toggled={isHamburgerOpen}
+                toggle={toggleSidebar}
+              />
+            </SidebarTrigger>
+          </div>
         </div>
         <div className="p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
           <motion.div

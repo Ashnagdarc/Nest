@@ -19,8 +19,8 @@ type Gear = {
   name: string;
   category: string;
   status: string;
-  condition: string;
   imageUrl?: string;
+  image_url?: string; // Add this to match database field
   description?: string;
 };
 
@@ -31,6 +31,7 @@ export default function BrowseGearsPage() {
   const [filterStatus, setFilterStatus] = useState<string>('Available');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchGears();
@@ -47,8 +48,38 @@ export default function BrowseGearsPage() {
   }, []);
 
   async function fetchGears() {
-    const { data, error } = await supabase.from('gears').select('*');
-    if (!error) setGears(data || []);
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('gears')
+        .select('id, name, category, status, description, image_url');
+
+      if (error) {
+        console.error("Error fetching gears:", error.message);
+        toast({
+          title: "Error fetching gear",
+          description: error.message || "Failed to load gear items",
+          variant: "destructive",
+        });
+      } else {
+        console.log("Fetched gears:", data?.length || 0);
+        // Map the data to include imageUrl 
+        const gearData = data?.map((gear: Gear) => ({
+          ...gear,
+          imageUrl: gear.image_url // Add this mapping to handle the field name difference
+        })) || [];
+        setGears(gearData);
+      }
+    } catch (err) {
+      console.error("Exception when fetching gears:", err);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   const filteredGears = gears.filter(gear => {
@@ -186,66 +217,80 @@ export default function BrowseGearsPage() {
         </Card>
       </motion.div>
 
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex justify-center items-center py-20">
+          <p className="text-muted-foreground">Loading gear items...</p>
+        </div>
+      )}
+
       {/* Gear Grid */}
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-      >
-        {filteredGears.length > 0 ? (
-          filteredGears.map((gear) => (
-            <motion.div key={gear.id} variants={itemVariants}>
-              <Card className="overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
-                <CardHeader className="p-0">
-                  <Image
-                    src={gear.imageUrl || 'https://via.placeholder.com/400x300?text=No+Image'}
-                    alt={gear.name}
-                    width={400}
-                    height={300}
-                    className="object-cover w-full h-48"
-                    data-ai-hint={`${gear.category} equipment`}
-                  />
-                </CardHeader>
-                <CardContent className="p-4 flex-grow">
-                  <div className="flex justify-between items-start mb-2">
-                    <CardTitle className="text-lg font-semibold">{gear.name}</CardTitle>
-                    <Badge variant={
-                      gear.status === 'Available' ? 'default' :
-                        gear.status === 'Booked' ? 'secondary' :
-                          gear.status === 'Damaged' ? 'destructive' :
-                            gear.status === 'New' ? 'outline' : // Example for 'New'
-                              'secondary' // Default badge
-                    } className={`capitalize text-xs ${gear.status === 'Available' ? 'bg-accent text-accent-foreground' : ''}`}>
-                      {gear.status}
-                    </Badge>
-                  </div>
-                  <CardDescription className="text-sm text-muted-foreground mb-1">{gear.category}</CardDescription>
-                  <p className="text-sm line-clamp-2">{gear.description}</p>
-                </CardContent>
-                <CardFooter className="p-4 bg-muted/30 flex justify-end gap-2">
-                  {/* <Button variant="outline" size="sm" disabled>
-                    <Eye className="mr-1 h-4 w-4" /> Details
-                  </Button> */}
-                  <Link href={`/user/request?gearId=${gear.id}`}>
-                    <Button size="sm" disabled={gear.status !== 'Available'}>
-                      <PackagePlus className="mr-1 h-4 w-4" /> Request
-                    </Button>
-                  </Link>
-                </CardFooter>
-              </Card>
-            </motion.div>
-          ))
-        ) : (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="col-span-full text-center text-muted-foreground py-10"
-          >
-            No gear found matching your criteria.
-          </motion.p>
-        )}
-      </motion.div>
+      {!isLoading && (
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+        >
+          {filteredGears.length > 0 ? (
+            filteredGears.map((gear) => (
+              <motion.div key={gear.id} variants={itemVariants}>
+                <Card className="overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
+                  <CardHeader className="p-0">
+                    <div className="w-full h-48 relative bg-muted">
+                      {gear.imageUrl ? (
+                        <Image
+                          src={gear.imageUrl}
+                          alt={gear.name}
+                          fill
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          className="object-cover"
+                          unoptimized // Important for Supabase Storage URLs
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                          No image available
+                        </div>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 flex-grow">
+                    <div className="flex justify-between items-start mb-2">
+                      <CardTitle className="text-lg font-semibold">{gear.name}</CardTitle>
+                      <Badge variant={
+                        gear.status === 'Available' ? 'default' :
+                          gear.status === 'Booked' ? 'secondary' :
+                            gear.status === 'Damaged' ? 'destructive' :
+                              gear.status === 'New' ? 'outline' : // Example for 'New'
+                                'secondary' // Default badge
+                      } className={`capitalize text-xs ${gear.status === 'Available' ? 'bg-accent text-accent-foreground' : ''}`}>
+                        {gear.status}
+                      </Badge>
+                    </div>
+                    <CardDescription className="text-sm text-muted-foreground mb-1">{gear.category}</CardDescription>
+                    <p className="text-sm line-clamp-2">{gear.description}</p>
+                  </CardContent>
+                  <CardFooter className="p-4 bg-muted/30 flex justify-end gap-2">
+                    <Link href={`/user/request?gearId=${gear.id}`}>
+                      <Button size="sm" disabled={gear.status !== 'Available'}>
+                        <PackagePlus className="mr-1 h-4 w-4" /> Request
+                      </Button>
+                    </Link>
+                  </CardFooter>
+                </Card>
+              </motion.div>
+            ))
+          ) : (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="col-span-full text-center text-muted-foreground py-10"
+            >
+              No gear found matching your criteria.
+            </motion.p>
+          )}
+        </motion.div>
+      )}
     </motion.div>
   );
 }

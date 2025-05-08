@@ -16,9 +16,23 @@ export class SupabaseConfigError extends Error {
 // Create a singleton instance
 let supabaseInstance: ReturnType<typeof createBrowserClient> | null = null;
 
+/**
+ * Creates or returns a Supabase client instance.
+ * Includes mechanisms to handle schema cache issues.
+ */
 export const createClient = () => {
-    if (supabaseInstance) {
+    // Regenerate the client less frequently - only in dev or 1% of the time
+    // to avoid constant reinitialization
+    const forceRefresh = (process.env.NODE_ENV === 'development' && Math.random() < 0.05)
+        || Math.random() < 0.01; // 1% chance in production, 5% in dev
+
+    if (supabaseInstance && !forceRefresh) {
         return supabaseInstance;
+    }
+
+    // Only log reinit in development
+    if (supabaseInstance && process.env.NODE_ENV === 'development') {
+        console.log("Reinitializing Supabase client with fresh schema cache");
     }
 
     try {
@@ -27,6 +41,11 @@ export const createClient = () => {
             'x-schema-cache': 'reload'
         };
 
+        if (supabaseInstance) {
+            supabaseInstance = null;
+        }
+
+        // Use a simpler initialization for stability
         supabaseInstance = createBrowserClient(
             supabaseUrl,
             supabaseAnonKey,
@@ -52,3 +71,11 @@ export const createClient = () => {
 
 // Export initialization status for components that need it
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+
+// Helper function to clear schema cache - can be called when schema issues are detected
+export const refreshSupabaseClient = () => {
+    if (supabaseInstance) {
+        supabaseInstance = null;
+    }
+    return createClient();
+}

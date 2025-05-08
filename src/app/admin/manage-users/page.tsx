@@ -336,191 +336,256 @@ export default function ManageUsersPage() {
   }
   const confirmationDetails = getConfirmationDetails();
 
-  const filteredUsers = users.filter(user =>
-    (user.full_name && user.full_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (user.email && user.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (user.department && user.department.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Filter users based on search term
+  const filteredUsers = users.filter(user => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      (user.full_name || '').toLowerCase().includes(searchLower) ||
+      (user.email || '').toLowerCase().includes(searchLower) ||
+      (user.department || '').toLowerCase().includes(searchLower)
+    );
+  });
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="space-y-6"
-    >
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold text-foreground">Manage Users</h1>
-        {/* TODO: Implement Admin Add User functionality securely via Edge Function */}
-        <Button disabled>
-          <UserPlus className="mr-2 h-4 w-4" /> Add New User (Requires Edge Function)
+    <div className="space-y-6 pb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 border-b pb-4">
+        <h1 className="text-3xl font-bold tracking-tight">Manage Users</h1>
+        <Button
+          onClick={() => setIsAddUserModalOpen(true)}
+          className="flex items-center gap-2 whitespace-nowrap"
+        >
+          <UserPlus className="h-4 w-4" />
+          <span className="hidden sm:inline">Add New User</span>
+          <span className="sm:hidden">Add New User</span>
         </Button>
-        {/*
-         <Dialog open={isAddUserModalOpen} onOpenChange={setIsAddUserModalOpen}>
-           <DialogTrigger asChild>
-             <Button>
-               <UserPlus className="mr-2 h-4 w-4" /> Add New User
-             </Button>
-           </DialogTrigger>
-           <DialogContent className="sm:max-w-[625px]">
-             <DialogHeader>
-               <DialogTitle>Add New User</DialogTitle>
-               <DialogDescription>
-                 Create a new user account. Requires Supabase Edge Function setup.
-               </DialogDescription>
-             </DialogHeader>
-              <AddUserForm onUserAdded={handleUserAdded} /> // Needs adaptation for Supabase
-           </DialogContent>
-         </Dialog>
-          */}
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>User List</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">User List</CardTitle>
           <CardDescription>View, search, and manage user accounts.</CardDescription>
+
           <div className="mt-4 flex flex-col sm:flex-row gap-4">
-            <Input
-              placeholder="Search by name, email, or department..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
-            />
-            <Button variant="outline" size="icon" disabled>
-              <Filter className="h-4 w-4" />
-              <span className="sr-only">Filter Users</span>
-            </Button>
-            <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing || isLoading}>
-              <RotateCcw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh List
-            </Button>
+            <div className="relative w-full sm:max-w-sm">
+              <Filter className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, email, or department..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 w-full"
+              />
+            </div>
+            <div className="flex items-center">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                className="h-10 px-3 ml-auto"
+                disabled={isRefreshing}
+              >
+                <RotateCcw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Refresh</span>
+                <span className="sm:hidden">Refresh</span>
+              </Button>
+            </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <AlertDialog open={!!userToDelete || !!userToUpdate} onOpenChange={(open) => !open && (setUserToDelete(null), setUserToUpdate(null), setUpdateAction(null))}>
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="overflow-x-auto"
-            >
-              {/* --- Confirmation Dialog Content --- */}
-              <AlertDialogContent>
-                {confirmationDetails && (
-                  <>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{confirmationDetails.title}</AlertDialogTitle>
-                      <AlertDialogDescription>{confirmationDetails.description}</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel onClick={() => (setUserToDelete(null), setUserToUpdate(null), setUpdateAction(null))} disabled={isLoading}>
-                        Cancel
-                      </AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={confirmationDetails.onConfirm}
-                        className={buttonVariants({ variant: confirmationDetails.actionVariant })}
-                        disabled={isLoading}
-                      >
-                        {isLoading ? "Processing..." : confirmationDetails.actionText}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </>
-                )}
-              </AlertDialogContent>
 
-              {/* --- User Table --- */}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isRefreshing ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center">
-                        <RotateCcw className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
-                        <p className="text-muted-foreground mt-2">Refreshing user list...</p>
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredUsers.length > 0 ? (
-                    filteredUsers.map((user) => (
-                      <motion.tr key={user.id} variants={itemVariants}>
-                        <TableCell className="font-medium">{user.full_name || 'N/A'}</TableCell>
-                        <TableCell>{user.email || 'N/A'}</TableCell>
-                        <TableCell>{getRoleBadge(user.role)}</TableCell>
-                        <TableCell>{user.department || 'N/A'}</TableCell>
-                        <TableCell>{getStatusBadge(user.status)}</TableCell>
-                        <TableCell className="text-right">
-                          {/* Prevent actions on self */}
-                          {user.id !== currentAdminId ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                  <span className="sr-only">Open menu</span>
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem onClick={() => handleEditUser(user.id)} disabled>
-                                  <Edit className="mr-2 h-4 w-4" /> Edit Details (NYI)
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                {user.status === 'Active' ? (
-                                  <DropdownMenuItem onClick={() => confirmUpdateUser(user, 'suspend')} className="text-orange-600 focus:text-orange-600 focus:bg-orange-100/50 cursor-pointer">
-                                    <UserX className="mr-2 h-4 w-4" /> Suspend User
+        <CardContent>
+          {isRefreshing && users.length === 0 ? (
+            <div className="flex justify-center py-16">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-8 w-8 rounded-full border-4 border-primary/30 border-t-primary animate-spin"></div>
+                <p className="text-muted-foreground">Loading users...</p>
+              </div>
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <ShieldCheck className="h-10 w-10 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">No users found matching your search criteria.</p>
+              {searchTerm && (
+                <Button
+                  variant="link"
+                  onClick={() => setSearchTerm('')}
+                >
+                  Clear search
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto -mx-6">
+              <div className="inline-block min-w-full align-middle px-6">
+                <div className="overflow-hidden rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[250px]">Name</TableHead>
+                        <TableHead className="hidden md:table-cell">Email</TableHead>
+                        <TableHead className="hidden lg:table-cell">Department</TableHead>
+                        <TableHead className="hidden sm:table-cell">Status</TableHead>
+                        <TableHead className="hidden sm:table-cell">Role</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredUsers.map((user) => (
+                        <TableRow key={user.id}>
+                          <TableCell className="font-medium">
+                            <div className="flex flex-col">
+                              <span>{user.full_name || 'Unnamed User'}</span>
+                              {/* Mobile-only email display */}
+                              <span className="text-xs text-muted-foreground md:hidden">
+                                {user.email || 'No email'}
+                              </span>
+                              {/* Mobile-only status & role badges */}
+                              <div className="flex gap-2 mt-1 sm:hidden">
+                                {getStatusBadge(user.status)}
+                                {getRoleBadge(user.role)}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">{user.email}</TableCell>
+                          <TableCell className="hidden lg:table-cell">{user.department || 'N/A'}</TableCell>
+                          <TableCell className="hidden sm:table-cell">{getStatusBadge(user.status)}</TableCell>
+                          <TableCell className="hidden sm:table-cell">{getRoleBadge(user.role)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                    <span className="sr-only">Open menu</span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                  <DropdownMenuItem onClick={() => handleEditUser(user.id)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit Details
                                   </DropdownMenuItem>
-                                ) : user.status === 'Inactive' ? (
-                                  <DropdownMenuItem onClick={() => confirmUpdateUser(user, 'activate')} className="text-green-600 focus:text-green-600 focus:bg-green-100/50 cursor-pointer">
-                                    <UserCheck className="mr-2 h-4 w-4" /> Activate User
-                                  </DropdownMenuItem>
-                                ) : null}
-                                {user.role === 'User' ? (
-                                  <DropdownMenuItem onClick={() => confirmUpdateUser(user, 'makeAdmin')} className="text-blue-600 focus:text-blue-600 focus:bg-blue-100/50 cursor-pointer">
-                                    <ShieldCheck className="mr-2 h-4 w-4" /> Promote to Admin
-                                  </DropdownMenuItem>
-                                ) : (
-                                  <DropdownMenuItem onClick={() => confirmUpdateUser(user, 'makeUser')} className="text-purple-600 focus:text-purple-600 focus:bg-purple-100/50 cursor-pointer" disabled={users.filter(u => u.role === 'Admin').length <= 1}>
-                                    <ShieldOff className="mr-2 h-4 w-4" /> Change to User
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuSeparator />
-                                {/* Trigger deletion confirmation dialog */}
-                                <AlertDialogTrigger asChild disabled={user.role === 'Admin' && users.filter(u => u.role === 'Admin').length <= 1}>
+                                  <DropdownMenuSeparator />
+
+                                  {user.status === 'Active' ? (
+                                    <DropdownMenuItem onClick={() => confirmUpdateUser(user, 'suspend')}>
+                                      <UserX className="mr-2 h-4 w-4" />
+                                      Suspend User
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem onClick={() => confirmUpdateUser(user, 'activate')}>
+                                      <UserCheck className="mr-2 h-4 w-4" />
+                                      Activate User
+                                    </DropdownMenuItem>
+                                  )}
+
+                                  {user.role === 'User' ? (
+                                    <DropdownMenuItem onClick={() => confirmUpdateUser(user, 'makeAdmin')}>
+                                      <ShieldCheck className="mr-2 h-4 w-4" />
+                                      Make Admin
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem onClick={() => confirmUpdateUser(user, 'makeUser')}>
+                                      <ShieldOff className="mr-2 h-4 w-4" />
+                                      Remove Admin
+                                    </DropdownMenuItem>
+                                  )}
+
+                                  <DropdownMenuSeparator />
                                   <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
-                                    onSelect={(e) => { e.preventDefault(); confirmDeleteUser(user); }}
-                                    disabled={user.role === 'Admin' && users.filter(u => u.role === 'Admin').length <= 1}
+                                    className="text-destructive"
+                                    onClick={() => confirmDeleteUser(user)}
                                   >
-                                    <Trash2 className="mr-2 h-4 w-4" /> Delete User Profile (Requires Server Action)
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete User
                                   </DropdownMenuItem>
-                                </AlertDialogTrigger>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">Current User</span>
-                          )}
-                        </TableCell>
-                      </motion.tr>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center">
-                        No users found matching your criteria or no users exist yet.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </motion.div>
-          </AlertDialog>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
-    </motion.div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {getConfirmationDetails()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteUser}
+              disabled={isLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isLoading ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Update status/role confirmation dialog */}
+      <AlertDialog open={!!userToUpdate && !!updateAction} onOpenChange={(open) => !open && (setUserToUpdate(null), setUpdateAction(null))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm User Update</AlertDialogTitle>
+            <AlertDialogDescription>
+              {getConfirmationDetails()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleUpdateUser}
+              disabled={isLoading}
+            >
+              {isLoading ? "Updating..." : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add user dialog - stubbed since likely using Edge Function */}
+      <Dialog open={isAddUserModalOpen} onOpenChange={setIsAddUserModalOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Add New User</DialogTitle>
+            <DialogDescription>
+              This feature requires creating a Supabase Edge Function to securely create new users.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-6 px-2 bg-muted/30 rounded-md border border-muted mt-4">
+            <div className="text-center">
+              <UserPlus className="h-10 w-10 mx-auto text-primary/50 mb-4" />
+              <h3 className="text-lg font-medium">Edge Function Required</h3>
+              <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+                Adding users requires admin API access, which should be implemented as a Supabase Edge Function for security.
+              </p>
+              <div className="mt-6 flex justify-center gap-4">
+                <Button variant="outline" onClick={() => setIsAddUserModalOpen(false)}>Cancel</Button>
+                <a
+                  href="https://supabase.com/docs/guides/functions"
+                  target="_blank"
+                  rel="noreferrer"
+                  className={buttonVariants({ variant: "default" })}
+                >
+                  Learn More
+                </a>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
