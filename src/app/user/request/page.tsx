@@ -12,20 +12,48 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // If needed for duration
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Image from 'next/image';
-import { Send } from 'lucide-react'; // Changed icon to Send
+import { Send, Users, Clock, Tag } from 'lucide-react';
 import { createSystemNotification } from '@/lib/notifications';
 import { createClient } from '@/lib/supabase/client';
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Badge } from "@/components/ui/badge";
+
+// List of predefined reasons for use
+const reasonOptions = [
+  "Youtube Shoot",
+  "Event Shoot",
+  "Site Update Shoot",
+  "Offplan property Shoot",
+  "Finished House Shoot",
+  "Allocation Shoot",
+  "Personal",
+  "Home",
+  "Site",
+  "Out of State",
+  "Out of country"
+];
+
+// Duration options for the dropdown
+const durationOptions = [
+  "24hours",
+  "48hours",
+  "72hours",
+  "1 week",
+  "2 weeks",
+  "Month",
+  "year"
+];
 
 const requestSchema = z.object({
   selectedGears: z.array(z.string()).min(1, { message: "Please select at least one gear item." }),
-  reason: z.string().min(5, { message: "Please provide a brief reason (min. 5 characters)." }),
+  reason: z.string().min(1, { message: "Please select a reason for use." }),
   destination: z.string().min(3, { message: "Destination is required (min. 3 characters)." }),
-  duration: z.string().min(1, { message: "Duration is required." }), // Or use a date picker range
-  teamMembers: z.string().optional(),
+  duration: z.string().min(1, { message: "Please select a duration." }),
+  teamMembers: z.array(z.string()).optional().default([]),
   conditionConfirmed: z.boolean().refine(val => val === true, { message: 'You must confirm the gear condition.' }),
 });
 
@@ -37,6 +65,7 @@ export default function RequestGearPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [availableGears, setAvailableGears] = useState<any[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
   const supabase = createClient();
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -47,7 +76,7 @@ export default function RequestGearPage() {
       reason: "",
       destination: "",
       duration: "",
-      teamMembers: "",
+      teamMembers: [],
       conditionConfirmed: false,
     },
   });
@@ -61,7 +90,7 @@ export default function RequestGearPage() {
   }, [preselectedGearId, form.reset]);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(({ data: { user } }: { data: { user: any } }) => {
       if (user?.id) setUserId(user.id);
     });
   }, [supabase]);
@@ -69,9 +98,37 @@ export default function RequestGearPage() {
   useEffect(() => {
     const fetchGears = async () => {
       const { data, error } = await supabase.from('gears').select('*').eq('status', 'Available');
-      if (!error) setAvailableGears(data || []);
+      if (!error) {
+        // Add imageUrl mapping to handle both image_url and fallback
+        const mappedData = (data || []).map((gear: any) => ({
+          ...gear,
+          imageUrl: gear.imageUrl || gear.image_url || '/images/placeholder-gear.svg' // Use SVG fallback image
+        }));
+        setAvailableGears(mappedData);
+      }
     };
+
+    const fetchUsers = async () => {
+      try {
+        // Fetch profiles from Supabase
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role')
+          .order('full_name');
+
+        if (error) {
+          throw error;
+        }
+
+        setAvailableUsers(data || []);
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      }
+    };
+
     fetchGears();
+    fetchUsers();
+
     // Optionally, subscribe to real-time updates
     const channel = supabase
       .channel('public:gears')
@@ -84,35 +141,74 @@ export default function RequestGearPage() {
     setIsLoading(true);
     console.log("Gear request submitted:", data);
 
-    // TODO: Implement actual API call to submit the request
-    // Associate with the logged-in user
+    try {
+      // Log data we're submitting
+      console.log("Submitting with data:", {
+        user_id: userId,
+        gear_ids: data.selectedGears,
+        reason: data.reason,
+        destination: data.destination,
+        expected_duration: data.duration,
+        team_members: data.teamMembers.length ? data.teamMembers.join(',') : null,
+        status: 'Pending'
+      });
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
+      // Create the request in Supabase - using the correct table name and schema
+      const { data: requestData, error } = await supabase
+        .from('gear_requests')
+        .insert({
+          user_id: userId,
+          gear_ids: data.selectedGears,
+          reason: data.reason,
+          destination: data.destination,
+          expected_duration: data.duration,
+          team_members: data.teamMembers.length ? data.teamMembers.join(',') : null,
+          status: 'Pending'
+        })
+        .select();
 
-    toast({
-      title: "Request Submitted",
-      description: "Your gear request has been sent for approval.",
-      variant: "success", // Use success variant
-    });
+      if (error) {
+        console.error("Supabase error details:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
 
-    form.reset({ // Reset form, keeping preselection if it exists
-      selectedGears: preselectedGearId ? [preselectedGearId] : [],
-      reason: "",
-      destination: "",
-      duration: "",
-      teamMembers: "",
-      conditionConfirmed: false,
-    });
-    // Maybe redirect to 'My Requests' page? router.push('/user/my-requests');
-    setIsLoading(false);
+      toast({
+        title: "Request Submitted",
+        description: "Your gear request has been sent for approval.",
+        variant: "success",
+      });
 
-    if (userId) {
-      await createSystemNotification(
-        userId,
-        'Request Submitted',
-        'Your gear request has been sent for approval.'
-      );
+      form.reset({
+        selectedGears: preselectedGearId ? [preselectedGearId] : [],
+        reason: "",
+        destination: "",
+        duration: "",
+        teamMembers: [],
+        conditionConfirmed: false,
+      });
+
+      if (userId) {
+        await createSystemNotification(
+          userId,
+          'Request Submitted',
+          'Your gear request has been sent for approval.'
+        );
+      }
+    } catch (error: any) {
+      console.error('Error submitting request:', error.message || error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit your request. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -150,13 +246,13 @@ export default function RequestGearPage() {
                   name="selectedGears"
                   render={({ field }) => (
                     <FormItem>
-                      <ScrollArea className="h-[30rem] w-full rounded-md border p-4"> {/* Increased height */}
+                      <ScrollArea className="h-[30rem] w-full rounded-md border p-4">
                         {availableGears.map((gear) => (
                           <FormField
                             key={gear.id}
                             control={form.control}
                             name="selectedGears"
-                            render={({ field: checkboxField }) => { // Renamed inner field
+                            render={({ field: checkboxField }) => {
                               return (
                                 <FormItem
                                   key={gear.id}
@@ -177,7 +273,14 @@ export default function RequestGearPage() {
                                     />
                                   </FormControl>
                                   <FormLabel className="font-normal flex items-center gap-2 cursor-pointer">
-                                    <Image src={gear.imageUrl} alt={gear.name} width={24} height={24} className="rounded-sm" data-ai-hint={`${gear.category} item`} />
+                                    <Image
+                                      src={(gear.imageUrl || gear.image_url) ? (gear.imageUrl || gear.image_url) : '/images/placeholder-gear.svg'}
+                                      alt={gear.name}
+                                      width={24}
+                                      height={24}
+                                      className="rounded-sm"
+                                      data-ai-hint={`${gear.category} item`}
+                                    />
                                     {gear.name} <span className="text-xs text-muted-foreground">({gear.category})</span>
                                   </FormLabel>
                                 </FormItem>
@@ -190,7 +293,6 @@ export default function RequestGearPage() {
                     </FormItem>
                   )}
                 />
-
               </CardContent>
             </Card>
           </motion.div>
@@ -212,14 +314,32 @@ export default function RequestGearPage() {
                   name="reason"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Reason for Use</FormLabel>
+                      <FormLabel className="flex items-center gap-2">
+                        <Tag className="h-4 w-4" /> Reason for Use
+                      </FormLabel>
                       <FormControl>
-                        <Textarea placeholder="e.g., Client photoshoot, internal training, event coverage..." {...field} />
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          className="grid grid-cols-2 gap-2 mt-2"
+                        >
+                          {reasonOptions.map((reason) => (
+                            <FormItem key={reason} className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value={reason} id={`reason-${reason}`} />
+                              </FormControl>
+                              <FormLabel htmlFor={`reason-${reason}`} className="font-normal cursor-pointer">
+                                {reason}
+                              </FormLabel>
+                            </FormItem>
+                          ))}
+                        </RadioGroup>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
                 <FormField
                   control={form.control}
                   name="destination"
@@ -233,30 +353,107 @@ export default function RequestGearPage() {
                     </FormItem>
                   )}
                 />
+
                 <FormField
                   control={form.control}
                   name="duration"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Expected Duration</FormLabel>
-                      <FormControl>
-                        {/* Consider using react-day-picker for date range */}
-                        <Input placeholder="e.g., 2 days, 4 hours, Until Friday EOD" {...field} />
-                      </FormControl>
+                      <FormLabel className="flex items-center gap-2">
+                        <Clock className="h-4 w-4" /> Expected Duration
+                      </FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select duration" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {durationOptions.map((duration) => (
+                            <SelectItem key={duration} value={duration}>
+                              {duration}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
                 <FormField
                   control={form.control}
                   name="teamMembers"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Team Members <span className="text-muted-foreground">(Optional)</span></FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., John Doe, Jane Smith" {...field} />
-                      </FormControl>
-                      <FormDescription>List others who might use the gear during this request.</FormDescription>
+                      <FormLabel className="flex items-center gap-2">
+                        <Users className="h-4 w-4" /> Team Members <span className="text-muted-foreground">(Optional)</span>
+                      </FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange([...field.value, value])}
+                        value=""
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select team members" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectLabel>Team Members</SelectLabel>
+                            {availableUsers
+                              .filter(user => user.id !== userId) // Don't show current user
+                              .sort((a, b) => {
+                                // Sort by full name first, fall back to email if name not available
+                                const nameA = a.full_name || a.email || '';
+                                const nameB = b.full_name || b.email || '';
+                                return nameA.localeCompare(nameB);
+                              })
+                              .map((user) => (
+                                <SelectItem
+                                  key={user.id}
+                                  value={user.id}
+                                  className="flex items-center"
+                                >
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{user.full_name || 'Unnamed User'}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {user.email} {user.role && `• ${user.role}`}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      {field.value.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {field.value.map((memberId: string) => {
+                            const member = availableUsers.find(u => u.id === memberId);
+                            return (
+                              <Badge
+                                key={memberId}
+                                variant="secondary"
+                                className="flex items-center gap-1"
+                              >
+                                {member?.full_name || member?.email || 'Unknown user'}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-auto p-0 px-1 text-muted-foreground hover:text-foreground"
+                                  onClick={() => {
+                                    field.onChange(field.value.filter((id: string) => id !== memberId));
+                                  }}
+                                >
+                                  ×
+                                </Button>
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <FormDescription>Select team members who might use the gear during this request.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -301,21 +498,19 @@ export default function RequestGearPage() {
               </Card>
             )}
 
-
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.5 }}
-              whileTap={{ scale: 0.98 }} // Added tap animation
-              className="flex justify-end pt-4" // Align button to the right
+              whileTap={{ scale: 0.98 }}
+              className="flex justify-end pt-4"
             >
               <Button type="submit" disabled={isLoading || form.watch("selectedGears").length === 0}>
-                <Send className="mr-2 h-4 w-4" /> {/* Changed icon */}
+                <Send className="mr-2 h-4 w-4" />
                 {isLoading ? 'Submitting...' : 'Submit Request'}
               </Button>
             </motion.div>
           </motion.div>
-
         </form>
       </Form>
     </motion.div>

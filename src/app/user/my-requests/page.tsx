@@ -1,64 +1,228 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Clock, XCircle, AlertCircle, Package, RotateCcw } from 'lucide-react';
+import {
+  CheckCircle, Clock, XCircle, AlertCircle, Package,
+  RotateCcw, Loader2, Search, Filter, Eye, Calendar,
+  BarChart3, Users
+} from 'lucide-react';
 import { format } from 'date-fns';
-import { Button } from '@/components/ui/button'; // For potential actions like 'Cancel'
-import { useToast } from "@/hooks/use-toast"; // Import toast
-
-// Mock Data - Replace with actual user's request data fetching
-const mockRequests = [
-  { id: 'req1', gearNames: ['Canon EOS R5', 'Tripod X'], requestDate: new Date(2024, 6, 20), duration: '3 days', status: 'Pending', adminNotes: null },
-  { id: 'req3', gearNames: ['Sony A7 IV', 'Rode Mic'], requestDate: new Date(2024, 6, 18), duration: '5 days', status: 'Approved', adminNotes: 'Approved for Studio B use.', checkoutDate: new Date(2024, 6, 19), dueDate: new Date(2024, 6, 24) },
-  { id: 'req2', gearNames: ['DJI Mavic 3'], requestDate: new Date(2024, 6, 19), duration: '1 day', status: 'Rejected', adminNotes: 'Drone requires maintenance.' },
-  { id: 'req4', gearNames: ['Lens Kit'], requestDate: new Date(2024, 6, 21), duration: '2 hours', status: 'Checked Out', adminNotes: 'Approved.', checkoutDate: new Date(2024, 6, 21, 14), dueDate: new Date(2024, 6, 21, 16) }, // Example checked out
-  { id: 'req5', gearNames: ['LED Panel'], requestDate: new Date(2024, 7, 1), duration: '1 week', status: 'Checked In', adminNotes: null, checkoutDate: new Date(2024, 7, 2), checkinDate: new Date(2024, 7, 9) }, // Example completed
-  { id: 'req6', gearNames: ['Manfrotto Tripod'], requestDate: new Date(2024, 6, 20), duration: '1 day', status: 'Overdue', adminNotes: 'Approved.', checkoutDate: new Date(2024, 6, 20), dueDate: new Date(2024, 6, 21) }, // Example overdue
-];
+import { Button } from '@/components/ui/button';
+import { useToast } from "@/hooks/use-toast";
+import { createClient } from '@/lib/supabase/client';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 export default function MyRequestsPage() {
-  const [requests, setRequests] = useState(mockRequests);
-  const { toast } = useToast(); // Initialize useToast
-  // TODO: Add filtering or sorting if needed
+  const [requests, setRequests] = useState<any[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const { toast } = useToast();
+  const supabase = createClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const highlightRequestId = searchParams.get('id');
+
+  useEffect(() => {
+    const fetchRequests = async () => {
+      setLoading(true);
+      try {
+        // Get the current user
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+          router.push('/auth/login');
+          return;
+        }
+
+        // First fetch the user's requests - log at each step to debug
+        console.log("Fetching requests for user:", user.id);
+        const { data: requestsData, error: requestsError } = await supabase
+          .from('gear_requests')
+          .select(`
+            id, 
+            created_at,
+            reason,
+            destination,
+            expected_duration,
+            status,
+            user_id,
+            gear_ids,
+            team_members
+          `)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        console.log("Requests data:", requestsData);
+        console.log("Requests error:", requestsError);
+
+        if (requestsError) {
+          throw requestsError;
+        }
+
+        if (!requestsData || requestsData.length === 0) {
+          setRequests([]);
+          setFilteredRequests([]); // Make sure filtered requests is also empty
+          setLoading(false);
+          return;
+        }
+
+        // Then fetch gear details separately for each request
+        const requestsWithGear = await Promise.all(
+          requestsData.map(async (request: any) => {
+            // For gear_ids as an array
+            if (!request.gear_ids || request.gear_ids.length === 0) {
+              return { ...request, gears: [] };
+            }
+
+            // Fetch all gears in the request
+            const { data: gearData, error: gearError } = await supabase
+              .from('gears')
+              .select('id, name, category')
+              .in('id', request.gear_ids);
+
+            if (gearError) {
+              console.warn(`Error fetching gears for request ${request.id}:`, gearError);
+              return { ...request, gears: [] };
+            }
+
+            // Fetch team member profiles if available
+            let teamMemberProfiles = [];
+            if (request.team_members) {
+              try {
+                const teamMemberIds = request.team_members.split(',').filter(Boolean);
+                if (teamMemberIds.length > 0) {
+                  const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email')
+                    .in('id', teamMemberIds);
+
+                  teamMemberProfiles = profiles || [];
+                }
+              } catch (e) {
+                console.warn('Error fetching team member profiles:', e);
+              }
+            }
+
+            return {
+              ...request,
+              gears: gearData || [],
+              teamMemberProfiles
+            };
+          })
+        );
+
+        console.log("Final processed requests:", requestsWithGear);
+        setRequests(requestsWithGear);
+        setFilteredRequests(requestsWithGear); // Initialize filtered requests with all requests
+      } catch (error: any) {
+        console.error('Error fetching requests:', error.message || error);
+        toast({
+          title: "Error loading requests",
+          description: "There was a problem loading your gear requests. Please try again.",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRequests();
+  }, [supabase, router, toast]);
+
+  // Apply filters
+  useEffect(() => {
+    if (!requests.length) {
+      setFilteredRequests([]);
+      return;
+    }
+
+    let result = [...requests];
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      result = result.filter(req =>
+        req.status?.toLowerCase() === statusFilter.toLowerCase()
+      );
+    }
+
+    // Apply search term
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(req =>
+        req.gears?.some((gear: any) => gear.name?.toLowerCase().includes(term)) ||
+        req.destination?.toLowerCase().includes(term) ||
+        req.reason?.toLowerCase().includes(term)
+      );
+    }
+
+    setFilteredRequests(result);
+  }, [requests, statusFilter, searchTerm]);
 
   const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
       case 'pending':
         return <Badge variant="outline"><Clock className="mr-1 h-3 w-3" /> {status}</Badge>;
       case 'approved':
-        return <Badge variant="default"><CheckCircle className="mr-1 h-3 w-3" /> {status}</Badge>; // Use primary color
+        return <Badge variant="default"><CheckCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
       case 'checked out':
-        return <Badge variant="secondary"><Package className="mr-1 h-3 w-3" /> {status}</Badge>; // Use secondary color
+        return <Badge variant="secondary"><Package className="mr-1 h-3 w-3" /> {status}</Badge>;
       case 'checked in':
       case 'completed':
-        return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white"><CheckCircle className="mr-1 h-3 w-3" /> Completed</Badge>; // Keep green for completed
+        return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white"><CheckCircle className="mr-1 h-3 w-3" /> Completed</Badge>;
       case 'rejected':
         return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
       case 'overdue':
         return <Badge variant="destructive"><AlertCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
-      case 'cancelled': // Added case for cancelled requests
+      case 'cancelled':
         return <Badge variant="outline" className="text-muted-foreground border-dashed"><RotateCcw className="mr-1 h-3 w-3" /> Cancelled</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
   };
 
-  // TODO: Implement Cancel Request logic (with confirmation)
-  const handleCancelRequest = (requestId: string) => {
-    console.log("Cancelling request:", requestId);
-    // Add confirmation dialog here before proceeding
-    // Example using window.confirm (replace with AlertDialog):
+  const handleCancelRequest = async (requestId: string) => {
     if (window.confirm("Are you sure you want to cancel this request?")) {
-      setRequests(requests.map(r => r.id === requestId ? { ...r, status: 'Cancelled' } : r).filter(r => r.status !== 'Cancelled')); // Example optimistic update, or refetch list
-      // Call API to cancel
-      toast({ title: "Request Cancelled", description: "Your gear request has been cancelled." });
+      try {
+        // Update the request status in Supabase
+        const { error } = await supabase
+          .from('gear_requests')
+          .update({ status: 'Cancelled' })
+          .eq('id', requestId);
+
+        if (error) {
+          throw error;
+        }
+
+        // Update local state
+        setRequests(requests.map(r =>
+          r.id === requestId ? { ...r, status: 'Cancelled' } : r
+        ));
+
+        toast({
+          title: "Request Cancelled",
+          description: "Your gear request has been cancelled."
+        });
+      } catch (error) {
+        console.error('Error cancelling request:', error);
+        toast({
+          title: "Error",
+          description: "Failed to cancel request. Please try again.",
+          variant: "destructive"
+        });
+      }
     }
   };
-
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -78,6 +242,49 @@ export default function MyRequestsPage() {
     }
   };
 
+  // Format duration directly from expected_duration field
+  const formatDuration = (request: any) => {
+    if (request.expected_duration) {
+      return request.expected_duration;
+    }
+    return 'N/A';
+  };
+
+  // Helpers for rendering
+  const formatTeamMembers = (request: any) => {
+    if (!request.teamMemberProfiles || request.teamMemberProfiles.length === 0) {
+      return 'None';
+    }
+
+    return request.teamMemberProfiles.map((member: any) =>
+      member.full_name || member.email || 'Unknown user'
+    ).join(', ');
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      return format(date, 'MMM d, yyyy');
+    } catch (e) {
+      return 'Invalid date';
+    }
+  };
+
+  // Stats for summary cards
+  const stats = {
+    total: requests.length,
+    pending: requests.filter(req => req.status?.toLowerCase() === 'pending').length,
+    approved: requests.filter(req => req.status?.toLowerCase() === 'approved').length,
+    rejected: requests.filter(req => req.status?.toLowerCase() === 'rejected').length,
+    completed: requests.filter(req => ['checked in', 'completed'].includes(req.status?.toLowerCase() || '')).length
+  };
+
+  const viewRequestDetails = (request: any) => {
+    setSelectedRequest(request);
+    setShowDetailsModal(true);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -85,16 +292,97 @@ export default function MyRequestsPage() {
       transition={{ duration: 0.5 }}
       className="space-y-6"
     >
-      <h1 className="text-3xl font-bold text-foreground">My Gear Requests</h1>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <h1 className="text-3xl font-bold text-foreground">My Gear Requests</h1>
+        <Button
+          onClick={() => router.push('/user/request')}
+          className="flex items-center gap-2"
+        >
+          <Package className="h-4 w-4" />
+          New Request
+        </Button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
+          <CardContent className="p-4 flex flex-col items-center justify-center">
+            <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{stats.total}</div>
+            <div className="text-sm text-blue-700 dark:text-blue-300">Total Requests</div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800">
+          <CardContent className="p-4 flex flex-col items-center justify-center">
+            <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">{stats.pending}</div>
+            <div className="text-sm text-amber-700 dark:text-amber-300">Pending</div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800">
+          <CardContent className="p-4 flex flex-col items-center justify-center">
+            <div className="text-3xl font-bold text-green-600 dark:text-green-400">{stats.approved}</div>
+            <div className="text-sm text-green-700 dark:text-green-300">Approved</div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 border-red-200 dark:border-red-800">
+          <CardContent className="p-4 flex flex-col items-center justify-center">
+            <div className="text-3xl font-bold text-red-600 dark:text-red-400">{stats.rejected}</div>
+            <div className="text-sm text-red-700 dark:text-red-300">Rejected</div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800">
+          <CardContent className="p-4 flex flex-col items-center justify-center">
+            <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.completed}</div>
+            <div className="text-sm text-purple-700 dark:text-purple-300">Completed</div>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Request Status</CardTitle>
           <CardDescription>Track the status of your gear checkout requests.</CardDescription>
-          {/* Add filtering/sorting options here if needed */}
+
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-4 mt-4">
+            <div className="relative flex-grow">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search gear, location, reason..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  <SelectValue placeholder="Filter by status" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="checked out">Checked Out</SelectItem>
+                <SelectItem value="checked in">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
+
         <CardContent>
-          {requests.length > 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+              <p>Loading your requests...</p>
+            </div>
+          ) : filteredRequests.length > 0 ? (
             <motion.div
               variants={containerVariants}
               initial="hidden"
@@ -103,20 +391,86 @@ export default function MyRequestsPage() {
             >
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Requested Gear(s)</TableHead>
-                    <TableHead>Requested On</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Dates</TableHead> {/* Checkout/Due/Checkin */}
-                    <TableHead>Admin Notes</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-medium">Requested Gear(s)</TableHead>
+                    <TableHead className="font-medium">Requested On</TableHead>
+                    <TableHead className="font-medium">Duration</TableHead>
+                    <TableHead className="font-medium">Destination</TableHead>
+                    <TableHead className="font-medium">Status</TableHead>
+                    <TableHead className="font-medium">Team Members</TableHead>
+                    <TableHead className="text-right font-medium">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {requests.map((req) => (
-                    <motion.tr key={req.id} variants={itemVariants}>
-                      <TableCell className="font-medium">{req.gearNames.join(', ')}</TableCell><TableCell>{format(req.requestDate, 'PP')}</TableCell><TableCell>{req.duration}</TableCell><TableCell>{getStatusBadge(req.status)}</TableCell><TableCell className="text-xs">{req.checkoutDate && <div>Out: {format(req.checkoutDate, 'PP')}</div>}{req.dueDate && <div className={`${req.status === 'Overdue' ? 'text-destructive font-semibold' : ''}`}>Due: {format(req.dueDate, 'PP')}</div>}{req.checkinDate && <div>In: {format(req.checkinDate, 'PP')}</div>}</TableCell><TableCell className="text-xs text-muted-foreground">{req.adminNotes || 'N/A'}</TableCell><TableCell className="text-right">{req.status === 'Pending' && (<Button variant="outline" size="sm" onClick={() => handleCancelRequest(req.id)}><RotateCcw className="mr-1 h-3 w-3" /> Cancel</Button>)}</TableCell>
+                  {filteredRequests.map((req) => (
+                    <motion.tr
+                      key={req.id}
+                      variants={itemVariants}
+                      className={`${req.id === highlightRequestId ? "bg-muted" : ""} hover:bg-muted/50 transition-colors`}
+                    >
+                      <TableCell className="font-medium">
+                        {req.gears && req.gears.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {req.gears.map((gear: any) => (
+                              <div key={gear.id} className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{gear.name || 'Unnamed Gear'}</span>
+                                {gear.category && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {gear.category}
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          'No gear selected'
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {req.created_at ? (
+                          <div className="flex flex-col">
+                            <span>{formatDate(req.created_at)}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(req.created_at), 'h:mm a')}
+                            </span>
+                          </div>
+                        ) : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="font-normal">
+                          {formatDuration(req)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {req.destination || 'N/A'}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(req.status || 'Unknown')}</TableCell>
+                      <TableCell className="text-xs max-w-[200px] truncate" title={formatTeamMembers(req)}>
+                        {formatTeamMembers(req)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => viewRequestDetails(req)}
+                            className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+
+                          {req.status === 'Pending' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCancelRequest(req.id)}
+                              className="hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                            >
+                              <RotateCcw className="mr-1 h-3 w-3" /> Cancel
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
                     </motion.tr>
                   ))}
                 </TableBody>
@@ -127,17 +481,161 @@ export default function MyRequestsPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="text-center py-10 text-muted-foreground"
+              className="text-center py-12 px-4"
             >
-              <Package className="h-10 w-10 mx-auto mb-4" />
-              <p>You haven't made any gear requests yet.</p>
-              <Button variant="link" className="mt-2" asChild>
-                <a href="/user/browse">Request Gear</a>
-              </Button>
+              <div className="bg-muted/30 inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
+                <Package className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">No gear requests found</h3>
+              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                {searchTerm || statusFilter !== "all"
+                  ? "Try adjusting your search filters to find what you're looking for."
+                  : "You haven't made any gear requests yet. Get started by requesting the gear you need."}
+              </p>
+
+              {/* Debug information - to help diagnose issues */}
+              <div className="text-xs text-muted-foreground mt-4 mb-4 p-3 border border-muted rounded-md max-w-md mx-auto text-left">
+                <p className="font-medium mb-1">Debug Info:</p>
+                <p>Total requests in database: {requests.length}</p>
+                <p>Filtered requests shown: {filteredRequests.length}</p>
+                <p>Status filter: {statusFilter}</p>
+                <p>Search term: {searchTerm || '(none)'}</p>
+                <p>Data source: gear_requests table</p>
+              </div>
+
+              {searchTerm || statusFilter !== "all" ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setStatusFilter("all");
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              ) : (
+                <Button onClick={() => router.push('/user/request')}>
+                  Request Gear
+                </Button>
+              )}
             </motion.div>
           )}
         </CardContent>
+
+        {!loading && filteredRequests.length > 0 && (
+          <CardFooter className="flex justify-between items-center border-t px-6 py-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {filteredRequests.length} of {requests.length} requests
+            </div>
+            <Button variant="outline" size="sm" onClick={() => router.push('/user/request')}>
+              <Package className="mr-2 h-4 w-4" />
+              New Request
+            </Button>
+          </CardFooter>
+        )}
       </Card>
+
+      {/* Request Details Modal */}
+      <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Request Details</DialogTitle>
+            <DialogDescription>
+              Detailed information about your gear request.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRequest && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-sm font-semibold mb-1 flex items-center">
+                    <Calendar className="h-4 w-4 mr-1 text-muted-foreground" /> Request Information
+                  </h4>
+                  <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+                    <div className="grid grid-cols-3 gap-1 text-sm">
+                      <span className="text-muted-foreground">Status:</span>
+                      <span className="col-span-2">{getStatusBadge(selectedRequest.status)}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 text-sm">
+                      <span className="text-muted-foreground">Requested:</span>
+                      <span className="col-span-2">{formatDate(selectedRequest.created_at)}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 text-sm">
+                      <span className="text-muted-foreground">Duration:</span>
+                      <span className="col-span-2">{selectedRequest.expected_duration}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 text-sm">
+                      <span className="text-muted-foreground">Location:</span>
+                      <span className="col-span-2">{selectedRequest.destination || 'Not specified'}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 text-sm">
+                      <span className="text-muted-foreground">Reason:</span>
+                      <span className="col-span-2">{selectedRequest.reason || 'Not specified'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold mb-1 flex items-center">
+                    <Package className="h-4 w-4 mr-1 text-muted-foreground" /> Requested Gear
+                  </h4>
+                  <div className="bg-muted/30 rounded-lg p-3">
+                    {selectedRequest.gears && selectedRequest.gears.length > 0 ? (
+                      <div className="space-y-3">
+                        {selectedRequest.gears.map((gear: any, index: number) => (
+                          <div key={gear.id} className={`${index > 0 ? 'pt-2 border-t border-muted' : ''}`}>
+                            <div className="font-medium">{gear.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {gear.category || 'No category'} • ID: {gear.id}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No gear information available</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold mb-1 flex items-center">
+                  <Users className="h-4 w-4 mr-1 text-muted-foreground" /> Team Members
+                </h4>
+                <div className="bg-muted/30 rounded-lg p-3">
+                  {selectedRequest.teamMemberProfiles && selectedRequest.teamMemberProfiles.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedRequest.teamMemberProfiles.map((member: any) => (
+                        <Badge key={member.id} variant="secondary">
+                          {member.full_name || member.email || 'Unknown user'}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">No team members assigned</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailsModal(false)}>Close</Button>
+            {selectedRequest?.status === 'Pending' && (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  handleCancelRequest(selectedRequest.id);
+                  setShowDetailsModal(false);
+                }}
+              >
+                Cancel Request
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }

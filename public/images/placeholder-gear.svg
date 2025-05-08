@@ -1,0 +1,17 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dark background -->
+  <rect width="200" height="200" fill="#1e293b" />
+  
+  <!-- Camera icon -->
+  <g fill="#94a3b8">
+    <!-- Camera body -->
+    <rect x="50" y="80" width="100" height="60" />
+    <!-- Camera lens -->
+    <circle cx="100" cy="110" r="30" />
+    <!-- Camera viewfinder -->
+    <rect x="70" y="70" width="20" height="10" />
+  </g>
+  
+  <!-- Text -->
+  <text x="100" y="170" font-family="sans-serif" font-size="16" font-weight="bold" fill="#e2e8f0" text-anchor="middle">No Image</text>
+</svg> 

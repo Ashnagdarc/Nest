@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Check, X, Clock, Filter, ThumbsUp, ThumbsDown, Download, Package, RotateCcw, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+import { Check, X, Clock, Filter, ThumbsUp, ThumbsDown, Download, Package, RotateCcw, AlertCircle, CheckCircle, XCircle, Bell, BellRing } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -40,10 +40,42 @@ const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
 import successAnimation from "@/../public/animations/success.json";
 import rejectAnimation from "@/../public/animations/reject.json";
 
+// --- Import the notification sound ---
+const NOTIFICATION_SOUND_URL = '/sounds/notification.mp3'; // Add this sound file to your public folder
+
 type StatusHistory = { status: string; timestamp: Date; note?: string }[];
 type GearDetail = { name: string; description: string; specs: string };
 
 type Request = any;
+
+// Add these types at the top of the file
+type GearCheckout = {
+  gear_id: string;
+  user_id: string;
+  request_id: string;
+  checkout_date: string;
+  due_date: string;
+  status: string;
+};
+
+type GearInfo = {
+  id: string;
+  name: string;
+};
+
+// Add these types at the top of the file
+type GearStatus = {
+  id: string;
+  status: string;
+  checked_out_to: string | null;
+};
+
+// Add these types at the top of the file
+type UpdatedGear = {
+  id: string;
+  status: string;
+  checked_out_to: string | null;
+};
 
 // Mock Data - Replace with actual data fetching
 // Added more diverse statuses and dates
@@ -91,29 +123,135 @@ export default function ManageRequestsPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusHistory, setStatusHistory] = useState<any[]>([]); // For audit trail
+  const [previousRequestCount, setPreviousRequestCount] = useState<number>(0);
+  const [newRequestNotification, setNewRequestNotification] = useState<Request | null>(null);
+  const [showNotificationPopup, setShowNotificationPopup] = useState<boolean>(false);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true); // Default sound on
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Fetch requests from Supabase
+  // Initialize audio element
   useEffect(() => {
-    const fetchRequests = async () => {
-      setLoading(true);
-      setFetchError(null);
-      // Test 1: Minimal query (id only)
-      const test1 = await supabase.from('requests').select('id').limit(1);
-      console.log('Test 1 (id only):', test1.error, test1.data);
-      // Test 2: id + user:profiles
-      const test2 = await supabase.from('requests').select('id, user:profiles (id, full_name, email)').limit(1);
-      console.log('Test 2 (user:profiles):', test2.error, test2.data);
-      // Test 3: id + profiles
-      const test3 = await supabase.from('requests').select('id, profiles (id, full_name, email)').limit(1);
-      console.log('Test 3 (profiles):', test3.error, test3.data);
+    audioRef.current = new Audio(NOTIFICATION_SOUND_URL);
+
+    // Check for user preference in localStorage
+    const savedSoundPreference = localStorage.getItem('gearflowSoundEnabled');
+    if (savedSoundPreference !== null) {
+      setSoundEnabled(savedSoundPreference === 'true');
+    }
+  }, []);
+
+  // Save sound preference when it changes
+  useEffect(() => {
+    localStorage.setItem('gearflowSoundEnabled', soundEnabled.toString());
+  }, [soundEnabled]);
+
+  // Add this before the useEffect hooks
+  const fetchRequests = async () => {
+    setLoading(true);
+    setFetchError(null);
+
+    try {
+      // Fetch gear requests from the gear_requests table
+      const { data: requestsData, error: requestsError } = await supabase
+        .from('gear_requests')
+        .select('*, profiles:user_id(id, full_name, email)')
+        .order('created_at', { ascending: false });
+
+      if (requestsError) {
+        console.error('Error fetching gear requests:', requestsError);
+        setFetchError('Failed to load gear requests.');
+        setRequests([]);
+        return;
+      }
+
+      // Process and map the data to the format expected by the UI
+      const processedRequests = await Promise.all(requestsData.map(async (request: any) => {
+        // Fetch gear details for gear_ids array
+        let gearNames: string[] = [];
+        if (request.gear_ids && request.gear_ids.length > 0) {
+          const { data: gearData } = await supabase
+            .from('gears')
+            .select('id, name')
+            .in('id', request.gear_ids);
+
+          gearNames = gearData ? gearData.map((gear: any) => gear.name) : [];
+        }
+
+        return {
+          id: request.id,
+          userName: request.profiles?.full_name || 'Unknown User',
+          userEmail: request.profiles?.email,
+          userId: request.user_id,
+          gearNames: gearNames,
+          requestDate: new Date(request.created_at),
+          duration: request.expected_duration || 'Not specified',
+          reason: request.reason || 'Not specified',
+          destination: request.destination || 'Not specified',
+          status: request.status || 'Pending',
+          adminNotes: request.admin_notes || null,
+          checkoutDate: request.checkout_date ? new Date(request.checkout_date) : null,
+          dueDate: request.due_date ? new Date(request.due_date) : null,
+          checkinDate: request.checkin_date ? new Date(request.checkin_date) : null,
+          teamMembers: request.team_members || null
+        };
+      }));
+
+      // Check for new requests
+      if (previousRequestCount > 0 && processedRequests.length > previousRequestCount) {
+        // Find the newest request (should be at index 0 if sorted by created_at desc)
+        const newestRequest = processedRequests[0];
+
+        // Only show notification for Pending requests
+        if (newestRequest && newestRequest.status === 'Pending') {
+          setNewRequestNotification(newestRequest);
+          setShowNotificationPopup(true);
+
+          // Play sound if enabled
+          if (soundEnabled && audioRef.current) {
+            audioRef.current.play().catch(e => console.error('Error playing notification sound:', e));
+          }
+
+          // Create notifications for all admin users
+          const { data: adminUsers } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('role', 'Admin');
+
+          if (adminUsers && adminUsers.length > 0) {
+            // Create notification for each admin
+            for (const admin of adminUsers) {
+              await createSystemNotification(
+                admin.id,
+                'New Gear Request',
+                `${newestRequest.userName} has requested ${newestRequest.gearNames.join(', ')}`
+              );
+            }
+          }
+        }
+      }
+
+      // Update request count for next comparison
+      setPreviousRequestCount(processedRequests.length);
+
+      console.log('Processed requests:', processedRequests);
+      setRequests(processedRequests);
+    } catch (error: any) {
+      console.error('Error fetching requests:', error);
+      setFetchError(error.message);
+      setRequests([]);
+    } finally {
       setLoading(false);
-    };
+    }
+  };
+
+  // Update the useEffect to use the fetchRequests function
+  useEffect(() => {
     fetchRequests();
 
-    // --- Real-time sync ---
+    // Set up real-time subscription
     const channel = supabase
-      .channel('public:requests')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, () => {
+      .channel('public:gear_requests')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gear_requests' }, () => {
         fetchRequests();
       })
       .subscribe();
@@ -131,7 +269,13 @@ export default function ManageRequestsPage() {
         .select('status, changed_at, note, profiles:changed_by(full_name)')
         .eq('request_id', selectedRequest.id)
         .order('changed_at', { ascending: true })
-        .then(({ data }) => setStatusHistory(data || []));
+        .then(({ data }: { data: any[] | null }) => {
+          if (data) {
+            setStatusHistory(data);
+          } else {
+            setStatusHistory([]);
+          }
+        });
     } else {
       setStatusHistory([]);
     }
@@ -139,7 +283,7 @@ export default function ManageRequestsPage() {
 
   // Fetch current user's role for role-based access
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }: { data: { user: any } }) => {
       if (user?.id) {
         const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
         setCurrentUserRole(data?.role || '');
@@ -167,29 +311,205 @@ export default function ManageRequestsPage() {
   // Approve handler: update DB and state, and insert status history and notification
   const handleApprove = async (requestId: string) => {
     setShowAnimation({ type: 'approve', id: requestId });
-    await supabase
-      .from('requests')
-      .update({ status: 'Approved', approved_at: new Date().toISOString() })
-      .eq('id', requestId);
-    setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'Approved', approved_at: new Date() } : r));
-    // Insert status history
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('request_status_history').insert({
-      request_id: requestId,
-      status: 'Approved',
-      changed_by: user?.id,
-      note: null,
-    });
-    // Fetch the request to get the user_id and gear names
-    const { data: reqData } = await supabase.from('requests').select('user_id, gears(name)').eq('id', requestId).single();
-    const gearNames = reqData?.gears?.map((g: any) => g.name).join(', ') || 'gear';
-    // After updating request status and inserting status history
-    await createSystemNotification(
-      reqData?.user_id,
-      'Request Approved',
-      `Your request for ${gearNames} has been approved.`
-    );
-    setShowAnimation({ type: 'approve', id: null });
+
+    try {
+      console.log('Step 1: Getting request details');
+      // Step 1: Get the request details to know which gears to update
+      const { data: requestData, error: requestError } = await supabase
+        .from('gear_requests')
+        .select('user_id, gear_ids, expected_duration')
+        .eq('id', requestId)
+        .single();
+
+      if (requestError) {
+        console.error('Error fetching request details:', requestError);
+        throw requestError;
+      }
+
+      const { user_id, gear_ids, expected_duration } = requestData;
+      if (!gear_ids || !gear_ids.length) {
+        const noGearsError = new Error('No gear IDs found in the request');
+        console.error(noGearsError);
+        throw noGearsError;
+      }
+
+      console.log('Step 2: Calculating due date');
+      // Step 2: Calculate the due date based on expected duration
+      const checkoutDate = new Date();
+      let dueDate = new Date();
+
+      // Parse the expected_duration to set appropriate due date
+      if (expected_duration.includes('hour')) {
+        const hours = parseInt(expected_duration);
+        dueDate.setHours(dueDate.getHours() + (isNaN(hours) ? 24 : hours));
+      } else if (expected_duration.includes('day')) {
+        const days = parseInt(expected_duration);
+        dueDate.setDate(dueDate.getDate() + (isNaN(days) ? 1 : days));
+      } else if (expected_duration.includes('week')) {
+        const weeks = parseInt(expected_duration);
+        dueDate.setDate(dueDate.getDate() + (isNaN(weeks) ? 7 : weeks * 7));
+      } else {
+        // Default to 1 day if duration can't be parsed
+        dueDate.setDate(dueDate.getDate() + 1);
+      }
+
+      // Format dates in ISO string format
+      const now = new Date().toISOString();
+      const formattedCheckoutDate = checkoutDate.toISOString();
+      const formattedDueDate = dueDate.toISOString();
+
+      console.log('Step 3: Verifying gear availability');
+      // Verify that all gears are available or pending approval
+      const { data: gearStatusData, error: gearStatusError } = await supabase
+        .from('gears')
+        .select('id, status, checked_out_to')
+        .in('id', gear_ids);
+
+      if (gearStatusError) {
+        throw gearStatusError;
+      }
+
+      // Check if any gear is already checked out to someone else
+      const unavailableGear = gearStatusData?.filter((gear: GearStatus) =>
+        gear.status === 'Checked Out' && gear.checked_out_to !== user_id
+      );
+
+      if (unavailableGear && unavailableGear.length > 0) {
+        throw new Error(`Some gear items are already checked out to other users: ${unavailableGear.map((g: GearStatus) => g.id).join(', ')}`);
+      }
+
+      console.log('Step 4: Creating gear_checkouts records');
+      // Create checkout records for each gear
+      const checkoutRecords = gear_ids.map((gearId: string): GearCheckout => ({
+        gear_id: gearId,
+        user_id: user_id,
+        request_id: requestId,
+        checkout_date: formattedCheckoutDate,
+        due_date: formattedDueDate,
+        status: 'Checked Out'
+      }));
+
+      const { error: checkoutError } = await supabase
+        .from('gear_checkouts')
+        .upsert(checkoutRecords, {
+          onConflict: 'gear_id,user_id',
+          ignoreDuplicates: false
+        });
+
+      if (checkoutError) {
+        console.error('Error creating gear_checkouts records:', checkoutError);
+        throw checkoutError;
+      }
+
+      console.log('Step 5: Updating gear_requests record');
+      // Update the gear_requests record
+      const { error: requestUpdateError } = await supabase
+        .from('gear_requests')
+        .update({
+          status: 'Approved',
+          approved_at: now,
+          checkout_date: formattedCheckoutDate,
+          due_date: formattedDueDate
+        })
+        .eq('id', requestId);
+
+      if (requestUpdateError) {
+        console.error('Error updating gear request:', requestUpdateError);
+        throw requestUpdateError;
+      }
+
+      console.log('Step 6: Updating gear statuses');
+      // Update each gear's status and checked_out_to field
+      const { error: gearUpdateError } = await supabase
+        .from('gears')
+        .update({
+          status: 'Checked Out',
+          checked_out_to: user_id,
+          current_request_id: requestId,
+          last_checkout_date: formattedCheckoutDate,
+          due_date: formattedDueDate
+        })
+        .in('id', gear_ids);
+
+      if (gearUpdateError) {
+        console.error(`Error updating gears:`, gearUpdateError);
+        throw gearUpdateError;
+      }
+
+      // Verify the update was successful
+      const { data: updatedGears, error: verifyError } = await supabase
+        .from('gears')
+        .select('id, status, checked_out_to')
+        .in('id', gear_ids);
+
+      if (verifyError) {
+        console.error('Error verifying gear updates:', verifyError);
+        throw verifyError;
+      }
+
+      const unsuccessfulUpdates = updatedGears?.filter(
+        (gear: UpdatedGear) => gear.status !== 'Checked Out' || gear.checked_out_to !== user_id
+      );
+
+      if (unsuccessfulUpdates && unsuccessfulUpdates.length > 0) {
+        console.error('Some gears were not properly updated:', unsuccessfulUpdates);
+        throw new Error(`Failed to update status for some gears: ${unsuccessfulUpdates.map((g: UpdatedGear) => g.id).join(', ')}`);
+      }
+
+      console.log('Step 7: Creating notification');
+      // Create a notification for the user
+      const { data: gearData } = await supabase
+        .from('gears')
+        .select('name')
+        .in('id', gear_ids);
+
+      const gearNames = gearData?.map((g: GearInfo) => g.name).join(', ') || 'requested gear';
+      await createSystemNotification(
+        user_id,
+        'Gear Request Approved',
+        `Your request for ${gearNames} has been approved. You can now check out the gear.`
+      );
+
+      // Create notification for admins about the approval
+      const { data: adminUsers } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'Admin');
+
+      if (adminUsers && adminUsers.length > 0) {
+        for (const admin of adminUsers) {
+          await createSystemNotification(
+            admin.id,
+            'Gear Request Approved',
+            `Request for ${gearNames} has been approved and checked out to user ${user_id}.`
+          );
+        }
+      }
+
+      // Refresh the requests list
+      fetchRequests();
+
+      // Show success message
+      toast({
+        title: "Request Approved",
+        description: "The gear request has been approved and the user has been notified.",
+        variant: "default",
+      });
+
+      // Hide animation after a delay
+      setTimeout(() => {
+        setShowAnimation({ type: 'approve', id: null });
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Error in handleApprove:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to approve request. Please try again.",
+        variant: "destructive",
+      });
+      setShowAnimation({ type: 'approve', id: null });
+    }
   };
 
   // Reject handler: update DB and state, and insert status history and notification
@@ -198,29 +518,123 @@ export default function ManageRequestsPage() {
     const requestId = requestToReject;
     setRequestToReject(null);
     setShowAnimation({ type: 'reject', id: requestId });
-    await supabase
-      .from('requests')
-      .update({ status: 'Rejected', rejection_reason: rejectionReason, rejected_at: new Date().toISOString() })
-      .eq('id', requestId);
-    setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'Rejected', rejectionReason, rejected_at: new Date() } : r));
-    // Insert status history
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('request_status_history').insert({
-      request_id: requestId,
-      status: 'Rejected',
-      changed_by: user?.id,
-      note: rejectionReason,
-    });
-    // Fetch the request to get the user_id and gear names
-    const { data: reqData } = await supabase.from('requests').select('user_id, gears(name)').eq('id', requestId).single();
-    const gearNames = reqData?.gears?.map((g: any) => g.name).join(', ') || 'gear';
-    // After updating request status and inserting status history
-    await createSystemNotification(
-      reqData?.user_id,
-      'Request Rejected',
-      `Your request for ${gearNames} was rejected. Reason: ${rejectionReason}`
-    );
-    setShowAnimation({ type: 'reject', id: null });
+
+    try {
+      // Step 1: Get the request details
+      const { data: requestData, error: requestError } = await supabase
+        .from('gear_requests')
+        .select('user_id, gear_ids')
+        .eq('id', requestId)
+        .single();
+
+      if (requestError) {
+        throw requestError;
+      }
+
+      const { user_id, gear_ids } = requestData;
+
+      // Step 2: Update the gear_requests record with rejected status
+      const { error: updateError } = await supabase
+        .from('gear_requests')
+        .update({
+          status: 'Rejected',
+          rejection_reason: rejectionReason,
+          rejected_at: new Date().toISOString()
+        })
+        .eq('id', requestId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Step 3: Make sure gear status remains 'Available'
+      if (gear_ids && gear_ids.length > 0) {
+        const { error: gearUpdateError } = await supabase
+          .from('gears')
+          .update({
+            status: 'Available'
+          })
+          .in('id', gear_ids)
+          .eq('status', 'On Hold'); // Only update if was on hold
+
+        if (gearUpdateError) {
+          console.error('Error updating gear status:', gearUpdateError);
+          // Non-blocking error, continue with process
+        }
+      }
+
+      // Step 4: Update UI
+      setRequests(prev => prev.map(r => r.id === requestId ? {
+        ...r,
+        status: 'Rejected',
+        rejectionReason,
+        rejected_at: new Date()
+      } : r));
+
+      // Step 5: Insert status history
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('request_status_history').insert({
+        request_id: requestId,
+        status: 'Rejected',
+        changed_by: user?.id,
+        note: rejectionReason,
+      });
+
+      // Step 6: Get gear names for notification
+      let gearNames = 'gear';
+      if (gear_ids && gear_ids.length > 0) {
+        const { data: gearData } = await supabase
+          .from('gears')
+          .select('name')
+          .in('id', gear_ids);
+
+        if (gearData && gearData.length > 0) {
+          gearNames = gearData.map((g: any) => g.name).join(', ');
+        }
+      }
+
+      // Step 7: Send user notification
+      await createSystemNotification(
+        user_id,
+        'Request Rejected',
+        `Your request for ${gearNames} was rejected. Reason: ${rejectionReason}`
+      );
+
+      // Step 8: Create notifications for all admin users
+      const { data: adminUsers } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'Admin');
+
+      if (adminUsers && adminUsers.length > 0) {
+        // Create notification for each admin
+        for (const admin of adminUsers) {
+          await createSystemNotification(
+            admin.id,
+            'Gear Request Rejected',
+            `Request for ${gearNames} by ${user_id} was rejected. Reason: ${rejectionReason}`
+          );
+        }
+      }
+
+      // Success toast
+      toast({
+        title: "Request Rejected",
+        description: "The requester has been notified.",
+        variant: "default",
+      });
+
+    } catch (error) {
+      console.error('Error rejecting request:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reject request. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRejectionReason('');
+      setShowAnimation({ type: 'reject', id: null });
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -361,6 +775,15 @@ export default function ManageRequestsPage() {
     setRejectionReason('');
   };
 
+  // Handler to view the notification request details
+  const handleViewNotification = () => {
+    if (newRequestNotification) {
+      setSelectedRequest(newRequestNotification);
+      setIsDetailsOpen(true);
+      setShowNotificationPopup(false);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -368,6 +791,73 @@ export default function ManageRequestsPage() {
       transition={{ duration: 0.5 }}
       className="space-y-6"
     >
+      {/* Sound toggle button */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          className="flex items-center gap-2"
+        >
+          {soundEnabled ? (
+            <>
+              <BellRing className="h-4 w-4 text-primary" />
+              Sound On
+            </>
+          ) : (
+            <>
+              <Bell className="h-4 w-4" />
+              Sound Off
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* New Request Notification Popup */}
+      <AnimatePresence>
+        {showNotificationPopup && newRequestNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.9 }}
+            transition={{ duration: 0.3 }}
+            className="fixed top-4 right-4 z-50 max-w-md"
+          >
+            <Card className="border-primary border-2 shadow-lg">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <BellRing className="h-5 w-5 text-primary animate-pulse" />
+                  New Gear Request
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <p className="mb-1"><span className="font-semibold">From:</span> {newRequestNotification.userName}</p>
+                <p className="mb-1"><span className="font-semibold">Gear:</span> {newRequestNotification.gearNames.join(', ')}</p>
+                <p className="mb-3"><span className="font-semibold">Requested:</span> {format(newRequestNotification.requestDate, 'PPp')}</p>
+                <div className="flex justify-between gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="flex-1"
+                    onClick={handleViewNotification}
+                  >
+                    View Details
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setShowNotificationPopup(false)}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {loading && <div className="text-center py-10">Loading requests...</div>}
       {fetchError && <div className="text-center text-destructive py-10">{fetchError}</div>}
       {!loading && !fetchError && (
@@ -489,9 +979,11 @@ export default function ManageRequestsPage() {
                                   <AlertDialogContent>
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Confirm Rejection</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Are you sure you want to reject request ID <span className="font-semibold">{req.id}</span>?
-                                        {/* Optional: Add input for rejection reason here */}
+                                      <AlertDialogDescription asChild>
+                                        <div className="text-sm text-muted-foreground">
+                                          Are you sure you want to reject request ID <span className="font-semibold">{req.id}</span>?
+                                          {/* Optional: Add input for rejection reason here */}
+                                        </div>
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
@@ -525,9 +1017,11 @@ export default function ManageRequestsPage() {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Confirm Rejection</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to reject request ID <span className="font-semibold">{requestToReject}</span>?
-                  {/* Optional: Add input for rejection reason here */}
+                <AlertDialogDescription asChild>
+                  <div className="text-sm text-muted-foreground">
+                    Are you sure you want to reject request ID <span className="font-semibold">{requestToReject}</span>?
+                    {/* Optional: Add input for rejection reason here */}
+                  </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -544,52 +1038,54 @@ export default function ManageRequestsPage() {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Request Details</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {selectedRequest && (
-                    <div className="space-y-2 text-left">
-                      <div className="flex items-center gap-2">
-                        <b>User:</b> {selectedRequest.userName}
-                        {selectedRequest.userEmail && (
-                          <a href={`mailto:${selectedRequest.userEmail}`} title="Email user" className="ml-2 text-primary hover:underline flex items-center"><Mail className="h-4 w-4 mr-1" />Email</a>
-                        )}
+                <AlertDialogDescription asChild>
+                  <div className="text-sm text-muted-foreground">
+                    {selectedRequest && (
+                      <div className="space-y-2 text-left">
+                        <div className="flex items-center gap-2">
+                          <b>User:</b> {selectedRequest.userName}
+                          {selectedRequest.userEmail && (
+                            <a href={`mailto:${selectedRequest.userEmail}`} title="Email user" className="ml-2 text-primary hover:underline flex items-center"><Mail className="h-4 w-4 mr-1" />Email</a>
+                          )}
+                        </div>
+                        <div><b>Gear(s):</b> {selectedRequest.gearNames.map((gear: string) => (
+                          <Popover key={gear}>
+                            <PopoverTrigger asChild>
+                              <Button variant="link" className="p-0 h-auto align-baseline text-primary underline text-sm">{gear}</Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64">
+                              <div className="font-bold mb-1">{gearDetails[gear]?.name || gear}</div>
+                              <div className="text-xs mb-1">{gearDetails[gear]?.description}</div>
+                              <div className="text-xs text-muted-foreground">Specs: {gearDetails[gear]?.specs}</div>
+                            </PopoverContent>
+                          </Popover>
+                        ))}</div>
+                        <div><b>Requested On:</b> {selectedRequest.requestDate && selectedRequest.requestDate instanceof Date ? format(selectedRequest.requestDate, 'PPpp') : ''}</div>
+                        <div><b>Duration:</b> {selectedRequest.duration}</div>
+                        <div><b>Reason:</b> {selectedRequest.reason}</div>
+                        <div><b>Destination:</b> {selectedRequest.destination}</div>
+                        <div><b>Status:</b> {getStatusBadge(selectedRequest.status)}</div>
+                        {selectedRequest.adminNotes && <div><b>Admin Notes:</b> {selectedRequest.adminNotes}</div>}
+                        {selectedRequest.rejectionReason && <div><b>Rejection Reason:</b> {selectedRequest.rejectionReason}</div>}
+                        {selectedRequest.checkoutDate && selectedRequest.checkoutDate instanceof Date && <div><b>Checkout Date:</b> {format(selectedRequest.checkoutDate, 'PPpp')}</div>}
+                        {selectedRequest.dueDate && selectedRequest.dueDate instanceof Date && <div><b>Due Date:</b> {format(selectedRequest.dueDate, 'PPpp')}</div>}
+                        {selectedRequest.checkinDate && selectedRequest.checkinDate instanceof Date && <div><b>Check-in Date:</b> {format(selectedRequest.checkinDate, 'PPpp')}</div>}
+                        {/* Audit Trail */}
+                        <div>
+                          <b>Status History:</b>
+                          <ul className="ml-4 list-disc text-xs">
+                            {statusHistory.length === 0 && <li>No status history found.</li>}
+                            {statusHistory.map((h, i) => (
+                              <li key={i}>
+                                {h.status} by {h.profiles?.full_name || 'Unknown'} at {h.changed_at ? format(new Date(h.changed_at), 'PPpp') : ''}
+                                {h.note ? ` (${h.note})` : ''}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
-                      <div><b>Gear(s):</b> {selectedRequest.gearNames.map((gear: string) => (
-                        <Popover key={gear}>
-                          <PopoverTrigger asChild>
-                            <Button variant="link" className="p-0 h-auto align-baseline text-primary underline text-sm">{gear}</Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-64">
-                            <div className="font-bold mb-1">{gearDetails[gear]?.name || gear}</div>
-                            <div className="text-xs mb-1">{gearDetails[gear]?.description}</div>
-                            <div className="text-xs text-muted-foreground">Specs: {gearDetails[gear]?.specs}</div>
-                          </PopoverContent>
-                        </Popover>
-                      ))}</div>
-                      <div><b>Requested On:</b> {selectedRequest.requestDate && selectedRequest.requestDate instanceof Date ? format(selectedRequest.requestDate, 'PPpp') : ''}</div>
-                      <div><b>Duration:</b> {selectedRequest.duration}</div>
-                      <div><b>Reason:</b> {selectedRequest.reason}</div>
-                      <div><b>Destination:</b> {selectedRequest.destination}</div>
-                      <div><b>Status:</b> {getStatusBadge(selectedRequest.status)}</div>
-                      {selectedRequest.adminNotes && <div><b>Admin Notes:</b> {selectedRequest.adminNotes}</div>}
-                      {selectedRequest.rejectionReason && <div><b>Rejection Reason:</b> {selectedRequest.rejectionReason}</div>}
-                      {selectedRequest.checkoutDate && selectedRequest.checkoutDate instanceof Date && <div><b>Checkout Date:</b> {format(selectedRequest.checkoutDate, 'PPpp')}</div>}
-                      {selectedRequest.dueDate && selectedRequest.dueDate instanceof Date && <div><b>Due Date:</b> {format(selectedRequest.dueDate, 'PPpp')}</div>}
-                      {selectedRequest.checkinDate && selectedRequest.checkinDate instanceof Date && <div><b>Check-in Date:</b> {format(selectedRequest.checkinDate, 'PPpp')}</div>}
-                      {/* Audit Trail */}
-                      <div>
-                        <b>Status History:</b>
-                        <ul className="ml-4 list-disc text-xs">
-                          {statusHistory.length === 0 && <li>No status history found.</li>}
-                          {statusHistory.map((h, i) => (
-                            <li key={i}>
-                              {h.status} by {h.profiles?.full_name || 'Unknown'} at {h.changed_at ? format(new Date(h.changed_at), 'PPpp') : ''}
-                              {h.note ? ` (${h.note})` : ''}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

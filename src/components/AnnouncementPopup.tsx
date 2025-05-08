@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Megaphone } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
+import { playNotificationSound } from '@/lib/soundUtils';
 
 type Announcement = {
     id: string;
@@ -64,6 +65,10 @@ export function AnnouncementPopup() {
                             content: recentAnnouncement.content,
                             createdAt: new Date(recentAnnouncement.created_at)
                         });
+
+                        // Play notification sound when showing announcement
+                        playNotificationSound('login');
+
                         // Show after a small delay for better UX
                         setTimeout(() => setIsVisible(true), 1000);
                     }
@@ -90,6 +95,10 @@ export function AnnouncementPopup() {
                         content: recentAnnouncement.content,
                         createdAt: new Date(recentAnnouncement.created_at)
                     });
+
+                    // Play notification sound when showing announcement
+                    playNotificationSound('login');
+
                     // Show after a small delay for better UX
                     setTimeout(() => setIsVisible(true), 1000);
                 }

@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PackageCheck, Clock, Bell } from 'lucide-react';
+import { PackageCheck, Clock, Bell, Box } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import UserLayout from '../layout'; // Assume UserLayout handles sidebar/header
 import Link from 'next/link';
@@ -18,6 +18,7 @@ export default function UserDashboardPage() {
   const [userStats, setUserStats] = useState([
     { title: 'Checked Out Gears', value: 0, icon: PackageCheck, color: 'text-blue-500', link: '/user/my-requests' },
     { title: 'Overdue Gears', value: 0, icon: Clock, color: 'text-red-500', link: '/user/check-in' },
+    { title: 'Available Gears', value: 0, icon: Box, color: 'text-green-500', link: '/user/browse' },
   ]);
   const [notificationCount, setNotificationCount] = useState(0);
   // Temporarily comment out tour state
@@ -40,44 +41,152 @@ export default function UserDashboardPage() {
 
   useEffect(() => {
     fetchUserStats();
+    fetchAvailableGears();
     fetchNotificationCount();
-    // Temporarily comment out tour initialization
-    // if (typeof window !== 'undefined' && !localStorage.getItem('user_dashboard_tour_done')) {
-    //   setShowTour(true);
-    // }
+
+    const refreshInterval = setInterval(() => {
+      fetchNotificationCount();
+    }, 30000);
+
+    return () => clearInterval(refreshInterval);
   }, []);
 
   async function fetchUserStats() {
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData?.session?.user?.id;
     if (!userId) return;
-    // Fetch checked out gears
-    const { data: requests, error } = await supabase
-      .from('requests')
-      .select('status, dueDate')
-      .eq('user_id', userId);
-    if (!error && requests) {
-      const checkedOut = requests.filter((r: any) => r.status === 'Checked Out').length;
-      const overdue = requests.filter((r: any) => r.status === 'Checked Out' && r.dueDate && new Date(r.dueDate) < new Date()).length;
-      setUserStats([
-        { title: 'Checked Out Gears', value: checkedOut, icon: PackageCheck, color: 'text-blue-500', link: '/user/my-requests' },
-        { title: 'Overdue Gears', value: overdue, icon: Clock, color: 'text-red-500', link: '/user/check-in' },
+
+    try {
+      // Fetch checked out gears from gear_requests
+      const { data: requestsData, error: requestsError } = await supabase
+        .from('gear_requests')
+        .select('id, status, due_date, gear_ids')
+        .eq('user_id', userId);
+
+      if (requestsError) throw requestsError;
+
+      let checkedOutGearCount = 0;
+      let overdueGearCount = 0;
+
+      if (requestsData && requestsData.length > 0) {
+        // Get all gear IDs that are checked out
+        const now = new Date();
+
+        requestsData.forEach((request: any) => {
+          if (request.status === 'Approved' || request.status === 'Checked Out') {
+            const gearCount = request.gear_ids?.length || 0;
+            checkedOutGearCount += gearCount;
+
+            // Check for overdue gears
+            if (request.due_date && new Date(request.due_date) < now) {
+              overdueGearCount += gearCount;
+            }
+          }
+        });
+      }
+
+      try {
+        // Alternative approach: directly query the gears table
+        // Check if checked_out_to column exists by logging the structure
+        console.log("Attempting to query gears table with checked_out_to column");
+
+        const { data: gearData, error: gearError } = await supabase
+          .from('gears')
+          .select('id, status')
+          .eq('checked_out_to', userId);
+
+        if (gearError) {
+          console.log("Error querying gears table:", gearError);
+          // Continue with the counts from gear_requests if this query fails
+        } else if (gearData) {
+          // This is a more accurate count, so we'll use it if available
+          const directlyCheckedOut = gearData.filter((g: any) => g.status === 'Checked Out').length;
+          console.log(`Found ${directlyCheckedOut} items directly checked out to user in gears table`);
+          checkedOutGearCount = directlyCheckedOut;
+        }
+      } catch (gearQueryError) {
+        console.log("Exception querying gears table:", gearQueryError);
+        // Fall back to using the counts from gear_requests
+      }
+
+      // Update only the first two items, preserving the third (Available Gears)
+      setUserStats(prev => [
+        { title: 'Checked Out Gears', value: checkedOutGearCount, icon: PackageCheck, color: 'text-blue-500', link: '/user/my-requests' },
+        { title: 'Overdue Gears', value: overdueGearCount, icon: Clock, color: 'text-red-500', link: '/user/check-in' },
+        prev[2], // Keep the Available Gears item
+      ]);
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+      // Show a more detailed error message
+      if (error instanceof Error) {
+        console.error('Error details:', error.message);
+      } else {
+        console.error('Unknown error type:', typeof error);
+      }
+    }
+  }
+
+  async function fetchAvailableGears() {
+    // Fetch available gears count
+    const { data, error } = await supabase
+      .from('gears')
+      .select('id')
+      .eq('status', 'Available');
+
+    if (!error && data) {
+      // Update only the third item (Available Gears)
+      setUserStats(prev => [
+        prev[0], // Keep the Checked Out Gears item
+        prev[1], // Keep the Overdue Gears item
+        { ...prev[2], value: data.length }, // Update Available Gears value
       ]);
     }
   }
 
   async function fetchNotificationCount() {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData?.session?.user?.id;
-    if (!userId) return;
-    // Fetch notifications for the user if you have a notifications table
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('read', false);
-    if (!error && data) {
-      setNotificationCount(data.length);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id;
+      if (!userId) {
+        console.log('No user ID found');
+        return;
+      }
+
+      // Get IDs of read notifications
+      const { data: readRows, error: readError } = await supabase
+        .from('read_notifications')
+        .select('notification_id')
+        .eq('user_id', userId);
+
+      if (readError) {
+        console.error('Error fetching read notifications:', readError);
+        return;
+      }
+
+      const readIds = readRows?.map((r: { notification_id: string }) => r.notification_id) || [];
+
+      // Get all notifications for the user
+      const { data: allNotifications, error: notifError } = await supabase
+        .from('notifications')
+        .select('id, created_at')  // Only select what you need
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (notifError) {
+        console.error('Error fetching notifications:', notifError);
+        return;
+      }
+
+      // Calculate unread count
+      const unreadCount = (allNotifications || [])
+        .filter((n: { id: string }) => !readIds.includes(n.id))
+        .length;
+
+      console.log(`Unread notifications count: ${unreadCount}`);
+      setNotificationCount(unreadCount);
+
+    } catch (error) {
+      console.error('Error in fetchNotificationCount:', error);
     }
   }
 
@@ -142,7 +251,7 @@ export default function UserDashboardPage() {
       </motion.div>
 
       {/* User Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 user-stats-cards">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8 user-stats-cards">
         {userStats.map((stat, index) => (
           <motion.div key={stat.title} custom={index} initial="hidden" animate="visible" variants={cardVariants}>
             <Link href={stat.link} passHref>
@@ -189,6 +298,53 @@ export default function UserDashboardPage() {
         <AnnouncementsWidget />
       </div>
 
+      {/* Updated NotificationSound usage */}
+      <NotificationSound count={notificationCount} />
+
     </div>
   );
+}
+
+// Updated NotificationSound component with proper TypeScript and error handling
+interface NotificationSoundProps {
+  count: number;
+}
+
+function NotificationSound({ count }: NotificationSoundProps) {
+  const [audioError, setAudioError] = useState(false);
+
+  useEffect(() => {
+    let audio: HTMLAudioElement | null = null;
+
+    if (count > 0 && !audioError) {
+      try {
+        audio = new Audio('/notification-sound.mp3');
+        audio.loop = true;
+
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.error("Audio playback failed:", error);
+            setAudioError(true);
+          });
+        }
+      } catch (error) {
+        console.error("Error creating audio:", error);
+        setAudioError(true);
+      }
+    }
+
+    return () => {
+      if (audio) {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+        } catch (error) {
+          console.error("Error cleaning up audio:", error);
+        }
+      }
+    };
+  }, [count, audioError]);
+
+  return null;
 }

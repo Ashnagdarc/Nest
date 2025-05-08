@@ -182,11 +182,13 @@ export default function ManageGearsPage() {
 
   async function fetchGears() {
     setLoading(true);
+    console.log("Fetching gears with real-time updates...");
+
     try {
       // Use the absolute minimum fields to avoid schema issues
       const { data, error } = await supabase
         .from('gears')
-        .select('id, name, category, status, image_url')
+        .select('id, name, category, status, image_url, checked_out_to, current_request_id, last_checkout_date, due_date')
         .neq('status', 'Deleted'); // Filter out soft-deleted items
 
       if (error) {
@@ -199,7 +201,7 @@ export default function ManageGearsPage() {
 
         const { data: retryData, error: retryError } = await freshClient
           .from('gears')
-          .select('id, name, category, status, image_url')
+          .select('id, name, category, status, image_url, checked_out_to, current_request_id, last_checkout_date, due_date')
           .neq('status', 'Deleted'); // Filter out soft-deleted items
 
         if (retryError) {
@@ -208,9 +210,32 @@ export default function ManageGearsPage() {
         }
 
         console.log("Retry successful, fetched", retryData?.length || 0, "gears");
+        console.log("Gear statuses:", retryData?.map((g: { name: string, status: string }) => `${g.name}: ${g.status}`));
         setGears(retryData || []);
       } else {
         console.log("Successfully fetched", data?.length || 0, "gears");
+        console.log("Gear statuses:", data?.map((g: { name: string, status: string }) => `${g.name}: ${g.status}`));
+
+        // Log gear check-out details
+        const checkedOutGears = data?.filter((g: { status: string }) => g.status === 'Checked Out') || [];
+        if (checkedOutGears.length > 0) {
+          console.log("Checked out gears:", checkedOutGears.map((g: {
+            name: string,
+            status: string,
+            checked_out_to: string,
+            current_request_id: string,
+            last_checkout_date: string,
+            due_date: string
+          }) => ({
+            name: g.name,
+            status: g.status,
+            checked_out_to: g.checked_out_to,
+            current_request_id: g.current_request_id,
+            last_checkout_date: g.last_checkout_date,
+            due_date: g.due_date
+          })));
+        }
+
         setGears(data || []);
       }
     } catch (err) {

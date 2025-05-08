@@ -73,6 +73,7 @@ export default function AdminSettingsPage() {
 
     // --- State ---
     const [adminUser, setAdminUser] = useState<Profile | null>(null);
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [currentLogoUrl, setCurrentLogoUrl] = useState<string | undefined>(undefined);
     const [isLoadingUser, setIsLoadingUser] = useState(true);
     const [isProfileLoading, setIsProfileLoading] = useState(false);
@@ -110,7 +111,13 @@ export default function AdminSettingsPage() {
                 return;
             }
 
-            console.log("AdminSettings: User authenticated, fetching profile for ID:", user.id);
+            // Get avatar URL from user metadata
+            console.log("AdminSettings: User authenticated, getting metadata for ID:", user.id);
+            const avatarUrlFromMetadata = user.user_metadata?.avatar_url || null;
+            setAvatarUrl(avatarUrlFromMetadata);
+            console.log("AdminSettings: Avatar URL from metadata:", avatarUrlFromMetadata);
+
+            console.log("AdminSettings: Fetching profile for ID:", user.id);
             // Fetch admin profile from Supabase
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
@@ -227,7 +234,7 @@ export default function AdminSettingsPage() {
         setIsProfileLoading(true);
         console.log("AdminSettings: Submitting profile update...");
 
-        let newAvatarUrl: string | null = adminUser.avatar_url; // Start with current URL
+        let newAvatarUrl: string | null = avatarUrl; // Start with current URL from state
 
         // --- Handle Profile Picture Upload (Supabase Storage) ---
         if (data.profilePicture && data.profilePicture.length > 0) {
@@ -236,10 +243,10 @@ export default function AdminSettingsPage() {
             console.log("AdminSettings: Uploading new avatar to", storagePath);
 
             // --- Delete old avatar if exists ---
-            if (adminUser.avatar_url) {
+            if (avatarUrl) {
                 // Extract the file path from the full URL
                 try {
-                    const urlParts = new URL(adminUser.avatar_url);
+                    const urlParts = new URL(avatarUrl);
                     // Pathname usually starts with /storage/v1/object/public/BUCKET_NAME/
                     const pathSegments = urlParts.pathname.split('/');
                     // Find the bucket name index, the rest is the file path
@@ -257,7 +264,7 @@ export default function AdminSettingsPage() {
                             console.log("Old avatar removed from Storage.");
                         }
                     } else {
-                        console.warn("Could not determine old avatar path from URL:", adminUser.avatar_url);
+                        console.warn("Could not determine old avatar path from URL:", avatarUrl);
                     }
 
                 } catch (urlParseError) {
@@ -281,6 +288,9 @@ export default function AdminSettingsPage() {
                     .getPublicUrl(uploadData.path);
                 newAvatarUrl = urlData?.publicUrl || newAvatarUrl; // Update URL if public URL retrieved
                 console.log("New avatar URL:", newAvatarUrl);
+
+                // Update local state immediately for UI display
+                setAvatarUrl(newAvatarUrl);
             }
         }
 
@@ -309,9 +319,11 @@ export default function AdminSettingsPage() {
             full_name: data.fullName,
             phone: data.phone || null,
             department: data.department || null,
-            avatar_url: newAvatarUrl,
             updated_at: new Date().toISOString(),
         };
+
+        // Log for debugging
+        console.log("AdminSettings: Profile update data:", profileUpdateData);
 
         const { error: profileUpdateError } = await supabase
             .from('profiles')
@@ -490,7 +502,7 @@ export default function AdminSettingsPage() {
                             <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
                                 <div className="flex items-center gap-4 mb-4">
                                     <Avatar className="h-16 w-16">
-                                        <AvatarImage key={adminUser.avatar_url} src={adminUser.avatar_url || 'https://picsum.photos/seed/adminsettings/100/100'} alt={adminUser.full_name || ''} data-ai-hint="admin avatar settings" />
+                                        <AvatarImage key={avatarUrl} src={avatarUrl || 'https://picsum.photos/seed/adminsettings/100/100'} alt={adminUser.full_name || ''} data-ai-hint="admin avatar settings" />
                                         <AvatarFallback>{getInitials(adminUser.full_name)}</AvatarFallback>
                                     </Avatar>
                                     <FormField
