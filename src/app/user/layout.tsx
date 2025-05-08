@@ -23,6 +23,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client'; // Import Supabase client
 import ThemeToggle from '@/components/ThemeToggle';
+import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 
 const userNavItems = [
   { href: '/user/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -235,6 +236,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
           </motion.div>
         </div>
       </SidebarInset>
+      <AnnouncementPopup />
     </SidebarProvider>
   );
 }

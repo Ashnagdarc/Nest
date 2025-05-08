@@ -14,42 +14,108 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose, DialogTrigger
 } from '@/components/ui/dialog';
 import { createClient } from '@/lib/supabase/client';
+// import { Database } from '@/types/supabase';
+
+// Initialize Supabase client
+const supabase = createClient();
+
+// Temporary type definitions since supabase.ts isn't available
+type AnnouncementRow = {
+    id: string;
+    title: string;
+    content: string;
+    created_at: string;
+    created_by: string | null;
+    updated_at?: string;
+};
+
+type AnnouncementInsert = {
+    title: string;
+    content: string;
+    created_at?: string;
+    created_by: string;
+};
+
+// Original type definition using the Database type
+// type AnnouncementRow = Database['public']['Tables']['announcements']['Row'];
+// type AnnouncementInsert = Database['public']['Tables']['announcements']['Insert'];
 
 type Announcement = {
     id: string;
     title: string;
     content: string;
     createdAt: Date;
-    author_id: string | null;
+    created_by: string | null;
 };
 
 export default function AnnouncementsPage() {
-    const supabase = createClient();
+    const { toast } = useToast();
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newContent, setNewContent] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const { toast } = useToast();
 
     useEffect(() => {
         fetchAnnouncements();
     }, []);
 
     async function fetchAnnouncements() {
-        const { data, error } = await supabase
-            .from('announcements')
-            .select('*')
-            .order('created_at', { ascending: false });
+        console.log("Admin: Fetching announcements...");
+        try {
+            // Get announcements directly with SQL query for most reliable results
+            const { data, error } = await supabase.rpc('get_all_announcements');
 
-        if (!error && data) {
-            setAnnouncements(data.map(a => ({
-                id: a.id,
-                title: a.title,
-                content: a.content,
-                createdAt: new Date(a.created_at),
-                author_id: a.author_id || null,
-            })));
+            // If RPC fails, fall back to regular query
+            if (error) {
+                console.error("Error using RPC to fetch announcements:", error);
+                console.log("Falling back to direct query...");
+
+                const { data: directData, error: directError } = await supabase
+                    .from('announcements')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (directError) {
+                    console.error("Error fetching announcements:", directError);
+                    toast({
+                        title: "Error",
+                        description: "Failed to fetch announcements. Please refresh the page.",
+                        variant: "destructive"
+                    });
+                    return;
+                }
+
+                console.log("Admin: Announcements fetched via direct query:", directData);
+                if (directData) {
+                    setAnnouncements(directData.map((a: AnnouncementRow) => ({
+                        id: a.id,
+                        title: a.title,
+                        content: a.content,
+                        createdAt: new Date(a.created_at),
+                        created_by: a.created_by || null,
+                    })));
+                }
+                return;
+            }
+
+            console.log("Admin: Announcements fetched via RPC:", data);
+            if (data) {
+                setAnnouncements(data.map((a: AnnouncementRow) => ({
+                    id: a.id,
+                    title: a.title,
+                    content: a.content,
+                    createdAt: new Date(a.created_at),
+                    created_by: a.created_by || null,
+                })));
+            }
+        } catch (e) {
+            console.error("Unexpected error in fetchAnnouncements:", e);
+            toast({
+                title: "Error",
+                description: "An unexpected error occurred while fetching announcements.",
+                variant: "destructive"
+            });
         }
     }
 
@@ -61,34 +127,87 @@ export default function AnnouncementsPage() {
         }
         setIsSubmitting(true);
 
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            toast({ title: "Error", description: "You must be logged in to post announcements.", variant: "destructive" });
+        try {
+            // Step 1: Check user auth status (for debugging)
+            const { data: { user } } = await supabase.auth.getUser();
+            console.log("Current user:", user);
+
+            if (!user) {
+                toast({ title: "Error", description: "You must be logged in to post announcements.", variant: "destructive" });
+                setIsSubmitting(false);
+                return;
+            }
+
+            // Step 2: Get the user profile info with role (for debugging)
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('role, id')
+                .eq('id', user.id)
+                .single();
+
+            console.log("User profile:", profileData, "Error:", profileError);
+
+            // Step 3: Use direct RPC call to bypass schema cache issue
+            // This uses a Postgres function call instead of the REST API that's having schema cache issues
+            const { data, error } = await supabase.rpc('create_announcement', {
+                p_title: newTitle,
+                p_content: newContent,
+                p_user_id: user.id
+            });
+
+            // Enhanced error logging
+            console.log("Complete response from RPC call:", { data, error });
+
+            // Detailed error logging
+            if (error) {
+                console.error("Error posting announcement:", {
+                    message: error.message,
+                    details: error.details,
+                    hint: error.hint,
+                    code: error.code,
+                    fullError: JSON.stringify(error, null, 2)
+                });
+                toast({
+                    title: "Error",
+                    description: `Failed to post announcement: ${error.message || 'Unknown error'}`,
+                    variant: "destructive"
+                });
+                setIsSubmitting(false);
+                return;
+            } else if (!data) {
+                // Handle the case where there's no error but also no data
+                console.error("No data returned from insert operation");
+                toast({
+                    title: "Error",
+                    description: "Failed to post announcement: No data returned",
+                    variant: "destructive"
+                });
+                setIsSubmitting(false);
+                return;
+            }
+
+            console.log("Announcement posted successfully:", data);
+
+            // Reset form and update UI on success
+            setNewTitle('');
+            setNewContent('');
             setIsSubmitting(false);
-            return;
-        }
+            setIsModalOpen(false);
+            toast({ title: "Success", description: "Announcement posted successfully." });
 
-        const { error } = await supabase
-            .from('announcements')
-            .insert([{
-                title: newTitle,
-                content: newContent,
-                author_id: user.id,
-                created_at: new Date().toISOString(),
-            }]);
-
-        if (error) {
-            toast({ title: "Error", description: "Failed to post announcement.", variant: "destructive" });
+            // Force fetch with slight delay to ensure database consistency
+            setTimeout(() => {
+                fetchAnnouncements();
+            }, 500);
+        } catch (e) {
+            console.error("Unexpected error in handleAddAnnouncement:", e);
+            toast({
+                title: "Error",
+                description: "An unexpected error occurred. Please try again.",
+                variant: "destructive"
+            });
             setIsSubmitting(false);
-            return;
         }
-
-        setNewTitle('');
-        setNewContent('');
-        setIsSubmitting(false);
-        setIsModalOpen(false);
-        toast({ title: "Success", description: "Announcement posted successfully." });
-        fetchAnnouncements();
     };
 
     const handleDeleteAnnouncement = async (announcementId: string) => {
@@ -198,7 +317,7 @@ export default function AnnouncementsPage() {
                                                 {announcement.title}
                                             </CardTitle>
                                             <CardDescription className="text-xs mt-1">
-                                                Posted by {announcement.author_id || 'Unknown'} on {format(announcement.createdAt, 'PPP')}
+                                                Posted by {announcement.created_by || 'Unknown'} on {format(announcement.createdAt, 'PPP')}
                                             </CardDescription>
                                         </div>
                                         <div className="flex gap-1">

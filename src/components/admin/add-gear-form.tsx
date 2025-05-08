@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -30,10 +29,9 @@ const gearSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   category: z.string({ required_error: "Please select a category." }),
   description: z.string().optional(),
-  serialNumber: z.string().min(1, { message: "Serial number is required." }),
-  purchaseDate: z.date().optional(),
-  imageUrl: z.any().optional(), // Changed from z.instanceof(FileList)
-  initialCondition: z.string().min(1, { message: "Initial condition is required." }),
+  serial_number: z.string().min(1, { message: "Serial number is required." }),
+  purchase_date: z.string().optional(),
+  initial_condition: z.string().min(1, { message: "Initial condition is required." }),
   status: z.enum(["Available", "Damaged", "Under Repair", "New"], {
     required_error: "Please select an initial status.",
   }),
@@ -55,11 +53,10 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
       name: "",
       category: undefined,
       description: "",
-      serialNumber: "",
-      purchaseDate: undefined,
-      imageUrl: undefined,
-      initialCondition: "",
-      status: "Available", // Default status
+      serial_number: "",
+      purchase_date: "",
+      initial_condition: "",
+      status: "Available",
     },
   });
 
@@ -145,7 +142,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
 
         <FormField
           control={form.control}
-          name="serialNumber"
+          name="serial_number"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Serial Number</FormLabel>
@@ -159,79 +156,28 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
 
         <FormField
           control={form.control}
-          name="purchaseDate"
+          name="purchase_date"
           render={({ field }) => (
-            <FormItem className="flex flex-col">
+            <FormItem>
               <FormLabel>Purchase Date <span className="text-muted-foreground">(Optional)</span></FormLabel>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <FormControl>
-                    <Button
-                      variant={"outline"}
-                      className={cn(
-                        "w-[240px] pl-3 text-left font-normal",
-                        !field.value && "text-muted-foreground"
-                      )}
-                    >
-                      {field.value ? (
-                        format(field.value, "PPP")
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                    </Button>
-                  </FormControl>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={field.value}
-                    onSelect={field.onChange}
-                    disabled={(date) =>
-                      date > new Date() || date < new Date("1900-01-01")
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <FormControl>
+                <Input type="date" {...field} />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-         <FormField
-            control={form.control}
-            name="imageUrl"
-            render={({ field }) => (
-                <FormItem>
-                <FormLabel>Image <span className="text-muted-foreground">(Optional)</span></FormLabel>
-                <FormControl>
-                    <Input
-                    type="file"
-                    accept="image/*"
-                    // Adapt onChange to handle FileList
-                    onChange={(e) => field.onChange(e.target.files)}
-                    onBlur={field.onBlur}
-                    name={field.name}
-                    // ref={field.ref} // Ref might not be needed
-                    />
-                </FormControl>
-                <FormDescription>Upload an image of the gear.</FormDescription>
-                <FormMessage />
-                </FormItem>
-            )}
-         />
-
         <FormField
           control={form.control}
-          name="initialCondition"
+          name="initial_condition"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Initial Condition</FormLabel>
               <FormControl>
                 <Input placeholder="e.g., New, Good, Minor scratches" {...field} />
               </FormControl>
-               <FormDescription>Describe the condition when added.</FormDescription>
+              <FormDescription>Describe the condition when added.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -243,33 +189,33 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Initial Status</FormLabel>
-               <Select onValueChange={field.onChange} defaultValue={field.value}>
-                 <FormControl>
-                   <SelectTrigger>
-                     <SelectValue placeholder="Select initial status" />
-                   </SelectTrigger>
-                 </FormControl>
-                 <SelectContent>
-                   <SelectItem value="Available">Available</SelectItem>
-                   <SelectItem value="New">New</SelectItem>
-                   <SelectItem value="Damaged">Damaged</SelectItem>
-                   <SelectItem value="Under Repair">Under Repair</SelectItem>
-                 </SelectContent>
-               </Select>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select initial status" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="Available">Available</SelectItem>
+                  <SelectItem value="New">New</SelectItem>
+                  <SelectItem value="Damaged">Damaged</SelectItem>
+                  <SelectItem value="Under Repair">Under Repair</SelectItem>
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}
         />
 
         <DialogFooter className="pt-4">
-             <DialogClose asChild>
-                <Button type="button" variant="outline">
-                    Cancel
-                </Button>
-            </DialogClose>
-            <Button type="submit" disabled={isLoading}>
-             {isLoading ? "Adding..." : "Add Gear"}
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
             </Button>
+          </DialogClose>
+          <Button type="submit" disabled={isLoading}>
+            {isLoading ? "Adding..." : "Add Gear"}
+          </Button>
         </DialogFooter>
       </form>
     </Form>

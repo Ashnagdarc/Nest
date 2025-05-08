@@ -55,6 +55,7 @@ export default function ManageGearsPage() {
   const [selectedGear, setSelectedGear] = useState<Gear | null>(null);
   const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>([]);
   const [loadingMaintenance, setLoadingMaintenance] = useState(false);
+  const [profile, setProfile] = useState<{ role: string } | null>(null);
 
   // Maintenance form state and logic
   const maintenanceForm = useForm({
@@ -79,6 +80,21 @@ export default function ManageGearsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        setProfile(profile);
+      }
+    };
+    fetchProfile();
+  }, []);
+
   async function fetchGears() {
     setLoading(true);
     const { data, error } = await supabase.from('gears').select('*');
@@ -86,7 +102,7 @@ export default function ManageGearsPage() {
     setLoading(false);
   }
 
-  const handleAddGear = async () => {
+  const handleAddGear = async (data: any) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast({
@@ -96,40 +112,36 @@ export default function ManageGearsPage() {
       });
       return;
     }
-
+    // Map form fields to DB columns
+    const gearToInsert = {
+      name: data.name,
+      category: data.category,
+      description: data.description,
+      serial_number: data.serial_number,
+      purchase_date: data.purchase_date,
+      initial_condition: data.initial_condition,
+      status: data.status,
+      owner_id: user.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
     const { error } = await supabase
       .from('gears')
-      .insert([{
-        ...newGear,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }]);
-
+      .insert([gearToInsert]);
     if (error) {
       toast({
         title: "Error",
-        description: "Failed to add gear",
+        description: error.message || JSON.stringify(error) || "Failed to add gear",
         variant: "destructive",
       });
       return;
     }
-
-    // Create notification for the admin
-    await createGearNotification(user.id, newGear.name || '', 'add');
-
+    await createGearNotification(user.id, data.name || '', 'add');
     toast({
       title: "Success",
       description: "Gear added successfully",
     });
-
     setIsAddModalOpen(false);
-    setNewGear({
-      name: '',
-      description: '',
-      category: '',
-      status: 'Available',
-      serial: '',
-    });
   };
 
   const handleUpdateGear = async (gear: Gear, updates: Partial<Gear>) => {
@@ -402,23 +414,25 @@ export default function ManageGearsPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <PlusCircle className="mr-2 h-4 w-4" /> Add New Gear
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[625px]">
-              <DialogHeader>
-                <DialogTitle>Add New Gear</DialogTitle>
-                <DialogDescription>
-                  Fill in the details for the new equipment.
-                </DialogDescription>
-              </DialogHeader>
-              {/* Pass the submit handler to the form */}
-              <AddGearForm onSubmit={handleAddGear} />
-            </DialogContent>
-          </Dialog>
+          {profile?.role === 'Admin' && (
+            <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add New Gear
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[625px]">
+                <DialogHeader>
+                  <DialogTitle>Add New Gear</DialogTitle>
+                  <DialogDescription>
+                    Fill in the details for the new equipment.
+                  </DialogDescription>
+                </DialogHeader>
+                {/* Pass the submit handler to the form */}
+                <AddGearForm onSubmit={handleAddGear} />
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
       {/* Batch actions bar */}

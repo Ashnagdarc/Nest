@@ -69,33 +69,51 @@ export default function CheckInGearPage() {
   }, [supabase, userId]);
 
   useEffect(() => {
-    if (!scannerInitialized && !scannedCode) {
-      const scanner = new Html5QrcodeScanner("qr-reader", {
-        qrbox: {
-          width: 250,
-          height: 250,
-        },
-        fps: 5,
-      }, false);
-
-      scanner.render(
-        (decodedText) => {
-          setScannedCode(decodedText);
-          scanner.clear();
-        },
-        (error) => {
-          console.warn(error);
-          setQrError("Failed to read QR code. Please try again.");
+    if (!scannerInitialized && !scannedCode && isScannerOpen) {
+      // Small delay to ensure DOM is ready
+      const timeoutId = setTimeout(() => {
+        const element = document.getElementById("qr-reader");
+        if (!element) {
+          console.warn("QR reader element not found, will retry");
+          return;
         }
-      );
 
-      setScannerInitialized(true);
+        try {
+          const scanner = new Html5QrcodeScanner("qr-reader", {
+            qrbox: {
+              width: 250,
+              height: 250,
+            },
+            fps: 5,
+          }, false);
+
+          scanner.render(
+            (decodedText) => {
+              setScannedCode(decodedText);
+              scanner.clear();
+            },
+            (error) => {
+              console.warn(error);
+              setQrError("Failed to read QR code. Please try again.");
+            }
+          );
+
+          setScannerInitialized(true);
+
+          return () => {
+            scanner.clear();
+          };
+        } catch (error) {
+          console.error("Error initializing QR scanner:", error);
+          setQrError("Failed to initialize scanner. Please try again.");
+        }
+      }, 300);
 
       return () => {
-        scanner.clear();
+        clearTimeout(timeoutId);
       };
     }
-  }, [scannerInitialized, scannedCode]);
+  }, [scannerInitialized, scannedCode, isScannerOpen]);
 
   const handleCheckboxChange = (gearId: string, checked: boolean | string) => {
     if (checked === true) { // Ensure it's strictly boolean true

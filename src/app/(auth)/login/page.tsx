@@ -46,16 +46,17 @@ export default function LoginPage() {
     const checkUser = async () => {
       console.log("LoginPage: Checking for existing Supabase session...");
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getSession();
+
         if (error) {
           console.error("LoginPage: Error fetching session:", error);
           return; // Continue to show login page on session fetch error
         }
 
-        if (session?.user) {
-          console.log("LoginPage: Active Supabase session found for user:", session.user.id);
+        if (data?.session?.user) {
+          console.log("LoginPage: Active Supabase session found for user:", data.session.user.id);
           // If already logged in, redirect based on role (fetched from Supabase profiles table)
-          redirectToDashboard(session.user.id);
+          redirectToDashboard(data.session.user.id);
         } else {
           console.log("LoginPage: No active Supabase user session.");
         }
@@ -63,7 +64,14 @@ export default function LoginPage() {
         console.error("LoginPage: Unexpected error during session check:", e);
       }
     };
+
+    // Using a variable to track if component is mounted
+    let isMounted = true;
     checkUser();
+
+    return () => {
+      isMounted = false; // Prevent state updates after unmount
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Removed dependencies causing potential loops, check session only once
 
@@ -139,23 +147,30 @@ export default function LoginPage() {
       if (profile.status !== 'Active') {
         console.warn("[Redirect Check Aborted] Profile inactive during redirect check for user ID:", userId, "Status:", profile.status, " Signing out.");
         await supabase.auth.signOut().catch(signOutError => console.error("Error signing out:", signOutError));
-        router.push('/login');
         toast({ title: "Account Inactive", description: `Your account status is ${profile.status}. Please contact support.`, variant: "destructive" });
+        // Prevent redirect loop by checking current path
+        if (window.location.pathname !== '/login') {
+          router.push('/login');
+        }
         return;
       }
       console.log("[Redirect Check] User status verified as Active.");
 
       console.log("[Redirect Check] Redirecting existing session to", profile.role === 'Admin' ? '/admin/dashboard' : '/user/dashboard');
-      if (profile.role === 'Admin') {
-        router.push('/admin/dashboard');
-      } else {
-        router.push('/user/dashboard');
+      const targetPath = profile.role === 'Admin' ? '/admin/dashboard' : '/user/dashboard';
+
+      // Prevent unnecessary navigation if already on the target page
+      if (window.location.pathname !== targetPath) {
+        router.push(targetPath);
       }
     } catch (e: any) {
       console.error("[Redirect Check Failed] Unexpected error during redirection:", e);
       toast({ title: "Error", description: `An unexpected error occurred during redirection: ${e.message}`, variant: "destructive" });
       await supabase.auth.signOut().catch(signOutError => console.error("Error signing out during redirect error:", signOutError));
-      router.push('/login');
+      // Prevent redirect loop
+      if (window.location.pathname !== '/login') {
+        router.push('/login');
+      }
     }
   };
 

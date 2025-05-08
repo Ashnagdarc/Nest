@@ -1,5 +1,6 @@
 import { createBrowserClient } from '@supabase/ssr';
-import type { Database } from '@/types/supabase'; // Import your generated types
+// Import your generated types - comment out if file doesn't exist yet
+// import type { Database } from '@/types/supabase';
 
 // Get environment variables with fallback values for development
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ymtufeymduajgxsgebyr.supabase.co';
@@ -13,7 +14,7 @@ export class SupabaseConfigError extends Error {
 }
 
 // Create a singleton instance
-let supabaseInstance: ReturnType<typeof createBrowserClient<Database>> | null = null;
+let supabaseInstance: ReturnType<typeof createBrowserClient> | null = null;
 
 export const createClient = () => {
     if (supabaseInstance) {
@@ -21,16 +22,25 @@ export const createClient = () => {
     }
 
     try {
-        supabaseInstance = createBrowserClient<Database>(
+        // Add custom headers to force schema refresh
+        const customHeaders = {
+            'x-schema-cache': 'reload'
+        };
+
+        supabaseInstance = createBrowserClient(
             supabaseUrl,
             supabaseAnonKey,
             {
                 auth: {
                     persistSession: true,
                     autoRefreshToken: true,
+                },
+                global: {
+                    headers: customHeaders
                 }
             }
         );
+
         return supabaseInstance;
     } catch (error) {
         console.error("Error creating Supabase browser client:", error);

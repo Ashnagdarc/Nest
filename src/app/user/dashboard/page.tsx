@@ -9,6 +9,7 @@ import UserLayout from '../layout'; // Assume UserLayout handles sidebar/header
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { AnnouncementsWidget } from "@/components/dashboard/AnnouncementsWidget";
 // Temporarily comment out Joyride
 // import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
 
@@ -182,6 +183,11 @@ export default function UserDashboardPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Add the widget to the dashboard grid */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <AnnouncementsWidget />
+      </div>
 
     </div>
   );
