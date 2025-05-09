@@ -20,6 +20,7 @@
 # Misc
 .DS_Store
 *.pem
+**/.DS_Store
 
 # Logs
 logs
@@ -31,7 +32,8 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Local configuration
-
+.env.Local
+.env.Development.local
 .vercel
 
 # Editor directories and files
@@ -41,10 +43,14 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 *.sublime-workspace
+.idea/
+*.swp
+*.swo
 
 # Compiled output
 dist
 tmp
+build/
 
 # Folders
 .turbo
@@ -67,8 +73,17 @@ yarn.lock
 
 # Next-Auth specific
 next-auth.session-token
-# Generally avoid committing generated types, let users generate them
-# src/types/supabase.ts # Uncomment if you prefer not to commit generated types
+
+# TypeScript
+tsconfig.tsbuildinfo
 
 # IDX specific
 .idx/
+
+# Temporary files
+*.tmp
+*~
+
+# Environment variables
+.env*
+!.env.example
