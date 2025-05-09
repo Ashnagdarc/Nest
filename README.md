@@ -1,112 +1,300 @@
-# Gear-Flow By EO
+# GearFlow by Eden Oasis
 
-A modern web application for managing gear, users, and workflows, built with Next.js, Supabase, and TypeScript.
+<div align="center">
+  <img src="public/logo.png" alt="GearFlow Logo" width="120"/>
+  <h3>Professional Equipment Management Platform</h3>
+  <p>A modern, full-stack web application for managing real estate equipment and resources.</p>
+</div>
 
 ---
+
+## 📋 Table of Contents
+- [Overview](#-overview)
+- [Features](#-features)
+- [Tech Stack](#-tech-stack)
+- [Getting Started](#-getting-started)
+- [Project Structure](#-project-structure)
+- [Development](#-development)
+- [Database](#-database)
+- [Authentication](#-authentication)
+- [Deployment](#-deployment)
+- [Contributing](#-contributing)
+- [Troubleshooting](#-troubleshooting)
+- [License](#-license)
+
+## 🌟 Overview
+
+GearFlow is a comprehensive equipment management platform designed specifically for Eden Oasis Realty. It streamlines the process of tracking, requesting, and managing company equipment through an intuitive and modern interface.
+
+### Key Benefits
+- **Centralized Management**: Single source of truth for all company equipment
+- **Efficient Workflows**: Streamlined request and approval processes
+- **Real-time Updates**: Instant status updates and notifications
+- **Data-Driven Insights**: Analytics and usage patterns tracking
+- **User-Friendly Interface**: Modern, responsive design optimized for all devices
 
 ## 🚀 Features
-- User authentication and roles (Admin, User)
-- Gear management and booking
-- Notifications and announcements
-- Supabase integration for database and authentication
-- Modern UI with Radix UI and Tailwind CSS
 
----
+### Equipment Management
+- **Inventory Tracking**
+  - Real-time availability status
+  - Detailed equipment specifications
+  - Maintenance history
+  - Usage analytics
 
-## 🛠️ Project Structure
-```
-├── src/                # Main application code
-│   ├── app/            # Next.js app directory
-│   ├── components/     # React components
-│   ├── lib/            # Utilities and Supabase clients
-│   ├── services/       # Service logic
-│   └── types/          # TypeScript types
-├── supabase/           # Database schema and migrations
-├── scripts/            # Utility scripts (e.g., admin seeding)
-├── public/             # Static assets
-├── .env.local          # Environment variables (not committed)
-├── package.json        # Project dependencies and scripts
-└── README.md           # Project documentation
-```
+### User Management
+- **Role-based Access Control**
+  - Admin dashboard
+  - User permissions
+  - Team management
+  - Activity logging
 
----
+### Booking System
+- **Equipment Requests**
+  - Easy request submission
+  - Approval workflows
+  - Calendar integration
+  - Conflict detection
+
+### Notifications
+- **Real-time Updates**
+  - Request status changes
+  - Due date reminders
+  - Maintenance alerts
+  - System announcements
+
+### Analytics & Reporting
+- **Usage Insights**
+  - Equipment utilization rates
+  - Popular items tracking
+  - User activity reports
+  - Custom report generation
+
+## 🛠 Tech Stack
+
+### Frontend
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Components**: Radix UI
+- **Animations**: Framer Motion
+- **State Management**: React Context + Hooks
+
+### Backend
+- **Database**: PostgreSQL (via Supabase)
+- **Authentication**: Supabase Auth
+- **API**: Next.js API Routes
+- **File Storage**: Supabase Storage
+
+### Development Tools
+- **Package Manager**: npm
+- **Version Control**: Git
+- **Code Quality**: ESLint, Prettier
+- **Testing**: Jest, React Testing Library
 
 ## ⚡ Getting Started
 
-### 1. Clone the Repository
-```bash
-git clone <your-repo-url>
-cd Gear-Flow\ By\ EO
-```
+### Prerequisites
+- Node.js (v18.17.0 or higher)
+- npm (v9.0.0 or higher)
+- Git
 
-### 2. Install Dependencies
-```bash
-npm install
-```
+### Installation
 
-### 3. Set Up Environment Variables
-Create a `.env.local` file in the project root with the following content:
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
-```
-- Get these values from your Supabase project dashboard.
-- **Never commit your service role key to public repositories.**
-
-### 4. Database Setup
-- The database schema is defined in `supabase/schema.sql`.
-- You can apply the schema using the Supabase SQL editor or CLI.
-
-#### Seed a Default Admin User
-To create a default admin user (email: `adira@edenoasisrealty.com`, password: `Edenoasis123`):
-
-1. Ensure your `.env.local` is set up as above.
-2. Run the seeding script:
+1. **Clone the Repository**
    ```bash
-   npx ts-node scripts/seedAdmin.ts
+   git clone https://github.com/your-username/gear-flow.git
+   cd gear-flow
    ```
 
----
+2. **Install Dependencies**
+   ```bash
+   npm install
+   ```
 
-## 🧩 Scripts
-- `scripts/seedAdmin.ts`: Seeds a default admin user into the database.
+3. **Environment Setup**
+   Create a `.env.local` file:
+   ```env
+   # Supabase Configuration
+   NEXT_PUBLIC_SUPABASE_URL=your-project-url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   SUPABASE_SERVICE_ROLE_KEY=your-service-key
 
----
+   # Application Configuration
+   NEXT_PUBLIC_APP_URL=http://localhost:9002
+   NEXT_PUBLIC_APP_ENV=development
+   
+   # Optional Features
+   NEXT_PUBLIC_ENABLE_ANALYTICS=false
+   NEXT_PUBLIC_MAINTENANCE_MODE=false
+   ```
 
-## 🏗️ Development
+4. **Database Setup**
+   ```bash
+   # Apply database migrations
+   npm run db:migrate
 
-### Start the Development Server
-```bash
-npm run dev
+   # Seed initial data
+   npm run db:seed
+   ```
+
+5. **Start Development Server**
+   ```bash
+   npm run dev
+   ```
+
+## 📁 Project Structure
+
+```
+├── src/
+│   ├── app/                 # Next.js app directory
+│   │   ├── (auth)/         # Authentication routes
+│   │   ├── api/            # API routes
+│   │   ├── user/           # User dashboard
+│   │   └── admin/          # Admin dashboard
+│   ├── components/
+│   │   ├── ui/             # Reusable UI components
+│   │   ├── forms/          # Form components
+│   │   └── layouts/        # Layout components
+│   ├── lib/
+│   │   ├── supabase/       # Supabase client & utilities
+│   │   ├── utils/          # Helper functions
+│   │   └── constants/      # Application constants
+│   ├── types/              # TypeScript definitions
+│   └── styles/             # Global styles
+├── public/                 # Static assets
+├── supabase/
+│   ├── migrations/         # Database migrations
+│   └── seed/              # Seed data
+├── scripts/               # Utility scripts
+└── tests/                # Test files
 ```
 
-The app will be available at [http://localhost:9002](http://localhost:9002) (or the port you specify).
+## 🧪 Development
 
----
+### Available Scripts
 
-## 📝 Environment Variables
-| Variable                      | Description                        |
-|-------------------------------|------------------------------------|
-| NEXT_PUBLIC_SUPABASE_URL      | Your Supabase project URL          |
-| NEXT_PUBLIC_SUPABASE_ANON_KEY | Supabase anon/public API key       |
-| SUPABASE_SERVICE_ROLE_KEY     | Supabase service role (admin) key  |
+```bash
+# Development
+npm run dev          # Start development server
+npm run build        # Build production bundle
+npm run start        # Start production server
+npm run lint         # Run ESLint
+npm run test         # Run tests
+npm run type-check   # Run TypeScript checks
 
----
+# Database
+npm run db:migrate   # Run database migrations
+npm run db:reset     # Reset database
+npm run db:seed      # Seed database
 
-## 🗃️ Tech Stack
-- [Next.js](https://nextjs.org/)
-- [Supabase](https://supabase.com/)
-- [TypeScript](https://www.typescriptlang.org/)
-- [Radix UI](https://www.radix-ui.com/)
-- [Tailwind CSS](https://tailwindcss.com/)
+# Utilities
+npm run format       # Format code with Prettier
+npm run clean        # Clean build artifacts
+```
 
----
+### Code Quality
+
+We maintain high code quality standards through:
+- ESLint configuration
+- Prettier formatting
+- TypeScript strict mode
+- Git hooks (husky)
+- Conventional commits
+
+## 🗃 Database
+
+### Schema Overview
+- `users`: User accounts and profiles
+- `equipment`: Equipment inventory
+- `requests`: Equipment booking requests
+- `notifications`: System notifications
+- `settings`: Application settings
+
+### Migrations
+All database changes are version controlled in `supabase/migrations/`.
+
+## 🔐 Authentication
+
+### User Types
+1. **Admin**
+   - Full system access
+   - User management
+   - Settings configuration
+
+2. **Regular User**
+   - Equipment browsing
+   - Request submission
+   - Profile management
+
+### Security Features
+- JWT authentication
+- Role-based access control
+- Session management
+- Password policies
+- Rate limiting
+
+## 🚀 Deployment
+
+### Production Deployment
+1. Build the application
+   ```bash
+   npm run build
+   ```
+
+2. Start the production server
+   ```bash
+   npm run start
+   ```
+
+### Environment Considerations
+- Set appropriate environment variables
+- Configure proper security headers
+- Enable error tracking
+- Set up monitoring
 
 ## 🤝 Contributing
-Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
+
+### Development Process
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests and linting
+5. Submit a pull request
+
+### Commit Guidelines
+We follow conventional commits:
+- `feat:` New features
+- `fix:` Bug fixes
+- `docs:` Documentation
+- `style:` Code style changes
+- `refactor:` Code refactoring
+- `test:` Testing changes
+
+## ❓ Troubleshooting
+
+### Common Issues
+1. **Database Connection**
+   - Verify Supabase credentials
+   - Check network connectivity
+   - Confirm database permissions
+
+2. **Build Errors**
+   - Clear `.next` directory
+   - Update dependencies
+   - Check TypeScript errors
+
+### Support
+- Create an issue for bugs
+- Join our Discord community
+- Check documentation
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 📄 License
-[MIT](LICENSE)
+<div align="center">
+  <p>Built with ❤️ by Eden Oasis Realty</p>
+</div>
