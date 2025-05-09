@@ -48,9 +48,30 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const { toast } = useToast();
     const supabase = createClient();
     const [userId, setUserId] = useState<string | null>(null);
-    // Track if this is first login to play notifications
     const [isFirstLogin, setIsFirstLogin] = useState(true);
+    const [hasUserInteracted, setHasUserInteracted] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    // Add effect to track user interaction
+    useEffect(() => {
+        const handleUserInteraction = () => {
+            setHasUserInteracted(true);
+            // Remove listeners after first interaction
+            window.removeEventListener('click', handleUserInteraction);
+            window.removeEventListener('keydown', handleUserInteraction);
+            window.removeEventListener('touchstart', handleUserInteraction);
+        };
+
+        window.addEventListener('click', handleUserInteraction);
+        window.addEventListener('keydown', handleUserInteraction);
+        window.addEventListener('touchstart', handleUserInteraction);
+
+        return () => {
+            window.removeEventListener('click', handleUserInteraction);
+            window.removeEventListener('keydown', handleUserInteraction);
+            window.removeEventListener('touchstart', handleUserInteraction);
+        };
+    }, []);
 
     useEffect(() => {
         // Load sound preferences on mount
@@ -114,7 +135,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 setNotifications(mappedData);
 
                 // Play login sound if this is first login and there are unread notifications
-                if (isFirstLogin) {
+                if (isFirstLogin && hasUserInteracted) {
                     const hasUnread = data.some((n: DbNotification) => !n.read);
                     const hasNewAnnouncements = data.some((n: DbNotification) =>
                         !n.read &&
@@ -132,12 +153,18 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                     data.filter((notification: DbNotification) => !notification.read).forEach((notification: DbNotification) => {
                         setNotificationReminder(notification.id);
                     });
+                } else if (isFirstLogin && !hasUserInteracted) {
+                    toast({
+                        title: "Sound Playback",
+                        description: "Please interact with the page first (click anywhere) to enable notification sounds.",
+                        variant: "default",
+                    });
                 }
             }
         } catch (error) {
             console.error("Error in fetchNotifications:", error);
         }
-    }, [userId, mapDbNotificationToUi, isFirstLogin]);
+    }, [userId, mapDbNotificationToUi, isFirstLogin, hasUserInteracted, toast]);
 
     const markAsRead = useCallback(async (id: string) => {
         if (!userId) return;
@@ -345,8 +372,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
                     setNotifications(prev => [mappedNotification, ...prev]);
 
-                    // Play notification sound for new notifications
-                    playNotificationSound('bell');
+                    // Play notification sound for new notifications only if user has interacted
+                    if (hasUserInteracted) {
+                        playNotificationSound('bell');
+                    } else {
+                        toast({
+                            title: "Sound Playback",
+                            description: "Please interact with the page first (click anywhere) to enable notification sounds.",
+                            variant: "default",
+                        });
+                    }
 
                     // Set a reminder for this notification
                     setNotificationReminder(newNotification.id);
@@ -368,7 +403,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 supabase.removeChannel(channel);
             }
         };
-    }, [userId, supabase, mapDbNotificationToUi, toast]);
+    }, [userId, supabase, mapDbNotificationToUi, hasUserInteracted, toast]);
 
     return (
         <NotificationContext.Provider value={{

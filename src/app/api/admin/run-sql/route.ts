@@ -1,14 +1,40 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import rateLimit from '@/lib/rate-limit';
+
+const limiter = rateLimit({
+    interval: 60 * 1000, // 1 minute
+    uniqueTokenPerInterval: 100 // Max 100 requests per minute
+});
 
 export async function POST(request: Request) {
     try {
+        // Rate limit check
+        try {
+            await limiter.check(request, 5); // 5 requests per minute per IP
+        } catch {
+            return NextResponse.json(
+                { error: 'Rate limit exceeded. Please try again later.' },
+                { status: 429 }
+            );
+        }
+
         const { sql, userId } = await request.json();
 
-        // Validation
+        // Input validation
         if (!sql) {
-            return NextResponse.json({ error: 'Missing SQL parameter' }, { status: 400 });
+            return NextResponse.json(
+                { error: 'Missing SQL parameter' },
+                { status: 400 }
+            );
+        }
+
+        if (sql.toLowerCase().includes('drop') || sql.toLowerCase().includes('truncate')) {
+            return NextResponse.json(
+                { error: 'Destructive SQL operations are not allowed' },
+                { status: 403 }
+            );
         }
 
         console.log("API - SQL execution request received");
@@ -21,72 +47,44 @@ export async function POST(request: Request) {
 
         if (authError || !user) {
             console.error("API - Authentication error:", authError);
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            return NextResponse.json(
+                { error: 'Unauthorized access' },
+                { status: 401 }
+            );
         }
 
-        // Check if user is admin
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
+        // Check if user is admin using the secure function
+        const { data: isAdmin, error: adminCheckError } = await supabase
+            .rpc('is_admin', { uid: user.id });
 
-        if (profileError || !profile || profile.role !== 'Admin') {
-            console.error("API - Authorization error:", profileError);
-            return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+        if (adminCheckError || !isAdmin) {
+            console.error("API - Authorization error:", adminCheckError);
+            return NextResponse.json(
+                { error: 'Admin access required' },
+                { status: 403 }
+            );
         }
 
         console.log("API - Admin verification successful, executing SQL");
 
-        try {
-            // Create a delete function in the database (fallback if direct SQL fails)
-            try {
-                const functionQuery = `
-                    CREATE OR REPLACE FUNCTION admin_delete_gear(gear_id UUID)
-                    RETURNS VOID AS $$
-                    BEGIN
-                        DELETE FROM public.gears WHERE id = gear_id;
-                    END;
-                    $$ LANGUAGE plpgsql SECURITY DEFINER;
-                `;
+        // Execute the SQL with timeout
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Query timeout')), 30000)
+        );
 
-                // Try to execute the function creation query directly
-                // This is risky but we're in an admin-only context
-                try {
-                    // Use standardized DELETE query instead of the SQL parameter
-                    const { error: deleteError } = await supabase
-                        .from('gears')
-                        .delete()
-                        .eq('id', userId); // Using userId as a placeholder
+        const queryPromise = supabase.rpc('execute_sql', { sql_query: sql });
+        const result = await Promise.race([queryPromise, timeoutPromise]);
 
-                    // Just an empty operation to test if DB access works
-                    console.log("API - Database connectivity verified");
-                } catch (e) {
-                    console.error("API - Database connectivity error:", e);
-                }
+        return NextResponse.json({ success: true, result });
 
-                return NextResponse.json({
-                    success: true,
-                    message: "Function creation attempted - actual creation happens when the endpoint is used"
-                });
-            } catch (sqlError: any) {
-                console.error("API - SQL execution error:", sqlError);
-                return NextResponse.json({
-                    error: `SQL execution error: ${sqlError.message}`,
-                    details: sqlError
-                }, { status: 500 });
-            }
-        } catch (sqlError: any) {
-            console.error("API - SQL execution error:", sqlError);
-            return NextResponse.json({
-                error: `SQL execution error: ${sqlError.message}`,
-                details: sqlError
-            }, { status: 500 });
-        }
-    } catch (error: any) {
-        console.error("API - General error:", error);
-        return NextResponse.json({
-            error: `Server error: ${error.message}`
-        }, { status: 500 });
+    } catch (error) {
+        console.error("API - Unexpected error:", error);
+        return NextResponse.json(
+            {
+                error: error instanceof Error ? error.message : 'Internal server error',
+                details: process.env.NODE_ENV === 'development' ? error : undefined
+            },
+            { status: 500 }
+        );
     }
 } 
