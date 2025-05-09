@@ -64,6 +64,17 @@ type RealtimeNotificationPayload = RealtimePostgresChangesPayload<{
   new: Notification;
 }>;
 
+type GearStatusPayload = {
+  old: {
+    status?: string;
+    checked_out_to?: string;
+  } | null;
+  new: {
+    status?: string;
+    checked_out_to?: string;
+  };
+};
+
 const logError = createErrorLogger('UserDashboard');
 
 export default function UserDashboardPage() {
@@ -167,10 +178,7 @@ export default function UserDashboardPage() {
             .on(
               'postgres_changes',
               { event: '*', schema: 'public', table: 'gears' },
-              async (payload: RealtimePostgresChangesPayload<{
-                old: { status?: string; checked_out_to?: string } | null;
-                new: { status?: string; checked_out_to?: string };
-              }>) => {
+              async (payload: { old: GearStatusPayload['old']; new: GearStatusPayload['new'] }) => {
                 console.log('Gears change received:', payload);
                 if (mounted) {
                   const oldStatus = payload.old?.status?.toLowerCase();
@@ -581,11 +589,34 @@ interface NotificationSoundProps {
 
 function NotificationSound({ count }: NotificationSoundProps) {
   const [audioError, setAudioError] = useState(false);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const { toast } = useToast();
+
+  // Add effect to track user interaction
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      setHasUserInteracted(true);
+      // Remove listeners after first interaction
+      window.removeEventListener('click', handleUserInteraction);
+      window.removeEventListener('keydown', handleUserInteraction);
+      window.removeEventListener('touchstart', handleUserInteraction);
+    };
+
+    window.addEventListener('click', handleUserInteraction);
+    window.addEventListener('keydown', handleUserInteraction);
+    window.addEventListener('touchstart', handleUserInteraction);
+
+    return () => {
+      window.removeEventListener('click', handleUserInteraction);
+      window.removeEventListener('keydown', handleUserInteraction);
+      window.removeEventListener('touchstart', handleUserInteraction);
+    };
+  }, []);
 
   useEffect(() => {
     let audio: HTMLAudioElement | null = null;
 
-    if (count > 0 && !audioError) {
+    if (count > 0 && !audioError && hasUserInteracted) {
       try {
         audio = new Audio('/notification-sound.mp3');
         audio.loop = true;
@@ -595,12 +626,28 @@ function NotificationSound({ count }: NotificationSoundProps) {
           playPromise.catch(error => {
             console.error("Audio playback failed:", error);
             setAudioError(true);
+            toast({
+              title: "Sound Playback Failed",
+              description: "Could not play the notification sound. Please check your browser settings.",
+              variant: "destructive",
+            });
           });
         }
       } catch (error) {
         console.error("Error creating audio:", error);
         setAudioError(true);
+        toast({
+          title: "Sound Initialization Failed",
+          description: "Could not initialize the notification sound. Please check your browser settings.",
+          variant: "destructive",
+        });
       }
+    } else if (count > 0 && !hasUserInteracted) {
+      toast({
+        title: "Sound Playback",
+        description: "Please interact with the page first (click anywhere) to enable notification sounds.",
+        variant: "default",
+      });
     }
 
     return () => {
@@ -613,7 +660,7 @@ function NotificationSound({ count }: NotificationSoundProps) {
         }
       }
     };
-  }, [count, audioError]);
+  }, [count, audioError, hasUserInteracted, toast]);
 
   return null;
 }

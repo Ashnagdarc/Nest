@@ -35,10 +35,63 @@ const audioElements: Record<NotificationSoundType, HTMLAudioElement | null> = {
 const pendingSounds: NotificationSoundType[] = [];
 
 /**
+ * Set up user interaction tracking
+ */
+export function setupUserInteractionTracking(): void {
+    if (typeof window === 'undefined') return;
+
+    const handleUserInteraction = () => {
+        userHasInteracted = true;
+        // Initialize audio elements after user interaction
+        initializeAudioElements();
+        // Remove listeners after first interaction
+        window.removeEventListener('click', handleUserInteraction);
+        window.removeEventListener('keydown', handleUserInteraction);
+        window.removeEventListener('touchstart', handleUserInteraction);
+    };
+
+    window.addEventListener('click', handleUserInteraction);
+    window.addEventListener('keydown', handleUserInteraction);
+    window.addEventListener('touchstart', handleUserInteraction);
+}
+
+/**
+ * Check if user has interacted with the page
+ */
+export function hasUserInteracted(): boolean {
+    return userHasInteracted;
+}
+
+/**
+ * Check if browser supports audio
+ */
+function browserSupportsAudio(): boolean {
+    return typeof window !== 'undefined' && typeof Audio !== 'undefined';
+}
+
+/**
+ * Stop all currently playing sounds
+ */
+export function stopAllSounds(): void {
+    activeAudioElements.forEach(audio => {
+        try {
+            audio.pause();
+            audio.currentTime = 0;
+        } catch (error) {
+            console.error('Error stopping sound:', error);
+        }
+    });
+    activeAudioElements.length = 0;
+}
+
+/**
  * Initialize audio elements once user has interacted with the page
  */
 function initializeAudioElements(): void {
-    if (!browserSupportsAudio()) return;
+    if (!browserSupportsAudio()) {
+        console.warn('Browser does not support audio playback');
+        return;
+    }
 
     // Create and preload all sound elements
     Object.keys(SOUND_URLS).forEach((type) => {
@@ -63,28 +116,16 @@ function initializeAudioElements(): void {
 }
 
 /**
- * Stop all playing sounds
- */
-export function stopAllSounds(): void {
-    activeAudioElements.forEach(audio => {
-        try {
-            audio.pause();
-            audio.currentTime = 0;
-        } catch (error) {
-            console.error('Error stopping sound:', error);
-        }
-    });
-    activeAudioElements.length = 0; // Clear the array
-}
-
-/**
  * Play already initialized sound
  */
 function playInitializedSound(type: NotificationSoundType): void {
     if (!soundsEnabled) return;
 
     const audio = audioElements[type];
-    if (!audio) return;
+    if (!audio) {
+        console.warn(`Sound type ${type} not initialized`);
+        return;
+    }
 
     try {
         // Stop any existing sounds of the same type
@@ -115,8 +156,11 @@ function playInitializedSound(type: NotificationSoundType): void {
                     });
                 })
                 .catch(err => {
-                    console.warn('Could not play sound, will retry after interaction:', err.message);
-                    pendingSounds.push(type);
+                    console.warn('Could not play sound:', err.message);
+                    // Queue for retry if it's an interaction error
+                    if (err.name === 'NotAllowedError') {
+                        pendingSounds.push(type);
+                    }
                     // Remove from active elements if failed
                     const index = activeAudioElements.indexOf(soundInstance);
                     if (index > -1) {
@@ -127,41 +171,6 @@ function playInitializedSound(type: NotificationSoundType): void {
     } catch (error) {
         console.error('Error playing initialized sound:', error);
     }
-}
-
-/**
- * Set up user interaction tracking
- */
-export function setupUserInteractionTracking(): void {
-    if (typeof window !== 'undefined') {
-        // These events indicate user interaction has occurred
-        const interactionEvents = ['click', 'keydown', 'touchstart', 'touchend'];
-
-        const handleUserInteraction = () => {
-            if (!userHasInteracted) {
-                userHasInteracted = true;
-                console.log('User interaction detected, initializing audio');
-                initializeAudioElements();
-
-                // Remove initial interaction listeners
-                interactionEvents.forEach(event => {
-                    window.removeEventListener(event, handleUserInteraction);
-                });
-            }
-        };
-
-        // Add the event listeners
-        interactionEvents.forEach(event => {
-            window.addEventListener(event, handleUserInteraction);
-        });
-    }
-}
-
-/**
- * Check if the browser supports audio
- */
-export function browserSupportsAudio(): boolean {
-    return typeof window !== 'undefined' && typeof Audio !== 'undefined';
 }
 
 /**
@@ -201,8 +210,6 @@ export function areSoundsEnabled(): boolean {
  */
 export function playNotificationSound(type: NotificationSoundType = 'bell'): void {
     if (!soundsEnabled || !browserSupportsAudio()) return;
-
-    console.log(`Attempting to play ${type} sound, user has interacted:`, userHasInteracted);
 
     try {
         if (userHasInteracted && audioElements[type]) {

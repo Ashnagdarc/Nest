@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { List, CheckCircle, AlertTriangle, PackagePlus, Calendar, Users, Settings, BarChart3, Activity, Search, Filter, Sliders, Plus, RotateCcw, ShieldCheck } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import ThemeToggle from '@/components/ThemeToggle';
 import type { Database } from '@/types/supabase';
@@ -15,6 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import Link from "next/link";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useRouter } from 'next/navigation';
 
 type Activity = {
   id: string;
@@ -107,9 +111,13 @@ type GearData = {
 type ActivityLogData = {
   id: string;
   activity_type: string;
-  details: any;
+  status?: string;
+  notes?: string;
+  details?: any;
   created_at: string;
-  user?: {
+  user_id: string;
+  gear_id: string;
+  profiles?: {
     full_name?: string;
     email?: string;
   };
@@ -122,7 +130,8 @@ type GearActivityData = {
   id: string;
   name?: string;
   created_at: string;
-  user?: {
+  owner_id?: string;
+  profiles?: {
     full_name?: string;
     email?: string;
   };
@@ -154,6 +163,8 @@ export default function AdminDashboardPage() {
   const supabase = createClient();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [stats, setStats] = useState<Stat[]>([
     { title: 'Available Gears', value: 0, icon: CheckCircle, color: 'text-green-500' },
     { title: 'Booked Gears', value: 0, icon: List, color: 'text-blue-500' },
@@ -173,6 +184,32 @@ export default function AdminDashboardPage() {
     admins: 0
   });
   const [userActivities, setUserActivities] = useState<UserActivity[]>([]);
+
+  // Initialize audio in useEffect
+  useEffect(() => {
+    audioRef.current = new Audio('/sounds/notification.mp3');
+  }, []);
+
+  // Add effect to track user interaction
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      setHasUserInteracted(true);
+      // Remove listeners after first interaction
+      window.removeEventListener('click', handleUserInteraction);
+      window.removeEventListener('keydown', handleUserInteraction);
+      window.removeEventListener('touchstart', handleUserInteraction);
+    };
+
+    window.addEventListener('click', handleUserInteraction);
+    window.addEventListener('keydown', handleUserInteraction);
+    window.addEventListener('touchstart', handleUserInteraction);
+
+    return () => {
+      window.removeEventListener('click', handleUserInteraction);
+      window.removeEventListener('keydown', handleUserInteraction);
+      window.removeEventListener('touchstart', handleUserInteraction);
+    };
+  }, []);
 
   useEffect(() => {
     // Initial data fetch
@@ -202,6 +239,14 @@ export default function AdminDashboardPage() {
         setRecentUpdate(updateMessage);
         setLastUpdated(new Date());
         fetchRecentActivities();
+
+        // Only play sound if user has interacted
+        if (hasUserInteracted && audioRef.current) {
+          audioRef.current.currentTime = 0;
+          audioRef.current.play().catch((error: Error) => {
+            console.error("Error playing notification sound:", error);
+          });
+        }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'maintenance' }, (payload: MaintenancePayload) => {
         console.log('Real-time update from maintenance table:', payload);
@@ -396,63 +441,116 @@ export default function AdminDashboardPage() {
 
   async function fetchRecentActivities() {
     try {
-      // Fetch from gear_activity_log first
+      // First check if user is admin
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user?.id)
+        .single();
+
+      if (profileError) {
+        console.error("Error fetching user profile:", profileError);
+        throw profileError;
+      }
+
+      if (profile?.role !== 'Admin') {
+        console.error("Unauthorized: Admin access required");
+        toast({
+          title: "Access Denied",
+          description: "You need admin privileges to view this information.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Fetch activity log with basic fields first
       const { data: activityData, error: activityError } = await supabase
         .from('gear_activity_log')
-        .select(`
-          id,
-          user_id,
-          gear_id,
-          activity_type,
-          status,
-          notes,
-          details,
-          created_at,
-          user:user_id (
-            full_name,
-            email
-          ),
-          gears:gear_id (
-            name
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(5);
 
-      if (activityError) throw activityError;
+      if (activityError) {
+        console.error("Error fetching activity log:", activityError);
+        toast({
+          title: "Error",
+          description: "Failed to fetch activity log. Please try again later.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Fetch user details for activities
+      const userIds = activityData?.map(a => a.user_id).filter(Boolean) || [];
+      const gearIds = activityData?.map(a => a.gear_id).filter(Boolean) || [];
+
+      const [usersResponse, gearsResponse] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', userIds),
+        supabase
+          .from('gears')
+          .select('id, name')
+          .in('id', gearIds)
+      ]);
+
+      const usersMap = new Map(usersResponse.data?.map(u => [u.id, u]) || []);
+      const gearsMap = new Map(gearsResponse.data?.map(g => [g.id, g]) || []);
 
       // Also fetch recent gear changes
       const { data: gearData, error: gearError } = await supabase
         .from('gears')
-        .select(`
-          id,
-          name,
-          created_at,
-          created_by,
-          user:created_by (
-            full_name,
-            email
-          )
-        `)
+        .select('id, name, created_at, owner_id')
         .order('created_at', { ascending: false })
         .limit(5);
 
-      if (gearError) throw gearError;
+      if (gearError) {
+        console.error("Error fetching gear data:", gearError);
+        toast({
+          title: "Error",
+          description: "Failed to fetch gear data. Please try again later.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Fetch owner details for gears
+      const ownerIds = gearData?.map(g => g.owner_id).filter(Boolean) || [];
+      const { data: ownersData } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', ownerIds);
+
+      const ownersMap = new Map(ownersData?.map(o => [o.id, o]) || []);
 
       // Combine and format activities
       const activities = [
-        ...(activityData?.map((a: ActivityLogData) => ({
-          id: a.id,
-          user: a.user?.full_name || a.user?.email || 'Admin',
-          action: formatActivityType(a.activity_type, a.details, a.gears?.name),
-          time: a.created_at ? timeAgo(new Date(a.created_at)) : '',
-        })) || []),
-        ...(gearData?.map((g: GearActivityData) => ({
-          id: g.id,
-          user: g.user?.full_name || g.user?.email || 'Admin',
-          action: `added ${g.name}`,
-          time: g.created_at ? timeAgo(new Date(g.created_at)) : '',
-        })) || [])
+        ...(activityData?.map(a => {
+          const user = usersMap.get(a.user_id);
+          const gear = gearsMap.get(a.gear_id);
+          return {
+            id: a.id,
+            user: user?.full_name || user?.email || 'Unknown User',
+            action: formatActivityType(a.activity_type, a.details, gear?.name),
+            time: a.created_at ? timeAgo(new Date(a.created_at)) : '',
+          };
+        }) || []),
+        ...(gearData?.map(g => {
+          const owner = ownersMap.get(g.owner_id);
+          return {
+            id: g.id,
+            user: owner?.full_name || owner?.email || 'Unknown User',
+            action: `added ${g.name || 'new gear'}`,
+            time: g.created_at ? timeAgo(new Date(g.created_at)) : '',
+          };
+        }) || [])
       ]
         .sort((a, b) => {
           const timeA = parseTimeAgo(a.time);
@@ -464,6 +562,12 @@ export default function AdminDashboardPage() {
       setRecentActivities(activities);
     } catch (error: any) {
       console.error("Error fetching activities:", error.message);
+      setRecentActivities([]);
+      toast({
+        title: "Error",
+        description: error.message || "Could not load recent activities. Please try again later.",
+        variant: "destructive",
+      });
     }
   }
 
@@ -735,6 +839,30 @@ export default function AdminDashboardPage() {
       },
     }),
   }
+
+  // Update the playTestSound function with proper error typing
+  const playTestSound = () => {
+    if (!hasUserInteracted) {
+      toast({
+        title: "Sound Playback",
+        description: "Please interact with the page first (click anywhere) to enable sound playback.",
+        variant: "default",
+      });
+      return;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch((error: Error) => {
+        console.error("Error playing test sound:", error);
+        toast({
+          title: "Sound Playback Failed",
+          description: "Could not play the notification sound. Please check your browser settings.",
+          variant: "destructive",
+        });
+      });
+    }
+  };
 
   return (
     <div className="container mx-auto py-6 space-y-8">

@@ -26,6 +26,8 @@ import { createClient } from '@/lib/supabase/client';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import { useToast } from "@/hooks/use-toast";
+import type { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 
 const adminNavItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: Home },
@@ -62,45 +64,83 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const fetchAdminData = async (userId: string) => {
-      setIsLoadingUser(true);
-      console.log("AdminLayout: Fetching profile for user ID:", userId);
-      // Fetch profile data from Supabase 'profiles' table
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single(); // Expect exactly one profile
+      try {
+        setIsLoadingUser(true);
+        console.log("AdminLayout: Fetching profile for user ID:", userId);
 
-      if (profileError) {
-        console.error("AdminLayout: Error fetching admin profile:", profileError.message);
-        // Handle error - Log out and redirect
+        // Fetch profile data from Supabase 'profiles' table
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+
+        if (profileError) {
+          console.error("AdminLayout: Error fetching admin profile:", profileError.message);
+          // Clear any stored data
+          localStorage.removeItem('supabase.auth.token');
+          sessionStorage.clear();
+          await supabase.auth.signOut();
+          toast({
+            title: "Authentication Error",
+            description: "There was a problem verifying your admin access. Please log in again.",
+            variant: "destructive",
+          });
+          router.push('/login?error=fetcherror');
+          setIsLoadingUser(false);
+          return;
+        }
+
+        if (!profile) {
+          console.error("AdminLayout: Admin profile not found for UID:", userId);
+          // Clear any stored data
+          localStorage.removeItem('supabase.auth.token');
+          sessionStorage.clear();
+          await supabase.auth.signOut();
+          toast({
+            title: "Profile Not Found",
+            description: "Your user profile could not be found. Please contact support.",
+            variant: "destructive",
+          });
+          router.push('/login?error=noprofile');
+          setIsLoadingUser(false);
+          return;
+        }
+
+        // Verify if the user has Admin role
+        if (profile.role !== 'Admin') {
+          console.warn("AdminLayout: User is not an Admin. Redirecting.");
+          // Clear any stored data
+          localStorage.removeItem('supabase.auth.token');
+          sessionStorage.clear();
+          await supabase.auth.signOut();
+          toast({
+            title: "Unauthorized Access",
+            description: "You do not have administrator privileges. Please log in with an admin account.",
+            variant: "destructive",
+          });
+          router.push('/login?error=unauthorized');
+          setIsLoadingUser(false);
+          return;
+        }
+
+        console.log("AdminLayout: Admin profile loaded:", profile);
+        setAdminUser(profile);
+        setIsLoadingUser(false);
+      } catch (error) {
+        console.error("AdminLayout: Unexpected error:", error);
+        // Clear any stored data
+        localStorage.removeItem('supabase.auth.token');
+        sessionStorage.clear();
         await supabase.auth.signOut();
-        router.push('/login?error=fetcherror');
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred. Please try again later.",
+          variant: "destructive",
+        });
+        router.push('/login?error=unknown');
         setIsLoadingUser(false);
-        return;
       }
-
-      if (!profile) {
-        console.error("AdminLayout: Admin profile not found for UID:", userId);
-        await supabase.auth.signOut();
-        router.push('/login?error=noprofile');
-        setIsLoadingUser(false);
-        return;
-      }
-
-      // Verify if the user has Admin role
-      if (profile.role !== 'Admin') {
-        console.warn("AdminLayout: User is not an Admin. Redirecting.");
-        // Redirect non-admin users away
-        await supabase.auth.signOut(); // Log them out
-        router.push('/login?error=unauthorized'); // Redirect to login
-        setIsLoadingUser(false);
-        return;
-      }
-
-      console.log("AdminLayout: Admin profile loaded:", profile);
-      setAdminUser(profile);
-      setIsLoadingUser(false);
     };
 
     // Listen for Supabase Auth state changes

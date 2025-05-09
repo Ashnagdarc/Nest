@@ -46,7 +46,7 @@ USING (
     EXISTS (
         SELECT 1 FROM public.profiles 
         WHERE id = auth.uid() 
-        AND position = 'Admin'
+        AND role = 'Admin'
     )
 );
 
