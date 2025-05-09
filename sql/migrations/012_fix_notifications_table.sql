@@ -103,4 +103,50 @@ END;
 $$;
 
 -- Grant execute permission to authenticated users
-GRANT EXECUTE ON PROCEDURE mark_notification_read TO authenticated; 
+GRANT EXECUTE ON PROCEDURE mark_notification_read TO authenticated;
+
+-- Create read_notifications table if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'read_notifications') THEN
+    RAISE NOTICE 'Creating read_notifications table';
+    
+    CREATE TABLE public.read_notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+      notification_id UUID NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(user_id, notification_id)
+    );
+
+    -- Create indexes for better performance
+    CREATE INDEX idx_read_notifications_user_id ON read_notifications(user_id);
+    CREATE INDEX idx_read_notifications_notification_id ON read_notifications(notification_id);
+    CREATE INDEX idx_read_notifications_created_at ON read_notifications(created_at DESC);
+
+    -- Enable RLS
+    ALTER TABLE read_notifications ENABLE ROW LEVEL SECURITY;
+
+    -- Create policies
+    CREATE POLICY "Users can view their own read notifications"
+    ON read_notifications FOR SELECT
+    USING (user_id = auth.uid());
+
+    CREATE POLICY "Users can insert their own read notifications"
+    ON read_notifications FOR INSERT
+    WITH CHECK (user_id = auth.uid());
+
+    -- Grant access to authenticated users
+    GRANT ALL ON read_notifications TO authenticated;
+  END IF;
+END $$;
+
+-- Sync existing read notifications
+DO $$
+BEGIN
+  INSERT INTO read_notifications (user_id, notification_id)
+  SELECT n.user_id, n.id
+  FROM notifications n
+  WHERE n.read = true
+  ON CONFLICT (user_id, notification_id) DO NOTHING;
+END $$; 

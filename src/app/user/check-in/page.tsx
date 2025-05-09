@@ -8,13 +8,13 @@ import { createClient } from '@/lib/supabase/client';
 import { createSystemNotification } from '@/lib/notifications';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Loader2, Package, QrCode } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from '@/components/ui/label';
-import { UploadCloud, PackageCheck, Package } from 'lucide-react';
+import { UploadCloud, PackageCheck } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import Image from 'next/image';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,6 +22,10 @@ import dynamic from 'next/dynamic';
 import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { cn } from '@/lib/utils';
 import { User } from '@supabase/supabase-js';
+import { format } from 'date-fns';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { History } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 
 // --- Dynamically import Lottie ---
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -67,14 +71,16 @@ type Gear = {
 type ProcessedGear = {
   id: string;
   name: string;
-  status: string;
   category: string;
-  imageUrl: string | null;
-  dueDate: Date | null;
-  checkoutDate: Date | null;
+  status: string;
+  checked_out_to: string | null;
+  current_request_id: string | null;
+  last_checkout_date: string | null;
+  due_date: string | null;
+  image_url: string | null;
 };
 
-// Add this type at the top of the file with other types
+// Update the GearData type at the top of the file
 type GearData = {
   id: string;
   name: string;
@@ -84,6 +90,7 @@ type GearData = {
   checked_out_to: string;
   due_date: string | null;
   current_request_id: string | null;
+  last_checkout_date: string | null;
 };
 
 type PostgresChangePayload = {
@@ -101,21 +108,41 @@ const isValidImageUrl = (url: string | null | undefined): url is string => {
   return typeof url === 'string' && url.trim().length > 0;
 };
 
+// Helper function to parse date string
+const parseDate = (dateStr: string | null): Date | null => {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  return isNaN(date.getTime()) ? null : date;
+};
+
+// Add type for check-in history
+type CheckInHistory = {
+  id: string;
+  gearName: string;
+  checkinDate: Date;
+  status: string;
+  condition: string;
+  notes: string;
+};
+
 export default function CheckInGearPage() {
   const { toast } = useToast();
+  const supabase = createClient();
   const [checkedOutGears, setCheckedOutGears] = useState<ProcessedGear[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
   const [selectedGears, setSelectedGears] = useState<string[]>([]);
   const [isDamaged, setIsDamaged] = useState(false);
   const [damageDescription, setDamageDescription] = useState('');
   const [checkinNotes, setCheckinNotes] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false); // State for animation
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [qrError, setQrError] = useState<string | null>(null);
-  const [scannedCode, setScannedCode] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [scannerInitialized, setScannerInitialized] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false); // State for animation
+  const [scannedCode, setScannedCode] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [checkInHistory, setCheckInHistory] = useState<CheckInHistory[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -142,7 +169,8 @@ export default function CheckInGearPage() {
             image_url,
             checked_out_to,
             due_date,
-            current_request_id
+            current_request_id,
+            last_checkout_date
           `)
           .eq('checked_out_to', userId)
           .eq('status', 'Checked Out');
@@ -190,9 +218,11 @@ export default function CheckInGearPage() {
             name: gear.name,
             status: gear.status,
             category: gear.category,
-            imageUrl: isValidImageUrl(gear.image_url) ? gear.image_url : null,
-            dueDate: gear.due_date ? new Date(gear.due_date) : null,
-            checkoutDate: null
+            image_url: isValidImageUrl(gear.image_url) ? gear.image_url : null,
+            current_request_id: gear.current_request_id,
+            due_date: gear.due_date,
+            last_checkout_date: gear.last_checkout_date,
+            checked_out_to: gear.checked_out_to
           };
         });
 
@@ -200,7 +230,7 @@ export default function CheckInGearPage() {
         console.log('Processed gear image URLs:', processedGears.map((g: ProcessedGear) => ({
           id: g.id,
           name: g.name,
-          imageUrl: g.imageUrl
+          image_url: g.image_url
         })));
 
         setCheckedOutGears(processedGears);
@@ -296,197 +326,175 @@ export default function CheckInGearPage() {
     }
   };
 
-  const handleCheckinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setShowSuccessAnimation(false); // Reset animation
-    if (selectedGears.length === 0) {
-      toast({ title: "Error", description: "Please select at least one gear item to check in.", variant: "destructive" });
-      return;
-    }
-    if (isDamaged && !damageDescription.trim()) {
-      toast({ title: "Error", description: "Please describe the damage if 'Damaged' is checked.", variant: "destructive" });
-      return;
-    }
-
-    setIsLoading(true);
-    console.log("Checking in gears:", {
-      gearIds: selectedGears,
-      isDamaged,
-      damageDescription,
-      checkinNotes,
-    });
-
+  // Function to fetch checked out gear
+  const fetchCheckedOutGear = async () => {
     try {
-      const checkinDate = new Date();
-      const condition = isDamaged ? 'Damaged' : 'Good';
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-      // Step 1: Get the details of selected gears
-      const { data: selectedGearDetails, error: gearError } = await supabase
+      const { data: gears, error } = await supabase
         .from('gears')
-        .select('id, name, current_request_id')
-        .in('id', selectedGears);
+        .select(`
+          id,
+          name,
+          category,
+          status,
+          checked_out_to,
+          current_request_id,
+          last_checkout_date,
+          due_date,
+          image_url
+        `)
+        .eq('checked_out_to', user.id)
+        .eq('status', 'Checked Out');
 
-      if (gearError) throw gearError;
-
-      // Step 2: Create checkin records for each gear
-      const checkinRecords = selectedGears.map(gearId => ({
-        user_id: userId,
-        gear_id: gearId,
-        checkin_date: checkinDate.toISOString(),
-        status: 'Pending Admin Approval', // Changed from 'Completed'
-        notes: checkinNotes,
-        condition: condition
-      }));
-
-      const { error: checkinError } = await supabase
-        .from('checkins')
-        .insert(checkinRecords);
-
-      if (checkinError) throw checkinError;
-
-      // Step 3: Update gear status to 'Pending Check-in'
-      const { error: gearUpdateError } = await supabase
-        .from('gears')
-        .update({
-          status: 'Pending Check-in', // Changed from directly setting to Available
-          last_checkin_date: checkinDate.toISOString(),
-          condition: condition,
-          damage_notes: isDamaged ? damageDescription : null
-        })
-        .in('id', selectedGears);
-
-      if (gearUpdateError) throw gearUpdateError;
-
-      // Step 4: Update gear_requests statuses
-      const requestIds = selectedGearDetails
-        .map((gear: any) => gear.current_request_id)
-        .filter(Boolean);
-
-      if (requestIds.length > 0) {
-        const uniqueRequestIds = [...new Set(requestIds)];
-
-        for (const requestId of uniqueRequestIds) {
-          // Get all gears in this request
-          const { data: requestData } = await supabase
-            .from('gear_requests')
-            .select('gear_ids')
-            .eq('id', requestId)
-            .single();
-
-          if (requestData && requestData.gear_ids) {
-            // Check if all gears in the request are being returned
-            const allGearsReturned = requestData.gear_ids.every((gearId: string) =>
-              selectedGears.includes(gearId));
-
-            // Update request status accordingly
-            await supabase
-              .from('gear_requests')
-              .update({
-                status: allGearsReturned ? 'Pending Return Approval' : 'Partially Returned',
-                checkin_date: checkinDate.toISOString(),
-                checkin_notes: checkinNotes
-              })
-              .eq('id', requestId);
-
-            // Create history entry
-            await supabase.from('request_status_history').insert({
-              request_id: requestId,
-              status: allGearsReturned ? 'Pending Return Approval' : 'Partially Returned',
-              changed_by: userId,
-              note: checkinNotes
-            });
-          }
-        }
+      if (error) {
+        console.error("Error fetching checked out gear:", error);
+        return;
       }
 
-      // Step 5: Create check-in notifications
-      // User notification
-      const gearNames = selectedGearDetails.map((gear: any) => gear.name).join(', ');
+      setCheckedOutGears(gears || []);
+    } catch (error) {
+      console.error("Error in fetchCheckedOutGear:", error);
+    }
+  };
 
-      await createSystemNotification(
-        userId as string,
-        'Gear Check-in Submitted',
-        `Your check-in for ${gearNames} has been submitted and is pending admin approval.`
-      );
+  useEffect(() => {
+    fetchCheckedOutGear();
+  }, []);
 
-      // Admin notifications
-      const { data: adminUsers } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('role', 'Admin');
+  const handleCheckinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
 
-      if (adminUsers && adminUsers.length > 0) {
-        // Create check-in notification for each admin
-        for (const admin of adminUsers) {
-          await createSystemNotification(
-            admin.id,
-            'Gear Check-in Pending',
-            `${gearNames} has been submitted for check-in${isDamaged ? ' with reported damage' : ''}. Please review and approve.`
-          );
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("No authenticated user found");
+      }
+      const userId = user.id;
 
-          // If gear is damaged, create a damage report notification for each admin
-          if (isDamaged) {
+      // Step 1: Create check-in records for each gear
+      for (const gearId of selectedGears) {
+        const gear = checkedOutGears.find(g => g.id === gearId);
+        if (!gear) continue;
+
+        // Create a pending check-in record
+        const { error: checkinError } = await supabase
+          .from('checkins')
+          .insert({
+            user_id: userId,
+            gear_id: gearId,
+            request_id: gear.current_request_id,
+            checkin_date: new Date().toISOString(),
+            status: 'Pending Admin Approval',
+            condition: isDamaged ? 'Damaged' : 'Good',
+            damage_notes: isDamaged ? damageDescription : null,
+            notes: checkinNotes
+          });
+
+        if (checkinError) {
+          console.error("Error creating check-in record:", checkinError);
+          throw new Error(`Failed to create check-in record: ${checkinError.message}`);
+        }
+
+        // Log the check-in activity
+        const { error: activityError } = await supabase.rpc(
+          'log_gear_activity',
+          {
+            p_user_id: userId,
+            p_gear_id: gearId,
+            p_request_id: gear.current_request_id,
+            p_activity_type: 'Check-in',
+            p_status: 'Pending Admin Approval',
+            p_notes: isDamaged ? damageDescription : checkinNotes,
+            p_details: JSON.stringify({
+              condition: isDamaged ? 'Damaged' : 'Good',
+              damage_notes: isDamaged ? damageDescription : null,
+              checkin_notes: checkinNotes
+            })
+          }
+        );
+
+        if (activityError) {
+          console.error("Error logging check-in activity:", activityError);
+          throw new Error(`Failed to log check-in activity: ${activityError.message}`);
+        }
+
+        // Update gear status to "Pending Check-in"
+        const { error: gearUpdateError } = await supabase
+          .from('gears')
+          .update({
+            status: 'Pending Check-in',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', gearId);
+
+        if (gearUpdateError) {
+          console.error("Error updating gear status:", gearUpdateError);
+          throw new Error(`Failed to update gear status: ${gearUpdateError.message}`);
+        }
+
+        // Notify admins of pending check-in
+        const { data: admins } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'Admin');
+
+        if (admins) {
+          for (const admin of admins) {
             await createSystemNotification(
               admin.id,
-              'Damage Report',
-              `Damage reported on ${gearNames}: ${damageDescription}`
+              'Pending Check-in',
+              `New gear check-in pending approval for ${gear.name}.`
             );
           }
         }
       }
 
-      // Step 6: Success message and animation
+      // Show success message
       toast({
         title: "Check-in Submitted",
-        description: `Successfully submitted check-in for ${selectedGears.length} item(s). Pending admin approval.`,
-        variant: "success",
+        description: "Your check-in has been submitted and is pending admin approval.",
+        variant: "default",
       });
-
-      // Update local state to remove checked-in items
-      setCheckedOutGears(checkedOutGears.filter(gear => !selectedGears.includes(gear.id)));
 
       // Show success animation
       setShowSuccessAnimation(true);
+      setTimeout(() => {
+        setShowSuccessAnimation(false);
+      }, 3000);
 
-      // Reset form state AFTER showing animation
+      // Reset form
       setSelectedGears([]);
       setIsDamaged(false);
       setDamageDescription('');
       setCheckinNotes('');
 
-      // Hide animation after a delay
-      setTimeout(() => {
-        setShowSuccessAnimation(false);
-      }, 2000);
+      // Refresh the list of checked out gear
+      await fetchCheckedOutGear();
 
     } catch (error) {
-      console.error('Error checking in gear:', error);
+      console.error('Error during check-in:', error);
       toast({
         title: "Error",
-        description: "Failed to process check-in. Please try again or contact support.",
-        variant: "destructive",
+        description: error instanceof Error ? error.message : "Failed to submit check-in. Please try again.",
+        variant: "destructive"
       });
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  const isOverdue = (dueDate: Date | null) => {
-    if (!dueDate) return false;
-    const now = new Date();
-    // Set the time to end of day for the due date to give full day
-    const dueDateEndOfDay = new Date(dueDate);
-    dueDateEndOfDay.setHours(23, 59, 59, 999);
-    return now > dueDateEndOfDay;
+  const isOverdue = (date: string | null) => {
+    if (!date) return false;
+    return new Date(date) < new Date();
   };
 
-  const formatDueDate = (date: Date | null) => {
-    if (!date) return '';
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    }).format(date);
+  const formatDueDate = (date: string | null) => {
+    if (!date) return 'No due date';
+    return format(new Date(date), 'PP');
   };
 
   const containerVariants = {
@@ -558,242 +566,443 @@ export default function CheckInGearPage() {
     }
   };
 
+  // Update the gear card rendering
+  const renderGearCard = (gear: ProcessedGear) => {
+    const isOverdueDate = gear.due_date && new Date(gear.due_date) < new Date();
+    const dueDate = gear.due_date ? format(new Date(gear.due_date), 'PP') : 'No due date';
+
+    return (
+      <motion.div
+        key={gear.id}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn(
+          "group relative flex flex-col rounded-lg border p-4 transition-all hover:bg-accent/5",
+          selectedGears.includes(gear.id) && "border-primary bg-primary/5 shadow-sm"
+        )}
+      >
+        <div className="flex items-start gap-4">
+          <Checkbox
+            id={`gear-${gear.id}`}
+            checked={selectedGears.includes(gear.id)}
+            onCheckedChange={(checked) => {
+              if (checked) {
+                setSelectedGears(prev => [...prev, gear.id]);
+              } else {
+                setSelectedGears(prev => prev.filter(id => id !== gear.id));
+              }
+            }}
+            className={cn(
+              "mt-1",
+              selectedGears.includes(gear.id) && "border-primary"
+            )}
+          />
+          <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border">
+            {gear.image_url ? (
+              <Image
+                src={gear.image_url}
+                alt={gear.name}
+                fill
+                className="object-cover"
+                sizes="64px"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-muted">
+                <Package className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <Label
+              htmlFor={`gear-${gear.id}`}
+              className="text-base font-medium cursor-pointer truncate block"
+            >
+              {gear.name}
+            </Label>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground truncate">
+                {gear.category}
+              </span>
+              <div className="flex items-center gap-2">
+                <Badge variant={isOverdueDate ? "destructive" : "secondary"} className="text-xs">
+                  Due: {dueDate}
+                </Badge>
+                {isOverdueDate && (
+                  <Badge variant="destructive" className="text-xs">
+                    Overdue
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
+  // Add function to fetch check-in history
+  const fetchCheckInHistory = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: historyData, error: historyError } = await supabase
+        .from('checkins')
+        .select(`
+          id,
+          checkin_date,
+          status,
+          condition,
+          notes,
+          gears:gear_id (
+            name
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('checkin_date', { ascending: false });
+
+      if (historyError) {
+        console.error("Error fetching check-in history:", historyError);
+        toast({
+          title: "Error",
+          description: "Failed to load check-in history",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const processedHistory: CheckInHistory[] = (historyData || []).map((item: any) => ({
+        id: item.id,
+        gearName: item.gears?.name || 'Unknown Gear',
+        checkinDate: new Date(item.checkin_date),
+        status: item.status || 'Unknown',
+        condition: item.condition || 'Not specified',
+        notes: item.notes || ''
+      }));
+
+      setCheckInHistory(processedHistory);
+    } catch (error) {
+      console.error("Error in fetchCheckInHistory:", error);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
+  // Add useEffect to fetch history
+  useEffect(() => {
+    fetchCheckInHistory();
+  }, []);
+
+  // Add history section render function
+  const renderCheckInHistory = () => {
+    if (isHistoryLoading) {
+      return (
+        <div className="flex justify-center items-center py-10">
+          <Loader2 className="h-10 w-10 animate-spin mr-2 text-primary" />
+          <p className="text-muted-foreground">Loading check-in history...</p>
+        </div>
+      );
+    }
+
+    if (checkInHistory.length === 0) {
+      return (
+        <div className="text-center py-10">
+          <History className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-lg font-semibold mb-2">No Check-in History</h3>
+          <p className="text-muted-foreground mb-4">You haven't checked in any gear yet.</p>
+        </div>
+      );
+    }
+
+    return (
+      <ScrollArea className="h-[400px] w-full rounded-md border">
+        <div className="p-4 space-y-4">
+          {checkInHistory.map((item) => (
+            <div
+              key={item.id}
+              className="flex flex-col space-y-2 p-4 rounded-lg border bg-card transition-colors hover:bg-accent/5"
+            >
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium">{item.gearName}</h4>
+                <Badge variant={item.condition.toLowerCase() === 'damaged' ? 'destructive' : 'secondary'}>
+                  {item.condition}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Calendar className="h-4 w-4" />
+                <span>{format(item.checkinDate, 'PPp')}</span>
+              </div>
+              {item.notes && (
+                <p className="text-sm text-muted-foreground">
+                  Notes: {item.notes}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+    );
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="container max-w-4xl mx-auto py-6 px-4 md:px-6 space-y-6"
+      className="min-h-screen bg-background"
     >
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Check-in Gear</h1>
-          <p className="text-muted-foreground">Return equipment you've checked out.</p>
+      {/* Header Section */}
+      <div className="border-b">
+        <div className="container max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Check-in Gear</h1>
+              <p className="text-muted-foreground mt-1">Return equipment you've checked out</p>
+            </div>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <Button
+                onClick={() => setIsScannerOpen(true)}
+                variant="outline"
+                className="flex-1 sm:flex-none"
+              >
+                <QrCode className="mr-2 h-4 w-4" />
+                Scan QR Code
+              </Button>
+            </div>
+          </div>
         </div>
-        <Button onClick={() => setIsScannerOpen(true)} variant="outline">
-          Scan QR Code
-        </Button>
       </div>
 
-      {/* Success Animation Screen */}
-      {SuccessAnimationComponent}
+      {/* Main Content */}
+      <div className="container max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <Tabs defaultValue="check-in" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="check-in">Check-in Gear</TabsTrigger>
+            <TabsTrigger value="history">Check-in History</TabsTrigger>
+          </TabsList>
 
-      {/* Main Content: Form or No Gear Message */}
-      {!showSuccessAnimation && (
-        <>
-          {checkedOutGears.length === 0 ? (
-            <Card className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <PackageCheck className="h-16 w-16 text-muted-foreground mb-4" />
-              <CardTitle className="mb-3">You currently have no gear checked out</CardTitle>
-              <CardDescription className="max-w-md">
-                When you have checked out gear, it will appear here ready for check-in.
-                Browse the equipment and request some gear to get started.
-              </CardDescription>
-              <Button className="mt-6" asChild>
-                <a href="/user/browse">Browse Available Gear</a>
-              </Button>
-            </Card>
-          ) : (
-            <form onSubmit={handleCheckinSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Gear Selection Column */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1, duration: 0.5 }}
-                className="md:col-span-1"
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Select Gear to Check-in</CardTitle>
-                    <CardDescription>Choose items you are returning.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[400px] w-full rounded-md border p-4">
-                      <div className="space-y-4">
-                        {checkedOutGears.map((gear) => (
-                          <div
-                            key={gear.id}
-                            className={cn(
-                              "flex flex-col space-y-2 rounded-lg border p-3 transition-colors",
-                              selectedGears.includes(gear.id) && "border-primary bg-primary/5"
-                            )}
-                          >
-                            <div className="flex items-start space-x-3">
-                              <Checkbox
-                                id={`gear-${gear.id}`}
-                                checked={selectedGears.includes(gear.id)}
-                                onCheckedChange={(checked) => handleCheckboxChange(gear.id, checked)}
-                                className="mt-1"
-                              />
-                              <div className="flex-grow space-y-1">
-                                <div className="flex items-center gap-2">
-                                  {isValidImageUrl(gear.imageUrl) ? (
-                                    <Image
-                                      src={gear.imageUrl}
-                                      alt={gear.name}
-                                      width={32}
-                                      height={32}
-                                      className="rounded-md object-cover"
-                                      data-ai-hint={`${gear.category} item`}
-                                    />
-                                  ) : (
-                                    <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center">
-                                      <Package className="w-5 h-5 text-muted-foreground" />
-                                    </div>
-                                  )}
-                                  <div className="flex-grow">
-                                    <Label
-                                      htmlFor={`gear-${gear.id}`}
-                                      className="text-base font-medium cursor-pointer"
-                                    >
-                                      {gear.name}
-                                    </Label>
-                                    <p className="text-sm text-muted-foreground">
-                                      {gear.category}
-                                    </p>
-                                  </div>
+          <TabsContent value="check-in">
+            {/* Success Animation Screen */}
+            {SuccessAnimationComponent}
+
+            {/* Main Content: Form or No Gear Message */}
+            {!showSuccessAnimation && (
+              <>
+                {checkedOutGears.length === 0 ? (
+                  <Card className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                    <PackageCheck className="h-16 w-16 text-muted-foreground mb-4" />
+                    <CardTitle className="text-xl mb-3">No Gear to Check-in</CardTitle>
+                    <CardDescription className="max-w-md mb-8">
+                      You currently have no gear checked out. Browse our available equipment and request some gear to get started.
+                    </CardDescription>
+                    <Button size="lg" asChild>
+                      <a href="/user/browse">Browse Available Gear</a>
+                    </Button>
+                  </Card>
+                ) : (
+                  <form onSubmit={handleCheckinSubmit}>
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* Left Column - Gear Selection */}
+                      <div className="lg:col-span-5 space-y-4">
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <CardTitle>Select Items</CardTitle>
+                              <Badge variant="outline" className="ml-2">
+                                {selectedGears.length} of {checkedOutGears.length}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <CardDescription>Choose items to return</CardDescription>
+                              {checkedOutGears.length > 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedGears(checkedOutGears.map(g => g.id))}
+                                  className="text-xs"
+                                >
+                                  Select All
+                                </Button>
+                              )}
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px] w-full rounded-md border">
+                              <div className="p-4 space-y-3">
+                                {checkedOutGears.map((gear) => renderGearCard(gear))}
+                              </div>
+                            </ScrollArea>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* Right Column - Check-in Details */}
+                      <div className="lg:col-span-7 space-y-6">
+                        <Card>
+                          <CardHeader>
+                            <CardTitle>Check-in Details</CardTitle>
+                            <CardDescription>Report condition and add any notes</CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-6">
+                            {/* Damage Report Section */}
+                            <div className="rounded-lg border p-4 bg-card">
+                              <div className="flex items-start space-x-4">
+                                <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+                                  <Checkbox
+                                    id="isDamaged"
+                                    checked={isDamaged}
+                                    onCheckedChange={(checked) => setIsDamaged(checked === true)}
+                                  />
                                 </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                  <span className="text-muted-foreground">Due: {formatDueDate(gear.dueDate)}</span>
-                                  {isOverdue(gear.dueDate) && (
-                                    <Badge variant="destructive" className="text-xs">
-                                      Overdue
-                                    </Badge>
-                                  )}
+                                <div className="flex-1">
+                                  <Label
+                                    htmlFor="isDamaged"
+                                    className="text-base font-medium cursor-pointer"
+                                  >
+                                    Report Damage
+                                  </Label>
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    Check this if any selected items are damaged or need maintenance
+                                  </p>
                                 </div>
                               </div>
+
+                              {isDamaged && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="mt-4"
+                                >
+                                  <div className="rounded-lg border p-4 bg-destructive/5">
+                                    <Label htmlFor="damageDescription" className="text-base font-medium flex items-center gap-2">
+                                      <AlertCircle className="h-4 w-4 text-destructive" />
+                                      Damage Report <span className="text-destructive">*</span>
+                                    </Label>
+                                    <p className="text-sm text-muted-foreground mt-1 mb-3">
+                                      Please provide specific details about any damage or maintenance needs
+                                    </p>
+                                    <Textarea
+                                      id="damageDescription"
+                                      value={damageDescription}
+                                      onChange={(e) => setDamageDescription(e.target.value)}
+                                      placeholder="Describe the damage or maintenance needs in detail..."
+                                      className="min-h-[120px] bg-background"
+                                      required={isDamaged}
+                                    />
+                                  </div>
+                                </motion.div>
+                              )}
                             </div>
-                          </div>
-                        ))}
-                        {checkedOutGears.length === 0 && (
-                          <div className="flex flex-col items-center justify-center py-8 text-center">
-                            <PackageCheck className="h-12 w-12 text-muted-foreground mb-4" />
-                            <p className="text-muted-foreground">No gear currently checked out</p>
-                          </div>
-                        )}
+
+                            {/* Notes Section */}
+                            <div className="rounded-lg border p-4 bg-card">
+                              <Label htmlFor="checkinNotes" className="text-base font-medium">
+                                Check-in Notes <span className="text-muted-foreground text-sm">(Optional)</span>
+                              </Label>
+                              <p className="text-sm text-muted-foreground mt-1 mb-3">
+                                Add any additional notes about the return condition or usage
+                              </p>
+                              <Textarea
+                                id="checkinNotes"
+                                value={checkinNotes}
+                                onChange={(e) => setCheckinNotes(e.target.value)}
+                                placeholder="Add any additional notes about the return..."
+                                className="min-h-[100px]"
+                              />
+                            </div>
+
+                            {/* Overdue Warning */}
+                            {checkedOutGears.some(gear => selectedGears.includes(gear.id) && isOverdue(gear.due_date)) && (
+                              <Alert variant="destructive">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertTitle>Overdue Items</AlertTitle>
+                                <AlertDescription>
+                                  One or more selected items are past their due date. Please check for any wear and tear.
+                                </AlertDescription>
+                              </Alert>
+                            )}
+
+                            {/* Submit Button */}
+                            <div className="flex justify-end gap-4 mt-6">
+                              <Button
+                                type="submit"
+                                disabled={selectedGears.length === 0 || isSubmitting || (isDamaged && !damageDescription.trim())}
+                                className="w-full sm:w-auto"
+                              >
+                                {isSubmitting ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Checking in...
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle className="mr-2 h-4 w-4" />
+                                    Check In Selected Gear
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
                       </div>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-              </motion.div>
-
-              {/* Check-in Details Column */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Check-in Details</CardTitle>
-                  <CardDescription>Report condition and add any notes.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex items-start space-x-2">
-                    <Checkbox
-                      id="isDamaged"
-                      checked={isDamaged}
-                      onCheckedChange={(checked) => setIsDamaged(checked === true)}
-                      className="mt-1"
-                    />
-                    <div className="space-y-1.5">
-                      <Label
-                        htmlFor="isDamaged"
-                        className="text-base font-medium"
-                      >
-                        Report Damage?
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Check this if any selected items are damaged
-                      </p>
                     </div>
-                  </div>
+                  </form>
+                )}
+              </>
+            )}
+          </TabsContent>
 
-                  {isDamaged && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="space-y-2"
-                    >
-                      <Label htmlFor="damageDescription" className="text-base font-medium">
-                        Describe the Damage <span className="text-destructive">*</span>
-                      </Label>
-                      <Textarea
-                        id="damageDescription"
-                        value={damageDescription}
-                        onChange={(e) => setDamageDescription(e.target.value)}
-                        placeholder="Please provide specific details about any damage..."
-                        className="min-h-[100px]"
-                        required={isDamaged}
-                      />
-                    </motion.div>
-                  )}
+          <TabsContent value="history">
+            <Card>
+              <CardHeader>
+                <CardTitle>Check-in History</CardTitle>
+                <CardDescription>View your past gear check-ins</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {renderCheckInHistory()}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="checkinNotes" className="text-base font-medium">
-                      Check-in Notes <span className="text-muted-foreground text-sm">(Optional)</span>
-                    </Label>
-                    <Textarea
-                      id="checkinNotes"
-                      value={checkinNotes}
-                      onChange={(e) => setCheckinNotes(e.target.value)}
-                      placeholder="Add any additional notes about the return..."
-                      className="min-h-[100px]"
-                    />
-                  </div>
-
-                  {checkedOutGears.some(gear => selectedGears.includes(gear.id) && isOverdue(gear.dueDate)) && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Overdue Item(s)</AlertTitle>
-                      <AlertDescription>
-                        One or more selected items are past their due date. Please return them promptly.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
-
-              <div className="flex justify-end mt-6">
-                <Button
-                  type="submit"
-                  disabled={isLoading || selectedGears.length === 0}
-                  className="min-w-[200px]"
-                >
-                  <UploadCloud className="mr-2 h-4 w-4" />
-                  {isLoading ? 'Processing Check-in...' : `Check-in Selected (${selectedGears.length})`}
-                </Button>
-              </div>
-            </form>
-          )}
-        </>
-      )}
-
+      {/* QR Scanner Dialog */}
       <Dialog open={isScannerOpen} onOpenChange={setIsScannerOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Scan Gear QR Code</DialogTitle>
+            <DialogTitle>Scan QR Code</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4">
             <div id="qr-reader" className="w-full max-w-md mx-auto"></div>
             {scannedCode && (
-              <div className="mt-4">
-                <Badge variant="secondary" className="text-lg">
+              <div className="w-full space-y-4">
+                <Badge variant="secondary" className="w-full py-2 text-center">
                   Code: {scannedCode}
                 </Badge>
                 <Button
-                  className="mt-4 w-full"
+                  className="w-full"
                   onClick={handleCheckIn}
                 >
                   Complete Check-In
                 </Button>
               </div>
             )}
-            {qrError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{qrError}</AlertDescription></Alert>}
+            {qrError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{qrError}</AlertDescription>
+              </Alert>
+            )}
             <DialogClose asChild>
-              <Button variant="secondary">Close</Button>
+              <Button variant="secondary" className="w-full">Close Scanner</Button>
             </DialogClose>
           </div>
         </DialogContent>
       </Dialog>
 
+      {/* Success Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -801,7 +1010,10 @@ export default function CheckInGearPage() {
           </DialogHeader>
           <p>Equipment has been successfully checked in.</p>
           <DialogClose asChild>
-            <Button className="mt-4" onClick={() => setScannedCode(null)}>
+            <Button className="w-full mt-4" onClick={() => {
+              setScannedCode(null);
+              setIsDialogOpen(false);
+            }}>
               Close
             </Button>
           </DialogClose>

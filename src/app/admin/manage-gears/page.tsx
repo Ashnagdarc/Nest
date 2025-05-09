@@ -1306,6 +1306,7 @@ $$;
         status: data.status || "Available",
         description: data.description || null,
         serial_number: data.serial_number || null,
+        condition: data.condition || null,
         image_url: imageUrl
       };
 

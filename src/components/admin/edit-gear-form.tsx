@@ -210,6 +210,25 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
                     )}
                 />
 
+                <FormField
+                    control={form.control}
+                    name="condition"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Condition</FormLabel>
+                            <FormControl>
+                                <Input
+                                    placeholder="Enter gear condition..."
+                                    {...field}
+                                    value={field.value || ""}
+                                />
+                            </FormControl>
+                            <FormDescription>Describe the current physical condition of the gear.</FormDescription>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+
                 <div className="space-y-2">
                     <FormLabel>Gear Image</FormLabel>
                     {imagePreview && (

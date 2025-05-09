@@ -118,6 +118,8 @@ GearFlow is a comprehensive equipment management platform designed specifically 
    # Supabase Configuration
    NEXT_PUBLIC_SUPABASE_URL=your-project-url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   # WARNING: Never commit the service role key or share it publicly
+   # Keep this key secure and only use it for trusted server-side operations
    SUPABASE_SERVICE_ROLE_KEY=your-service-key
 
    # Application Configuration
@@ -128,6 +130,14 @@ GearFlow is a comprehensive equipment management platform designed specifically 
    NEXT_PUBLIC_ENABLE_ANALYTICS=false
    NEXT_PUBLIC_MAINTENANCE_MODE=false
    ```
+
+   ⚠️ **IMPORTANT SECURITY NOTES:**
+   - NEVER commit `.env` or `.env.local` files to version control
+   - NEVER share service role keys or sensitive credentials publicly
+   - Add `.env*` to your `.gitignore` file
+   - Use environment variables in production deployment platforms
+   - Rotate compromised keys immediately
+   - Consider using secret management services in production
 
 4. **Database Setup**
    ```bash
@@ -298,3 +308,24 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 <div align="center">
   <p>Built by Daniel Samuel </p>
 </div>
+
+## 🔒 Security
+
+### Credential Management
+- Use environment variables for all sensitive credentials
+- Store production secrets in secure credential management systems
+- Rotate keys regularly and after any potential exposure
+- Use least-privilege access principles
+
+### Key Security
+- Service role keys have full database access - keep them secure
+- Only use service role keys in trusted server environments
+- Use anon/public keys for client-side operations
+- Monitor for and revoke compromised credentials
+
+### Best Practices
+- Enable 2FA for all admin accounts
+- Regular security audits
+- Monitor application logs
+- Keep dependencies updated
+- Follow OWASP security guidelines
