@@ -6,7 +6,25 @@
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#000000",
-    "orientation": "portrait-primary",
+    "orientation": "any",
+    "scope": "/",
+    "prefer_related_applications": false,
+    "categories": [
+        "business",
+        "productivity"
+    ],
+    "shortcuts": [
+        {
+            "name": "Dashboard",
+            "url": "/dashboard",
+            "description": "View your dashboard"
+        },
+        {
+            "name": "Inventory",
+            "url": "/inventory",
+            "description": "Manage inventory"
+        }
+    ],
     "icons": [
         {
             "src": "/icons/icon-72x72.png",
