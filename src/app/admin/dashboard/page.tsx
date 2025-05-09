@@ -56,6 +56,100 @@ type UserStats = {
   admins: number;
 };
 
+type GearPayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: {
+    id: string;
+    name?: string;
+    status?: string;
+  };
+  old?: {
+    id: string;
+    name?: string;
+    status?: string;
+  };
+};
+
+type MaintenancePayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: {
+    id: string;
+    gear_id: string;
+    status?: string;
+  };
+};
+
+type RequestPayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: {
+    id: string;
+    status: string;
+  };
+};
+
+type ProfilePayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: {
+    id: string;
+    full_name?: string;
+    email?: string;
+  };
+};
+
+type SubscriptionStatus = 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR';
+
+type GearData = {
+  id: string;
+  status?: string;
+  created_at?: string;
+};
+
+type ActivityLogData = {
+  id: string;
+  activity_type: string;
+  details: any;
+  created_at: string;
+  user?: {
+    full_name?: string;
+    email?: string;
+  };
+  gears?: {
+    name?: string;
+  };
+};
+
+type GearActivityData = {
+  id: string;
+  name?: string;
+  created_at: string;
+  user?: {
+    full_name?: string;
+    email?: string;
+  };
+};
+
+type ProfileData = {
+  id: string;
+  full_name?: string;
+  email?: string;
+  updated_at: string;
+  created_at: string;
+};
+
+type GearActivityLogPayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: {
+    id: string;
+    user_id: string;
+    gear_id: string;
+    activity_type: string;
+    status?: string;
+    notes?: string;
+    details?: any;
+    created_at: string;
+  };
+};
+
 export default function AdminDashboardPage() {
   const supabase = createClient();
   const { toast } = useToast();
@@ -87,7 +181,7 @@ export default function AdminDashboardPage() {
     // Set up comprehensive real-time subscription for all relevant tables
     const dashboardChannel = supabase
       .channel('real-time-dashboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gears' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gears' }, (payload: GearPayload) => {
         console.log('Real-time update from gears table:', payload);
         fetchStats();
         fetchUtilizationData();
@@ -109,26 +203,26 @@ export default function AdminDashboardPage() {
         setLastUpdated(new Date());
         fetchRecentActivities();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'maintenance' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'maintenance' }, (payload: MaintenancePayload) => {
         console.log('Real-time update from maintenance table:', payload);
         fetchUpcomingMaintenance();
         setRecentUpdate('Maintenance schedule was updated');
         setLastUpdated(new Date());
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, (payload: RequestPayload) => {
         console.log('Real-time update from requests table:', payload);
         fetchPendingRequests();
         setRecentUpdate('Request status changed');
         setLastUpdated(new Date());
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload: ProfilePayload) => {
         console.log('Real-time update from profiles table:', payload);
         fetchUserStats();
         fetchUserActivities();
         setRecentUpdate('User profile was updated');
         setLastUpdated(new Date());
       })
-      .subscribe((status) => {
+      .subscribe((status: SubscriptionStatus) => {
         console.log('Real-time dashboard subscription status:', status);
         if (status === 'SUBSCRIBED') {
           toast({
@@ -142,7 +236,7 @@ export default function AdminDashboardPage() {
     // Add a new subscription specific to user activity
     const userChannel = supabase
       .channel('user-activity-channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload: ProfilePayload) => {
         console.log('Real-time update from profiles table:', payload);
         fetchUserStats();
         fetchUserActivities();
@@ -164,12 +258,23 @@ export default function AdminDashboardPage() {
       })
       .subscribe();
 
+    // Add subscription for gear activity log
+    const activityChannel = supabase
+      .channel('gear-activity-channel')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gear_activity_log' }, (payload: GearActivityLogPayload) => {
+        console.log('Real-time update from gear_activity_log table:', payload);
+        fetchRecentActivities();
+        setLastUpdated(new Date());
+      })
+      .subscribe();
+
     // Cleanup function
     return () => {
       supabase.removeChannel(dashboardChannel);
       supabase.removeChannel(userChannel);
+      supabase.removeChannel(activityChannel);
     };
-  }, []);
+  }, [supabase, toast]);
 
   // Function to fetch all data at once
   const fetchAllData = async () => {
@@ -199,73 +304,82 @@ export default function AdminDashboardPage() {
   async function fetchStats() {
     setIsLoading(true);
     try {
-      // Get more detailed data including status, to properly count items
-      const { data, error } = await supabase
+      // Get more detailed data including status and timestamps
+      const { data: currentData, error: currentError } = await supabase
         .from('gears')
         .select('id, status, created_at')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        throw error;
-      }
+      if (currentError) throw currentError;
 
-      if (data) {
-        console.log("Gear data fetched:", data);
+      // Get historical data from 7 days ago for comparison
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        // Log the unique status values to help debug
-        const statuses = [...new Set(data.map(g => String(g.status).toLowerCase()))];
-        console.log("Unique gear statuses found:", statuses);
+      const { data: historicalData, error: historicalError } = await supabase
+        .from('gears')
+        .select('id, status')
+        .lt('created_at', sevenDaysAgo.toISOString());
 
-        // More robust filtering with extra logging
-        const available = data.filter(g => {
-          const status = String(g.status || '').toLowerCase().trim();
-          const isAvailable = status === 'available';
+      if (historicalError) throw historicalError;
 
-          // Log each status that's not clearly matching any category
-          if (!['available', 'booked', 'checked out', 'checked_out', 'damaged', 'maintenance', ''].includes(status)) {
-            console.log(`Unusual status found: "${status}" for gear ID ${g.id}`);
-          }
-
-          return isAvailable;
-        }).length;
-
-        console.log(`Available gears count: ${available}`);
-
-        // Improved filtering for booked status
-        const booked = data.filter(g => {
-          const status = String(g.status || '').toLowerCase().trim();
-          return status === 'booked' ||
-            status === 'checked out' ||
-            status === 'checked_out';
-        }).length;
-
-        console.log(`Booked gears count: ${booked}`);
-
-        // Improved filtering for damaged/maintenance status
-        const damaged = data.filter(g => {
-          const status = String(g.status || '').toLowerCase().trim();
-          return status === 'damaged' ||
-            status === 'maintenance' ||
-            status === 'repair';
-        }).length;
-
-        console.log(`Damaged gears count: ${damaged}`);
-
-        // New gears: added in the last 7 days
-        const now = new Date();
-        const newGears = data.filter(g => {
+      if (currentData) {
+        // Current counts
+        const available = currentData.filter((g: GearData) => String(g.status || '').toLowerCase().trim() === 'available').length;
+        const booked = currentData.filter((g: GearData) => ['booked', 'checked out', 'checked_out'].includes(String(g.status || '').toLowerCase().trim())).length;
+        const damaged = currentData.filter((g: GearData) => ['damaged', 'maintenance', 'repair'].includes(String(g.status || '').toLowerCase().trim())).length;
+        const newGears = currentData.filter((g: GearData) => {
           if (!g.created_at) return false;
           const createdDate = new Date(g.created_at);
-          return (now.getTime() - createdDate.getTime()) < 7 * 24 * 60 * 60 * 1000;
+          return (new Date().getTime() - createdDate.getTime()) < 7 * 24 * 60 * 60 * 1000;
         }).length;
 
-        console.log(`New gears count: ${newGears}`);
+        // Historical counts for calculating changes
+        const historicalAvailable = historicalData?.filter((g: GearData) => String(g.status || '').toLowerCase().trim() === 'available').length || 0;
+        const historicalBooked = historicalData?.filter((g: GearData) => ['booked', 'checked out', 'checked_out'].includes(String(g.status || '').toLowerCase().trim())).length || 0;
+        const historicalDamaged = historicalData?.filter((g: GearData) => ['damaged', 'maintenance', 'repair'].includes(String(g.status || '').toLowerCase().trim())).length || 0;
+
+        // Calculate percentage changes
+        const calculateChange = (current: number, historical: number) => {
+          if (historical === 0) return current > 0 ? 100 : 0;
+          return Math.round(((current - historical) / historical) * 100);
+        };
+
+        const availableChange = calculateChange(available, historicalAvailable);
+        const bookedChange = calculateChange(booked, historicalBooked);
+        const damagedChange = calculateChange(damaged, historicalDamaged);
 
         setStats([
-          { title: 'Available Gears', value: available, icon: CheckCircle, color: 'text-green-500', change: 2, changeType: 'increase' },
-          { title: 'Booked Gears', value: booked, icon: List, color: 'text-blue-500', change: 5, changeType: 'increase' },
-          { title: 'Damaged Gears', value: damaged, icon: AlertTriangle, color: 'text-orange-500', change: 1, changeType: 'decrease' },
-          { title: 'New Gears', value: newGears, icon: PackagePlus, color: 'text-purple-500', change: 3, changeType: 'increase' },
+          {
+            title: 'Available Gears',
+            value: available,
+            icon: CheckCircle,
+            color: 'text-green-500',
+            change: Math.abs(availableChange),
+            changeType: availableChange >= 0 ? 'increase' : 'decrease'
+          },
+          {
+            title: 'Booked Gears',
+            value: booked,
+            icon: List,
+            color: 'text-blue-500',
+            change: Math.abs(bookedChange),
+            changeType: bookedChange >= 0 ? 'increase' : 'decrease'
+          },
+          {
+            title: 'Damaged Gears',
+            value: damaged,
+            icon: AlertTriangle,
+            color: 'text-orange-500',
+            change: Math.abs(damagedChange),
+            changeType: damagedChange >= 0 ? 'increase' : 'decrease'
+          },
+          {
+            title: 'New Gears',
+            value: newGears,
+            icon: PackagePlus,
+            color: 'text-purple-500'
+          }
         ]);
       }
     } catch (error: any) {
@@ -282,25 +396,118 @@ export default function AdminDashboardPage() {
 
   async function fetchRecentActivities() {
     try {
-      // If you have an activities table, fetch from there. Otherwise, use recent gears as placeholder.
-      const { data, error } = await supabase
-        .from('gears')
-        .select('id, name, created_at')
+      // Fetch from gear_activity_log first
+      const { data: activityData, error: activityError } = await supabase
+        .from('gear_activity_log')
+        .select(`
+          id,
+          user_id,
+          gear_id,
+          activity_type,
+          status,
+          notes,
+          details,
+          created_at,
+          user:user_id (
+            full_name,
+            email
+          ),
+          gears:gear_id (
+            name
+          )
+        `)
         .order('created_at', { ascending: false })
         .limit(5);
 
-      if (error) throw error;
+      if (activityError) throw activityError;
 
-      if (data) {
-        setRecentActivities(data.map(g => ({
+      // Also fetch recent gear changes
+      const { data: gearData, error: gearError } = await supabase
+        .from('gears')
+        .select(`
+          id,
+          name,
+          created_at,
+          created_by,
+          user:created_by (
+            full_name,
+            email
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (gearError) throw gearError;
+
+      // Combine and format activities
+      const activities = [
+        ...(activityData?.map((a: ActivityLogData) => ({
+          id: a.id,
+          user: a.user?.full_name || a.user?.email || 'Admin',
+          action: formatActivityType(a.activity_type, a.details, a.gears?.name),
+          time: a.created_at ? timeAgo(new Date(a.created_at)) : '',
+        })) || []),
+        ...(gearData?.map((g: GearActivityData) => ({
           id: g.id,
-          user: 'Admin',
+          user: g.user?.full_name || g.user?.email || 'Admin',
           action: `added ${g.name}`,
           time: g.created_at ? timeAgo(new Date(g.created_at)) : '',
-        })));
-      }
+        })) || [])
+      ]
+        .sort((a, b) => {
+          const timeA = parseTimeAgo(a.time);
+          const timeB = parseTimeAgo(b.time);
+          return timeA - timeB;
+        })
+        .slice(0, 5);
+
+      setRecentActivities(activities);
     } catch (error: any) {
       console.error("Error fetching activities:", error.message);
+    }
+  }
+
+  // Helper function to format activity types
+  function formatActivityType(type: string, details: any, gearName?: string): string {
+    switch (type) {
+      case 'Request':
+        return `requested ${gearName || 'gear'}`;
+      case 'Check-in':
+        return `checked in ${gearName || 'gear'}`;
+      case 'Check-out':
+        return `checked out ${gearName || 'gear'}`;
+      case 'Maintenance':
+        return `scheduled maintenance for ${gearName || 'gear'}`;
+      case 'Status Change':
+        if (details && typeof details === 'object') {
+          return `changed ${gearName || 'gear'} status from ${details.old_status || 'unknown'} to ${details.new_status || 'unknown'}`;
+        }
+        return `updated ${gearName || 'gear'} status`;
+      default:
+        return type.replace(/_/g, ' ').toLowerCase();
+    }
+  }
+
+  // Helper function to parse time ago string into milliseconds
+  function parseTimeAgo(timeAgo: string): number {
+    const [amount, unit] = timeAgo.split(' ');
+    const now = new Date().getTime();
+
+    switch (unit) {
+      case 'sec':
+      case 'secs':
+        return now - (parseInt(amount) * 1000);
+      case 'min':
+      case 'mins':
+        return now - (parseInt(amount) * 60 * 1000);
+      case 'hour':
+      case 'hours':
+        return now - (parseInt(amount) * 60 * 60 * 1000);
+      case 'day':
+      case 'days':
+        return now - (parseInt(amount) * 24 * 60 * 60 * 1000);
+      default:
+        return now;
     }
   }
 
@@ -316,7 +523,7 @@ export default function AdminDashboardPage() {
         // Group by category
         const categories: Record<string, { total: number, used: number }> = {};
 
-        data.forEach(gear => {
+        data.forEach((gear: { category?: string, status?: string }) => {
           const category = gear.category || 'Uncategorized';
 
           if (!categories[category]) {
@@ -436,7 +643,7 @@ export default function AdminDashboardPage() {
       }
 
       if (profiles) {
-        activities = profiles.map(profile => {
+        activities = profiles.map((profile: ProfileData) => {
           // Check if this is a new profile (created_at and updated_at are close)
           const isNewProfile = new Date(profile.updated_at).getTime() - new Date(profile.created_at).getTime() < 1000 * 60 * 5; // 5 minutes difference
 
@@ -458,7 +665,7 @@ export default function AdminDashboardPage() {
         .limit(5);
 
       if (!gearsError && gears) {
-        const gearActivities = gears.map(gear => ({
+        const gearActivities = gears.map((gear: GearActivityData) => ({
           id: gear.id,
           user: 'Admin',
           action: `added ${gear.name}`,

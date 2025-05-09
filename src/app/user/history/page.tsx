@@ -5,14 +5,19 @@ import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { History, Package, Calendar, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { format, compareDesc } from 'date-fns';
+import { History, Package, Calendar, CheckCircle, XCircle, AlertCircle, Loader2, Clock, Wrench, RefreshCcw } from 'lucide-react';
+import { format } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 // Define types for our history items
 type HistoryItem = {
   id: string;
-  type: 'Request' | 'Check-in';
+  activityType: 'Request' | 'Check-in' | 'Check-out' | 'Maintenance' | 'Status Change';
   gearName: string;
   date: Date;
   status: string;
@@ -20,8 +25,10 @@ type HistoryItem = {
 };
 
 export default function UserHistoryPage() {
+  const { toast } = useToast();
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<string>("all");
   const supabase = createClient();
 
   useEffect(() => {
@@ -29,157 +36,274 @@ export default function UserHistoryPage() {
       setIsLoading(true);
 
       try {
+        console.log("Initializing history fetch...");
+
         // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          console.error("No user is logged in");
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+        if (userError) {
+          console.error("Auth error:", {
+            message: userError.message,
+            name: userError.name,
+            stack: userError.stack
+          });
+          toast({
+            title: "Authentication Error",
+            description: "Failed to verify user authentication. Please try logging in again.",
+            variant: "destructive"
+          });
           setIsLoading(false);
           return;
         }
 
-        // Fetch requests from the database
-        const { data: requestsData, error: requestsError } = await supabase
-          .from('requests')
-          .select(`
-            id, 
-            created_at,
-            status,
-            due_date,
-            checkout_date,
-            gears (name, id)
-          `)
-          .eq('user_id', user.id);
-
-        if (requestsError) {
-          console.error("Error fetching requests:", requestsError);
+        if (!user) {
+          console.error("No user is logged in");
+          toast({
+            title: "Authentication Error",
+            description: "Please log in to view your activity history.",
+            variant: "destructive"
+          });
+          setIsLoading(false);
+          return;
         }
 
-        // Fetch check-ins from the database
-        let checkinsData = null;
-        try {
-          const { data, error } = await supabase
+        console.log("Authenticated user:", user.id);
+
+        // Fetch both activity log and check-ins
+        const [activityResponse, checkinsResponse] = await Promise.all([
+          supabase
+            .from('gear_activity_log')
+            .select(`
+              id,
+              activity_type,
+              status,
+              notes,
+              details,
+              created_at,
+              gear_id,
+              gear:gears(*)
+            `)
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false }),
+
+          supabase
             .from('checkins')
             .select(`
               id,
               checkin_date,
               status,
+              condition,
               notes,
-              gears (name, id)
+              gear_id,
+              gear:gears(*)
             `)
-            .eq('user_id', user.id);
+            .eq('user_id', user.id)
+            .order('checkin_date', { ascending: false })
+        ]);
 
-          if (error) {
-            console.error("Error fetching check-ins:", error.message);
-            // Continue execution without check-ins data
-          } else {
-            checkinsData = data;
-          }
-        } catch (error) {
-          console.error("Error accessing check-ins table:", error);
-          // Continue execution without check-ins data
-        }
+        const activityError = activityResponse.error;
+        const checkinsError = checkinsResponse.error;
+        const activityData = activityResponse.data || [];
+        const checkinsData = checkinsResponse.data || [];
 
-        // Process and combine the data
-        const historyItems: HistoryItem[] = [];
-
-        // Add requests to history
-        if (requestsData) {
-          requestsData.forEach((request: any) => {
-            const gearName = request.gears?.name || 'Unknown Gear';
-            let details = '';
-            let status = request.status || 'Pending';
-
-            if (request.checkout_date && request.due_date) {
-              details = `Checkout: ${formatDate(request.checkout_date)}, Due: ${formatDate(request.due_date)}`;
-
-              // Check if overdue
-              if (status === 'Checked Out' && new Date(request.due_date) < new Date()) {
-                status = 'Overdue';
-              }
-            } else if (status === 'Rejected') {
-              details = 'Request was not approved';
-            } else if (status === 'Pending') {
-              details = 'Awaiting approval';
-            }
-
-            historyItems.push({
-              id: `req-${request.id}`,
-              type: 'Request',
-              gearName,
-              date: new Date(request.created_at),
-              status,
-              details
-            });
+        if (activityError) {
+          console.error("Error fetching activity log:", {
+            error: activityError,
+            message: activityError.message,
+            details: activityError.details,
+            hint: activityError.hint,
+            code: activityError.code,
+            status: activityError.status,
+            name: activityError?.name,
+            stack: activityError?.stack
           });
         }
 
-        // Add check-ins to history if available
-        if (checkinsData && checkinsData.length > 0) {
-          checkinsData.forEach((checkin: any) => {
-            const gearName = checkin.gears?.name || 'Unknown Gear';
-
-            historyItems.push({
-              id: `checkin-${checkin.id}`,
-              type: 'Check-in',
-              gearName,
-              date: new Date(checkin.checkin_date || checkin.created_at),
-              status: checkin.status || 'Completed',
-              details: checkin.notes || 'No additional notes'
-            });
+        if (checkinsError) {
+          console.error("Error fetching check-ins:", {
+            error: checkinsError,
+            message: checkinsError.message
           });
         }
 
-        // Sort combined history by date (most recent first)
-        historyItems.sort((a, b) => compareDesc(a.date, b.date));
+        // Process activity data
+        const activityItems = activityData.map((activity: any) => ({
+          id: activity.id,
+          activityType: activity.activity_type,
+          gearName: activity.gear?.name || `Gear ${activity.gear_id?.slice(0, 8) || 'Unknown'}`,
+          date: new Date(activity.created_at),
+          status: activity.status || 'Unknown',
+          details: formatActivityDetails(activity)
+        }));
 
-        setHistory(historyItems);
+        // Process check-ins data
+        const checkinItems = checkinsData.map((checkin: any) => ({
+          id: checkin.id,
+          activityType: 'Check-in' as const,
+          gearName: checkin.gear?.name || `Gear ${checkin.gear_id?.slice(0, 8) || 'Unknown'}`,
+          date: new Date(checkin.checkin_date),
+          status: checkin.condition || checkin.status || 'Unknown',
+          details: checkin.notes || 'Gear checked in'
+        }));
+
+        // Combine and sort all history items
+        const combinedHistory = [...activityItems, ...checkinItems]
+          .sort((a, b) => b.date.getTime() - a.date.getTime());
+
+        setHistory(combinedHistory);
       } catch (error) {
-        console.error("Error fetching history:", error);
+        console.error("Unexpected error in fetchHistory:", {
+          error,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred while loading your history.",
+          variant: "destructive"
+        });
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchHistory();
-  }, [supabase]);
 
-  // Helper function to format dates
-  const formatDate = (dateString: string) => {
-    try {
-      return format(new Date(dateString), 'PP');
-    } catch (e) {
-      return 'Invalid date';
+    // Set up real-time subscriptions for both tables
+    const gearActivityChannel = supabase
+      .channel('gear_activity_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'gear_activity_log' },
+        () => fetchHistory()
+      )
+      .subscribe();
+
+    const checkinsChannel = supabase
+      .channel('checkins_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'checkins' },
+        () => fetchHistory()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(gearActivityChannel);
+      supabase.removeChannel(checkinsChannel);
+    };
+  }, [toast]);
+
+  const formatActivityDetails = (activity: any): string => {
+    switch (activity.activity_type) {
+      case 'Request':
+        return activity.notes || 'Gear requested';
+      case 'Check-in':
+        return activity.notes || 'Gear checked in';
+      case 'Check-out':
+        return activity.notes || 'Gear checked out';
+      case 'Maintenance':
+        return activity.notes || 'Maintenance performed';
+      case 'Status Change':
+        if (activity.details) {
+          const details = typeof activity.details === 'string'
+            ? JSON.parse(activity.details)
+            : activity.details;
+          return `Status changed from ${details.old_status} to ${details.new_status}`;
+        }
+        return 'Status updated';
+      default:
+        return activity.notes || 'No additional details';
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'Request':
+        return <Package className="h-4 w-4" />;
+      case 'Check-in':
+        return <CheckCircle className="h-4 w-4" />;
+      case 'Check-out':
+        return <Clock className="h-4 w-4" />;
+      case 'Maintenance':
+        return <Wrench className="h-4 w-4" />;
+      case 'Status Change':
+        return <RefreshCcw className="h-4 w-4" />;
+      default:
+        return <History className="h-4 w-4" />;
+    }
+  };
+
+  const getStatusBadge = (status: string, type: string) => {
     const statusLower = status.toLowerCase();
+    const Icon = getActivityIcon(type);
 
     switch (statusLower) {
       case 'approved':
       case 'completed':
-        return <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white"><CheckCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
+      case 'good':
+        return (
+          <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white">
+            {Icon}
+            <span className="ml-1">{status}</span>
+          </Badge>
+        );
 
       case 'checked out':
-        return <Badge variant="secondary"><Package className="mr-1 h-3 w-3" /> Checked Out</Badge>;
+        return (
+          <Badge variant="secondary">
+            {Icon}
+            <span className="ml-1">Checked Out</span>
+          </Badge>
+        );
 
       case 'overdue':
-        return <Badge variant="destructive"><AlertCircle className="mr-1 h-3 w-3" /> Overdue</Badge>;
+        return (
+          <Badge variant="destructive">
+            {Icon}
+            <span className="ml-1">Overdue</span>
+          </Badge>
+        );
 
       case 'rejected':
-        return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
+        return (
+          <Badge variant="destructive">
+            {Icon}
+            <span className="ml-1">{status}</span>
+          </Badge>
+        );
 
       case 'damaged':
       case 'completed (damaged)':
-        return <Badge variant="outline" className="border-orange-500 text-orange-600"><AlertCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
+        return (
+          <Badge variant="outline" className="border-orange-500 text-orange-600">
+            {Icon}
+            <span className="ml-1">{status}</span>
+          </Badge>
+        );
 
       case 'pending':
-        return <Badge variant="outline"><Calendar className="mr-1 h-3 w-3" /> Pending</Badge>;
+        return (
+          <Badge variant="outline">
+            {Icon}
+            <span className="ml-1">Pending</span>
+          </Badge>
+        );
 
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return (
+          <Badge variant="outline">
+            {Icon}
+            <span className="ml-1">{status}</span>
+          </Badge>
+        );
     }
   };
+
+  const filteredHistory = history.filter(item =>
+    activeTab === "all" ||
+    (activeTab === "check-ins" && item.activityType === "Check-in") ||
+    (activeTab === "requests" && item.activityType === "Request") ||
+    (activeTab === "maintenance" && item.activityType === "Maintenance")
+  );
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -204,14 +328,29 @@ export default function UserHistoryPage() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="space-y-6"
+      className="container mx-auto py-6 space-y-6 max-w-7xl"
     >
-      <h1 className="text-3xl font-bold text-foreground">My History</h1>
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold tracking-tight">Activity History</h1>
+        <p className="text-muted-foreground">Track your gear requests, check-ins, and other activities.</p>
+      </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Gear Activity Log</CardTitle>
-          <CardDescription>Your past requests and check-ins.</CardDescription>
+        <CardHeader className="space-y-1">
+          <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+            <div>
+              <CardTitle>Gear Activity Log</CardTitle>
+              <CardDescription>Your past requests and check-ins.</CardDescription>
+            </div>
+            <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+              <TabsList>
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value="request">Requests</TabsTrigger>
+                <TabsTrigger value="check-in">Check-ins</TabsTrigger>
+                <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -219,50 +358,56 @@ export default function UserHistoryPage() {
               <Loader2 className="h-10 w-10 animate-spin mr-2 text-primary" />
               <p className="text-muted-foreground">Loading your activity history...</p>
             </div>
-          ) : history.length > 0 ? (
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="overflow-x-auto"
-            >
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Gear Name</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {history.map((item) => (
-                    <motion.tr key={item.id} variants={itemVariants}>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {item.type === 'Request' ? <Package className="mr-1 h-3 w-3" /> : <CheckCircle className="mr-1 h-3 w-3" />}
-                          {item.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">{item.gearName}</TableCell>
-                      <TableCell>{format(item.date, 'PP')}</TableCell>
-                      <TableCell>{getStatusBadge(item.status)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{item.details}</TableCell>
-                    </motion.tr>
-                  ))}
-                </TableBody>
-              </Table>
-            </motion.div>
+          ) : filteredHistory.length > 0 ? (
+            <ScrollArea className="h-[600px] rounded-md">
+              <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="w-full"
+              >
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Gear Name</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Details</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredHistory.map((item) => (
+                      <motion.tr key={item.id} variants={itemVariants}>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">
+                            {getActivityIcon(item.activityType)}
+                            <span className="ml-1">{item.activityType}</span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">{item.gearName}</TableCell>
+                        <TableCell>{format(item.date, 'PPp')}</TableCell>
+                        <TableCell>{getStatusBadge(item.status, item.activityType)}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{item.details}</TableCell>
+                      </motion.tr>
+                    ))}
+                  </TableBody>
+                </Table>
+              </motion.div>
+            </ScrollArea>
           ) : (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="text-center py-10 text-muted-foreground"
+              className="text-center py-10"
             >
-              <History className="h-10 w-10 mx-auto mb-4" />
-              <p>No activity history found.</p>
+              <History className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-lg font-semibold mb-2">No Activity Found</h3>
+              <p className="text-muted-foreground mb-4">You haven't performed any gear-related activities yet.</p>
+              <Button asChild>
+                <a href="/user/browse">Browse Available Gear</a>
+              </Button>
             </motion.div>
           )}
         </CardContent>

@@ -335,35 +335,62 @@ export default function MyRequestsPage() {
   };
 
   const handleCancelRequest = async (requestId: string) => {
-    if (window.confirm("Are you sure you want to cancel this request?")) {
-      try {
-        // Update the request status in Supabase
-        const { error } = await supabase
-          .from('gear_requests')
-          .update({ status: 'Cancelled' })
-          .eq('id', requestId);
+    try {
+      // Get the request details first
+      const { data: request, error: requestError } = await supabase
+        .from('gear_requests')
+        .select(`
+          id,
+          status,
+          gear_ids,
+          user_id
+        `)
+        .eq('id', requestId)
+        .single();
 
-        if (error) {
-          throw error;
-        }
+      if (requestError) {
+        console.error('Error fetching request:', requestError);
+        throw new Error(`Failed to fetch request details: ${requestError.message}`);
+      }
 
-        // Update local state
-        setRequests(requests.map(r =>
-          r.id === requestId ? { ...r, status: 'Cancelled' } : r
-        ));
-
+      // Check if request can be cancelled
+      if (!request || request.status !== 'Pending') {
         toast({
-          title: "Request Cancelled",
-          description: "Your gear request has been cancelled."
-        });
-      } catch (error) {
-        console.error('Error cancelling request:', error);
-        toast({
-          title: "Error",
-          description: "Failed to cancel request. Please try again.",
+          title: "Cannot Cancel Request",
+          description: "Only pending requests can be cancelled.",
           variant: "destructive"
         });
+        return;
       }
+
+      // Start a transaction using RPC
+      const { error: cancelError } = await supabase.rpc('cancel_gear_request', {
+        p_request_id: requestId
+      });
+
+      if (cancelError) {
+        console.error('Error in cancel_gear_request RPC:', cancelError);
+        throw new Error(`Failed to cancel request: ${cancelError.message}`);
+      }
+
+      // Update local state
+      setRequests(requests.map(r =>
+        r.id === requestId ? { ...r, status: 'Cancelled' } : r
+      ));
+
+      // Show success message
+      toast({
+        title: "Request Cancelled",
+        description: "Your gear request has been cancelled successfully."
+      });
+
+    } catch (error) {
+      console.error('Error cancelling request:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to cancel request. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
