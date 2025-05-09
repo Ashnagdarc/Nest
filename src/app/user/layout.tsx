@@ -24,6 +24,7 @@ import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client'; // Import Supabase client
 import ThemeToggle from '@/components/ThemeToggle';
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
+import type { Database } from '@/types/supabase';
 
 const userNavItems = [
   { href: '/user/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -37,90 +38,58 @@ const userNavItems = [
   { href: '/user/settings', label: 'Settings', icon: Settings },
 ];
 
-type Profile = any;
+type Profile = Database['public']['Tables']['profiles']['Row'];
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient(); // Create Supabase client instance
+  const supabase = createClient();
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
 
   useEffect(() => {
-    const fetchUserData = async (userId: string) => {
-      setIsLoadingUser(true);
-      console.log("UserLayout: Fetching profile for user ID:", userId);
-      // Fetch profile data from Supabase 'profiles' table
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*') // Adjust columns as needed
-        .eq('id', userId)
-        .single(); // Expect one profile
+    const fetchUserProfile = async () => {
+      try {
+        // Get the current session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-      if (profileError) {
-        console.error("UserLayout: Error fetching user profile:", profileError.message);
-        // Handle error - Log out and redirect if profile essential
-        await supabase.auth.signOut();
-        router.push('/login?error=fetcherror');
-        setIsLoadingUser(false);
-        return;
-      }
+        if (sessionError) {
+          throw sessionError;
+        }
 
-      if (!profile) {
-        console.error("UserLayout: User profile not found for UID:", userId);
-        await supabase.auth.signOut();
-        router.push('/login?error=noprofile');
+        if (!session?.user) {
+          router.push('/login');
+          return;
+        }
+
+        // Fetch the user's profile
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileError) {
+          throw profileError;
+        }
+
+        if (!profile) {
+          console.error('No profile found for user');
+          router.push('/login');
+          return;
+        }
+
+        setCurrentUser(profile);
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+        router.push('/login');
+      } finally {
         setIsLoadingUser(false);
-        return;
       }
-      console.log("UserLayout: User profile loaded:", profile);
-      setCurrentUser(profile);
-      setIsLoadingUser(false);
     };
 
-    // Listen for Supabase Auth state changes
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        console.log("UserLayout: Auth state change - SIGNED_IN");
-        fetchUserData(session.user.id);
-      } else if (event === 'SIGNED_OUT') {
-        console.log("UserLayout: Auth state change - SIGNED_OUT");
-        setCurrentUser(null);
-        setIsLoadingUser(false);
-        router.push('/login');
-      } else if (event === 'INITIAL_SESSION' && session?.user) {
-        console.log("UserLayout: Auth state change - INITIAL_SESSION");
-        fetchUserData(session.user.id);
-      } else if (event === 'INITIAL_SESSION' && !session?.user) {
-        console.log("UserLayout: Auth state change - INITIAL_SESSION (no user), redirecting");
-        setIsLoadingUser(false);
-        router.push('/login');
-      }
-      // Handle other events like USER_UPDATED if profile needs refresh
-      if (event === 'USER_UPDATED' && session?.user) {
-        console.log("UserLayout: Auth state change - USER_UPDATED, refetching profile");
-        fetchUserData(session.user.id);
-      }
-    });
-
-    // Initial check in case the listener doesn't fire immediately
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        console.log("UserLayout: Initial session check found user, fetching data.");
-        fetchUserData(session.user.id);
-      } else {
-        console.log("UserLayout: Initial session check found no user.");
-        setIsLoadingUser(false);
-      }
-    });
-
-
-    // Cleanup subscription on unmount
-    return () => {
-      authListener?.subscription.unsubscribe();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]); // Dependency on router
+    fetchUserProfile();
+  }, [router, supabase]);
 
   const handleLogout = async () => {
     setIsLoadingUser(true); // Show loading state during logout

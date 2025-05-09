@@ -12,6 +12,27 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createSystemNotification } from '@/lib/notifications';
+import { PostgrestError } from '@supabase/supabase-js';
+
+type CheckinData = {
+  id: string;
+  user_id: string;
+  gear_id: string;
+  checkin_date: string | null;
+  notes: string | null;
+  status: string;
+  condition: string;
+  damage_notes: string | null;
+  gears: {
+    name: string;
+    current_request_id: string | null;
+  } | null;
+};
+
+type ProfileData = {
+  id: string;
+  full_name: string;
+};
 
 type Checkin = {
   id: string;
@@ -23,8 +44,8 @@ type Checkin = {
   notes: string;
   status: string;
   condition: string;
-  damageNotes?: string;
-  requestId?: string;
+  damageNotes: string | null;
+  requestId: string | null;
 };
 
 export default function ManageCheckinsPage() {
@@ -43,50 +64,109 @@ export default function ManageCheckinsPage() {
 
   async function fetchCheckins() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('checkins')
-      .select(`
-        id,
-        user_id,
-        gear_id,
-        checkin_date,
-        notes,
-        status,
-        condition,
-        damage_notes,
-        profiles!checkins_user_id_fkey (
-          full_name
-        ),
-        gears!checkins_gear_id_fkey (
-          name,
-          current_request_id
-        )
-      `)
-      .order('checkin_date', { ascending: false });
+    try {
+      console.log('Fetching checkins...');
 
-    if (!error && data) {
-      setCheckins(data.map((c: any) => ({
-        id: c.id,
-        userId: c.user_id,
-        userName: c.profiles?.full_name || 'Unknown',
-        gearId: c.gear_id,
-        gearName: c.gears?.name || 'Unknown',
-        checkinDate: c.checkin_date ? new Date(c.checkin_date) : null,
-        notes: c.notes || '',
-        status: c.status,
-        condition: c.condition,
-        damageNotes: c.damage_notes,
-        requestId: c.gears?.current_request_id
-      })));
-    } else {
-      console.error('Error fetching checkins:', error);
+      // First, get the checkins data
+      const { data: checkinsData, error: checkinsError } = await supabase
+        .from('checkins')
+        .select(`
+          id,
+          user_id,
+          gear_id,
+          checkin_date,
+          notes,
+          status,
+          condition,
+          gears!checkins_gear_id_fkey (
+            name,
+            current_request_id
+          )
+        `)
+        .order('checkin_date', { ascending: false });
+
+      // Log the raw response for debugging
+      console.log('Supabase response:', { data: checkinsData, error: checkinsError });
+
+      if (checkinsError) {
+        // Log the full error object
+        console.error('Checkins query error:', JSON.stringify(checkinsError, null, 2));
+
+        toast({
+          title: "Error",
+          description: `Failed to load check-ins: ${checkinsError.message || 'Unknown error'}`,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (!checkinsData) {
+        console.log('No checkins found');
+        setCheckins([]);
+        setLoading(false);
+        return;
+      }
+
+      // Get unique user IDs from valid checkins data
+      const userIds = [...new Set((checkinsData as CheckinData[]).map(c => c.user_id))];
+      console.log('Fetching profiles for users:', userIds);
+
+      // Then, get the user profiles
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+
+      // Log profiles response
+      console.log('Profiles response:', { data: profilesData, error: profilesError });
+
+      if (profilesError) {
+        console.error('Profiles query error:', JSON.stringify(profilesError, null, 2));
+        toast({
+          title: "Error",
+          description: `Failed to load user profiles: ${profilesError.message || 'Unknown error'}`,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Create a map of user IDs to names for quick lookup
+      const userNameMap = new Map(
+        (profilesData as ProfileData[] || []).map(p => [p.id, p.full_name])
+      );
+
+      const processedCheckins = (checkinsData as CheckinData[]).map((c: CheckinData) => {
+        const checkin = {
+          id: c.id,
+          userId: c.user_id,
+          userName: userNameMap.get(c.user_id) || 'Unknown User',
+          gearId: c.gear_id,
+          gearName: c.gears?.name || 'Unknown Gear',
+          checkinDate: c.checkin_date ? new Date(c.checkin_date) : null,
+          notes: c.notes || '',
+          status: c.status,
+          condition: c.condition,
+          damageNotes: null, // Set to null since we're not fetching it yet
+          requestId: c.gears?.current_request_id || null
+        };
+        console.log('Processed checkin:', checkin);
+        return checkin;
+      });
+
+      console.log('Final processed checkins:', processedCheckins);
+      setCheckins(processedCheckins);
+    } catch (error) {
+      console.error('Unexpected error in fetchCheckins:', error);
       toast({
         title: "Error",
-        description: "Failed to load check-ins. Please try again.",
+        description: error instanceof Error ? error.message : "An unexpected error occurred",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   const handleApproveClick = (checkin: Checkin) => {

@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PackageCheck, Clock, Bell, Box } from 'lucide-react';
+import { PackageCheck, Clock, Bell, Box, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import UserLayout from '../layout'; // Assume UserLayout handles sidebar/header
 import Link from 'next/link';
@@ -12,15 +12,92 @@ import { createClient } from '@/lib/supabase/client';
 import { AnnouncementsWidget } from "@/components/dashboard/AnnouncementsWidget";
 // Temporarily comment out Joyride
 // import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
+import type { Database } from '@/types/supabase';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { LoadingState } from "@/components/ui/loading-state";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import { createErrorLogger } from "@/lib/error-handling";
+import { useToast } from "@/hooks/use-toast";
+
+interface Gear {
+  id: string;
+  name: string;
+  description?: string | null;
+  category?: string | null;
+  status?: string | null;
+  image_url?: string | null;
+  checked_out_to?: string | null;
+  current_request_id?: string | null;
+  last_checkout_date?: string | null;
+  due_date?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+interface GearRequest {
+  id: string;
+  user_id: string;
+  gear_ids?: string[];
+  status: string;
+  request_date?: string | null;
+  due_date?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+type Profile = Database['public']['Tables']['profiles']['Row'];
+type Notification = Database['public']['Tables']['notifications']['Row'];
+
+type RealtimeGearPayload = RealtimePostgresChangesPayload<{
+  old: Gear | null;
+  new: Gear;
+}>;
+
+type RealtimeGearRequestPayload = RealtimePostgresChangesPayload<{
+  old: GearRequest | null;
+  new: GearRequest;
+}>;
+
+type RealtimeNotificationPayload = RealtimePostgresChangesPayload<{
+  old: Notification | null;
+  new: Notification;
+}>;
+
+const logError = createErrorLogger('UserDashboard');
 
 export default function UserDashboardPage() {
+  const { toast } = useToast();
   const supabase = createClient();
   const [userStats, setUserStats] = useState([
-    { title: 'Checked Out Gears', value: 0, icon: PackageCheck, color: 'text-blue-500', link: '/user/my-requests' },
-    { title: 'Overdue Gears', value: 0, icon: Clock, color: 'text-red-500', link: '/user/check-in' },
-    { title: 'Available Gears', value: 0, icon: Box, color: 'text-green-500', link: '/user/browse' },
+    {
+      title: 'Checked Out Gears',
+      value: 0,
+      icon: PackageCheck,
+      color: 'text-blue-500',
+      link: '/user/my-requests',
+      description: 'Currently in your possession'
+    },
+    {
+      title: 'Overdue Gears',
+      value: 0,
+      icon: Clock,
+      color: 'text-red-500',
+      link: '/user/check-in',
+      description: 'Past due date - please return'
+    },
+    {
+      title: 'Available Gears',
+      value: 0,
+      icon: Box,
+      color: 'text-green-500',
+      link: '/user/browse',
+      description: 'Ready for checkout'
+    },
   ]);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [userData, setUserData] = useState<Profile | null>(null);
   // Temporarily comment out tour state
   // const [showTour, setShowTour] = useState(false);
   // const steps: Step[] = [
@@ -40,89 +117,275 @@ export default function UserDashboardPage() {
   // ];
 
   useEffect(() => {
-    fetchUserStats();
-    fetchAvailableGears();
-    fetchNotificationCount();
+    let mounted = true;
 
-    const refreshInterval = setInterval(() => {
-      fetchNotificationCount();
-    }, 30000);
+    const setupDashboard = async () => {
+      try {
+        setIsLoading(true);
 
-    return () => clearInterval(refreshInterval);
-  }, []);
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!session?.user) {
+          throw new Error('No authenticated user found');
+        }
+
+        // Fetch user profile
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileError) {
+          console.error('Error fetching user profile:', profileError);
+        } else if (profile && mounted) {
+          setUserData(profile);
+        }
+
+        // Initial data fetch with error handling
+        if (mounted) {
+          await Promise.all([
+            fetchUserStats().catch(error => {
+              logError(error, 'fetching user stats');
+              return null;
+            }),
+            fetchAvailableGears().catch(error => {
+              logError(error, 'fetching available gears');
+              return null;
+            }),
+            fetchNotificationCount().catch(error => {
+              logError(error, 'fetching notification count');
+              return null;
+            })
+          ]);
+        }
+
+        // Set up real-time subscriptions with payload type checking
+        const channels = [
+          // Gears channel - listen for any changes that might affect user's checkouts
+          supabase.channel('public:gears')
+            .on(
+              'postgres_changes',
+              { event: '*', schema: 'public', table: 'gears' },
+              async (payload: RealtimePostgresChangesPayload<{
+                old: { status?: string; checked_out_to?: string } | null;
+                new: { status?: string; checked_out_to?: string };
+              }>) => {
+                console.log('Gears change received:', payload);
+                if (mounted) {
+                  const oldStatus = payload.old?.status?.toLowerCase();
+                  const newStatus = payload.new?.status?.toLowerCase();
+                  const affectsUser =
+                    payload.new?.checked_out_to === session.user.id ||
+                    payload.old?.checked_out_to === session.user.id ||
+                    newStatus === 'available' ||
+                    oldStatus === 'available';
+
+                  if (affectsUser) {
+                    await fetchUserStats();
+                    await fetchAvailableGears();
+                  }
+                }
+              }
+            ),
+
+          // Gear requests channel - filter for user's requests
+          supabase.channel('public:gear_requests')
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'gear_requests',
+                filter: `user_id=eq.${session.user.id}`
+              },
+              async (payload: RealtimeGearRequestPayload) => {
+                console.log('Gear requests change received:', payload);
+                if (mounted) {
+                  await fetchUserStats();
+                }
+              }
+            ),
+
+          // Notifications channel
+          supabase.channel('public:notifications')
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'notifications',
+                filter: `user_id=eq.${session.user.id}`
+              },
+              async (payload: RealtimeNotificationPayload) => {
+                console.log('Notifications change received:', payload);
+                if (mounted) {
+                  await fetchNotificationCount();
+                }
+              }
+            )
+        ];
+
+        // Subscribe to all channels
+        await Promise.all(channels.map(channel => channel.subscribe()));
+
+        // Return cleanup function
+        return () => {
+          channels.forEach(channel => {
+            supabase.removeChannel(channel);
+          });
+        };
+
+      } catch (error) {
+        logError(error, 'setting up dashboard');
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    setupDashboard();
+
+    return () => {
+      mounted = false;
+    };
+  }, []); // Empty dependency array since we want this to run once on mount
 
   async function fetchUserStats() {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData?.session?.user?.id;
-    if (!userId) return;
-
     try {
-      // Fetch checked out gears from gear_requests
+      // Get current user session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.user) {
+        throw new Error('No authenticated user found');
+      }
+
+      const userId = session.user.id;
+      console.log('Fetching stats for user:', userId);
+
+      // First, get all checked out gears directly from gears table
+      const { data: directCheckouts, error: directError } = await supabase
+        .from('gears')
+        .select('id, status, due_date')
+        .eq('checked_out_to', userId)
+        .or('status.eq.Checked Out,status.eq.checked out');
+
+      if (directError) {
+        console.error('Error fetching direct checkouts:', directError);
+        throw directError;
+      }
+
+      // Then, get all gear requests
       const { data: requestsData, error: requestsError } = await supabase
         .from('gear_requests')
         .select('id, status, due_date, gear_ids')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .or('status.eq.Approved,status.eq.Checked Out');
 
-      if (requestsError) throw requestsError;
+      if (requestsError) {
+        console.error('Error fetching gear requests:', requestsError.message || requestsError);
+        throw new Error(requestsError.message || 'Failed to fetch gear requests');
+      }
+
+      console.log('Direct checkouts:', directCheckouts);
+      console.log('Requests data:', requestsData);
 
       let checkedOutGearCount = 0;
       let overdueGearCount = 0;
+      const now = new Date();
+      const checkedGearIds = new Set<string>();
 
-      if (requestsData && requestsData.length > 0) {
-        // Get all gear IDs that are checked out
-        const now = new Date();
-
-        requestsData.forEach((request: any) => {
-          if (request.status === 'Approved' || request.status === 'Checked Out') {
-            const gearCount = request.gear_ids?.length || 0;
-            checkedOutGearCount += gearCount;
-
-            // Check for overdue gears
-            if (request.due_date && new Date(request.due_date) < now) {
-              overdueGearCount += gearCount;
+      // Process direct checkouts
+      if (directCheckouts) {
+        directCheckouts.forEach((gear: Gear) => {
+          if (!checkedGearIds.has(gear.id)) {
+            checkedOutGearCount++;
+            checkedGearIds.add(gear.id);
+            if (gear.due_date && new Date(gear.due_date) < now) {
+              overdueGearCount++;
             }
           }
         });
       }
 
-      try {
-        // Alternative approach: directly query the gears table
-        // Check if checked_out_to column exists by logging the structure
-        console.log("Attempting to query gears table with checked_out_to column");
+      // Process gear requests
+      if (requestsData) {
+        for (const request of requestsData) {
+          if (request.gear_ids && Array.isArray(request.gear_ids)) {
+            // Verify each gear's current status
+            const { data: currentGearStatuses, error: statusError } = await supabase
+              .from('gears')
+              .select('id, status, checked_out_to, due_date')
+              .in('id', request.gear_ids);
 
-        const { data: gearData, error: gearError } = await supabase
-          .from('gears')
-          .select('id, status')
-          .eq('checked_out_to', userId);
+            if (statusError) {
+              console.error('Error fetching gear statuses:', statusError);
+              continue;
+            }
 
-        if (gearError) {
-          console.log("Error querying gears table:", gearError);
-          // Continue with the counts from gear_requests if this query fails
-        } else if (gearData) {
-          // This is a more accurate count, so we'll use it if available
-          const directlyCheckedOut = gearData.filter((g: any) => g.status === 'Checked Out').length;
-          console.log(`Found ${directlyCheckedOut} items directly checked out to user in gears table`);
-          checkedOutGearCount = directlyCheckedOut;
+            currentGearStatuses?.forEach((gear: Gear) => {
+              if (
+                gear.checked_out_to === userId &&
+                !checkedGearIds.has(gear.id)
+              ) {
+                checkedOutGearCount++;
+                checkedGearIds.add(gear.id);
+                if (gear.due_date && new Date(gear.due_date) < now) {
+                  overdueGearCount++;
+                }
+              }
+            });
+          }
         }
-      } catch (gearQueryError) {
-        console.log("Exception querying gears table:", gearQueryError);
-        // Fall back to using the counts from gear_requests
       }
 
-      // Update only the first two items, preserving the third (Available Gears)
-      setUserStats(prev => [
-        { title: 'Checked Out Gears', value: checkedOutGearCount, icon: PackageCheck, color: 'text-blue-500', link: '/user/my-requests' },
-        { title: 'Overdue Gears', value: overdueGearCount, icon: Clock, color: 'text-red-500', link: '/user/check-in' },
-        prev[2], // Keep the Available Gears item
-      ]);
-    } catch (error) {
-      console.error('Error fetching user stats:', error);
-      // Show a more detailed error message
-      if (error instanceof Error) {
-        console.error('Error details:', error.message);
-      } else {
-        console.error('Unknown error type:', typeof error);
+      // Get available gears count
+      const { count: availableCount, error: availableError } = await supabase
+        .from('gears')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'Available');
+
+      if (availableError) {
+        console.error('Error fetching available gears:', availableError);
+        throw availableError;
       }
+
+      // Log the counts for debugging
+      console.log('Final gear counts:', {
+        checkedOut: checkedOutGearCount,
+        overdue: overdueGearCount,
+        available: availableCount || 0,
+        directCheckouts: directCheckouts?.length || 0,
+        approvedRequests: requestsData?.length || 0,
+        checkedGearIds: Array.from(checkedGearIds)
+      });
+
+      // Update the stats
+      setUserStats(prev => [
+        {
+          ...prev[0],
+          value: checkedOutGearCount
+        },
+        {
+          ...prev[1],
+          value: overdueGearCount
+        },
+        {
+          ...prev[2],
+          value: availableCount || 0
+        }
+      ]);
+
+    } catch (error: any) {
+      console.error('Exception in fetchUserStats:', error.message || error);
+      toast({
+        title: "Error",
+        description: error instanceof Error
+          ? `Error: ${error.message}`
+          : "An unexpected error occurred while fetching stats.",
+        variant: "destructive"
+      });
     }
   }
 
@@ -213,95 +476,101 @@ export default function UserDashboardPage() {
   // };
 
   return (
-    <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-      {/* Temporarily comment out Joyride component */}
-      {/* {showTour && (
-        <Joyride
-          steps={steps}
-          continuous
-          showSkipButton
-          showProgress
-          callback={handleTourCallback}
-          styles={{ options: { zIndex: 10000 } }}
-        />
-      )} */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex justify-between items-center mb-6"
-      >
-        <h1 className="text-3xl font-bold text-foreground">
-          User Dashboard
-        </h1>
-        <Link href="/user/notifications" passHref>
-          <Button variant="ghost" size="icon" className="relative user-notifications-btn">
-            <Bell className="h-6 w-6" />
-            {notificationCount > 0 && (
-              <Badge
-                variant="destructive"
-                className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center rounded-full text-xs"
-              >
-                {notificationCount}
-              </Badge>
-            )}
-            <span className="sr-only">Notifications</span>
-          </Button>
-        </Link>
-      </motion.div>
+    <ErrorBoundary>
+      <div className="container mx-auto py-6 space-y-8">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex justify-between items-center mb-6"
+        >
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">
+              Welcome, {userData?.full_name || 'User'}
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              {userData?.department ? `${userData.department} Department` : 'Dashboard'}
+            </p>
+          </div>
+          <Link href="/user/notifications" passHref>
+            <Button variant="ghost" size="icon" className="relative user-notifications-btn">
+              <Bell className="h-6 w-6" />
+              {notificationCount > 0 && (
+                <Badge
+                  variant="destructive"
+                  className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center rounded-full text-xs"
+                >
+                  {notificationCount}
+                </Badge>
+              )}
+              <span className="sr-only">Notifications</span>
+            </Button>
+          </Link>
+        </motion.div>
 
-      {/* User Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8 user-stats-cards">
-        {userStats.map((stat, index) => (
-          <motion.div key={stat.title} custom={index} initial="hidden" animate="visible" variants={cardVariants}>
-            <Link href={stat.link} passHref>
-              <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 cursor-pointer">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    {stat.title}
-                  </CardTitle>
-                  <stat.icon className={`h-5 w-5 ${stat.color}`} />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stat.value}</div>
-                </CardContent>
-              </Card>
-            </Link>
-          </motion.div>
-        ))}
+        {isLoading ? (
+          <LoadingState variant="cards" count={3} />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8 user-stats-cards">
+            {userStats.map((stat, index) => (
+              <motion.div key={stat.title} custom={index} initial="hidden" animate="visible" variants={cardVariants}>
+                <Link href={stat.link} passHref>
+                  <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 cursor-pointer">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                        {stat.title}
+                      </CardTitle>
+                      <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stat.value}</div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        )}
+
+        {/* Quick Actions */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.5 }}
+          className="user-quick-actions"
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col sm:flex-row gap-4">
+              <Link href="/user/browse" passHref>
+                <Button className="w-full sm:w-auto">Browse & Request Gear</Button>
+              </Link>
+              <Link href="/user/check-in">
+                <Button variant="outline" className="w-full sm:w-auto">Check-in Gear</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Announcements Widget */}
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mt-8">
+          <ErrorBoundary fallback={
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-muted-foreground">Unable to load announcements</p>
+              </CardContent>
+            </Card>
+          }>
+            <AnnouncementsWidget />
+          </ErrorBoundary>
+        </div>
+
+        {/* Updated NotificationSound usage */}
+        <NotificationSound count={notificationCount} />
       </div>
-
-      {/* Quick Actions or other relevant info */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, duration: 0.5 }}
-        className="user-quick-actions"
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col sm:flex-row gap-4">
-            <Link href="/user/browse" passHref>
-              <Button className="w-full sm:w-auto">Browse & Request Gear</Button>
-            </Link>
-            <Link href="/user/check-in">
-              <Button variant="outline" className="w-full sm:w-auto">Check-in Gear</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Add the widget to the dashboard grid */}
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        <AnnouncementsWidget />
-      </div>
-
-      {/* Updated NotificationSound usage */}
-      <NotificationSound count={notificationCount} />
-
-    </div>
+    </ErrorBoundary>
   );
 }
 

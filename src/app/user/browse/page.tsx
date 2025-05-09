@@ -14,15 +14,20 @@ import { createClient } from '@/lib/supabase/client';
 import { createGearNotification } from '@/lib/notifications';
 import { useToast } from "@/hooks/use-toast";
 
-type Gear = {
+interface Gear {
   id: string;
   name: string;
-  category: string;
-  status: string;
-  imageUrl?: string;
-  image_url?: string; // Add this to match database field
-  description?: string;
-};
+  description?: string | null;
+  category?: string | null;
+  status?: string | null;
+  image_url?: string | null;
+  checked_out_to?: string | null;
+  current_request_id?: string | null;
+  last_checkout_date?: string | null;
+  due_date?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
 
 export default function BrowseGearsPage() {
   const supabase = createClient();
@@ -125,31 +130,71 @@ export default function BrowseGearsPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from('gears')
-      .update({
-        status: 'Checked Out',
-        checked_out_by: user.id,
-        checked_out_at: new Date().toISOString(),
-      })
-      .eq('id', gear.id);
+    try {
+      // Start a transaction
+      const now = new Date();
+      const dueDate = new Date(now);
+      dueDate.setDate(dueDate.getDate() + 7); // Default to 7 days
 
-    if (error) {
+      // Update gear status
+      const { error: gearError } = await supabase
+        .from('gears')
+        .update({
+          status: 'Checked Out',
+          checked_out_to: user.id,
+          last_checkout_date: now.toISOString(),
+          due_date: dueDate.toISOString(),
+          updated_at: now.toISOString()
+        })
+        .eq('id', gear.id);
+
+      if (gearError) throw gearError;
+
+      // Create a checkout record
+      const { error: checkoutError } = await supabase
+        .from('gear_checkouts')
+        .insert({
+          gear_id: gear.id,
+          user_id: user.id,
+          checkout_date: now.toISOString(),
+          expected_return_date: dueDate.toISOString(),
+          status: 'Checked Out'
+        });
+
+      if (checkoutError) {
+        // If creating checkout record fails, revert gear status
+        await supabase
+          .from('gears')
+          .update({
+            status: 'Available',
+            checked_out_to: null,
+            last_checkout_date: null,
+            due_date: null,
+            updated_at: now.toISOString()
+          })
+          .eq('id', gear.id);
+
+        throw checkoutError;
+      }
+
+      // Create notification for the user
+      await createGearNotification(user.id, gear.name, 'checkout');
+
+      toast({
+        title: "Success",
+        description: `Successfully checked out ${gear.name}`,
+      });
+
+    } catch (error) {
+      console.error('Error during checkout:', error);
       toast({
         title: "Error",
-        description: "Failed to checkout gear",
+        description: error instanceof Error
+          ? `Failed to checkout gear: ${error.message}`
+          : "Failed to checkout gear. Please try again.",
         variant: "destructive",
       });
-      return;
     }
-
-    // Create notification for the user
-    await createGearNotification(user.id, gear.name, 'checkout');
-
-    toast({
-      title: "Success",
-      description: `Successfully checked out ${gear.name}`,
-    });
   };
 
   return (

@@ -310,117 +310,29 @@ export default function ManageRequestsPage() {
 
   // Approve handler: update DB and state, and insert status history and notification
   const handleApprove = async (requestId: string) => {
-    setShowAnimation({ type: 'approve', id: requestId });
-
     try {
-      console.log('Step 1: Getting request details');
-      // Step 1: Get the request details to know which gears to update
-      const { data: requestData, error: requestError } = await supabase
+      setIsProcessing(true);
+
+      // Get request details
+      const { data: request, error: requestError } = await supabase
         .from('gear_requests')
-        .select('user_id, gear_ids, expected_duration')
+        .select('*, profiles:user_id(id, full_name, email)')
         .eq('id', requestId)
         .single();
 
-      if (requestError) {
-        console.error('Error fetching request details:', requestError);
-        throw requestError;
-      }
+      if (requestError) throw requestError;
 
-      const { user_id, gear_ids, expected_duration } = requestData;
-      if (!gear_ids || !gear_ids.length) {
-        const noGearsError = new Error('No gear IDs found in the request');
-        console.error(noGearsError);
-        throw noGearsError;
-      }
+      const { user_id, gear_ids } = request;
+      const now = new Date();
+      const formattedCheckoutDate = now.toISOString();
 
-      console.log('Step 2: Calculating due date');
-      // Step 2: Calculate the due date based on expected duration
-      const checkoutDate = new Date();
-      let dueDate = new Date();
-
-      // Parse the expected_duration to set appropriate due date
-      if (expected_duration.includes('hour')) {
-        const hours = parseInt(expected_duration);
-        dueDate.setHours(dueDate.getHours() + (isNaN(hours) ? 24 : hours));
-      } else if (expected_duration.includes('day')) {
-        const days = parseInt(expected_duration);
-        dueDate.setDate(dueDate.getDate() + (isNaN(days) ? 1 : days));
-      } else if (expected_duration.includes('week')) {
-        const weeks = parseInt(expected_duration);
-        dueDate.setDate(dueDate.getDate() + (isNaN(weeks) ? 7 : weeks * 7));
-      } else {
-        // Default to 1 day if duration can't be parsed
-        dueDate.setDate(dueDate.getDate() + 1);
-      }
-
-      // Format dates in ISO string format
-      const now = new Date().toISOString();
-      const formattedCheckoutDate = checkoutDate.toISOString();
+      // Calculate due date based on expected_duration
+      const dueDate = new Date(now);
+      dueDate.setDate(dueDate.getDate() + parseInt(request.expected_duration || '7')); // Default to 7 days if not specified
       const formattedDueDate = dueDate.toISOString();
 
-      console.log('Step 3: Verifying gear availability');
-      // Verify that all gears are available or pending approval
-      const { data: gearStatusData, error: gearStatusError } = await supabase
-        .from('gears')
-        .select('id, status, checked_out_to')
-        .in('id', gear_ids);
-
-      if (gearStatusError) {
-        throw gearStatusError;
-      }
-
-      // Check if any gear is already checked out to someone else
-      const unavailableGear = gearStatusData?.filter((gear: GearStatus) =>
-        gear.status === 'Checked Out' && gear.checked_out_to !== user_id
-      );
-
-      if (unavailableGear && unavailableGear.length > 0) {
-        throw new Error(`Some gear items are already checked out to other users: ${unavailableGear.map((g: GearStatus) => g.id).join(', ')}`);
-      }
-
-      console.log('Step 4: Creating gear_checkouts records');
-      // Create checkout records for each gear
-      const checkoutRecords = gear_ids.map((gearId: string): GearCheckout => ({
-        gear_id: gearId,
-        user_id: user_id,
-        request_id: requestId,
-        checkout_date: formattedCheckoutDate,
-        due_date: formattedDueDate,
-        status: 'Checked Out'
-      }));
-
-      const { error: checkoutError } = await supabase
-        .from('gear_checkouts')
-        .upsert(checkoutRecords, {
-          onConflict: 'gear_id,user_id',
-          ignoreDuplicates: false
-        });
-
-      if (checkoutError) {
-        console.error('Error creating gear_checkouts records:', checkoutError);
-        throw checkoutError;
-      }
-
-      console.log('Step 5: Updating gear_requests record');
-      // Update the gear_requests record
-      const { error: requestUpdateError } = await supabase
-        .from('gear_requests')
-        .update({
-          status: 'Approved',
-          approved_at: now,
-          checkout_date: formattedCheckoutDate,
-          due_date: formattedDueDate
-        })
-        .eq('id', requestId);
-
-      if (requestUpdateError) {
-        console.error('Error updating gear request:', requestUpdateError);
-        throw requestUpdateError;
-      }
-
-      console.log('Step 6: Updating gear statuses');
-      // Update each gear's status and checked_out_to field
-      const { error: gearUpdateError } = await supabase
+      // Update gear status to Checked Out
+      const { error: gearStatusError } = await supabase
         .from('gears')
         .update({
           status: 'Checked Out',
@@ -431,84 +343,76 @@ export default function ManageRequestsPage() {
         })
         .in('id', gear_ids);
 
-      if (gearUpdateError) {
-        console.error(`Error updating gears:`, gearUpdateError);
-        throw gearUpdateError;
-      }
+      if (gearStatusError) throw gearStatusError;
 
-      // Verify the update was successful
-      const { data: updatedGears, error: verifyError } = await supabase
-        .from('gears')
-        .select('id, status, checked_out_to')
-        .in('id', gear_ids);
+      // Create checkout records - now using a transaction to ensure all records are created
+      const checkoutRecords = gear_ids.map((gearId: string) => ({
+        gear_id: gearId,
+        user_id: user_id,
+        request_id: requestId,
+        checkout_date: formattedCheckoutDate,
+        expected_return_date: formattedDueDate,
+        status: 'Checked Out'
+      }));
 
-      if (verifyError) {
-        console.error('Error verifying gear updates:', verifyError);
-        throw verifyError;
-      }
+      // First, mark any existing active checkouts for these gears as returned
+      const { error: updateOldCheckoutsError } = await supabase
+        .from('gear_checkouts')
+        .update({ status: 'Returned', return_date: formattedCheckoutDate })
+        .in('gear_id', gear_ids)
+        .eq('status', 'Checked Out');
 
-      const unsuccessfulUpdates = updatedGears?.filter(
-        (gear: UpdatedGear) => gear.status !== 'Checked Out' || gear.checked_out_to !== user_id
-      );
+      if (updateOldCheckoutsError) throw updateOldCheckoutsError;
 
-      if (unsuccessfulUpdates && unsuccessfulUpdates.length > 0) {
-        console.error('Some gears were not properly updated:', unsuccessfulUpdates);
-        throw new Error(`Failed to update status for some gears: ${unsuccessfulUpdates.map((g: UpdatedGear) => g.id).join(', ')}`);
-      }
+      // Then insert new checkout records
+      const { error: checkoutError } = await supabase
+        .from('gear_checkouts')
+        .insert(checkoutRecords);
 
-      console.log('Step 7: Creating notification');
-      // Create a notification for the user
-      const { data: gearData } = await supabase
-        .from('gears')
-        .select('name')
-        .in('id', gear_ids);
+      if (checkoutError) throw checkoutError;
 
-      const gearNames = gearData?.map((g: GearInfo) => g.name).join(', ') || 'requested gear';
+      // Update gear_requests status to Checked Out (not just Approved)
+      const { error: requestUpdateError } = await supabase
+        .from('gear_requests')
+        .update({
+          status: 'Checked Out', // Changed from 'Approved' to 'Checked Out'
+          approved_at: now.toISOString(),
+          checkout_date: formattedCheckoutDate,
+          due_date: formattedDueDate
+        })
+        .eq('id', requestId);
+
+      if (requestUpdateError) throw requestUpdateError;
+
+      // Create notification for the user
       await createSystemNotification(
         user_id,
         'Gear Request Approved',
-        `Your request for ${gearNames} has been approved. You can now check out the gear.`
+        `Your gear request has been approved and checked out. You can now pick up your equipment.`
       );
 
-      // Create notification for admins about the approval
-      const { data: adminUsers } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('role', 'Admin');
+      // Show success animation
+      setShowAnimation({ type: 'approve', id: requestId });
+      setTimeout(() => setShowAnimation({ type: 'approve', id: null }), 2000);
 
-      if (adminUsers && adminUsers.length > 0) {
-        for (const admin of adminUsers) {
-          await createSystemNotification(
-            admin.id,
-            'Gear Request Approved',
-            `Request for ${gearNames} has been approved and checked out to user ${user_id}.`
-          );
-        }
-      }
+      // Show success toast
+      toast({
+        title: "Request Approved",
+        description: "The gear request has been approved and checked out successfully.",
+      });
 
       // Refresh the requests list
       fetchRequests();
 
-      // Show success message
-      toast({
-        title: "Request Approved",
-        description: "The gear request has been approved and the user has been notified.",
-        variant: "default",
-      });
-
-      // Hide animation after a delay
-      setTimeout(() => {
-        setShowAnimation({ type: 'approve', id: null });
-      }, 2000);
-
     } catch (error: any) {
-      console.error('Error in handleApprove:', error);
+      console.error('Error approving request:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to approve request. Please try again.",
-        variant: "destructive",
+        description: "Failed to approve the request. Please try again.",
+        variant: "destructive"
       });
-      setShowAnimation({ type: 'approve', id: null });
+    } finally {
+      setIsProcessing(false);
     }
   };
 

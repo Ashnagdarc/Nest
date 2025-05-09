@@ -179,37 +179,24 @@ export default function ManageUsersPage() {
     setIsLoading(true);
     console.log("[ManageUsers] Attempting to delete user ID:", userToDelete.id);
 
-    // IMPORTANT: Deleting Supabase Auth users requires admin privileges.
-    // This should ideally be done via a Supabase Edge Function for security.
-    // Directly calling admin methods from the client is insecure.
-    // The code below ONLY deletes the profile row.
-
     try {
-      // **Placeholder for Edge Function call:**
-      // const response = await fetch('/api/admin/delete-user', { // Your API route calling the Edge Function
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ userId: userToDelete.id }),
-      // });
-      // if (!response.ok) {
-      //   const errorData = await response.json();
-      //   throw new Error(errorData.message || 'Failed to delete Supabase Auth user');
-      // }
-      // console.log("[ManageUsers] Supabase Auth user deletion successful (via Edge Function).");
+      // Call the Edge Function to delete the user
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ userId: userToDelete.id }),
+      });
 
-      // Delete Supabase profile row
-      const { error: deleteError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', userToDelete.id);
-
-      if (deleteError) {
-        console.error("[ManageUsers] Error deleting Supabase profile row:", deleteError);
-        throw new Error(`Failed to delete user profile: ${deleteError.message}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete user');
       }
-      console.log("[ManageUsers] Supabase profile row deleted.");
 
-      toast({ title: "Success", description: `User profile for ${userToDelete.full_name} deleted. Remember to implement Auth user deletion via an Edge Function.` });
+      console.log("[ManageUsers] User deletion successful");
+      toast({ title: "Success", description: `User ${userToDelete.full_name} has been deleted.` });
       fetchUsers(); // Refetch list
 
     } catch (error: any) {

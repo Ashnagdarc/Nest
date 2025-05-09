@@ -18,6 +18,24 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+
+interface GearRequest {
+  id: string;
+  created_at: string;
+  reason?: string;
+  destination?: string;
+  expected_duration?: string;
+  status: string;
+  user_id: string;
+  gear_ids?: string[];
+  team_members?: string;
+}
+
+type RealtimeGearRequestPayload = RealtimePostgresChangesPayload<{
+  old: GearRequest | null;
+  new: GearRequest;
+}>;
 
 export default function MyRequestsPage() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -32,6 +50,13 @@ export default function MyRequestsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const highlightRequestId = searchParams.get('id');
+  const [requestStats, setRequestStats] = useState({
+    total: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    completed: 0
+  });
 
   useEffect(() => {
     const fetchRequests = async () => {
@@ -124,7 +149,12 @@ export default function MyRequestsPage() {
 
         console.log("Final processed requests:", requestsWithGear);
         setRequests(requestsWithGear);
-        setFilteredRequests(requestsWithGear); // Initialize filtered requests with all requests
+        setFilteredRequests(requestsWithGear);
+
+        // Calculate and set stats
+        const stats = calculateRequestStats(requestsWithGear);
+        setRequestStats(stats);
+
       } catch (error: any) {
         console.error('Error fetching requests:', error.message || error);
         toast({
@@ -139,6 +169,119 @@ export default function MyRequestsPage() {
 
     fetchRequests();
   }, [supabase, router, toast]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const setupRealtimeSubscription = async () => {
+      try {
+        // Get the current session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          console.warn('No authenticated user found for real-time subscription');
+          return;
+        }
+
+        // Set up real-time subscription for gear requests
+        const channel = supabase
+          .channel('gear_requests_changes')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'gear_requests'
+            },
+            async (payload: RealtimeGearRequestPayload) => {
+              console.log('Real-time update received:', payload);
+
+              if (!mounted) return;
+
+              // Fetch the updated request data
+              const { data: updatedRequests } = await supabase
+                .from('gear_requests')
+                .select(`
+                  id, 
+                  created_at,
+                  reason,
+                  destination,
+                  expected_duration,
+                  status,
+                  user_id,
+                  gear_ids,
+                  team_members
+                `)
+                .eq('user_id', session.user.id)
+                .order('created_at', { ascending: false });
+
+              if (updatedRequests && mounted) {
+                // Process the requests with gear details
+                const requestsWithGear = await Promise.all(
+                  updatedRequests.map(async (request: any) => {
+                    if (!request.gear_ids || request.gear_ids.length === 0) {
+                      return { ...request, gears: [] };
+                    }
+
+                    const { data: gearData } = await supabase
+                      .from('gears')
+                      .select('id, name, category')
+                      .in('id', request.gear_ids);
+
+                    let teamMemberProfiles = [];
+                    if (request.team_members) {
+                      try {
+                        const teamMemberIds = request.team_members.split(',').filter(Boolean);
+                        if (teamMemberIds.length > 0) {
+                          const { data: profiles } = await supabase
+                            .from('profiles')
+                            .select('id, full_name, email')
+                            .in('id', teamMemberIds);
+
+                          teamMemberProfiles = profiles || [];
+                        }
+                      } catch (e) {
+                        console.warn('Error fetching team member profiles:', e);
+                      }
+                    }
+
+                    return {
+                      ...request,
+                      gears: gearData || [],
+                      teamMemberProfiles
+                    };
+                  })
+                );
+
+                if (mounted) {
+                  // Update the requests and stats
+                  setRequests(requestsWithGear);
+                  const stats = calculateRequestStats(requestsWithGear);
+                  setRequestStats(stats);
+                }
+              }
+            }
+          )
+          .subscribe();
+
+        return () => {
+          if (channel) {
+            supabase.removeChannel(channel);
+          }
+        };
+      } catch (error) {
+        console.error('Error setting up real-time subscription:', error);
+      }
+    };
+
+    const cleanup = setupRealtimeSubscription();
+
+    return () => {
+      mounted = false;
+      if (cleanup) {
+        cleanup.then(cleanupFn => cleanupFn?.());
+      }
+    };
+  }, [supabase]);
 
   // Apply filters
   useEffect(() => {
@@ -272,12 +415,32 @@ export default function MyRequestsPage() {
   };
 
   // Stats for summary cards
-  const stats = {
-    total: requests.length,
-    pending: requests.filter(req => req.status?.toLowerCase() === 'pending').length,
-    approved: requests.filter(req => req.status?.toLowerCase() === 'approved').length,
-    rejected: requests.filter(req => req.status?.toLowerCase() === 'rejected').length,
-    completed: requests.filter(req => ['checked in', 'completed'].includes(req.status?.toLowerCase() || '')).length
+  const calculateRequestStats = (requests: any[]) => {
+    return requests.reduce((stats, request) => {
+      const status = request.status?.toLowerCase() || '';
+
+      // Increment total
+      stats.total++;
+
+      // Count by status
+      if (status === 'pending') {
+        stats.pending++;
+      } else if (status === 'approved' || status === 'checked out') {
+        stats.approved++;
+      } else if (status === 'rejected') {
+        stats.rejected++;
+      } else if (status === 'completed' || status === 'checked in') {
+        stats.completed++;
+      }
+
+      return stats;
+    }, {
+      total: 0,
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      completed: 0
+    });
   };
 
   const viewRequestDetails = (request: any) => {
@@ -307,35 +470,35 @@ export default function MyRequestsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
           <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{stats.total}</div>
+            <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{requestStats.total}</div>
             <div className="text-sm text-blue-700 dark:text-blue-300">Total Requests</div>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800">
           <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">{stats.pending}</div>
+            <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">{requestStats.pending}</div>
             <div className="text-sm text-amber-700 dark:text-amber-300">Pending</div>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800">
           <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold text-green-600 dark:text-green-400">{stats.approved}</div>
+            <div className="text-3xl font-bold text-green-600 dark:text-green-400">{requestStats.approved}</div>
             <div className="text-sm text-green-700 dark:text-green-300">Approved</div>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 border-red-200 dark:border-red-800">
           <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold text-red-600 dark:text-red-400">{stats.rejected}</div>
+            <div className="text-3xl font-bold text-red-600 dark:text-red-400">{requestStats.rejected}</div>
             <div className="text-sm text-red-700 dark:text-red-300">Rejected</div>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800">
           <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.completed}</div>
+            <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">{requestStats.completed}</div>
             <div className="text-sm text-purple-700 dark:text-purple-300">Completed</div>
           </CardContent>
         </Card>

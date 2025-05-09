@@ -14,7 +14,25 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
 import { Skeleton } from "@/components/ui/skeleton";
-import { RealtimeChannel } from '@supabase/supabase-js';
+import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+
+interface GearRequest {
+  id: string;
+  created_at: string;
+  status: string;
+  gear_ids: string[];
+  gears?: Array<{
+    id: string;
+    name: string;
+  }>;
+}
+
+interface GearData {
+  id: string;
+  name: string;
+  category?: string;
+  created_at: string;
+}
 
 type WeeklyUsage = {
   week: string;
@@ -38,6 +56,17 @@ type CheckoutLog = {
   checkinDate: Date | null;
 };
 
+// Add these type definitions
+type GearRequestPayload = RealtimePostgresChangesPayload<{
+  old: GearRequest | null;
+  new: GearRequest;
+}>;
+
+type GearPayload = RealtimePostgresChangesPayload<{
+  old: GearData | null;
+  new: GearData;
+}>;
+
 export default function ReportsPage() {
   const supabase = createClient();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -57,10 +86,15 @@ export default function ReportsPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchReportData();
+    const initializeData = async () => {
+      setIsLoading(true);
+      await fetchReportData();
+      setIsLoading(false);
+    };
+
+    initializeData();
     setupRealtimeSubscription();
 
-    // Cleanup subscription on unmount
     return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
@@ -77,13 +111,15 @@ export default function ReportsPage() {
       let requestsAvailable = false;
       let gearsAvailable = false;
 
-      // Check if the requests table exists
+      // Check if the gear_requests table exists
+      console.log('Checking if tables exist...');
       const { error: requestsExistError } = await supabase
-        .from('requests')
+        .from('gear_requests')
         .select('count', { count: 'exact', head: true })
         .limit(1);
 
       requestsAvailable = !requestsExistError;
+      console.log('Requests table available:', requestsAvailable);
 
       // Check if the gears table exists
       const { error: gearsExistError } = await supabase
@@ -92,127 +128,114 @@ export default function ReportsPage() {
         .limit(1);
 
       gearsAvailable = !gearsExistError;
+      console.log('Gears table available:', gearsAvailable);
 
-      console.log("Available tables:", {
-        requestsAvailable,
-        gearsAvailable
-      });
-
-      // Simulate data if tables don't exist
-      if (!requestsAvailable) {
-        console.log("Requests table doesn't exist, using simulation data");
-        // Simulate weekly usage data
+      // If tables don't exist, use simulated data
+      if (!requestsAvailable || !gearsAvailable) {
+        console.log('Using simulated data...');
         const simulatedWeeklyData = getSimulatedWeeklyData();
         setWeeklyUsage(simulatedWeeklyData);
-
-        // Set other request-based metrics
         setTotalRequests(55);
         setTotalDamages(6);
-
-        // Set placeholder checkout log
-        setCheckoutLog(getSimulatedCheckoutLog());
-      } else {
-        // If requests table exists, fetch real data as before
-        const { data: usageData, error: usageError } = await supabase
-          .from('requests')
-          .select('created_at, status')
-          .order('created_at', { ascending: true });
-
-        if (usageError) {
-          throw new Error(`Failed to fetch usage data: ${usageError.message}`);
-        }
-
-        if (usageData) {
-          const weeklyData = (dateRange && dateRange.from && dateRange.to)
-            ? processWeeklyData(usageData, dateRange)
-            : processWeeklyData(usageData);
-          setWeeklyUsage(weeklyData);
-
-          // Calculate totals for summary cards
-          const filteredData = usageData.filter(item => {
-            if (!dateRange || !dateRange.from || !dateRange.to) return true;
-            const date = new Date(item.created_at);
-            return date >= dateRange.from && date <= dateRange.to;
-          });
-
-          setTotalRequests(filteredData.length);
-          setTotalDamages(filteredData.filter(item =>
-            item.status && item.status.toLowerCase().includes('damage')
-          ).length);
-        }
-      }
-
-      if (!gearsAvailable) {
-        console.log("Gears table doesn't exist, using simulation data");
-        // Simulate popular gears data
         const simulatedPopularGears = getSimulatedPopularGears();
         setPopularGears(simulatedPopularGears);
-        setMostPopularGear(simulatedPopularGears[0].name);
-      } else {
-        // Only fetch real gear data if the table exists
-        if (requestsAvailable) {
-          const { data: gearData, error: gearError } = await supabase
-            .from('requests')
-            .select('gear_id, gears(name), created_at')
-            .order('created_at', { ascending: false });
+        setMostPopularGear(simulatedPopularGears[0]?.name || 'None');
+        setCheckoutLog(getSimulatedCheckoutLog());
+        return;
+      }
 
-          if (gearError) {
-            throw new Error(`Failed to fetch gear data: ${gearError.message}`);
-          }
+      // Fetch real data if tables exist
+      if (requestsAvailable) {
+        // First fetch gear requests
+        console.log('Fetching gear requests...');
+        const { data: requestsData, error: requestsError } = await supabase
+          .from('gear_requests')
+          .select('id, created_at, status, gear_ids')
+          .order('created_at', { ascending: true });
 
-          if (gearData) {
-            const popularData = (dateRange && dateRange.from && dateRange.to)
-              ? processPopularGears(gearData, dateRange)
-              : processPopularGears(gearData);
-            setPopularGears(popularData);
+        console.log('Gear requests data:', requestsData);
+        console.log('Gear requests error:', requestsError);
 
-            // Set most popular gear
-            if (popularData.length > 0) {
-              setMostPopularGear(popularData[0].name);
-            } else {
-              setMostPopularGear('None');
+        if (requestsError) {
+          throw new Error(`Failed to fetch request data: ${requestsError.message}`);
+        }
+
+        // Then fetch gear details for all gear_ids
+        if (requestsData) {
+          // Collect all unique gear IDs
+          const allGearIds = [...new Set((requestsData as GearRequest[]).flatMap(request => request.gear_ids || []))];
+          console.log('All gear IDs:', allGearIds);
+
+          if (allGearIds.length > 0) {
+            console.log('Fetching gear details...');
+            const { data: gearsData, error: gearsError } = await supabase
+              .from('gears')
+              .select('id, name')
+              .in('id', allGearIds);
+
+            console.log('Gears data:', gearsData);
+            console.log('Gears error:', gearsError);
+
+            if (gearsError) {
+              throw new Error(`Failed to fetch gear data: ${gearsError.message}`);
             }
-          }
-        } else {
-          // If the gears table exists but requests doesn't:
-          // We can still show available gear but not popularity
-          const { data: gearData, error: gearError } = await supabase
-            .from('gears')
-            .select('id, name, category')
-            .order('created_at', { ascending: false });
 
-          if (!gearError && gearData) {
-            // Create popularity data based on some heuristics
-            const popularData = gearData.slice(0, 5).map((gear, index) => ({
-              name: gear.name || 'Unknown Gear',
-              requests: Math.floor(Math.random() * 20) + 1
-            })).sort((a, b) => b.requests - a.requests);
+            // Add gear details to requests
+            const enrichedRequestsData = requestsData.map((request: GearRequest) => ({
+              ...request,
+              gears: (request.gear_ids || [])
+                .map(gearId => gearsData?.find((gear: GearData) => gear.id === gearId))
+                .filter(Boolean)
+            }));
 
-            setPopularGears(popularData);
+            console.log('Enriched requests data:', enrichedRequestsData);
 
-            if (popularData.length > 0) {
-              setMostPopularGear(popularData[0].name);
-            } else {
-              setMostPopularGear('None');
-            }
-          } else {
-            // Fallback to simulation if both tables have issues
-            const simulatedPopularGears = getSimulatedPopularGears();
-            setPopularGears(simulatedPopularGears);
-            setMostPopularGear(simulatedPopularGears[0].name);
+            // Process the enriched data
+            const weeklyData = (dateRange && dateRange.from && dateRange.to)
+              ? processWeeklyData(enrichedRequestsData, dateRange)
+              : processWeeklyData(enrichedRequestsData);
+            setWeeklyUsage(weeklyData);
+
+            // Calculate totals for summary cards
+            const filteredData = enrichedRequestsData.filter((item: GearRequest) => {
+              if (!dateRange || !dateRange.from || !dateRange.to) return true;
+              const date = new Date(item.created_at);
+              return date >= dateRange.from && date <= dateRange.to;
+            });
+
+            setTotalRequests(filteredData.length);
+            setTotalDamages(filteredData.filter((item: GearRequest) =>
+              item.status && item.status.toLowerCase().includes('damage')
+            ).length);
+
+            // Process popular gears
+            const gearCounts: { [key: string]: number } = {};
+            filteredData.forEach((request: GearRequest) => {
+              if (request.gear_ids && Array.isArray(request.gear_ids)) {
+                request.gear_ids.forEach((gearId: string) => {
+                  const gear = request.gears?.find(g => g.id === gearId);
+                  if (gear) {
+                    const name = gear.name || 'Unknown Gear';
+                    gearCounts[name] = (gearCounts[name] || 0) + 1;
+                  }
+                });
+              }
+            });
+
+            const popularGearsData = Object.entries(gearCounts)
+              .map(([name, requests]) => ({ name, requests }))
+              .sort((a, b) => b.requests - a.requests)
+              .slice(0, 5);
+
+            setPopularGears(popularGearsData);
+            setMostPopularGear(popularGearsData[0]?.name || 'None');
           }
         }
       }
-    } catch (err: any) {
-      console.error("Error fetching report data:", err);
-      setError(err.message || "Failed to fetch report data. Please try again.");
-      toast({
-        title: "Error",
-        description: err.message || "Failed to fetch report data. Please try again.",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      console.error('Error fetching report data:', error);
+      setError(error.message);
     } finally {
-      setIsLoading(false);
       setIsRefreshing(false);
     }
   }
@@ -345,72 +368,34 @@ export default function ReportsPage() {
       supabase.removeChannel(channelRef.current);
     }
 
-    // Check which tables exist and subscribe only to those
-    const { error: requestsExistError } = await supabase
-      .from('requests')
-      .select('count', { count: 'exact', head: true })
-      .limit(1);
-
-    const { error: gearsExistError } = await supabase
-      .from('gears')
-      .select('count', { count: 'exact', head: true })
-      .limit(1);
-
-    const requestsAvailable = !requestsExistError;
-    const gearsAvailable = !gearsExistError;
-
     // Create a new subscription channel
-    let channel = supabase.channel('reports-analytics-changes');
+    const channel = supabase.channel('reports-analytics-changes');
 
-    // Only subscribe to tables that exist
-    if (requestsAvailable) {
-      channel = channel.on('postgres_changes',
-        { event: '*', schema: 'public', table: 'requests' },
-        (payload) => {
-          console.log('Real-time update from requests table:', payload);
-          toast({
-            title: "Data Updated",
-            description: "New request data is available. Refreshing reports...",
-            variant: "default",
-          });
-          fetchReportData();
-        }
-      );
-    }
-
-    if (gearsAvailable) {
-      channel = channel.on('postgres_changes',
-        { event: '*', schema: 'public', table: 'gears' },
-        (payload) => {
-          console.log('Real-time update from gears table:', payload);
-          fetchReportData();
-        }
-      );
-    }
-
-    // Subscribe to channel
-    channel.subscribe((status) => {
-      console.log('Real-time subscription status:', status);
-      if (status === 'SUBSCRIBED') {
-        console.log('Successfully subscribed to real-time updates');
-        if (!requestsAvailable && !gearsAvailable) {
-          toast({
-            title: "Demo Mode Active",
-            description: "Using simulated data. Create database tables for real-time data.",
-            variant: "default",
-            duration: 5000,
-          });
-        } else if (!requestsAvailable) {
-          toast({
-            title: "Partial Demo Mode",
-            description: "'requests' table missing - some data is simulated",
-            variant: "default",
-            duration: 5000,
-          });
-        }
+    // Subscribe to gear_requests table
+    channel.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'gear_requests' },
+      (payload: GearRequestPayload) => {
+        console.log('Real-time update from gear_requests table:', payload);
+        toast({
+          title: "Data Updated",
+          description: "New request data is available. Refreshing reports...",
+          variant: "default",
+        });
+        fetchReportData();
       }
-    });
+    );
 
+    // Subscribe to gears table
+    channel.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'gears' },
+      (payload: GearPayload) => {
+        console.log('Real-time update from gears table:', payload);
+        fetchReportData();
+      }
+    );
+
+    // Subscribe to the channel
+    await channel.subscribe();
     channelRef.current = channel;
   };
 
@@ -512,44 +497,6 @@ export default function ReportsPage() {
     });
   };
 
-  // Function to render loading skeleton
-  const renderSkeleton = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[1, 2, 3].map((i) => (
-          <Card key={i} className="overflow-hidden">
-            <CardHeader className="pb-2">
-              <Skeleton className="h-5 w-1/3 mb-2" />
-              <Skeleton className="h-4 w-1/2" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-8 w-16 mb-4" />
-              <Skeleton className="h-4 w-full" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-5 w-1/4" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-[200px] w-full rounded-lg" />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-5 w-1/4" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-[200px] w-full rounded-lg" />
-        </CardContent>
-      </Card>
-    </div>
-  );
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -565,22 +512,62 @@ export default function ReportsPage() {
             variant="outline"
             size="icon"
             onClick={handleRefresh}
-            disabled={isRefreshing}
+            disabled={isRefreshing || isLoading}
             title="Refresh Data"
           >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${(isRefreshing || isLoading) ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
 
       {error && (
         <div className="bg-destructive/15 border border-destructive text-destructive px-4 py-3 rounded-lg">
-          <p className="text-sm font-medium">{error}</p>
-          <p className="text-xs mt-1">Please try refreshing the data or contact support if the issue persists.</p>
+          <div className="flex items-start">
+            <AlertTriangle className="h-5 w-5 mr-2 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium">{error}</p>
+              <p className="text-xs mt-1">Please try refreshing the data or contact support if the issue persists.</p>
+            </div>
+          </div>
         </div>
       )}
 
-      {isLoading ? renderSkeleton() : (
+      {isLoading ? (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="overflow-hidden">
+                <CardHeader className="pb-2">
+                  <Skeleton className="h-5 w-1/3 mb-2" />
+                  <Skeleton className="h-4 w-1/2" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-16 mb-4" />
+                  <Skeleton className="h-4 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-1/4" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-[200px] w-full rounded-lg" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-1/4" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-[200px] w-full rounded-lg" />
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
         <>
           {/* Summary Cards - Top Row */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
