@@ -21,18 +21,47 @@ export default function LandingPage() {
     const fetchLogo = async () => {
       setIsLoadingLogo(true);
       try {
+        // Use default logo path as fallback
+        const defaultLogoPath = '/Gearflow logo.png';
+
+        // Check if supabase client is initialized
+        if (!supabase) {
+          setLogoUrl(defaultLogoPath);
+          return;
+        }
+
         const { data, error } = await supabase
           .from('app_settings')
           .select('value')
           .eq('key', 'logoUrl')
           .single();
 
-        if (error) throw error;
-        setLogoUrl(data?.value || null);
-      } catch (fetchError) {
-        console.error("Error fetching Supabase settings for logo:", fetchError);
-        setConfigError("Could not fetch application settings.");
-        setLogoUrl(null);
+        if (error) {
+          console.warn("Supabase query error:", error.message);
+          setLogoUrl(defaultLogoPath);
+          return;
+        }
+
+        // If no data found, use default logo
+        if (!data || !data.value) {
+          setLogoUrl(defaultLogoPath);
+          return;
+        }
+
+        // Validate the URL
+        try {
+          new URL(data.value);
+          setLogoUrl(data.value);
+        } catch {
+          // If URL is invalid, assume it's a local path
+          setLogoUrl(data.value.startsWith('/') ? data.value : `/${data.value}`);
+        }
+
+        setConfigError(null);
+      } catch (error: any) {
+        console.error("Error fetching Supabase settings for logo:", error.message);
+        // Always fallback to local logo
+        setLogoUrl('/Gearflow logo.png');
       } finally {
         setIsLoadingLogo(false);
       }
