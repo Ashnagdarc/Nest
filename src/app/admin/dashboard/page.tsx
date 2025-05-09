@@ -159,6 +159,30 @@ type GearActivityLogPayload = {
   };
 };
 
+// Add these type definitions at the top with the other types
+type ActivityLogRecord = {
+  id: string;
+  user_id: string;
+  gear_id: string;
+  activity_type: string;
+  details: any;
+  created_at: string;
+  status?: string;
+};
+
+type UserProfile = {
+  id: string;
+  full_name?: string;
+  email?: string;
+};
+
+type GearRecord = {
+  id: string;
+  name: string;
+  created_at: string;
+  owner_id?: string;
+};
+
 export default function AdminDashboardPage() {
   const supabase = createClient();
   const { toast } = useToast();
@@ -487,8 +511,8 @@ export default function AdminDashboardPage() {
       }
 
       // Fetch user details for activities
-      const userIds = activityData?.map(a => a.user_id).filter(Boolean) || [];
-      const gearIds = activityData?.map(a => a.gear_id).filter(Boolean) || [];
+      const userIds = activityData?.map((a: ActivityLogRecord) => a.user_id).filter(Boolean) || [];
+      const gearIds = activityData?.map((a: ActivityLogRecord) => a.gear_id).filter(Boolean) || [];
 
       const [usersResponse, gearsResponse] = await Promise.all([
         supabase
@@ -501,8 +525,8 @@ export default function AdminDashboardPage() {
           .in('id', gearIds)
       ]);
 
-      const usersMap = new Map(usersResponse.data?.map(u => [u.id, u]) || []);
-      const gearsMap = new Map(gearsResponse.data?.map(g => [g.id, g]) || []);
+      const usersMap = new Map(usersResponse.data?.map((u: UserProfile) => [u.id, u]) || []);
+      const gearsMap = new Map(gearsResponse.data?.map((g: GearRecord) => [g.id, g]) || []);
 
       // Also fetch recent gear changes
       const { data: gearData, error: gearError } = await supabase
@@ -522,19 +546,19 @@ export default function AdminDashboardPage() {
       }
 
       // Fetch owner details for gears
-      const ownerIds = gearData?.map(g => g.owner_id).filter(Boolean) || [];
+      const ownerIds = gearData?.map((g: GearRecord) => g.owner_id).filter(Boolean) || [];
       const { data: ownersData } = await supabase
         .from('profiles')
         .select('id, full_name, email')
         .in('id', ownerIds);
 
-      const ownersMap = new Map(ownersData?.map(o => [o.id, o]) || []);
+      const ownersMap = new Map(ownersData?.map((o: UserProfile) => [o.id, o]) || []);
 
       // Combine and format activities
       const activities = [
-        ...(activityData?.map(a => {
-          const user = usersMap.get(a.user_id);
-          const gear = gearsMap.get(a.gear_id);
+        ...(activityData?.map((a: ActivityLogRecord) => {
+          const user = usersMap.get(a.user_id) as UserProfile | undefined;
+          const gear = gearsMap.get(a.gear_id) as GearRecord | undefined;
           return {
             id: a.id,
             user: user?.full_name || user?.email || 'Unknown User',
@@ -542,8 +566,8 @@ export default function AdminDashboardPage() {
             time: a.created_at ? timeAgo(new Date(a.created_at)) : '',
           };
         }) || []),
-        ...(gearData?.map(g => {
-          const owner = ownersMap.get(g.owner_id);
+        ...(gearData?.map((g: GearRecord) => {
+          const owner = ownersMap.get(g.owner_id || '') as UserProfile | undefined;
           return {
             id: g.id,
             user: owner?.full_name || owner?.email || 'Unknown User',
