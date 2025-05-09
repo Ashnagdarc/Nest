@@ -6,6 +6,7 @@ import { ReactQueryProvider } from '@/components/providers/react-query-provider'
 import { ThemeProvider } from 'next-themes';
 import { NotificationProvider } from "@/components/notifications/NotificationProvider";
 import { SupabaseErrorBoundary } from "@/components/supabase-error-boundary";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -37,6 +38,7 @@ export default function RootLayout({
                 {children}
               </SupabaseErrorBoundary>
               <Toaster />
+              <SpeedInsights />
             </ReactQueryProvider>
           </NotificationProvider>
         </ThemeProvider>
