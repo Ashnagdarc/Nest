@@ -1,19 +1,9 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import webpush from 'web-push';
+import { sendPushNotification } from '../../../../lib/push-notifications';
 
-const vapidKeys = {
-    publicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-    privateKey: process.env.VAPID_PRIVATE_KEY!,
-    subject: process.env.VAPID_SUBJECT!
-};
-
-webpush.setVapidDetails(
-    vapidKeys.subject,
-    vapidKeys.publicKey,
-    vapidKeys.privateKey
-);
+export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
     try {
@@ -40,10 +30,7 @@ export async function POST(request: Request) {
         const results = await Promise.all(
             subscriptions.map(async (sub) => {
                 try {
-                    await webpush.sendNotification(
-                        sub.subscription,
-                        message
-                    );
+                    await sendPushNotification(sub.subscription, message);
                     return { success: true };
                 } catch (error) {
                     console.error('Error sending notification:', error);

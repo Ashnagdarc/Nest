@@ -15,6 +15,8 @@ webpush.setVapidDetails(
     vapidKeys.privateKey
 );
 
+export const runtime = 'nodejs';
+
 export async function POST(request: Request) {
     try {
         const supabase = createRouteHandlerClient({ cookies });
