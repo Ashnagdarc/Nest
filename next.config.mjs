@@ -81,16 +81,6 @@ const nextConfig = {
     // Only ignore ESLint during builds in production
     ignoreDuringBuilds: process.env.NODE_ENV === 'production',
   },
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      // Don't attempt to require web-push on the client side
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        'web-push': false,
-      };
-    }
-    return config;
-  },
   images: {
     remotePatterns: [
       {
