@@ -19,39 +19,39 @@
     --popover-foreground: 240 10% 3.9%;
     /* Dark Gray */
 
-    --primary: 23 100% 50%;
-    /* #ff6300 Orange */
-    --primary-foreground: 0 0% 100%;
+    --primary: 24 96% 53%;
+    /* Orange primary color */
+    --primary-foreground: 0 0% 98%;
     /* White */
 
-    --secondary: 210 9% 47%;
-    /* #6C757D Gray */
-    --secondary-foreground: 0 0% 100%;
-    /* White */
+    --secondary: 240 4.8% 95.9%;
+    /* Very Light Gray */
+    --secondary-foreground: 240 5.9% 10%;
+    /* Darker Gray */
 
-    --muted: 210 40% 96.1%;
-    /* Light Gray */
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 240 4.8% 95.9%;
+    /* Very Light Gray */
+    --muted-foreground: 240 3.8% 46.1%;
     /* Mid Gray */
 
-    --accent: 23 100% 95%;
-    /* Light Orange */
-    --accent-foreground: 23 100% 40%;
-    /* Darker Orange for text on light accent */
+    --accent: 240 4.8% 95.9%;
+    /* Very Light Gray */
+    --accent-foreground: 240 5.9% 10%;
+    /* Darker Gray */
 
     --destructive: 0 84.2% 60.2%;
     /* Red */
     --destructive-foreground: 0 0% 98%;
     /* Light Gray */
 
-    --border: 214.3 31.8% 91.4%;
+    --border: 240 5.9% 90%;
     /* Light Gray */
-    --input: 214.3 31.8% 91.4%;
+    --input: 240 5.9% 90%;
     /* Light Gray */
-    --ring: 23 100% 50%;
-    /* #ff6300 Orange */
+    --ring: 24 96% 53%;
+    /* Orange primary color */
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
     --chart-1: 23 100% 50%;
     /* Orange */
@@ -66,8 +66,8 @@
 
     --sidebar-background: 240 4.8% 95.9%;
     /* Very Light Gray */
-    --sidebar-foreground: 240 10% 3.9%;
-    /* Dark Gray */
+    --sidebar-foreground: 240 5.9% 10%;
+    /* Darker Gray */
     --sidebar-primary: 23 100% 50%;
     /* Orange */
     --sidebar-primary-foreground: 0 0% 100%;
@@ -83,8 +83,8 @@
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    /* Dark Gray */
+    --background: 0 0% 0%;
+    /* Black */
     --foreground: 0 0% 98%;
     /* Light Gray */
 
@@ -98,13 +98,13 @@
     --popover-foreground: 0 0% 98%;
     /* Light Gray */
 
-    --primary: 23 100% 60%;
-    /* Lighter Orange */
-    --primary-foreground: 23 100% 5%;
-    /* Very Dark Orange/Brown for contrast */
-
-    --secondary: 210 9% 30%;
+    --primary: 24 96% 53%;
+    /* Orange primary color */
+    --primary-foreground: 240 5.9% 10%;
     /* Darker Gray */
+
+    --secondary: 240 3.7% 15.9%;
+    /* Very Dark Gray */
     --secondary-foreground: 0 0% 98%;
     /* Light Gray */
 
@@ -113,12 +113,12 @@
     --muted-foreground: 240 5% 64.9%;
     /* Mid Gray */
 
-    --accent: 23 100% 20%;
-    /* Dark Orange */
-    --accent-foreground: 23 100% 70%;
-    /* Brighter Orange for text */
+    --accent: 240 3.7% 15.9%;
+    /* Very Dark Gray */
+    --accent-foreground: 0 0% 98%;
+    /* Light Gray */
 
-    --destructive: 0 62.8% 50.6%;
+    --destructive: 0 62.8% 30.6%;
     /* Adjusted Red for dark mode */
     --destructive-foreground: 0 0% 98%;
     /* Light Gray */
@@ -127,8 +127,8 @@
     /* Very Dark Gray */
     --input: 240 3.7% 15.9%;
     /* Very Dark Gray */
-    --ring: 23 100% 60%;
-    /* Lighter Orange */
+    --ring: 24 96% 53%;
+    /* Orange primary color */
 
     --chart-1: 23 100% 60%;
     /* Lighter Orange */
@@ -175,10 +175,9 @@
 
 /* Grid pattern for backgrounds */
 .bg-grid-pattern {
-  background-size: 40px 40px;
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -187,4 +186,124 @@
       linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
       linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
   }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Animated background gradient */
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-shift {
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+/* Hover effects */
+.hover-glow {
+  transition: all 0.3s ease;
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 20px rgba(255, 126, 51, 0.4);
+  transform: translateY(-2px);
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -8px rgba(255, 126, 51, 0.3);
+}
+
+/* Button animations */
+.button-gradient {
+  background-size: 200% auto;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.button-gradient:hover {
+  background-position: right center;
+}
+
+/* Text gradient animation */
+.text-gradient-animate {
+  background: linear-gradient(to right,
+      #ff7e33,
+      #ff5733,
+      #ff7e33);
+  background-size: 200% auto;
+  animation: text-gradient-shift 4s linear infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes text-gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+/* Glassmorphism effects */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Feature card glow effect */
+.feature-card-glow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: linear-gradient(45deg,
+      rgba(255, 126, 51, 0.3),
+      rgba(255, 87, 51, 0.3));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.feature-card-glow:hover::before {
+  opacity: 1;
 }

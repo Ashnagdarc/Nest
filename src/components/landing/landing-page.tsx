@@ -3,21 +3,21 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { AlertCircle, Package, Clock, BarChart, Users, ChevronDown } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Package, BarChart, Clock, Users, Laptop, Boxes } from 'lucide-react';
-import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 
 export default function LandingPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [isLoadingLogo, setIsLoadingLogo] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
+    setIsMounted(true);
     const fetchLogo = async () => {
       setIsLoadingLogo(true);
       try {
@@ -41,82 +41,124 @@ export default function LandingPage() {
     fetchLogo();
   }, [supabase]);
 
-  // Features list
   const features = [
-    { icon: <Package className="h-6 w-6 text-primary" />, title: "Track Equipment", description: "Keep detailed records of all company gear" },
-    { icon: <Clock className="h-6 w-6 text-primary" />, title: "Request & Schedule", description: "Book gear when you need it" },
-    { icon: <BarChart className="h-6 w-6 text-primary" />, title: "Analytics", description: "Track usage patterns and equipment status" },
-    { icon: <Users className="h-6 w-6 text-primary" />, title: "Team Management", description: "Coordinate equipment use across teams" }
+    {
+      icon: <Package className="w-8 h-8" />,
+      title: "Track Equipment",
+      description: "Keep detailed records of all company gear"
+    },
+    {
+      icon: <Clock className="w-8 h-8" />,
+      title: "Request & Schedule",
+      description: "Book gear when you need it"
+    },
+    {
+      icon: <BarChart className="w-8 h-8" />,
+      title: "Analytics",
+      description: "Track usage patterns and status"
+    },
+    {
+      icon: <Users className="w-8 h-8" />,
+      title: "Team Management",
+      description: "Coordinate equipment use"
+    }
   ];
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-primary/5 to-background">
-      <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern opacity-[0.015] pointer-events-none" />
+  if (!isMounted) {
+    return null; // Prevent hydration issues by not rendering until client-side
+  }
 
-      <div className="container mx-auto px-4 py-12 flex flex-col min-h-screen">
+  return (
+    <div className="min-h-screen bg-[#0A0A0A] text-white relative overflow-hidden">
+      {/* Background gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-b from-orange-500/5 via-transparent to-transparent pointer-events-none" />
+
+      {/* Content */}
+      <div className="relative z-10 w-full">
+        {/* Navigation */}
+        <nav className="w-full px-4 sm:px-6 py-4 sm:py-6 backdrop-blur-sm bg-black/20 sticky top-0 z-50">
+          <div className="flex justify-between items-center max-w-7xl mx-auto">
+            <div className="flex items-center gap-2 sm:gap-3">
+              {!isLoadingLogo && logoUrl ? (
+                <div className="relative w-8 h-8 sm:w-10 sm:h-10">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg blur opacity-50"></div>
+                  <Image
+                    src={logoUrl}
+                    alt="GearFlow Logo"
+                    fill
+                    className="relative rounded-lg object-contain"
+                    unoptimized
+                  />
+                </div>
+              ) : null}
+              <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-2">
+                <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent leading-tight">
+                  GearFlow
+                </span>
+                <span className="text-xs sm:text-sm font-medium dark:text-white text-black leading-tight">
+                  by Eden Oasis
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <Link href="/login">
+                <Button variant="ghost" className="text-white hover:text-orange-400 transition-colors px-2 sm:px-4 h-8 sm:h-10 text-sm sm:text-base">
+                  Login
+                </Button>
+              </Link>
+              <Link href="/signup">
+                <Button className="bg-orange-500 hover:bg-orange-600 text-white border-none shadow-lg shadow-orange-500/20 hover:shadow-orange-500/40 transition-all duration-300 h-8 sm:h-10 px-3 sm:px-4 text-sm sm:text-base">
+                  Sign Up
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </nav>
+
         {/* Hero Section */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8 }}
-          className="flex flex-col md:flex-row items-center justify-between flex-grow gap-8 md:gap-4"
-        >
-          {/* Left Content */}
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] px-4 sm:px-6 py-12 sm:py-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="flex-1 text-center md:text-left max-w-xl"
+            transition={{ duration: 0.6 }}
+            className="text-center w-full max-w-4xl mx-auto relative"
           >
-            <div className="flex justify-center md:justify-start mb-6">
-              {isLoadingLogo && !configError ? (
-                <div className="h-[100px] w-[100px] rounded-xl bg-primary/10 animate-pulse"></div>
-              ) : logoUrl ? (
-                <div className="relative group">
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-secondary rounded-xl blur opacity-50 group-hover:opacity-70 transition duration-1000"></div>
-                  <div className="relative">
-                    <Image
-                      key={logoUrl}
-                      src={logoUrl}
-                      alt="GearFlow Logo"
-                      width={100}
-                      height={100}
-                      className="rounded-xl border-2 border-primary/20 object-contain bg-card shadow-lg"
-                      data-ai-hint="gear logo"
-                      unoptimized
-                    />
-                  </div>
-                </div>
-              ) : !configError ? (
-                <div className="flex h-[100px] w-[100px] items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Boxes className="h-12 w-12" />
-                </div>
-              ) : null}
-            </div>
+            {/* Decorative elements */}
+            <div className="absolute -top-20 -left-20 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl opacity-60 hidden sm:block" />
+            <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl opacity-60 hidden sm:block" />
 
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-4"
-            >
-              GearFlow
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="text-xl md:text-2xl text-muted-foreground mb-6"
-            >
-              Streamline Gear Management for Eden Oasis Realty
-            </motion.p>
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 sm:mb-8 leading-[1.1] sm:leading-tight">
+              <motion.span
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                className="bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent block mb-2"
+              >
+                Streamline Gear
+              </motion.span>
+              <motion.span
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.3 }}
+                className="text-white block text-3xl sm:text-5xl md:text-6xl"
+              >
+                Management for
+              </motion.span>
+              <motion.span
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.4 }}
+                className="text-white block text-3xl sm:text-5xl md:text-6xl"
+              >
+                Eden Oasis
+              </motion.span>
+            </h1>
 
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.5 }}
-              className="text-lg text-foreground/80 mb-8 max-w-md mx-auto md:mx-0"
+              className="text-base sm:text-lg md:text-xl text-gray-400 mb-8 sm:mb-12 max-w-2xl mx-auto leading-relaxed px-4 sm:px-0"
             >
               Efficiently track, request, and manage company equipment with our intuitive platform designed for real estate professionals.
             </motion.p>
@@ -125,97 +167,64 @@ export default function LandingPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.6 }}
-              className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start"
+              className="flex flex-col sm:flex-row gap-3 sm:gap-6 justify-center px-4 sm:px-0"
             >
-              <Link href="/login">
-                <Button
-                  size="lg"
-                  className="w-full sm:w-auto px-8 rounded-full bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-md hover:shadow-lg transition-all duration-300"
-                >
-                  Login
+              <Link href="/login" className="w-full sm:w-auto">
+                <Button className="w-full sm:w-auto h-12 sm:h-14 px-6 sm:px-12 bg-gradient-to-r from-orange-500 to-orange-600 text-white text-base sm:text-lg rounded-xl shadow-lg shadow-orange-500/20 hover:shadow-orange-500/40 transition-all duration-300 hover:from-orange-600 hover:to-orange-700">
+                  Get Started
                 </Button>
               </Link>
-              <Link href="/signup">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full sm:w-auto px-8 rounded-full border-primary/20 hover:bg-primary/5 transition-all duration-300"
-                >
-                  Sign Up
+              <Link href="/signup" className="w-full sm:w-auto">
+                <Button variant="outline" className="w-full sm:w-auto h-12 sm:h-14 px-6 sm:px-12 text-base sm:text-lg border-2 border-orange-500/30 text-orange-400 hover:bg-orange-500/10 rounded-xl transition-all duration-300 hover:border-orange-500/50">
+                  Learn More
                 </Button>
               </Link>
             </motion.div>
           </motion.div>
 
-          {/* Right Content - Lottie Animation */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
-            className="flex-1 flex justify-center items-center max-w-md"
-          >
-            <div className="relative w-full h-[300px] md:h-[400px] flex items-center justify-center">
-              <DotLottieReact
-                src="https://lottie.host/0d28b562-b9c1-4325-afd9-ab949926269f/ZuOa1NgnjO.lottie"
-                loop
-                autoplay
-              />
-            </div>
-          </motion.div>
-        </motion.div>
-
-        {/* Features Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.7 }}
-          className="mt-12 md:mt-24"
-        >
-          <h2 className="text-2xl md:text-3xl font-bold text-center mb-12">Key Features</h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Features Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 w-full max-w-7xl mx-auto mt-16 sm:mt-24 px-4 sm:px-6">
             {features.map((feature, index) => (
               <motion.div
                 key={feature.title}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.8 + index * 0.1 }}
+                transition={{ duration: 0.4, delay: 0.2 + index * 0.1 }}
+                className="group relative bg-gradient-to-b from-[#111111] to-[#0A0A0A] rounded-xl p-6 sm:p-8 hover:from-[#1A1A1A] hover:to-[#111111] transition-all duration-300 shadow-xl shadow-black/20"
               >
-                <Card className="h-full hover:shadow-md transition-all duration-300 border-primary/10 hover:border-primary/20 bg-card/80">
-                  <CardContent className="p-6">
-                    <div className="mb-4 bg-primary/5 w-12 h-12 flex items-center justify-center rounded-lg">
-                      {feature.icon}
-                    </div>
-                    <h3 className="text-lg font-semibold mb-2">{feature.title}</h3>
-                    <p className="text-sm text-muted-foreground">{feature.description}</p>
-                  </CardContent>
-                </Card>
+                <div className="absolute inset-0 bg-gradient-to-r from-orange-500/0 to-orange-500/0 group-hover:from-orange-500/5 group-hover:to-transparent rounded-xl transition-all duration-300" />
+                <div className="relative">
+                  <div className="text-orange-500 mb-4 transform group-hover:scale-110 transition-transform duration-300">
+                    <div className="w-6 h-6 sm:w-8 sm:h-8">{feature.icon}</div>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-semibold mb-2 sm:mb-3 text-white group-hover:text-orange-400 transition-colors">
+                    {feature.title}
+                  </h3>
+                  <p className="text-sm sm:text-base text-gray-400 group-hover:text-gray-300 transition-colors">
+                    {feature.description}
+                  </p>
+                </div>
               </motion.div>
             ))}
           </div>
-        </motion.div>
-      </div>
-
-      {/* Footer */}
-      <footer className="border-t border-primary/10 py-8 mt-16">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Eden Oasis Realty. All rights reserved.
-          </p>
         </div>
-      </footer>
+      </div>
 
       {/* Error Alert */}
       {configError && (
-        <div className="fixed bottom-4 right-4 max-w-md">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed bottom-4 right-4 max-w-[calc(100vw-2rem)] sm:max-w-md mx-4 sm:mx-0"
+        >
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Configuration Error</AlertTitle>
             <AlertDescription>
-              {configError} Ensure Supabase URL/Key are set and RLS allows reading settings.
+              {configError}
             </AlertDescription>
           </Alert>
-        </div>
+        </motion.div>
       )}
     </div>
   );
