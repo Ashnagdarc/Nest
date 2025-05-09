@@ -8,7 +8,7 @@
 
 ---
 
-## 📋 Table of Contents
+##Table of Contents
 - [Overview](#-overview)
 - [Features](#-features)
 - [Tech Stack](#-tech-stack)
@@ -22,7 +22,7 @@
 - [Troubleshooting](#-troubleshooting)
 - [License](#-license)
 
-## 🌟 Overview
+## Overview
 
 GearFlow is a comprehensive equipment management platform designed specifically for Eden Oasis Realty. It streamlines the process of tracking, requesting, and managing company equipment through an intuitive and modern interface.
 
@@ -33,7 +33,7 @@ GearFlow is a comprehensive equipment management platform designed specifically 
 - **Data-Driven Insights**: Analytics and usage patterns tracking
 - **User-Friendly Interface**: Modern, responsive design optimized for all devices
 
-## 🚀 Features
+##  Features
 
 ### Equipment Management
 - **Inventory Tracking**
@@ -70,7 +70,7 @@ GearFlow is a comprehensive equipment management platform designed specifically 
   - User activity reports
   - Custom report generation
 
-## 🛠 Tech Stack
+##  Tech Stack
 
 ### Frontend
 - **Framework**: Next.js 14 (App Router)
@@ -92,7 +92,7 @@ GearFlow is a comprehensive equipment management platform designed specifically 
 - **Code Quality**: ESLint, Prettier
 - **Testing**: Jest, React Testing Library
 
-## ⚡ Getting Started
+## Getting Started
 
 ### Prerequisites
 - Node.js (v18.17.0 or higher)
@@ -214,7 +214,7 @@ We maintain high code quality standards through:
 ### Migrations
 All database changes are version controlled in `supabase/migrations/`.
 
-## 🔐 Authentication
+##  Authentication
 
 ### User Types
 1. **Admin**
@@ -234,7 +234,7 @@ All database changes are version controlled in `supabase/migrations/`.
 - Password policies
 - Rate limiting
 
-## 🚀 Deployment
+##  Deployment
 
 ### Production Deployment
 1. Build the application
@@ -253,7 +253,7 @@ All database changes are version controlled in `supabase/migrations/`.
 - Enable error tracking
 - Set up monitoring
 
-## 🤝 Contributing
+##  Contributing
 
 ### Development Process
 1. Fork the repository
@@ -271,7 +271,7 @@ We follow conventional commits:
 - `refactor:` Code refactoring
 - `test:` Testing changes
 
-## ❓ Troubleshooting
+##  Troubleshooting
 
 ### Common Issues
 1. **Database Connection**
@@ -296,5 +296,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-  <p>Built with ❤️ by Eden Oasis Realty</p>
+  <p>Built by Daniel Samuel </p>
 </div>
