@@ -618,7 +618,7 @@ function NotificationSound({ count }: NotificationSoundProps) {
 
     if (count > 0 && !audioError && hasUserInteracted) {
       try {
-        audio = new Audio('/notification-sound.mp3');
+        audio = new Audio('/sounds/notification.mp3');
         audio.loop = true;
 
         const playPromise = audio.play();

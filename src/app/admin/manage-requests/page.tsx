@@ -358,7 +358,7 @@ export default function ManageRequestsPage() {
       // First, mark any existing active checkouts for these gears as returned
       const { error: updateOldCheckoutsError } = await supabase
         .from('gear_checkouts')
-        .update({ status: 'Returned', return_date: formattedCheckoutDate })
+        .update({ status: 'Returned', expected_return_date: formattedCheckoutDate })
         .in('gear_id', gear_ids)
         .eq('status', 'Checked Out');
 
