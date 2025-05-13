@@ -126,10 +126,17 @@ BEGIN
     ALTER TABLE public.gear_maintenance ENABLE ROW LEVEL SECURITY;
     
     -- Create policies
-    CREATE POLICY "Admins can do anything" ON public.gear_maintenance
-      FOR ALL TO authenticated
-      USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'Admin'))
-      WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'Admin'));
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_policies 
+      WHERE schemaname = 'public' 
+      AND tablename = 'gear_maintenance'
+      AND policyname = 'Admins can do anything'
+    ) THEN
+      CREATE POLICY "Admins can do anything" ON public.gear_maintenance
+        FOR ALL TO authenticated
+        USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'Admin'))
+        WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'Admin'));
+    END IF;
       
     PERFORM log_db_health_check('Repair', 'CREATED', 'Created gear_maintenance table with policies');
   ELSE

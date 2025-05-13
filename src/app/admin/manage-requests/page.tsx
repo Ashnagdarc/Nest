@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Check, X, Clock, Filter, ThumbsUp, ThumbsDown, Download, Package, RotateCcw, AlertCircle, CheckCircle, XCircle, Bell, BellRing } from 'lucide-react';
+import { Check, X, Clock, Filter, ThumbsUp, ThumbsDown, Download, Package, RotateCcw, AlertCircle, CheckCircle, XCircle, Bell, BellRing, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -28,10 +28,22 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Mail } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { DateRange } from "react-day-picker";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { createSystemNotification } from '@/lib/notifications';
+import { Calendar } from "@/components/ui/calendar";
+import { CalendarIcon, Search } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // --- Dynamically import Lottie ---
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -45,8 +57,6 @@ const NOTIFICATION_SOUND_URL = '/sounds/notification.mp3'; // Add this sound fil
 
 type StatusHistory = { status: string; timestamp: Date; note?: string }[];
 type GearDetail = { name: string; description: string; specs: string };
-
-type Request = any;
 
 // Add these types at the top of the file
 type GearCheckout = {
@@ -103,9 +113,106 @@ const gearDetails: Record<string, GearDetail> = {
   'LED Panel': { name: 'LED Panel', description: 'Bi-color LED light', specs: '3200-5600K' },
 };
 
+// Update the isNewRequest function to check for pending status
+const isNewRequest = (status: string) => {
+  return status.toLowerCase() === 'pending';
+};
+
+// Add a function to determine if a request has been attended to
+const isAttendedRequest = (status: string) => {
+  const attendedStatuses = ['approved', 'rejected', 'checked out', 'checked in', 'completed', 'cancelled'];
+  return attendedStatuses.includes(status.toLowerCase());
+};
+
+// Add priority calculation function
+const getRequestPriority = (requestDate: Date): { level: 'low' | 'medium' | 'high', label: string } => {
+  const now = new Date();
+  const hoursSinceRequest = Math.floor((now.getTime() - requestDate.getTime()) / (1000 * 60 * 60));
+
+  if (hoursSinceRequest >= 24) {
+    return { level: 'high', label: 'High Priority' };
+  } else if (hoursSinceRequest >= 12) {
+    return { level: 'medium', label: 'Medium Priority' };
+  }
+  return { level: 'low', label: 'Low Priority' };
+};
+
+// Add timeline components
+const Timeline = ({ children }: { children: React.ReactNode }) => (
+  <div className="space-y-4">
+    {children}
+  </div>
+);
+
+const TimelineItem = ({
+  status,
+  date,
+  note,
+  changedBy
+}: {
+  status: string;
+  date: Date;
+  note?: string;
+  changedBy?: string;
+}) => (
+  <div className="flex gap-4 items-start">
+    <div className="mt-1">
+      <div className={cn(
+        "h-3 w-3 rounded-full",
+        status.toLowerCase() === 'approved' ? "bg-green-500" :
+          status.toLowerCase() === 'rejected' ? "bg-red-500" :
+            status.toLowerCase() === 'checked out' ? "bg-blue-500" :
+              status.toLowerCase() === 'checked in' ? "bg-purple-500" :
+                "bg-gray-500"
+      )} />
+    </div>
+    <div className="flex-1 space-y-1">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium">{status}</p>
+        <time className="text-xs text-muted-foreground">
+          {format(date, 'MMM d, yyyy h:mm a')}
+        </time>
+      </div>
+      {note && (
+        <p className="text-sm text-muted-foreground">{note}</p>
+      )}
+      {changedBy && (
+        <p className="text-xs text-muted-foreground">by {changedBy}</p>
+      )}
+    </div>
+  </div>
+);
+
+// Add type definitions
+interface GearRequest {
+  id: string;
+  userName: string;
+  userEmail?: string;
+  gearNames: string[];
+  requestDate: Date;
+  duration: string;
+  reason?: string;
+  destination?: string;
+  status: string;
+  adminNotes?: string | null;
+  checkoutDate?: Date | null;
+  dueDate?: Date | null;
+  checkinDate?: Date | null;
+  updatedAt?: Date;
+}
+
+interface StatusHistoryItem {
+  status: string;
+  changed_at: string;
+  note?: string;
+  profiles?: {
+    full_name: string;
+  };
+}
+
 export default function ManageRequestsPage() {
   const supabase = createClient();
-  const [requests, setRequests] = useState<Request[]>([]); // Now fetched from DB
+  const [requests, setRequests] = useState<GearRequest[]>([]); // Now fetched from DB
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [filterUser, setFilterUser] = useState('');
@@ -118,16 +225,17 @@ export default function ManageRequestsPage() {
   const { toast } = useToast(); // Initialize toast
   const [requestToReject, setRequestToReject] = useState<string | null>(null); // For rejection confirmation
   const [showAnimation, setShowAnimation] = useState<{ type: 'approve' | 'reject'; id: string | null }>({ type: 'approve', id: null }); // State for animations
-  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null); // For details modal
+  const [selectedRequest, setSelectedRequest] = useState<GearRequest | null>(null); // For details modal
   const [isDetailsOpen, setIsDetailsOpen] = useState(false); // For details modal
   const [rejectionReason, setRejectionReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusHistory, setStatusHistory] = useState<any[]>([]); // For audit trail
   const [previousRequestCount, setPreviousRequestCount] = useState<number>(0);
-  const [newRequestNotification, setNewRequestNotification] = useState<Request | null>(null);
+  const [newRequestNotification, setNewRequestNotification] = useState<GearRequest | null>(null);
   const [showNotificationPopup, setShowNotificationPopup] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true); // Default sound on
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [selectedRequests, setSelectedRequests] = useState<string[]>([]);
 
   // Initialize audio element
   useEffect(() => {
@@ -416,151 +524,252 @@ export default function ManageRequestsPage() {
     }
   };
 
-  // Reject handler: update DB and state, and insert status history and notification
+  // Update the handleReject function
   const handleReject = async () => {
-    if (!requestToReject) return;
-    const requestId = requestToReject;
-    setRequestToReject(null);
-    setShowAnimation({ type: 'reject', id: requestId });
+    if (!requestToReject || !rejectionReason.trim()) {
+      toast({
+        title: "Error",
+        description: "Request ID and rejection reason are required.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     try {
-      // Step 1: Get the request details
-      const { data: requestData, error: requestError } = await supabase
+      setIsProcessing(true);
+
+      // Get the current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw new Error(`Authentication error: ${userError.message}`);
+      }
+
+      if (!user) {
+        throw new Error('No authenticated user found');
+      }
+
+      // Get the current request to verify it exists and can be rejected
+      const { data: currentRequest, error: requestError } = await supabase
         .from('gear_requests')
-        .select('user_id, gear_ids')
-        .eq('id', requestId)
+        .select('status')
+        .eq('id', requestToReject)
         .single();
 
       if (requestError) {
-        throw requestError;
+        throw new Error(`Failed to fetch request: ${requestError.message}`);
       }
 
-      const { user_id, gear_ids } = requestData;
+      if (!currentRequest) {
+        throw new Error('Request not found');
+      }
 
-      // Step 2: Update the gear_requests record with rejected status
+      if (currentRequest.status !== 'Pending') {
+        throw new Error(`Cannot reject request with status: ${currentRequest.status}`);
+      }
+
+      // Update request status with the correct column names
       const { error: updateError } = await supabase
         .from('gear_requests')
         .update({
           status: 'Rejected',
-          rejection_reason: rejectionReason,
-          rejected_at: new Date().toISOString()
+          admin_notes: rejectionReason, // Using admin_notes instead of rejection_reason
+          updated_at: new Date().toISOString(), // Using updated_at instead of rejected_at
+          updated_by: user.id // Using updated_by instead of rejected_by
         })
-        .eq('id', requestId);
+        .eq('id', requestToReject);
 
       if (updateError) {
-        throw updateError;
+        throw new Error(`Failed to update request: ${updateError.message}`);
       }
 
-      // Step 3: Make sure gear status remains 'Available'
-      if (gear_ids && gear_ids.length > 0) {
-        const { error: gearUpdateError } = await supabase
-          .from('gears')
-          .update({
-            status: 'Available'
-          })
-          .in('id', gear_ids)
-          .eq('status', 'On Hold'); // Only update if was on hold
+      // Add to status history
+      const { error: historyError } = await supabase
+        .from('request_status_history')
+        .insert({
+          request_id: requestToReject,
+          status: 'Rejected',
+          changed_by: user.id,
+          note: rejectionReason,
+          changed_at: new Date().toISOString()
+        });
 
-        if (gearUpdateError) {
-          console.error('Error updating gear status:', gearUpdateError);
-          // Non-blocking error, continue with process
-        }
+      if (historyError) {
+        console.warn('Failed to add status history:', historyError);
+        // Don't throw here as the main rejection was successful
       }
 
-      // Step 4: Update UI
-      setRequests(prev => prev.map(r => r.id === requestId ? {
-        ...r,
-        status: 'Rejected',
-        rejectionReason,
-        rejected_at: new Date()
-      } : r));
+      // Get request details for notification
+      const { data: requestDetails, error: detailsError } = await supabase
+        .from('gear_requests')
+        .select('user_id')
+        .eq('id', requestToReject)
+        .single();
 
-      // Step 5: Insert status history
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('request_status_history').insert({
-        request_id: requestId,
-        status: 'Rejected',
-        changed_by: user?.id,
-        note: rejectionReason,
-      });
-
-      // Step 6: Get gear names for notification
-      let gearNames = 'gear';
-      if (gear_ids && gear_ids.length > 0) {
-        const { data: gearData } = await supabase
-          .from('gears')
-          .select('name')
-          .in('id', gear_ids);
-
-        if (gearData && gearData.length > 0) {
-          gearNames = gearData.map((g: any) => g.name).join(', ');
-        }
-      }
-
-      // Step 7: Send user notification
-      await createSystemNotification(
-        user_id,
-        'Request Rejected',
-        `Your request for ${gearNames} was rejected. Reason: ${rejectionReason}`
-      );
-
-      // Step 8: Create notifications for all admin users
-      const { data: adminUsers } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('role', 'Admin');
-
-      if (adminUsers && adminUsers.length > 0) {
-        // Create notification for each admin
-        for (const admin of adminUsers) {
+      if (!detailsError && requestDetails) {
+        // Create notification for the user
+        try {
           await createSystemNotification(
-            admin.id,
+            requestDetails.user_id,
             'Gear Request Rejected',
-            `Request for ${gearNames} by ${user_id} was rejected. Reason: ${rejectionReason}`
+            `Your gear request has been rejected. Reason: ${rejectionReason}`
           );
+        } catch (notificationError) {
+          console.warn('Failed to send notification:', notificationError);
+          // Don't throw as this is not critical
         }
       }
 
-      // Success toast
+      // Show success animation and toast
+      setShowAnimation({ type: 'reject', id: requestToReject });
       toast({
         title: "Request Rejected",
-        description: "The requester has been notified.",
-        variant: "default",
+        description: "The request has been rejected successfully.",
       });
 
-    } catch (error) {
-      console.error('Error rejecting request:', error);
+      // Refresh requests
+      await fetchRequests();
+
+    } catch (error: any) {
+      console.error('Error rejecting request:', {
+        error,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+
       toast({
         title: "Error",
-        description: "Failed to reject request. Please try again.",
-        variant: "destructive",
+        description: error.message || "Failed to reject the request. Please try again.",
+        variant: "destructive"
       });
     } finally {
+      setIsProcessing(false);
+      setRequestToReject(null);
       setRejectionReason('');
-      setShowAnimation({ type: 'reject', id: null });
+      setIsDetailsOpen(false);
     }
   };
 
+  // Add getStatusBadge function
   const getStatusBadge = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return <Badge variant="outline"><Clock className="mr-1 h-3 w-3" /> {status}</Badge>;
-      case 'approved':
-        return <Badge variant="default" className="bg-blue-500 hover:bg-blue-600"><CheckCircle className="mr-1 h-3 w-3" /> {status}</Badge>; // Use blue for approved/ready
-      case 'checked out':
-        return <Badge variant="secondary"><Package className="mr-1 h-3 w-3" /> {status}</Badge>;
-      case 'checked in':
-      case 'completed':
-        return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white"><CheckCircle className="mr-1 h-3 w-3" /> Completed</Badge>;
-      case 'rejected':
-        return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
-      case 'overdue':
-        return <Badge variant="destructive"><AlertCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
-      case 'cancelled':
-        return <Badge variant="outline" className="text-muted-foreground border-dashed"><RotateCcw className="mr-1 h-3 w-3" /> Cancelled</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
+    const statusColor = {
+      pending: "bg-yellow-500",
+      approved: "bg-green-500",
+      rejected: "bg-red-500",
+      "checked out": "bg-blue-500",
+      "checked in": "bg-purple-500",
+      completed: "bg-gray-500",
+      cancelled: "bg-gray-500",
+    }[status.toLowerCase()] || "bg-gray-500";
+
+    return (
+      <Badge className={cn("capitalize", statusColor)}>
+        {status}
+      </Badge>
+    );
+  };
+
+  // Move RequestDetailsDialog inside main component to access shared state
+  const RequestDetailsDialog = ({ request, open, onOpenChange }: { request: GearRequest | null, open: boolean, onOpenChange: (open: boolean) => void }) => {
+    if (!request) return null;
+
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Request Details</DialogTitle>
+            <DialogDescription>
+              Complete information about the gear request
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h4 className="font-medium mb-2">Request Information</h4>
+              <div className="space-y-2">
+                <div>
+                  <label className="text-sm text-muted-foreground">Requested By</label>
+                  <p className="font-medium">{request.userName}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Requested On</label>
+                  <p className="font-medium">{format(request.requestDate, 'PPP p')}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Duration</label>
+                  <p className="font-medium">{request.duration}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Current Status</label>
+                  <div className="mt-1">{getStatusBadge(request.status)}</div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-medium mb-2">Gear Details</h4>
+              <div className="space-y-2">
+                {request.gearNames.map((gear: string, index: number) => (
+                  <div key={index} className="p-2 rounded-md border">
+                    <p className="font-medium">{gear}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h4 className="font-medium mb-4">Request Timeline</h4>
+            <Timeline>
+              {/* Add initial request status */}
+              <TimelineItem
+                status="Requested"
+                date={request.requestDate}
+                changedBy={request.userName}
+              />
+
+              {/* Add status history items */}
+              {statusHistory.map((history: StatusHistoryItem, index: number) => (
+                <TimelineItem
+                  key={index}
+                  status={history.status}
+                  date={new Date(history.changed_at)}
+                  note={history.note}
+                  changedBy={history.profiles?.full_name}
+                />
+              ))}
+            </Timeline>
+          </div>
+
+          <DialogFooter>
+            {isNewRequest(request.status) && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    handleApprove(request.id);
+                    onOpenChange(false);
+                  }}
+                >
+                  Approve Request
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setRequestToReject(request.id);
+                    onOpenChange(false);
+                  }}
+                >
+                  Reject Request
+                </Button>
+              </div>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
   };
 
   const containerVariants = {
@@ -688,12 +897,163 @@ export default function ManageRequestsPage() {
     }
   };
 
+  // Update the table row rendering
+  const renderTableRow = (req: GearRequest) => {
+    const isNew = isNewRequest(req.status);
+    const isAttended = isAttendedRequest(req.status);
+    const priority = isNew ? getRequestPriority(req.requestDate) : null;
+
+    return (
+      <motion.tr
+        key={req.id}
+        variants={itemVariants}
+        className={cn(
+          "relative cursor-pointer transition-all",
+          isNew ? "bg-primary/5 border-l-4 border-primary" :
+            isAttended ? "bg-muted/10 hover:bg-muted/20" :
+              "hover:bg-muted/10"
+        )}
+        onClick={() => { setSelectedRequest(req); setIsDetailsOpen(true); }}
+      >
+        <TableCell className="font-medium">
+          <div className="flex items-center gap-2">
+            {isNew && (
+              <div className="flex items-center gap-2">
+                <Badge variant="default" className="bg-primary text-primary-foreground">
+                  New
+                </Badge>
+                {priority && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs",
+                      priority.level === 'high' ? "border-red-500 text-red-500" :
+                        priority.level === 'medium' ? "border-yellow-500 text-yellow-500" :
+                          "border-green-500 text-green-500"
+                    )}
+                  >
+                    {priority.label}
+                  </Badge>
+                )}
+              </div>
+            )}
+            {isAttended && (
+              <Badge variant="outline" className="bg-muted text-muted-foreground">
+                Processed
+              </Badge>
+            )}
+            <div>
+              <div>{req.userName}</div>
+              {req.userEmail && (
+                <div className="text-xs text-muted-foreground">{req.userEmail}</div>
+              )}
+            </div>
+          </div>
+        </TableCell>
+        <TableCell>
+          <div className="flex flex-wrap gap-1">
+            {req.gearNames.map((gear: string, index: number) => (
+              <Badge key={index} variant="outline" className="text-xs">
+                {gear}
+              </Badge>
+            ))}
+          </div>
+        </TableCell>
+        <TableCell>
+          <div className="flex flex-col">
+            <span>{req.requestDate instanceof Date ? format(req.requestDate, 'MMM d, yyyy') : ''}</span>
+            <span className="text-xs text-muted-foreground">
+              {req.requestDate instanceof Date ? format(req.requestDate, 'h:mm a') : ''}
+            </span>
+          </div>
+        </TableCell>
+        <TableCell>{req.duration}</TableCell>
+        <TableCell className="max-w-[200px]">
+          <div className="truncate" title={req.reason}>{req.reason}</div>
+        </TableCell>
+        <TableCell>{req.destination}</TableCell>
+        <TableCell>
+          <div className="flex items-center gap-2">
+            {getStatusBadge(req.status)}
+            {isNew && (
+              <span className="animate-pulse text-primary">•</span>
+            )}
+          </div>
+        </TableCell>
+        <TableCell className="text-right space-x-2">
+          {showAnimation.id === req.id && ActionAnimation}
+          {!showAnimation.id && isNewRequest(req.status) && (
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-green-500/10 text-green-600 hover:bg-green-500/20 hover:text-green-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleApprove(req.id);
+                }}
+              >
+                <Check className="h-4 w-4 mr-1" />
+                Approve
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-red-500/10 text-red-600 hover:bg-red-500/20 hover:text-red-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRequestToReject(req.id);
+                }}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Reject
+              </Button>
+            </div>
+          )}
+          {!showAnimation.id && isAttendedRequest(req.status) && (
+            <Badge variant="outline" className="ml-2">
+              {format(new Date(req.updatedAt || req.requestDate), 'MMM d, yyyy')}
+            </Badge>
+          )}
+        </TableCell>
+      </motion.tr>
+    );
+  };
+
+  // Add batch action handlers
+  const handleBatchApprove = async () => {
+    setIsProcessing(true);
+    try {
+      for (const requestId of selectedRequests) {
+        await handleApprove(requestId);
+      }
+      toast({
+        title: "Success",
+        description: `Approved ${selectedRequests.length} requests successfully.`,
+      });
+    } catch (error) {
+      console.error('Error in batch approve:', error);
+      toast({
+        title: "Error",
+        description: "Failed to approve some requests. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+      setSelectedRequests([]);
+    }
+  };
+
+  const handleBatchReject = () => {
+    setRequestToReject(selectedRequests[0]); // Open rejection dialog for first request
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="space-y-6"
+      className="space-y-6 p-6"
     >
       {/* Sound toggle button */}
       <div className="flex justify-end">
@@ -778,8 +1138,22 @@ export default function ManageRequestsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Request History</CardTitle>
-              <CardDescription>Review and manage all gear checkout requests.</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Request History</CardTitle>
+                  <CardDescription>Review and manage all gear checkout requests.</CardDescription>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="h-3 w-3 rounded-full bg-primary/20 border-2 border-primary"></div>
+                    <span>New Requests (Pending)</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="h-3 w-3 rounded-full bg-muted"></div>
+                    <span>Processed Requests</span>
+                  </div>
+                </div>
+              </div>
               <div className="mt-4 flex flex-col sm:flex-row gap-4">
                 <Input
                   placeholder="Filter by user name..."
@@ -801,7 +1175,7 @@ export default function ManageRequestsPage() {
                 <datalist id="gear-names">
                   {uniqueGearNames.map(name => <option key={name} value={name} />)}
                 </datalist>
-                <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+                <DatePickerWithRange dateRange={dateRange} onDateRangeChange={setDateRange} />
                 <Input
                   placeholder="Search reason/destination..."
                   value={keyword}
@@ -813,8 +1187,9 @@ export default function ManageRequestsPage() {
                     <SelectValue placeholder="Filter by Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="all">All Requests</SelectItem>
+                    <SelectItem value="pending">New (Pending)</SelectItem>
+                    <SelectItem value="processed">Processed</SelectItem>
                     <SelectItem value="Approved">Approved</SelectItem>
                     <SelectItem value="Checked Out">Checked Out</SelectItem>
                     <SelectItem value="Checked In">Checked In</SelectItem>
@@ -829,6 +1204,52 @@ export default function ManageRequestsPage() {
               </div>
             </CardHeader>
             <CardContent>
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="text-sm">
+                    <span className="font-medium">{filteredRequests.filter(r => isNewRequest(r.status)).length}</span> new requests
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    <span className="font-medium">{filteredRequests.filter(r => isAttendedRequest(r.status)).length}</span> processed
+                  </div>
+                </div>
+                {selectedRequests.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedRequests([])}
+                      className="text-muted-foreground"
+                    >
+                      Clear Selection ({selectedRequests.length})
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleBatchApprove}
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>Approve Selected</>
+                      )}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleBatchReject}
+                      disabled={isProcessing || selectedRequests.length !== 1}
+                    >
+                      Reject Selected
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               <motion.div
                 variants={containerVariants}
                 initial="hidden"
@@ -838,223 +1259,171 @@ export default function ManageRequestsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={
+                            filteredRequests.length > 0 &&
+                            selectedRequests.length === filteredRequests.filter(r => isNewRequest(r.status)).length
+                          }
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedRequests(
+                                filteredRequests
+                                  .filter(r => isNewRequest(r.status))
+                                  .map(r => r.id)
+                              );
+                            } else {
+                              setSelectedRequests([]);
+                            }
+                          }}
+                          aria-label="Select all new requests"
+                        />
+                      </TableHead>
                       <TableHead>User</TableHead>
-                      <TableHead>Gear(s)</TableHead>
-                      <TableHead>Requested On</TableHead>
-                      <TableHead>Duration</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Destination</TableHead>
+                      <TableHead>Gear</TableHead>
+                      <TableHead>Request Date</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRequests.length > 0 ? (
-                      filteredRequests.map((req) => (
-                        <tr
-                          key={req.id}
-                          className="cursor-pointer hover:bg-muted/30 transition"
-                          onClick={() => { setSelectedRequest(req); setIsDetailsOpen(true); }}
-                        >
-                          <TableCell className="font-medium">{req.userName}</TableCell>
-                          <TableCell>{req.gearNames.join(', ')}</TableCell>
-                          <TableCell>{req.requestDate && req.requestDate instanceof Date ? format(req.requestDate, 'PPp') : ''}</TableCell>
-                          <TableCell>{req.duration}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">{req.reason}</TableCell>
-                          <TableCell>{req.destination}</TableCell>
-                          <TableCell>{getStatusBadge(req.status)}</TableCell>
-                          <TableCell className="text-right space-x-1 relative">
-                            {/* --- Animation Placeholder --- */}
-                            {showAnimation.id === req.id ? ActionAnimation : null}
-                            {/* --- Action Buttons (hidden during animation) --- */}
-                            {currentUserRole === 'admin' && req.status === 'Pending' && showAnimation.id !== req.id && (
-                              <>
-                                <Button variant="ghost" size="icon" className="text-green-600 hover:text-green-700" onClick={e => { e.stopPropagation(); handleApprove(req.id); }}>
-                                  <ThumbsUp className="h-4 w-4" />
-                                  <span className="sr-only">Approve</span>
-                                </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="text-red-600 hover:text-red-700" onClick={e => e.stopPropagation()}>
-                                      <ThumbsDown className="h-4 w-4" />
-                                      <span className="sr-only">Reject</span>
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Confirm Rejection</AlertDialogTitle>
-                                      <AlertDialogDescription asChild>
-                                        <div className="text-sm text-muted-foreground">
-                                          Are you sure you want to reject request ID <span className="font-semibold">{req.id}</span>?
-                                          {/* Optional: Add input for rejection reason here */}
-                                        </div>
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={handleReject} className={buttonVariants({ variant: "destructive" })}>
-                                        Confirm Reject
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </>
-                            )}
-                          </TableCell>
-                        </tr>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={8} className="h-24 text-center">
-                          No requests found matching your filters.
+                    {filteredRequests.map((req) => (
+                      <TableRow key={req.id}>
+                        <TableCell>
+                          {isNewRequest(req.status) && (
+                            <Checkbox
+                              checked={selectedRequests.includes(req.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedRequests([...selectedRequests, req.id]);
+                                } else {
+                                  setSelectedRequests(selectedRequests.filter(id => id !== req.id));
+                                }
+                              }}
+                              aria-label={`Select request ${req.id}`}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {req.userName}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {req.gearNames.map((gear: string, index: number) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {gear}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span>{req.requestDate instanceof Date ? format(req.requestDate, 'MMM d, yyyy') : ''}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {req.requestDate instanceof Date ? format(req.requestDate, 'h:mm a') : ''}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(req.status)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right space-x-2">
+                          {showAnimation.id === req.id && ActionAnimation}
+                          {!showAnimation.id && isNewRequest(req.status) && (
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="bg-green-500/10 text-green-600 hover:bg-green-500/20 hover:text-green-700"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleApprove(req.id);
+                                }}
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                Approve
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="bg-red-500/10 text-red-600 hover:bg-red-500/20 hover:text-red-700"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRequestToReject(req.id);
+                                }}
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Reject
+                              </Button>
+                            </div>
+                          )}
+                          {!showAnimation.id && isAttendedRequest(req.status) && (
+                            <Badge variant="outline" className="ml-2">
+                              {format(new Date(req.updatedAt || req.requestDate), 'MMM d, yyyy')}
+                            </Badge>
+                          )}
                         </TableCell>
                       </TableRow>
-                    )}
+                    ))}
                   </TableBody>
                 </Table>
               </motion.div>
             </CardContent>
           </Card>
 
-          {/* Rejection Confirmation Dialog */}
+          {/* Rejection Dialog */}
           <AlertDialog open={!!requestToReject} onOpenChange={(open) => !open && setRequestToReject(null)}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Confirm Rejection</AlertDialogTitle>
-                <AlertDialogDescription asChild>
-                  <div className="text-sm text-muted-foreground">
-                    Are you sure you want to reject request ID <span className="font-semibold">{requestToReject}</span>?
-                    {/* Optional: Add input for rejection reason here */}
-                  </div>
+                <AlertDialogTitle>Reject Request</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Please provide a reason for rejecting this request.
                 </AlertDialogDescription>
               </AlertDialogHeader>
+              <div className="py-4">
+                <Input
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Enter rejection reason..."
+                  className="w-full"
+                />
+              </div>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleReject} className={buttonVariants({ variant: "destructive" })}>
-                  Confirm Reject
+                <AlertDialogAction
+                  onClick={handleReject}
+                  className={cn(
+                    buttonVariants({ variant: "destructive" }),
+                    "gap-2"
+                  )}
+                  disabled={!rejectionReason.trim() || isProcessing}
+                >
+                  {isProcessing ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <X className="h-4 w-4" />
+                      Reject Request
+                    </>
+                  )}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
 
           {/* Request Details Modal */}
-          <AlertDialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Request Details</AlertDialogTitle>
-                <AlertDialogDescription asChild>
-                  <div className="text-sm text-muted-foreground">
-                    {selectedRequest && (
-                      <div className="space-y-2 text-left">
-                        <div className="flex items-center gap-2">
-                          <b>User:</b> {selectedRequest.userName}
-                          {selectedRequest.userEmail && (
-                            <a href={`mailto:${selectedRequest.userEmail}`} title="Email user" className="ml-2 text-primary hover:underline flex items-center"><Mail className="h-4 w-4 mr-1" />Email</a>
-                          )}
-                        </div>
-                        <div><b>Gear(s):</b> {selectedRequest.gearNames.map((gear: string) => (
-                          <Popover key={gear}>
-                            <PopoverTrigger asChild>
-                              <Button variant="link" className="p-0 h-auto align-baseline text-primary underline text-sm">{gear}</Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-64">
-                              <div className="font-bold mb-1">{gearDetails[gear]?.name || gear}</div>
-                              <div className="text-xs mb-1">{gearDetails[gear]?.description}</div>
-                              <div className="text-xs text-muted-foreground">Specs: {gearDetails[gear]?.specs}</div>
-                            </PopoverContent>
-                          </Popover>
-                        ))}</div>
-                        <div><b>Requested On:</b> {selectedRequest.requestDate && selectedRequest.requestDate instanceof Date ? format(selectedRequest.requestDate, 'PPpp') : ''}</div>
-                        <div><b>Duration:</b> {selectedRequest.duration}</div>
-                        <div><b>Reason:</b> {selectedRequest.reason}</div>
-                        <div><b>Destination:</b> {selectedRequest.destination}</div>
-                        <div><b>Status:</b> {getStatusBadge(selectedRequest.status)}</div>
-                        {selectedRequest.adminNotes && <div><b>Admin Notes:</b> {selectedRequest.adminNotes}</div>}
-                        {selectedRequest.rejectionReason && <div><b>Rejection Reason:</b> {selectedRequest.rejectionReason}</div>}
-                        {selectedRequest.checkoutDate && selectedRequest.checkoutDate instanceof Date && <div><b>Checkout Date:</b> {format(selectedRequest.checkoutDate, 'PPpp')}</div>}
-                        {selectedRequest.dueDate && selectedRequest.dueDate instanceof Date && <div><b>Due Date:</b> {format(selectedRequest.dueDate, 'PPpp')}</div>}
-                        {selectedRequest.checkinDate && selectedRequest.checkinDate instanceof Date && <div><b>Check-in Date:</b> {format(selectedRequest.checkinDate, 'PPpp')}</div>}
-                        {/* Audit Trail */}
-                        <div>
-                          <b>Status History:</b>
-                          <ul className="ml-4 list-disc text-xs">
-                            {statusHistory.length === 0 && <li>No status history found.</li>}
-                            {statusHistory.map((h, i) => (
-                              <li key={i}>
-                                {h.status} by {h.profiles?.full_name || 'Unknown'} at {h.changed_at ? format(new Date(h.changed_at), 'PPpp') : ''}
-                                {h.note ? ` (${h.note})` : ''}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                {/* Approve/Reject actions with notes, print/download */}
-                {selectedRequest?.status === 'Pending' ? (
-                  <div className="flex flex-col gap-2 w-full">
-                    <div className="flex gap-2">
-                      <Button
-                        variant="default"
-                        disabled={isProcessing}
-                        onClick={() => selectedRequest && handleApproveModal(selectedRequest.id)}
-                      >
-                        <Check className="mr-1 h-4 w-4" /> Approve
-                      </Button>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="destructive"
-                            disabled={isProcessing}
-                          >
-                            <X className="mr-1 h-4 w-4" /> Reject
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-64">
-                          <div className="mb-2 font-semibold">Rejection Reason</div>
-                          <Input
-                            value={rejectionReason}
-                            onChange={e => setRejectionReason(e.target.value)}
-                            placeholder="Enter reason..."
-                            className="mb-2"
-                            disabled={isProcessing}
-                          />
-                          <Button
-                            variant="destructive"
-                            className="w-full"
-                            disabled={isProcessing || !rejectionReason.trim()}
-                            onClick={() => handleRejectModal()}
-                          >
-                            Confirm Reject
-                          </Button>
-                        </PopoverContent>
-                      </Popover>
-                      <Button
-                        variant="outline"
-                        onClick={() => window.print()}
-                      >
-                        Print/Download
-                      </Button>
-                    </div>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  </div>
-                ) : (
-                  <div className="flex gap-2 w-full">
-                    <Button
-                      variant="outline"
-                      onClick={() => window.print()}
-                    >
-                      Print/Download
-                    </Button>
-                    <AlertDialogCancel>Close</AlertDialogCancel>
-                  </div>
-                )}
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <RequestDetailsDialog
+            request={selectedRequest}
+            open={isDetailsOpen}
+            onOpenChange={setIsDetailsOpen}
+          />
         </>
       )}
     </motion.div>

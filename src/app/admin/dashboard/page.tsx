@@ -19,6 +19,8 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useRouter } from 'next/navigation';
+import { RequestStats } from '@/components/admin/RequestStats';
+import { RequestNotifications } from '@/components/admin/RequestNotifications';
 
 type Activity = {
   id: string;
@@ -183,18 +185,39 @@ type GearRecord = {
   owner_id?: string;
 };
 
+interface RequestNotification {
+  id: string;
+  type: 'new' | 'pending' | 'checkin';
+  userName: string;
+  gearNames: string[];
+  requestDate: Date;
+  dueDate?: Date;
+}
+
+interface RequestStats {
+  new: number;
+  pending: number;
+  checkin: number;
+  overdue: number;
+  available?: number;
+  total?: number;
+}
+
 export default function AdminDashboardPage() {
   const supabase = createClient();
+  const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [stats, setStats] = useState<Stat[]>([
-    { title: 'Available Gears', value: 0, icon: CheckCircle, color: 'text-green-500' },
-    { title: 'Booked Gears', value: 0, icon: List, color: 'text-blue-500' },
-    { title: 'Damaged Gears', value: 0, icon: AlertTriangle, color: 'text-orange-500' },
-    { title: 'New Gears', value: 0, icon: PackagePlus, color: 'text-purple-500' },
-  ]);
+  const [stats, setStats] = useState<RequestStats & { available?: number; total?: number }>({
+    new: 0,
+    pending: 0,
+    checkin: 0,
+    overdue: 0,
+    available: 0,
+    total: 0
+  });
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
   const [utilizationData, setUtilizationData] = useState<UtilizationData[]>([]);
   const [upcomingMaintenanceCount, setUpcomingMaintenanceCount] = useState(0);
@@ -208,6 +231,7 @@ export default function AdminDashboardPage() {
     admins: 0
   });
   const [userActivities, setUserActivities] = useState<UserActivity[]>([]);
+  const [notifications, setNotifications] = useState<RequestNotification[]>([]);
 
   // Initialize audio in useEffect
   useEffect(() => {
@@ -373,83 +397,49 @@ export default function AdminDashboardPage() {
   async function fetchStats() {
     setIsLoading(true);
     try {
-      // Get more detailed data including status and timestamps
+      // Get current gear data
       const { data: currentData, error: currentError } = await supabase
         .from('gears')
-        .select('id, status, created_at')
+        .select('id, status, created_at, category')
         .order('created_at', { ascending: false });
 
       if (currentError) throw currentError;
-
-      // Get historical data from 7 days ago for comparison
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-      const { data: historicalData, error: historicalError } = await supabase
-        .from('gears')
-        .select('id, status')
-        .lt('created_at', sevenDaysAgo.toISOString());
-
-      if (historicalError) throw historicalError;
 
       if (currentData) {
         // Current counts
         const available = currentData.filter((g: GearData) => String(g.status || '').toLowerCase().trim() === 'available').length;
         const booked = currentData.filter((g: GearData) => ['booked', 'checked out', 'checked_out'].includes(String(g.status || '').toLowerCase().trim())).length;
         const damaged = currentData.filter((g: GearData) => ['damaged', 'maintenance', 'repair'].includes(String(g.status || '').toLowerCase().trim())).length;
-        const newGears = currentData.filter((g: GearData) => {
-          if (!g.created_at) return false;
-          const createdDate = new Date(g.created_at);
-          return (new Date().getTime() - createdDate.getTime()) < 7 * 24 * 60 * 60 * 1000;
-        }).length;
+        const total = currentData.length;
 
-        // Historical counts for calculating changes
-        const historicalAvailable = historicalData?.filter((g: GearData) => String(g.status || '').toLowerCase().trim() === 'available').length || 0;
-        const historicalBooked = historicalData?.filter((g: GearData) => ['booked', 'checked out', 'checked_out'].includes(String(g.status || '').toLowerCase().trim())).length || 0;
-        const historicalDamaged = historicalData?.filter((g: GearData) => ['damaged', 'maintenance', 'repair'].includes(String(g.status || '').toLowerCase().trim())).length || 0;
-
-        // Calculate percentage changes
-        const calculateChange = (current: number, historical: number) => {
-          if (historical === 0) return current > 0 ? 100 : 0;
-          return Math.round(((current - historical) / historical) * 100);
-        };
-
-        const availableChange = calculateChange(available, historicalAvailable);
-        const bookedChange = calculateChange(booked, historicalBooked);
-        const damagedChange = calculateChange(damaged, historicalDamaged);
-
-        setStats([
-          {
-            title: 'Available Gears',
-            value: available,
-            icon: CheckCircle,
-            color: 'text-green-500',
-            change: Math.abs(availableChange),
-            changeType: availableChange >= 0 ? 'increase' : 'decrease'
-          },
-          {
-            title: 'Booked Gears',
-            value: booked,
-            icon: List,
-            color: 'text-blue-500',
-            change: Math.abs(bookedChange),
-            changeType: bookedChange >= 0 ? 'increase' : 'decrease'
-          },
-          {
-            title: 'Damaged Gears',
-            value: damaged,
-            icon: AlertTriangle,
-            color: 'text-orange-500',
-            change: Math.abs(damagedChange),
-            changeType: damagedChange >= 0 ? 'increase' : 'decrease'
-          },
-          {
-            title: 'New Gears',
-            value: newGears,
-            icon: PackagePlus,
-            color: 'text-purple-500'
+        // Group by category for utilization data
+        const categories: Record<string, { total: number, used: number }> = {};
+        currentData.forEach((gear: any) => {
+          const category = gear.category || 'Uncategorized';
+          if (!categories[category]) {
+            categories[category] = { total: 0, used: 0 };
           }
-        ]);
+          categories[category].total++;
+          if (['booked', 'checked out', 'checked_out'].includes(String(gear.status || '').toLowerCase().trim())) {
+            categories[category].used++;
+          }
+        });
+
+        // Convert to array and calculate utilization percentage
+        const utilizationResult = Object.entries(categories).map(([category, { total, used }]) => ({
+          category,
+          count: total,
+          utilization: total > 0 ? Math.round((used / total) * 100) : 0
+        }));
+
+        setUtilizationData(utilizationResult);
+
+        // Update stats with total available gear
+        setStats(prevStats => ({
+          ...prevStats,
+          available: available,
+          total: total
+        }));
       }
     } catch (error: any) {
       console.error("Error fetching stats:", error.message);
@@ -888,6 +878,259 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Fetch request statistics
+  const fetchRequestStats = async () => {
+    try {
+      const now = new Date();
+
+      // First check if the gear_requests table exists
+      const { count, error: tableCheckError } = await supabase
+        .from('gear_requests')
+        .select('*', { count: 'exact', head: true });
+
+      if (tableCheckError) {
+        console.error('Error checking gear_requests table:', tableCheckError);
+        // Initialize with empty stats if table doesn't exist
+        setStats({
+          new: 0,
+          pending: 0,
+          checkin: 0,
+          overdue: 0,
+          available: 0,
+          total: 0
+        });
+        setNotifications([]);
+        return;
+      }
+
+      // Fetch all requests with proper type checking
+      const { data: requests, error: requestError } = await supabase
+        .from('gear_requests')
+        .select(`
+          id,
+          status,
+          created_at,
+          updated_at,
+          due_date,
+          user_id,
+          gear_ids,
+          profiles:user_id (
+            full_name
+          )
+        `);
+
+      if (requestError) {
+        console.error('Supabase query error:', requestError);
+        throw new Error(requestError.message);
+      }
+
+      // Fetch gear names separately if needed
+      const gearNames = new Map<string, string>();
+      if (requests && requests.length > 0) {
+        const allGearIds = requests.reduce((acc: string[], request: any) => {
+          return acc.concat(request.gear_ids || []);
+        }, []);
+
+        if (allGearIds.length > 0) {
+          const { data: gears, error: gearError } = await supabase
+            .from('gears')
+            .select('id, name')
+            .in('id', allGearIds);
+
+          if (!gearError && gears) {
+            gears.forEach((gear: any) => {
+              gearNames.set(gear.id, gear.name);
+            });
+          }
+        }
+      }
+
+      if (!requests) {
+        console.warn('No requests data returned from query');
+        setStats({
+          new: 0,
+          pending: 0,
+          checkin: 0,
+          overdue: 0,
+          available: 0,
+          total: 0
+        });
+        setNotifications([]);
+        return;
+      }
+
+      // Calculate stats with type safety
+      const newStats = {
+        new: 0,
+        pending: 0,
+        checkin: 0,
+        overdue: 0
+      };
+
+      requests.forEach((request: any) => {
+        try {
+          if (!request.status) {
+            console.warn('Request missing status:', request.id);
+            return;
+          }
+
+          const status = request.status.toLowerCase();
+          if (status === 'pending') {
+            // Consider a request "new" if it was created less than 24 hours ago
+            const createdAt = new Date(request.created_at);
+            const isNew = (Date.now() - createdAt.getTime()) < 24 * 60 * 60 * 1000;
+            if (isNew) {
+              newStats.new++;
+            } else {
+              newStats.pending++;
+            }
+          } else if (status === 'checked out' && request.due_date) {
+            const dueDate = new Date(request.due_date);
+            if (dueDate < now) {
+              newStats.overdue++;
+            } else if (dueDate.getTime() - now.getTime() < 24 * 60 * 60 * 1000) {
+              newStats.checkin++;
+            }
+          }
+        } catch (err) {
+          console.warn('Error processing request:', request.id, err);
+        }
+      });
+
+      setStats(prevStats => ({
+        ...prevStats,
+        new: newStats.new,
+        pending: newStats.pending,
+        checkin: newStats.checkin,
+        overdue: newStats.overdue
+      }));
+
+      // Update notifications with better error handling
+      const newNotifications: RequestNotification[] = requests
+        .filter((request: any) => {
+          try {
+            if (!request.created_at) return false;
+
+            const requestDate = new Date(request.created_at);
+            const isRecent = now.getTime() - requestDate.getTime() < 24 * 60 * 60 * 1000;
+            const status = request.status?.toLowerCase() || '';
+            const needsAttention = status === 'pending' ||
+              (status === 'checked out' && request.due_date && new Date(request.due_date) < now);
+
+            return isRecent && needsAttention;
+          } catch (err) {
+            console.warn('Error filtering notification:', request.id, err);
+            return false;
+          }
+        })
+        .map((request: any) => {
+          try {
+            const gearNamesArray = (request.gear_ids || [])
+              .map((id: string) => gearNames.get(id) || 'Unnamed Gear')
+              .filter(Boolean);
+
+            const createdAt = new Date(request.created_at);
+            const isNew = (Date.now() - createdAt.getTime()) < 24 * 60 * 60 * 1000;
+
+            return {
+              id: request.id,
+              type: request.status?.toLowerCase() === 'pending' && isNew ? 'new' :
+                request.status?.toLowerCase() === 'pending' ? 'pending' : 'checkin',
+              userName: request.profiles?.full_name || 'Unknown User',
+              gearNames: gearNamesArray,
+              requestDate: new Date(request.created_at),
+              dueDate: request.due_date ? new Date(request.due_date) : undefined
+            };
+          } catch (err) {
+            console.warn('Error mapping notification:', request.id, err);
+            return null;
+          }
+        })
+        .filter(Boolean)
+        .slice(0, 5);
+
+      setNotifications(newNotifications);
+    } catch (error) {
+      console.error('Error fetching request stats:', error);
+      // Set default values on error
+      setStats({
+        new: 0,
+        pending: 0,
+        checkin: 0,
+        overdue: 0,
+        available: 0,
+        total: 0
+      });
+      setNotifications([]);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to fetch request statistics",
+        variant: "destructive"
+      });
+    }
+  };
+
+  useEffect(() => {
+    fetchRequestStats();
+
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('admin-dashboard')
+      .on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'gear_requests'
+        },
+        () => {
+          fetchRequestStats();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleViewCategory = (category: string) => {
+    router.push('/admin/manage-requests?filter=' + category);
+  };
+
+  const handleViewNotification = (id: string) => {
+    router.push('/admin/manage-requests?request=' + id);
+  };
+
+  const handleDismissNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const getStatIcon = (statName: keyof RequestStats) => {
+    switch (statName) {
+      case 'new':
+        return <PackagePlus className="h-5 w-5 text-green-500" />;
+      case 'pending':
+        return <List className="h-5 w-5 text-blue-500" />;
+      case 'overdue':
+        return <AlertTriangle className="h-5 w-5 text-red-500" />;
+      case 'checkin':
+        return <ShieldCheck className="h-5 w-5 text-purple-500" />;
+    }
+  };
+
+  const getStatColor = (statName: keyof RequestStats) => {
+    switch (statName) {
+      case 'new':
+        return 'bg-green-500/10 text-green-500';
+      case 'pending':
+        return 'bg-blue-500/10 text-blue-500';
+      case 'overdue':
+        return 'bg-red-500/10 text-red-500';
+      case 'checkin':
+        return 'bg-purple-500/10 text-purple-500';
+    }
+  };
+
   return (
     <div className="container mx-auto py-6 space-y-8">
       {/* Header with real-time indicator */}
@@ -951,40 +1194,37 @@ export default function AdminDashboardPage() {
         <TabsContent value="overview" className="space-y-6">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {stats.map((stat, index) => (
+            {[
+              { key: 'new', label: 'New Requests', icon: PackagePlus, color: 'green' },
+              { key: 'pending', label: 'Pending Requests', icon: List, color: 'blue' },
+              { key: 'available', label: 'Available Gear', icon: CheckCircle, color: 'emerald' },
+              { key: 'total', label: 'Total Gear', icon: BarChart3, color: 'purple' }
+            ].map((stat) => (
               <motion.div
-                key={stat.title}
-                custom={index}
-                initial="hidden"
-                animate="visible"
-                variants={cardVariants}
+                key={stat.key}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                onClick={() => handleViewCategory(stat.key)}
+                className="cursor-pointer"
               >
-                <Card className="shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
-                  <div className={`h-1 ${stat.title === 'Available Gears' ? 'bg-green-500' :
-                    stat.title === 'Booked Gears' ? 'bg-blue-500' :
-                      stat.title === 'Damaged Gears' ? 'bg-orange-500' :
-                        'bg-purple-500'
-                    }`}></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                      {stat.title}
+                <Card className={`border-l-4 border-${stat.color}-500`}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      {stat.label}
                     </CardTitle>
-                    <div className={`p-1.5 rounded-full ${stat.title === 'Available Gears' ? 'bg-green-100 dark:bg-green-900/20' :
-                      stat.title === 'Booked Gears' ? 'bg-blue-100 dark:bg-blue-900/20' :
-                        stat.title === 'Damaged Gears' ? 'bg-orange-100 dark:bg-orange-900/20' :
-                          'bg-purple-100 dark:bg-purple-900/20'
-                      }`}>
-                      <stat.icon className={`h-4 w-4 ${stat.color}`} />
-                    </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{stat.value}</div>
-                    {stat.change !== undefined && (
-                      <p className={`text-xs flex items-center mt-1 ${stat.changeType === 'increase' ? 'text-green-500' : 'text-red-500'
-                        }`}>
-                        {stat.changeType === 'increase' ? '↑' : '↓'} {stat.change}% from last week
-                      </p>
-                    )}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className={`p-2 rounded-full bg-${stat.color}-500/10 text-${stat.color}-500`}>
+                          <stat.icon className="h-5 w-5" />
+                        </div>
+                        <div className="text-2xl font-bold">
+                          {stats[stat.key] || 0}
+                        </div>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -1104,25 +1344,30 @@ export default function AdminDashboardPage() {
               ) : utilizationData.length > 0 ? (
                 <div className="space-y-8">
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {stats.map((stat, i) => (
+                    {Object.entries(stats).map(([statName, value], i) => (
                       <Card key={i}>
                         <CardContent className="p-6">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                              <h3 className="text-2xl font-bold mt-1">{stat.value}</h3>
+                              <p className="text-sm font-medium text-muted-foreground">{statName.charAt(0).toUpperCase() + statName.slice(1)}</p>
+                              <h3 className="text-2xl font-bold mt-1">{value}</h3>
                             </div>
-                            <div className={`p-2 rounded-full bg-primary/10 ${stat.color}`}>
-                              <stat.icon className="h-5 w-5" />
+                            <div className={`p-2 rounded-full bg-primary/10 ${statName === 'new' ? 'bg-green-500' :
+                              statName === 'pending' ? 'bg-blue-500' :
+                                statName === 'overdue' ? 'bg-orange-500' :
+                                  'bg-purple-500'
+                              }`}>
+                              {statName === 'new' ? (
+                                <PackagePlus className="h-5 w-5" />
+                              ) : statName === 'pending' ? (
+                                <List className="h-5 w-5" />
+                              ) : statName === 'overdue' ? (
+                                <AlertTriangle className="h-5 w-5" />
+                              ) : (
+                                <ShieldCheck className="h-5 w-5" />
+                              )}
                             </div>
                           </div>
-                          {stat.change !== undefined && (
-                            <div className="mt-4">
-                              <p className={`text-xs flex items-center ${stat.changeType === 'increase' ? 'text-green-500' : 'text-red-500'}`}>
-                                {stat.changeType === 'increase' ? '↑' : '↓'} {stat.change}% from last month
-                              </p>
-                            </div>
-                          )}
                         </CardContent>
                       </Card>
                     ))}
@@ -1372,6 +1617,27 @@ export default function AdminDashboardPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Request Statistics */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">Request Overview</h2>
+        <RequestStats
+          stats={stats}
+          onViewCategory={handleViewCategory}
+        />
+      </div>
+
+      {/* Notifications */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">Recent Notifications</h2>
+        <div className="max-w-2xl">
+          <RequestNotifications
+            notifications={notifications}
+            onView={handleViewNotification}
+            onDismiss={handleDismissNotification}
+          />
+        </div>
+      </div>
     </div>
   );
 }

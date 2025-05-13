@@ -2,9 +2,9 @@
 
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart as BarChartIcon, LineChartIcon, Package, AlertTriangle, Calendar, SheetIcon, Download, CheckCircle, RefreshCw, Filter } from 'lucide-react';
+import { BarChart as BarChartIcon, LineChartIcon, Package, AlertTriangle, Calendar, SheetIcon, Download, CheckCircle, RefreshCw, Filter, Users, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart, Line } from 'recharts';
 import { useState, useEffect, useRef } from 'react';
 import type { DateRange } from 'react-day-picker';
@@ -15,16 +15,39 @@ import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
 import { Skeleton } from "@/components/ui/skeleton";
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { Input } from "@/components/ui/input";
+import { PostgrestError } from '@supabase/supabase-js';
+
+interface GearCheckout {
+  id: string;
+  gear_id: string;
+  checkout_date: string;
+  checkin_date: string | null;
+  gears?: {
+    name: string;
+  };
+}
 
 interface GearRequest {
-  id: string;
+  id: number;
   created_at: string;
   status: string;
-  gear_ids: string[];
-  gears?: Array<{
-    id: string;
-    name: string;
-  }>;
+}
+
+interface GearMaintenance {
+  id: number;
+  gear_id: string;
+  status: string;
+  description: string;
+  performed_at: string;
+  performed_by: string;
+  created_at: string;
+  maintenance_type: string;
+}
+
+interface Profile {
+  id: string;
+  status: string;
 }
 
 interface GearData {
@@ -45,15 +68,44 @@ type PopularGear = {
   requests: number;
 };
 
-type CheckoutLog = {
+interface RawCheckoutLog {
+  id: string;
+  checkout_date: string;
+  status: string;
+  profiles?: {
+    full_name: string;
+    email: string;
+  };
+  gears?: {
+    name: string;
+  };
+}
+
+interface CheckoutLog {
   id: string;
   userName: string;
   gearName: string;
-  reason: string;
   checkoutDate: Date;
-  dueDate: Date;
   status: string;
-  checkinDate: Date | null;
+  user?: {
+    full_name: string;
+    email: string;
+  };
+  gears?: Array<{
+    name: string;
+  }>;
+}
+
+// Update the type definitions at the top of the file
+type RealtimePayload = {
+  [key: string]: any;
+  type: string;
+  table: string;
+  schema: string;
+  commit_timestamp: string;
+  eventType: string;
+  new: { [key: string]: any };
+  old: { [key: string]: any };
 };
 
 // Add these type definitions
@@ -67,11 +119,48 @@ type GearPayload = RealtimePostgresChangesPayload<{
   new: GearData;
 }>;
 
+// Add new interface for activity log
+interface GearActivityLog {
+  id: number;
+  gear_id: string;
+  user_id: string;
+  created_at: string;
+  gears?: {
+    name: string;
+  };
+}
+
+// Update AnalyticsData interface
+interface AnalyticsData {
+  totalRequests: number;
+  totalCheckouts: number;
+  totalCheckins: number;
+  totalDamageReports: number;
+  totalRepairs: number;
+  activeUsers: number;
+  popularGears: Array<{ name: string; count: number }>;
+  weeklyTrends: Array<{
+    week: string;
+    requests: number;
+    checkouts: number;
+    damages: number;
+    activities: number;
+  }>;
+  recentActivities: Array<{
+    id: number;
+    gearName: string;
+    userName: string;
+    actionType: string;
+    description: string;
+    timestamp: string;
+  }>;
+}
+
 export default function ReportsPage() {
   const supabase = createClient();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 30), // Default to last 30 days
-    to: new Date()
+    from: subDays(new Date(), 30), // Last 30 days
+    to: new Date() // Current date
   });
   const [weeklyUsage, setWeeklyUsage] = useState<WeeklyUsage[]>([]);
   const [popularGears, setPopularGears] = useState<PopularGear[]>([]);
@@ -84,320 +173,277 @@ export default function ReportsPage() {
   const [mostPopularGear, setMostPopularGear] = useState<string>('None');
   const channelRef = useRef<RealtimeChannel | null>(null);
   const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [analytics, setAnalytics] = useState<AnalyticsData>({
+    totalRequests: 0,
+    totalCheckouts: 0,
+    totalCheckins: 0,
+    totalDamageReports: 0,
+    totalRepairs: 0,
+    activeUsers: 0,
+    popularGears: [],
+    weeklyTrends: [],
+    recentActivities: []
+  });
 
-  useEffect(() => {
-    const initializeData = async () => {
-      setIsLoading(true);
-      await fetchReportData();
-      setIsLoading(false);
-    };
-
-    initializeData();
-    setupRealtimeSubscription();
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
-    };
-  }, [dateRange]);
-
-  async function fetchReportData() {
-    setIsRefreshing(true);
-    setError(null);
-
+  // Define initializeData at the component level so it's accessible to all effects and handlers
+  const initializeData = async () => {
+    setIsLoading(true);
+    console.log('Initializing data fetch with date range:', dateRange);
     try {
-      // Check which tables exist and provide fallback data when needed
-      let requestsAvailable = false;
-      let gearsAvailable = false;
-
-      // Check if the gear_requests table exists
-      console.log('Checking if tables exist...');
-      const { error: requestsExistError } = await supabase
+      // First check if tables exist
+      const { data: tablesExist, error: checkError } = await supabase
         .from('gear_requests')
         .select('count', { count: 'exact', head: true })
         .limit(1);
 
-      requestsAvailable = !requestsExistError;
-      console.log('Requests table available:', requestsAvailable);
-
-      // Check if the gears table exists
-      const { error: gearsExistError } = await supabase
-        .from('gears')
-        .select('count', { count: 'exact', head: true })
-        .limit(1);
-
-      gearsAvailable = !gearsExistError;
-      console.log('Gears table available:', gearsAvailable);
-
-      // If tables don't exist, use simulated data
-      if (!requestsAvailable || !gearsAvailable) {
-        console.log('Using simulated data...');
-        const simulatedWeeklyData = getSimulatedWeeklyData();
-        setWeeklyUsage(simulatedWeeklyData);
-        setTotalRequests(55);
-        setTotalDamages(6);
-        const simulatedPopularGears = getSimulatedPopularGears();
-        setPopularGears(simulatedPopularGears);
-        setMostPopularGear(simulatedPopularGears[0]?.name || 'None');
-        setCheckoutLog(getSimulatedCheckoutLog());
-        return;
+      if (checkError) {
+        console.error('Error checking tables:', checkError);
+        throw new Error('Failed to check database tables');
       }
 
-      // Fetch real data if tables exist
-      if (requestsAvailable) {
-        // First fetch gear requests
-        console.log('Fetching gear requests...');
-        const { data: requestsData, error: requestsError } = await supabase
+      // Fetch all data first, then process errors
+      console.log('Fetching data from all tables...');
+
+      const [
+        requestsResult,
+        damageResult,
+        usersResult,
+        checkoutsResult,
+        activityLogResult
+      ] = await Promise.all([
+        supabase
           .from('gear_requests')
-          .select('id, created_at, status, gear_ids')
-          .order('created_at', { ascending: true });
+          .select('id, created_at, status')
+          .gte('created_at', dateRange?.from?.toISOString() || '')
+          .lte('created_at', dateRange?.to?.toISOString() || ''),
 
-        console.log('Gear requests data:', requestsData);
-        console.log('Gear requests error:', requestsError);
+        supabase
+          .from('gear_maintenance')
+          .select(`
+            id,
+            gear_id,
+            status,
+            description,
+            performed_at,
+            performed_by,
+            created_at,
+            maintenance_type,
+            gears!gear_maintenance_gear_id_fkey (
+              name
+            )
+          `)
+          .gte('created_at', dateRange?.from?.toISOString() || '')
+          .lte('created_at', dateRange?.to?.toISOString() || ''),
 
-        if (requestsError) {
-          throw new Error(`Failed to fetch request data: ${requestsError.message}`);
-        }
+        supabase
+          .from('profiles')
+          .select('id, status')
+          .eq('status', 'active'),
 
-        // Then fetch gear details for all gear_ids
-        if (requestsData) {
-          // Collect all unique gear IDs
-          const allGearIds = [...new Set((requestsData as GearRequest[]).flatMap(request => request.gear_ids || []))];
-          console.log('All gear IDs:', allGearIds);
+        supabase
+          .from('gear_checkouts')
+          .select(`
+            id,
+            checkout_date,
+            status,
+            profiles!gear_checkouts_user_id_fkey (
+              full_name,
+              email
+            ),
+            gears!gear_checkouts_gear_id_fkey (
+              name
+            )
+          `)
+          .gte('checkout_date', dateRange?.from?.toISOString() || '')
+          .lte('checkout_date', dateRange?.to?.toISOString() || '')
+          .order('checkout_date', { ascending: false }),
 
-          if (allGearIds.length > 0) {
-            console.log('Fetching gear details...');
-            const { data: gearsData, error: gearsError } = await supabase
-              .from('gears')
-              .select('id, name')
-              .in('id', allGearIds);
+        supabase
+          .from('gear_activity_log')
+          .select(`
+            id,
+            gear_id,
+            user_id,
+            created_at,
+            gears!gear_activity_log_gear_id_fkey (
+              name
+            )
+          `)
+          .gte('created_at', dateRange?.from?.toISOString() || '')
+          .lte('created_at', dateRange?.to?.toISOString() || '')
+          .order('created_at', { ascending: false })
+      ]);
 
-            console.log('Gears data:', gearsData);
-            console.log('Gears error:', gearsError);
-
-            if (gearsError) {
-              throw new Error(`Failed to fetch gear data: ${gearsError.message}`);
-            }
-
-            // Add gear details to requests
-            const enrichedRequestsData = requestsData.map((request: GearRequest) => ({
-              ...request,
-              gears: (request.gear_ids || [])
-                .map(gearId => gearsData?.find((gear: GearData) => gear.id === gearId))
-                .filter(Boolean)
-            }));
-
-            console.log('Enriched requests data:', enrichedRequestsData);
-
-            // Process the enriched data
-            const weeklyData = (dateRange && dateRange.from && dateRange.to)
-              ? processWeeklyData(enrichedRequestsData, dateRange)
-              : processWeeklyData(enrichedRequestsData);
-            setWeeklyUsage(weeklyData);
-
-            // Calculate totals for summary cards
-            const filteredData = enrichedRequestsData.filter((item: GearRequest) => {
-              if (!dateRange || !dateRange.from || !dateRange.to) return true;
-              const date = new Date(item.created_at);
-              return date >= dateRange.from && date <= dateRange.to;
-            });
-
-            setTotalRequests(filteredData.length);
-            setTotalDamages(filteredData.filter((item: GearRequest) =>
-              item.status && item.status.toLowerCase().includes('damage')
-            ).length);
-
-            // Process popular gears
-            const gearCounts: { [key: string]: number } = {};
-            filteredData.forEach((request: GearRequest) => {
-              if (request.gear_ids && Array.isArray(request.gear_ids)) {
-                request.gear_ids.forEach((gearId: string) => {
-                  const gear = request.gears?.find(g => g.id === gearId);
-                  if (gear) {
-                    const name = gear.name || 'Unknown Gear';
-                    gearCounts[name] = (gearCounts[name] || 0) + 1;
-                  }
-                });
-              }
-            });
-
-            const popularGearsData = Object.entries(gearCounts)
-              .map(([name, requests]) => ({ name, requests }))
-              .sort((a, b) => b.requests - a.requests)
-              .slice(0, 5);
-
-            setPopularGears(popularGearsData);
-            setMostPopularGear(popularGearsData[0]?.name || 'None');
-          }
-        }
-      }
-    } catch (error: any) {
-      console.error('Error fetching report data:', error);
-      setError(error.message);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }
-
-  function processWeeklyData(data: any[], dateRange?: DateRange): WeeklyUsage[] {
-    // Group requests by week, count requests and damages
-    const weeks: { [key: string]: { requests: number; damage: number } } = {};
-    data.forEach((item) => {
-      const date = new Date(item.created_at);
-      if (dateRange && dateRange.from && dateRange.to) {
-        if (date < dateRange.from || date > dateRange.to) return;
-      }
-      // Get week string (e.g., '2024-W23')
-      const week = `${date.getFullYear()}-W${Math.ceil(
-        (date.getTime() - new Date(date.getFullYear(), 0, 1).getTime()) / 604800000
-      )}`;
-      if (!weeks[week]) weeks[week] = { requests: 0, damage: 0 };
-      weeks[week].requests++;
-      if (item.status && item.status.toLowerCase().includes('damage')) {
-        weeks[week].damage++;
-      }
-    });
-    // Convert to array and sort by week
-    return Object.entries(weeks)
-      .map(([week, v]) => ({ week, ...v }))
-      .sort((a, b) => a.week.localeCompare(b.week));
-  }
-
-  function processPopularGears(data: any[], dateRange?: DateRange): PopularGear[] {
-    // Count requests per gear
-    const gearCounts: { [key: string]: number } = {};
-    data.forEach((item) => {
-      const date = new Date(item.created_at);
-      if (dateRange && dateRange.from && dateRange.to) {
-        if (date < dateRange.from || date > dateRange.to) return;
-      }
-      const name = item.gears?.name || 'Unknown';
-      if (!gearCounts[name]) gearCounts[name] = 0;
-      gearCounts[name]++;
-    });
-    return Object.entries(gearCounts)
-      .map(([name, requests]) => ({ name, requests }))
-      .sort((a, b) => b.requests - a.requests)
-      .slice(0, 5);
-  }
-
-  // Helper functions for simulated data
-  function getSimulatedWeeklyData(): WeeklyUsage[] {
-    const today = new Date();
-    const weeklyData = [];
-
-    // Generate 4 weeks of data starting from current week
-    for (let i = 0; i < 4; i++) {
-      const weekDate = new Date(today);
-      weekDate.setDate(today.getDate() - (i * 7));
-      const weekNum = Math.ceil(
-        (weekDate.getTime() - new Date(weekDate.getFullYear(), 0, 1).getTime()) / 604800000
-      );
-      const week = `${weekDate.getFullYear()}-W${weekNum}`;
-
-      weeklyData.push({
-        week,
-        requests: Math.floor(Math.random() * 15) + 5, // Random between 5-20
-        damage: Math.floor(Math.random() * 3) // Random between 0-2
+      // Log all responses for debugging
+      console.log('API Responses:', {
+        requests: requestsResult,
+        damage: damageResult,
+        users: usersResult,
+        checkouts: checkoutsResult,
+        activityLog: activityLogResult
       });
+
+      // Check for errors in any response
+      const errors = [];
+      if (requestsResult.error) errors.push(`Requests: ${requestsResult.error.message}`);
+      if (damageResult.error) errors.push(`Maintenance: ${damageResult.error.message}`);
+      if (usersResult.error) errors.push(`Users: ${usersResult.error.message}`);
+      if (checkoutsResult.error) errors.push(`Checkouts: ${checkoutsResult.error.message}`);
+      if (activityLogResult.error) errors.push(`Activity Log: ${activityLogResult.error.message}`);
+
+      if (errors.length > 0) {
+        throw new Error(`Data fetch errors:\n${errors.join('\n')}`);
+      }
+
+      // Process analytics data
+      const gearCounts = new Map<string, number>();
+      (checkoutsResult.data || []).forEach((checkout: any) => {
+        const gearName = checkout.gears?.name || 'Unknown Gear';
+        gearCounts.set(gearName, (gearCounts.get(gearName) || 0) + 1);
+      });
+
+      const popularGears = Array.from(gearCounts.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      // Process activity log data
+      const recentActivities = (activityLogResult.data || []).map((log: GearActivityLog) => ({
+        id: log.id,
+        gearName: log.gears?.name || 'Unknown Gear',
+        userName: 'Unknown User',
+        actionType: 'Activity',
+        description: 'N/A',
+        timestamp: log.created_at
+      }));
+
+      // Process weekly trends
+      const weeklyData = new Map<string, { requests: number; checkouts: number; damages: number; activities: number }>();
+
+      (requestsResult.data || []).forEach((request: GearRequest) => {
+        const week = format(new Date(request.created_at), 'yyyy-ww');
+        const current = weeklyData.get(week) || { requests: 0, checkouts: 0, damages: 0, activities: 0 };
+        weeklyData.set(week, { ...current, requests: current.requests + 1 });
+      });
+
+      (checkoutsResult.data || []).forEach((checkout: any) => {
+        const week = format(new Date(checkout.checkout_date), 'yyyy-ww');
+        const current = weeklyData.get(week) || { requests: 0, checkouts: 0, damages: 0, activities: 0 };
+        weeklyData.set(week, { ...current, checkouts: current.checkouts + 1 });
+      });
+
+      (damageResult.data || []).forEach((damage: GearMaintenance) => {
+        const week = format(new Date(damage.created_at), 'yyyy-ww');
+        const current = weeklyData.get(week) || { requests: 0, checkouts: 0, damages: 0, activities: 0 };
+        weeklyData.set(week, { ...current, damages: current.damages + 1 });
+      });
+
+      // Add activity log to weekly trends
+      (activityLogResult.data || []).forEach((activity: GearActivityLog) => {
+        const week = format(new Date(activity.created_at), 'yyyy-ww');
+        const current = weeklyData.get(week) || { requests: 0, checkouts: 0, damages: 0, activities: 0 };
+        weeklyData.set(week, { ...current, activities: current.activities + 1 });
+      });
+
+      const weeklyTrends = Array.from(weeklyData.entries())
+        .map(([week, data]) => ({ week, ...data }))
+        .sort((a, b) => a.week.localeCompare(b.week));
+
+      // Update state
+      setAnalytics({
+        totalRequests: requestsResult.data?.length || 0,
+        totalCheckouts: checkoutsResult.data?.length || 0,
+        totalCheckins: 0,
+        totalDamageReports: (damageResult.data || []).filter((d: GearMaintenance) => d.maintenance_type === 'Damage Report')?.length || 0,
+        totalRepairs: (damageResult.data || []).filter((d: GearMaintenance) => d.status === 'Under Repair')?.length || 0,
+        activeUsers: usersResult.data?.length || 0,
+        popularGears,
+        weeklyTrends,
+        recentActivities: recentActivities.slice(0, 10) // Show only the 10 most recent activities
+      });
+
+      // Process checkout logs
+      const processedLogs: CheckoutLog[] = (checkoutsResult.data || []).map((log: any) => ({
+        id: log.id,
+        userName: log.profiles?.full_name || 'Unknown User',
+        gearName: log.gears?.name || 'Unknown Gear',
+        checkoutDate: new Date(log.checkout_date),
+        status: log.status || 'Unknown',
+        user: log.profiles,
+        gears: log.gears ? [log.gears] : []
+      }));
+
+      setCheckoutLog(processedLogs);
+      console.log('Data processing completed successfully');
+
+    } catch (error) {
+      console.error('Error during data initialization:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data';
+      console.error('Detailed error:', errorMessage);
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
-
-    return weeklyData.sort((a, b) => a.week.localeCompare(b.week));
-  }
-
-  function getSimulatedPopularGears(): PopularGear[] {
-    return [
-      { name: "Canon R5", requests: 14 },
-      { name: "Sony A7S III", requests: 12 },
-      { name: "DJI Ronin-S", requests: 10 },
-      { name: "Zoom H6 Recorder", requests: 8 },
-      { name: "Godox SL60W", requests: 6 }
-    ];
-  }
-
-  function getSimulatedCheckoutLog(): CheckoutLog[] {
-    const today = new Date();
-    const checkout1 = new Date(today);
-    checkout1.setDate(today.getDate() - 2);
-
-    const checkout2 = new Date(today);
-    checkout2.setDate(today.getDate() - 5);
-
-    const checkout3 = new Date(today);
-    checkout3.setDate(today.getDate() - 8);
-
-    return [
-      {
-        id: "sim1",
-        userName: "Jane Smith",
-        gearName: "Canon R5",
-        reason: "Photo shoot for marketing material",
-        checkoutDate: checkout1,
-        dueDate: new Date(checkout1.getTime() + 7 * 24 * 60 * 60 * 1000),
-        status: "Checked Out",
-        checkinDate: null
-      },
-      {
-        id: "sim2",
-        userName: "John Davis",
-        gearName: "Zoom H6 Recorder",
-        reason: "Recording podcast interview",
-        checkoutDate: checkout2,
-        dueDate: new Date(checkout2.getTime() + 3 * 24 * 60 * 60 * 1000),
-        status: "Checked In",
-        checkinDate: new Date(checkout2.getTime() + 2 * 24 * 60 * 60 * 1000)
-      },
-      {
-        id: "sim3",
-        userName: "Alex Johnson",
-        gearName: "DJI Ronin-S",
-        reason: "Video shoot for client project",
-        checkoutDate: checkout3,
-        dueDate: new Date(checkout3.getTime() + 5 * 24 * 60 * 60 * 1000),
-        status: "Overdue",
-        checkinDate: null
-      }
-    ];
-  }
-
-  // Set up real-time subscriptions only for tables that exist
-  const setupRealtimeSubscription = async () => {
-    // Remove existing channel if it exists
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-    }
-
-    // Create a new subscription channel
-    const channel = supabase.channel('reports-analytics-changes');
-
-    // Subscribe to gear_requests table
-    channel.on('postgres_changes',
-      { event: '*', schema: 'public', table: 'gear_requests' },
-      (payload: GearRequestPayload) => {
-        console.log('Real-time update from gear_requests table:', payload);
-        toast({
-          title: "Data Updated",
-          description: "New request data is available. Refreshing reports...",
-          variant: "default",
-        });
-        fetchReportData();
-      }
-    );
-
-    // Subscribe to gears table
-    channel.on('postgres_changes',
-      { event: '*', schema: 'public', table: 'gears' },
-      (payload: GearPayload) => {
-        console.log('Real-time update from gears table:', payload);
-        fetchReportData();
-      }
-    );
-
-    // Subscribe to the channel
-    await channel.subscribe();
-    channelRef.current = channel;
   };
+
+  // Data fetching effect
+  useEffect(() => {
+    initializeData();
+  }, [dateRange]);
+
+  // Update the realtime subscription handlers
+  useEffect(() => {
+    const setupRealtimeSubscription = async () => {
+      if (channelRef.current) {
+        console.log('Removing existing realtime subscription');
+        await supabase.removeChannel(channelRef.current);
+      }
+
+      console.log('Setting up new realtime subscription');
+      const channel = supabase.channel('reports-analytics-changes')
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'gear_requests' },
+          (payload: RealtimePostgresChangesPayload<RealtimePayload>) => {
+            console.log('Realtime update from gear_requests:', payload);
+            toast({
+              title: "Data Updated",
+              description: "New request data available. Refreshing reports...",
+            });
+            initializeData();
+          }
+        )
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'gear_checkouts' },
+          (payload: RealtimePostgresChangesPayload<RealtimePayload>) => {
+            console.log('Realtime update from gear_checkouts:', payload);
+            initializeData();
+          }
+        )
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'gear_maintenance' },
+          (payload: RealtimePostgresChangesPayload<RealtimePayload>) => {
+            console.log('Realtime update from gear_maintenance:', payload);
+            initializeData();
+          }
+        );
+
+      await channel.subscribe((status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR') => {
+        console.log('Realtime subscription status:', status);
+      });
+
+      channelRef.current = channel;
+    };
+
+    setupRealtimeSubscription();
+
+    return () => {
+      if (channelRef.current) {
+        console.log('Cleaning up realtime subscription');
+        supabase.removeChannel(channelRef.current);
+      }
+    };
+  }, []);
 
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -437,9 +483,15 @@ export default function ReportsPage() {
 
   // Function to handle date range changes
   const handleDateChange = (newDateRange: DateRange | undefined) => {
-    setDateRange(newDateRange);
-    console.log("Selected date range:", newDateRange);
-    // TODO: Fetch data based on the new date range for all report sections
+    // Ensure we don't allow future dates
+    const now = new Date();
+    const adjustedRange = newDateRange ? {
+      from: newDateRange.from,
+      to: newDateRange.to && newDateRange.to > now ? now : newDateRange.to
+    } : undefined;
+
+    setDateRange(adjustedRange);
+    console.log("Selected date range:", adjustedRange);
   };
 
   const getStatusBadge = (status: string) => {
@@ -464,37 +516,60 @@ export default function ReportsPage() {
       return;
     }
 
-    const headers = ['Log ID', 'User Name', 'Gear Name', 'Reason', 'Checkout Date', 'Due Date', 'Check-in Date', 'Status'];
-    const rows = dataToDownload.map(log => [
-      log.id,
+    const headers = ['Log ID', 'User Name', 'Gear Name', 'Checkout Date', 'Status'];
+
+    const csvData = checkoutLog.map(log => [
+      `"${log.id}"`,
       `"${log.userName}"`,
       `"${log.gearName}"`,
-      `"${log.reason?.replace(/"/g, '""') ?? 'N/A'}"`, // Handle quotes within reason
       format(log.checkoutDate, 'yyyy-MM-dd HH:mm'),
-      log.dueDate ? format(log.dueDate, 'yyyy-MM-dd') : 'N/A',
-      log.checkinDate ? format(log.checkinDate, 'yyyy-MM-dd HH:mm') : 'N/A',
-      `"${log.status}"`,
-    ].join(','));
+      `"${log.status}"`
+    ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `gear_checkout_log_${format(new Date(), 'yyyyMMdd')}.csv`);
-    document.body.appendChild(link);
+    const csvContent = [
+      headers,
+      ...csvData
+    ];
+
+    const csv = csvContent.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `checkout_log_${format(new Date(), 'yyyy-MM-dd')}.csv`;
     link.click();
-    document.body.removeChild(link);
 
     toast({ title: "Download Started", description: "Checkout log (CSV format) is downloading." });
   };
 
-  // Manual refresh function
+  // Manual refresh handler
   const handleRefresh = () => {
-    fetchReportData();
+    initializeData();
     toast({
       title: "Refreshing Data",
       description: "Fetching the latest reports and analytics...",
     });
+  };
+
+  const exportToCSV = () => {
+    const csvData = checkoutLog.map(log => [
+      `"${log.id}"`,
+      `"${log.userName}"`,
+      `"${log.gearName}"`,
+      format(log.checkoutDate, 'yyyy-MM-dd HH:mm'),
+      `"${log.status}"`
+    ]);
+
+    const csvContent = [
+      ['Log ID', 'User Name', 'Gear Name', 'Checkout Date', 'Status'],
+      ...csvData
+    ];
+
+    const csv = csvContent.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `checkout_log_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.click();
   };
 
   return (
@@ -507,7 +582,7 @@ export default function ReportsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-bold text-foreground">Reports & Analytics</h1>
         <div className="flex items-center gap-2">
-          <DateRangePicker date={dateRange} onDateChange={handleDateChange} />
+          <DatePickerWithRange dateRange={dateRange} onDateRangeChange={handleDateChange} />
           <Button
             variant="outline"
             size="icon"
@@ -515,7 +590,7 @@ export default function ReportsPage() {
             disabled={isRefreshing || isLoading}
             title="Refresh Data"
           >
-            <RefreshCw className={`h-4 w-4 ${(isRefreshing || isLoading) ? 'animate-spin' : ''}`} />
+            <RefreshCw className={isRefreshing || isLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
           </Button>
         </div>
       </div>
@@ -587,7 +662,7 @@ export default function ReportsPage() {
                   <CardDescription>Equipment requested during selected timeframe</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{totalRequests}</div>
+                  <div className="text-3xl font-bold">{analytics.totalRequests}</div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -608,7 +683,7 @@ export default function ReportsPage() {
                   <CardDescription>Reported damages during selected timeframe</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{totalDamages}</div>
+                  <div className="text-3xl font-bold">{analytics.totalDamageReports}</div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -629,7 +704,7 @@ export default function ReportsPage() {
                   <CardDescription>Most requested item during selected timeframe</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold truncate">{mostPopularGear}</div>
+                  <div className="text-xl font-bold truncate">{analytics.popularGears[0]?.name || 'None'}</div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -653,9 +728,11 @@ export default function ReportsPage() {
                       <CardDescription>Requests vs. Damage Reports over the selected period</CardDescription>
                     </div>
                     <Badge variant="outline" className="font-mono text-xs">
-                      {dateRange?.from && dateRange?.to
-                        ? `${format(dateRange.from, 'MMM d, yyyy')} - ${format(dateRange.to, 'MMM d, yyyy')}`
-                        : 'All Time'}
+                      {dateRange?.from && dateRange?.to ? (
+                        format(dateRange.from, 'MMM d, yyyy') + ' - ' + format(dateRange.to, 'MMM d, yyyy')
+                      ) : (
+                        'All Time'
+                      )}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -686,7 +763,7 @@ export default function ReportsPage() {
                           tick={{ fontSize: 12 }}
                           tickFormatter={(value) => {
                             const parts = value.split('-W');
-                            return `W${parts[1]}`;
+                            return `W${parts[1]} `;
                           }}
                         />
                         <YAxis
@@ -708,10 +785,10 @@ export default function ReportsPage() {
                             borderRadius: '8px',
                             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
                           }}
-                          formatter={(value: any) => [`${value}`, '']}
+                          formatter={(value: any) => [`${value} `, '']}
                           labelFormatter={(label) => {
                             const parts = label.split('-W');
-                            return `Week ${parts[1]}, ${parts[0]}`;
+                            return `Week ${parts[1]}, ${parts[0]} `;
                           }}
                         />
                         <Legend formatter={(value) => value === 'requests' ? 'Equipment Requests' : 'Damage Reports'} />
@@ -759,7 +836,7 @@ export default function ReportsPage() {
                   <CardDescription>Top 5 most requested gears in the selected period</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {popularGears.length === 0 ? (
+                  {analytics.popularGears.length === 0 ? (
                     <div className="text-center py-5 text-muted-foreground">
                       <p>No gear request data available for the selected period</p>
                     </div>
@@ -767,7 +844,7 @@ export default function ReportsPage() {
                     <ResponsiveContainer width="100%" height={250}>
                       <ComposedChart
                         layout="vertical"
-                        data={popularGears}
+                        data={analytics.popularGears}
                         margin={{ top: 10, right: 10, left: 20, bottom: 10 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" opacity={0.3} horizontal={true} vertical={false} />
@@ -789,7 +866,7 @@ export default function ReportsPage() {
                           labelFormatter={(label) => label}
                         />
                         <Bar
-                          dataKey="requests"
+                          dataKey="count"
                           fill="var(--primary)"
                           radius={[0, 4, 4, 0]}
                           label={{
@@ -815,7 +892,7 @@ export default function ReportsPage() {
                       </CardTitle>
                       <CardDescription>Detailed log of gear checkouts for the selected period</CardDescription>
                     </div>
-                    <Button variant="outline" size="sm" onClick={downloadCheckoutLogCSV} disabled={checkoutLog.length === 0}>
+                    <Button variant="outline" size="sm" onClick={exportToCSV} disabled={checkoutLog.length === 0}>
                       <Download className="h-4 w-4 mr-2" />
                       <span>Export CSV</span>
                     </Button>
@@ -857,6 +934,50 @@ export default function ReportsPage() {
                           </TableCaption>
                         )}
                       </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Recent Activity Log */}
+          {!isLoading && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <SheetIcon className="h-5 w-5 text-primary" />
+                    Recent Activity Log
+                  </CardTitle>
+                  <CardDescription>Latest gear-related activities across the system</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {analytics.recentActivities.length === 0 ? (
+                    <div className="text-center py-5 text-muted-foreground">
+                      <p>No recent activities found for the selected period</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {analytics.recentActivities.map((activity) => (
+                        <div key={activity.id} className="flex items-start gap-4 p-2 rounded-lg hover:bg-muted/50">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">{activity.gearName}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs">
+                                {activity.actionType}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                by {activity.userName} • {format(new Date(activity.timestamp), 'MMM d, h:mm a')}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </CardContent>
