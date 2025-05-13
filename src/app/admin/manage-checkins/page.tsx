@@ -235,7 +235,7 @@ export default function ManageCheckinsPage() {
           const remainingGears = request.gear_ids.filter(
             (id: string) => id !== selectedCheckin.gearId
           );
-          const newStatus = remainingGears.length === 0 ? 'Returned' : 'Partially Returned';
+          const newStatus = remainingGears.length <= 1 ? 'Returned' : 'Partially Returned';
 
           const { error: requestError } = await supabase
             .from('gear_requests')
