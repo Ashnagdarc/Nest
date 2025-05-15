@@ -7,11 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BellRing, Trash2, CheckCheck, Megaphone, Info, Clock, CheckCircle, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { useNotifications } from '@/components/notifications/NotificationProvider';
+import { useNotifications } from "@/components/notifications/NotificationProvider";
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { createClient } from '@/lib/supabase/client';
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { logInfo, logError, validateTableContext } from '@/utils/logger';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 type Announcement = {
   id: string;
@@ -33,6 +36,8 @@ type ReadAnnouncement = {
 // Define a type for the tab values to be consistent throughout the component
 type TabValue = 'all' | 'system' | 'announcements';
 
+const supabase: SupabaseClient = createClient();
+
 export default function UserNotificationsPage() {
   const { notifications, markAsRead, markAllAsRead } = useNotifications();
   const [filter, setFilter] = useState('all');
@@ -42,30 +47,70 @@ export default function UserNotificationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
-  const supabase = createClient();
+  const [localNotifications, setLocalNotifications] = useState<Notification[]>([]);
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchNotificationsAndReadStatus = async () => {
       setIsLoading(true);
       try {
+        logInfo('Fetching notifications and read status', 'fetchNotificationsAndReadStatus');
+
         // Get current user
-        const { data: userData } = await supabase.auth.getUser();
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+
+        if (userError) {
+          logError(userError, 'fetchNotificationsAndReadStatus', {
+            stage: 'getUser',
+            error: {
+              code: userError.code,
+              message: userError.message
+            }
+          });
+          throw userError;
+        }
+
         if (!userData.user) {
-          console.error('No user found');
+          const noUserError = new Error('No user found');
+          logError(noUserError, 'fetchNotificationsAndReadStatus', {
+            stage: 'validateUser'
+          });
           return;
         }
 
-        // Fetch read notifications
-        const { data: readData, error: readError } = await supabase
-          .from('read_notifications')
-          .select('notification_id')
-          .eq('user_id', userData.user.id);
+        // Fetch notifications using the simplified function
+        const { data: notificationsData, error: notificationsError } = await supabase
+          .rpc('get_user_notifications', { p_limit: 100, p_offset: 0 });
 
-        if (readError) {
-          console.error('Error fetching read notifications:', readError);
-        } else {
-          const readIds = readData?.map((item: ReadNotification) => item.notification_id) || [];
+        if (notificationsError) {
+          logError(notificationsError, 'fetchNotificationsAndReadStatus', {
+            stage: 'fetchNotifications',
+            userId: userData.user.id,
+            error: {
+              code: notificationsError.code,
+              message: notificationsError.message,
+              details: notificationsError.details,
+              hint: notificationsError.hint
+            }
+          });
+          throw notificationsError;
+        }
+
+        if (notificationsData) {
+          setLocalNotifications(notificationsData);
+
+          // Initialize the readNotificationIds array with IDs of notifications that are already marked as read
+          const readIds = notificationsData
+            .filter((notification: { is_read: boolean }) => notification.is_read)
+            .map((notification: { id: string }) => notification.id);
+
           setReadNotificationIds(readIds);
+
+          logInfo('Notifications fetched successfully', 'fetchNotificationsAndReadStatus', {
+            userId: userData.user.id,
+            notificationCount: notificationsData.length,
+            readNotificationsCount: readIds.length
+          });
         }
 
         // Fetch announcements
@@ -75,21 +120,55 @@ export default function UserNotificationsPage() {
           .order('created_at', { ascending: false });
 
         if (announcementsError) {
-          console.error("Error fetching announcements:", announcementsError);
+          logError(announcementsError, 'fetchNotificationsAndReadStatus', {
+            stage: 'fetchAnnouncements',
+            error: {
+              code: announcementsError.code,
+              message: announcementsError.message,
+              details: announcementsError.details,
+              hint: announcementsError.hint
+            }
+          });
         } else if (announcementsData) {
           setAnnouncements(announcementsData);
+          logInfo('Announcements fetched successfully', 'fetchNotificationsAndReadStatus', {
+            announcementCount: announcementsData.length
+          });
         }
 
-        // Fetch read_announcements
+        // Fetch read announcements
         const { data: readAnnouncementsData, error: readAnnouncementsError } = await supabase
           .from('read_announcements')
           .select('announcement_id')
           .eq('user_id', userData.user.id);
 
-        if (!readAnnouncementsError && readAnnouncementsData) {
-          setReadAnnouncements(readAnnouncementsData.map((item: ReadAnnouncement) => item.announcement_id));
+        if (readAnnouncementsError) {
+          logError(readAnnouncementsError, 'fetchNotificationsAndReadStatus', {
+            stage: 'fetchReadAnnouncements',
+            userId: userData.user.id,
+            error: {
+              code: readAnnouncementsError.code,
+              message: readAnnouncementsError.message,
+              details: readAnnouncementsError.details,
+              hint: readAnnouncementsError.hint
+            }
+          });
+        } else if (readAnnouncementsData) {
+          const readIds = readAnnouncementsData.map((item: ReadAnnouncement) => item.announcement_id);
+          setReadAnnouncements(readIds);
+          logInfo('Read announcements fetched successfully', 'fetchNotificationsAndReadStatus', {
+            userId: userData.user.id,
+            readAnnouncementsCount: readIds.length
+          });
         }
+
       } catch (error) {
+        // Ensure error is properly formatted before logging
+        const formattedError = error instanceof Error ? error : new Error(JSON.stringify(error));
+        logError(formattedError, 'fetchNotificationsAndReadStatus', {
+          stage: 'unexpectedError',
+          originalError: error
+        });
         console.error("Error fetching data:", error);
       } finally {
         setIsLoading(false);
@@ -105,109 +184,239 @@ export default function UserNotificationsPage() {
 
     // Cleanup interval on unmount
     return () => clearInterval(refreshInterval);
-  }, [supabase]);
+  }, []);
 
   const markAnnouncementAsRead = async (id: string) => {
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
+      logInfo('Marking announcement as read', 'markAnnouncementAsRead', { announcementId: id });
+
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        logError(userError, 'markAnnouncementAsRead', {
+          stage: 'getUser',
+          announcementId: id
+        });
+        throw userError;
+      }
+
+      if (!userData.user) {
+        const noUserError = new Error('No user found');
+        logError(noUserError, 'markAnnouncementAsRead', {
+          stage: 'validateUser',
+          announcementId: id
+        });
+        return;
+      }
+
+      // Validate table context before operation
+      validateTableContext('read_announcements', 'upsert', {
+        user_id: userData.user.id,
+        announcement_id: id
+      });
 
       const { error } = await supabase
         .from('read_announcements')
-        .upsert([
-          { user_id: userData.user.id, announcement_id: id }
-        ]);
+        .upsert(
+          { user_id: userData.user.id, announcement_id: id },
+          { onConflict: 'user_id,announcement_id' }
+        );
 
       if (error) {
-        console.error("Error marking announcement as read:", error);
-      } else {
-        setReadAnnouncements(prev => [...prev, id]);
+        logError(error, 'markAnnouncementAsRead', {
+          stage: 'upsert',
+          announcementId: id,
+          userId: userData.user.id,
+          error: {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          }
+        });
+        throw error;
       }
+
+      logInfo('Announcement marked as read successfully', 'markAnnouncementAsRead', {
+        announcementId: id,
+        userId: userData.user.id
+      });
+
+      setReadAnnouncements(prev => [...prev, id]);
+
+      // Show success toast
+      toast({
+        title: "Success",
+        description: "Announcement marked as read.",
+        variant: "default"
+      });
+
     } catch (error) {
+      logError(error, 'markAnnouncementAsRead', {
+        stage: 'unexpectedError',
+        announcementId: id
+      });
       console.error("Error marking announcement as read:", error);
+
+      // Show error toast
+      toast({
+        title: "Error",
+        description: "Failed to mark announcement as read. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
   const markAsReadWithLogging = async (id: string) => {
-    console.log('Mark Read button clicked for notification:', id);
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        logError(userError, 'markAsReadWithLogging', {
+          stage: 'getUser',
+          notificationId: id
+        });
+
+        toast({
+          title: "Error",
+          description: "Failed to authenticate user. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       if (!userData.user) {
-        console.error('No user found');
+        const error = new Error('No user found');
+        logError(error, 'markAsReadWithLogging', {
+          stage: 'validateUser',
+          notificationId: id
+        });
+
+        toast({
+          title: "Error",
+          description: "User session not found. Please log in again.",
+          variant: "destructive"
+        });
         return;
       }
 
-      // Insert into read_notifications table
-      const { error: readError } = await supabase
-        .from('read_notifications')
-        .insert([
-          {
-            user_id: userData.user.id,
-            notification_id: id
-          }
-        ]);
-
-      if (readError) {
-        console.error('Error inserting into read_notifications:', readError);
+      // Check if already marked as read locally to prevent duplicate requests
+      if (readNotificationIds.includes(id)) {
+        console.log(`Notification ${id} already marked as read locally, skipping update`);
         return;
       }
 
-      // Update local state
-      setReadNotificationIds(prev => [...prev, id]);
+      try {
+        // Call the context's markAsRead function
+        const success = await markAsRead(id);
 
-      // Call the markAsRead from the provider for UI update
-      await markAsRead(id);
+        if (!success) {
+          // If markAsRead returns false, it means it failed but handled its own error
+          return;
+        }
 
-      console.log('Successfully marked notification as read:', id);
+        // Update local state to reflect the change immediately
+        setReadNotificationIds(prev => [...prev, id]);
+
+        logInfo('Notification marked as read successfully', 'markAsReadWithLogging', {
+          notificationId: id,
+          userId: userData.user.id
+        });
+
+      } catch (markError) {
+        // Log the specific error from markAsRead
+        logError(markError, 'markAsReadWithLogging', {
+          stage: 'callMarkAsRead',
+          notificationId: id,
+          userId: userData.user.id
+        });
+
+        toast({
+          title: "Error",
+          description: "Failed to mark notification as read. Please try again.",
+          variant: "destructive"
+        });
+      }
     } catch (error) {
-      console.error('Error in markAsReadWithLogging:', error);
+      logError(error, 'markAsReadWithLogging', {
+        stage: 'unexpectedError',
+        notificationId: id
+      });
+      console.error('Unexpected error in markAsReadWithLogging:', error);
+
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
   const markAllNotificationsAsRead = async () => {
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      logInfo('Marking all notifications as read', 'markAllNotificationsAsRead');
+
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        logError(userError, 'markAllNotificationsAsRead', {
+          stage: 'getUser'
+        });
+        throw userError;
+      }
+
       if (!userData.user) {
-        console.error('No user found');
+        const noUserError = new Error('No user found');
+        logError(noUserError, 'markAllNotificationsAsRead', {
+          stage: 'validateUser'
+        });
         return;
       }
 
-      // Get all unread notifications
+      // Get all unread notifications for tracking
       const unreadNotifications = notifications.filter(n => !readNotificationIds.includes(n.id));
 
-      if (unreadNotifications.length === 0) return;
-
-      // Create entries for read_notifications table
-      const entries = unreadNotifications.map(n => ({
-        user_id: userData.user.id,
-        notification_id: n.id
-      }));
-
-      // Insert all entries into read_notifications table
-      const { error } = await supabase
-        .from('read_notifications')
-        .insert(entries);
-
-      if (error) {
-        console.error('Error marking all notifications as read:', error);
+      if (unreadNotifications.length === 0) {
+        logInfo('No unread notifications found', 'markAllNotificationsAsRead');
         return;
       }
 
-      // Update local state
-      const newReadIds = unreadNotifications.map(n => n.id);
-      setReadNotificationIds(prev => [...prev, ...newReadIds]);
-
-      // Update UI through provider
+      // Use the context's markAllAsRead function which now handles both tables
       await markAllAsRead();
 
-      console.log('Successfully marked all notifications as read');
+      logInfo('All notifications marked as read successfully', 'markAllNotificationsAsRead', {
+        userId: userData.user.id,
+        notificationCount: unreadNotifications.length
+      });
+
+      // Update local state
+      setReadNotificationIds(prev => [...prev, ...unreadNotifications.map(n => n.id)]);
+
+      // Show success toast
+      toast({
+        title: "Success",
+        description: `Marked ${unreadNotifications.length} notifications as read.`,
+        variant: "default"
+      });
+
     } catch (error) {
-      console.error('Error in markAllNotificationsAsRead:', error);
+      logError(error, 'markAllNotificationsAsRead', {
+        stage: 'unexpectedError'
+      });
+      console.error('Error marking all notifications as read:', error);
+
+      // Show error toast
+      toast({
+        title: "Error",
+        description: "Failed to mark all notifications as read. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
   const filteredNotifications = notifications.filter(n => {
-    const isRead = readNotificationIds.includes(n.id);
+    // Look at the notification's own is_read property first, then check our local state
+    const isRead = n.is_read || readNotificationIds.includes(n.id);
     const readMatches = filter === 'all' || (filter === 'unread' && !isRead);
     let typeMatches = true;
 
@@ -263,7 +472,7 @@ export default function UserNotificationsPage() {
   };
 
   const unreadAnnouncementsCount = announcements.filter(a => !readAnnouncements.includes(a.id)).length;
-  const unreadNotificationsCount = notifications.filter(n => !readNotificationIds.includes(n.id)).length;
+  const unreadNotificationsCount = notifications.filter(n => !n.is_read && !readNotificationIds.includes(n.id)).length;
 
   const markAllAnnouncementsAsRead = async () => {
     try {
@@ -469,9 +678,9 @@ export default function UserNotificationsPage() {
                             <motion.li
                               key={notification.id}
                               variants={itemVariants}
-                              className={`flex items-center justify-between p-3 rounded-md border ${readNotificationIds.includes(notification.id)
-                                ? 'bg-background'
-                                : 'bg-primary/5 font-medium border-primary/20'
+                              className={`flex items-center justify-between p-3 rounded-md border ${notification.is_read || readNotificationIds.includes(notification.id)
+                                  ? 'bg-background'
+                                  : 'bg-primary/5 font-medium border-primary/20'
                                 }`}
                             >
                               <div className="flex items-center gap-3">
@@ -484,7 +693,7 @@ export default function UserNotificationsPage() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1">
-                                {!readNotificationIds.includes(notification.id) && (
+                                {!notification.is_read && !readNotificationIds.includes(notification.id) && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -562,9 +771,9 @@ export default function UserNotificationsPage() {
                       <motion.li
                         key={notification.id}
                         variants={itemVariants}
-                        className={`flex items-center justify-between p-3 rounded-md border ${readNotificationIds.includes(notification.id)
-                          ? 'bg-background'
-                          : 'bg-primary/5 font-medium border-primary/20'
+                        className={`flex items-center justify-between p-3 rounded-md border ${notification.is_read || readNotificationIds.includes(notification.id)
+                            ? 'bg-background'
+                            : 'bg-primary/5 font-medium border-primary/20'
                           }`}
                       >
                         <div className="flex items-center gap-3">
@@ -577,7 +786,7 @@ export default function UserNotificationsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          {!readNotificationIds.includes(notification.id) && (
+                          {!notification.is_read && !readNotificationIds.includes(notification.id) && (
                             <Button
                               variant="ghost"
                               size="sm"

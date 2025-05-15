@@ -14,6 +14,7 @@ import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { LoadingState } from "@/components/ui/loading-state";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { createErrorLogger } from "@/lib/error-handling";
+import { logError as loggerError, logInfo as loggerInfo } from '@/lib/logger';
 import { useToast } from "@/hooks/use-toast";
 
 interface Profile {
@@ -119,20 +120,118 @@ export default function UserDashboardPage() {
   // Fetch notification count
   const fetchNotificationCount = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
+      loggerInfo('Starting notification count fetch', 'fetchNotificationCount');
 
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        loggerError(sessionError, 'fetchNotificationCount', {
+          stage: 'getSession',
+          error: sessionError
+        });
+        throw sessionError;
+      }
+
+      if (!session?.user) {
+        const noSessionError = new Error('No active session found');
+        loggerError(noSessionError, 'fetchNotificationCount', {
+          stage: 'checkSession'
+        });
+        throw noSessionError;
+      }
+
+      loggerInfo('Fetching notifications', 'fetchNotificationCount', {
+        userId: session.user.id,
+        timestamp: new Date().toISOString()
+      });
+
+      // First, verify user access by checking their profile
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role, status')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError) {
+        loggerError(profileError, 'fetchNotificationCount', {
+          stage: 'fetchProfile',
+          userId: session.user.id,
+          error: {
+            code: profileError.code,
+            message: profileError.message,
+            details: profileError.details
+          }
+        });
+        throw new Error('Failed to verify user access');
+      }
+
+      if (!profileData) {
+        const noProfileError = new Error('User profile not found');
+        loggerError(noProfileError, 'fetchNotificationCount', {
+          stage: 'checkProfile',
+          userId: session.user.id
+        });
+        throw noProfileError;
+      }
+
+      // Now fetch notifications count with detailed error logging
       const { data, error } = await supabase
         .from('notifications')
-        .select('id')
+        .select('id', { count: 'exact' })
         .eq('user_id', session.user.id)
         .eq('read', false);
 
-      if (error) throw error;
+      if (error) {
+        loggerError(error, 'fetchNotificationCount', {
+          stage: 'fetchNotifications',
+          userId: session.user.id,
+          error: {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          },
+          userProfile: {
+            role: profileData.role,
+            status: profileData.status
+          }
+        });
+        throw error;
+      }
 
-      setNotificationCount(data?.length || 0);
+      const count = data?.length || 0;
+      loggerInfo('Successfully fetched notifications', 'fetchNotificationCount', {
+        userId: session.user.id,
+        count,
+        userProfile: {
+          role: profileData.role,
+          status: profileData.status
+        }
+      });
+
+      setNotificationCount(count);
     } catch (error: unknown) {
-      console.error('Error fetching notification count:', error);
+      const errorDetails = error instanceof Error ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      } : { error };
+
+      loggerError('Error in fetchNotificationCount', 'fetchNotificationCount', {
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        ...errorDetails,
+        timestamp: new Date().toISOString()
+      });
+
+      // Set count to 0 on error to prevent UI issues
+      setNotificationCount(0);
+
+      // Show error toast to user
+      toast({
+        title: "Error",
+        description: "Failed to fetch notifications. Please try refreshing the page.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -142,12 +241,20 @@ export default function UserDashboardPage() {
     const setupDashboard = async () => {
       try {
         setIsLoading(true);
+        loggerInfo('Starting dashboard setup', 'setupDashboard');
 
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-        if (!session?.user) {
-          throw new Error('No authenticated user found');
+        if (sessionError) {
+          loggerError(sessionError, 'setupDashboard', { stage: 'getSession' });
+          throw sessionError;
         }
+        if (!session?.user) {
+          const noUserError = new Error('No authenticated user found');
+          loggerError(noUserError, 'setupDashboard', { stage: 'checkUser' });
+          throw noUserError;
+        }
+
+        loggerInfo('Session found', 'setupDashboard', { userId: session.user.id });
 
         // Fetch user profile
         const { data: profile, error: profileError } = await supabase
@@ -157,29 +264,54 @@ export default function UserDashboardPage() {
           .single();
 
         if (profileError) {
+          loggerError(profileError, 'setupDashboard', {
+            stage: 'fetchProfile',
+            userId: session.user.id
+          });
           console.error('Error fetching user profile:', profileError);
         } else if (profile && mounted) {
+          loggerInfo('Profile fetched successfully', 'setupDashboard', {
+            userId: session.user.id,
+            hasProfile: !!profile
+          });
           setUserData(profile);
         }
 
         // Initial data fetch with error handling
         if (mounted) {
+          loggerInfo('Starting parallel data fetches', 'setupDashboard');
           await Promise.all([
             fetchUserStats().catch(error => {
-              logError(error, 'fetching user stats');
+              loggerError(error, 'setupDashboard', {
+                stage: 'fetchUserStats',
+                userId: session.user.id
+              });
               return null;
             }),
             fetchAvailableGears().catch(error => {
-              logError(error, 'fetching available gears');
+              loggerError(error, 'setupDashboard', {
+                stage: 'fetchAvailableGears',
+                userId: session.user.id
+              });
               return null;
             }),
             fetchNotificationCount().catch(error => {
-              logError(error, 'fetching notification count');
+              loggerError(error, 'setupDashboard', {
+                stage: 'fetchNotificationCount',
+                userId: session.user.id,
+                error: JSON.stringify(error, Object.getOwnPropertyNames(error))
+              });
               return null;
             })
           ]);
+          loggerInfo('Parallel data fetches completed', 'setupDashboard');
         }
       } catch (error) {
+        loggerError(error, 'setupDashboard', {
+          errorType: error instanceof Error ? error.constructor.name : typeof error,
+          errorDetails: error instanceof Error ? error.message : String(error),
+          errorStack: error instanceof Error ? error.stack : undefined
+        });
         console.error('Error in setupDashboard:', error);
         toast({
           title: "Error",
@@ -187,7 +319,10 @@ export default function UserDashboardPage() {
           variant: "destructive"
         });
       } finally {
-        if (mounted) setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+          loggerInfo('Dashboard setup completed', 'setupDashboard', { success: !isLoading });
+        }
       }
     };
 
