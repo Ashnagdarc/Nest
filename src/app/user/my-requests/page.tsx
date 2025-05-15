@@ -322,6 +322,7 @@ export default function MyRequestsPage() {
         return <Badge variant="secondary"><Package className="mr-1 h-3 w-3" /> {status}</Badge>;
       case 'checked in':
       case 'completed':
+      case 'returned':
         return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white"><CheckCircle className="mr-1 h-3 w-3" /> Completed</Badge>;
       case 'rejected':
         return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
@@ -456,7 +457,7 @@ export default function MyRequestsPage() {
         stats.approved++;
       } else if (status === 'rejected') {
         stats.rejected++;
-      } else if (status === 'completed' || status === 'checked in') {
+      } else if (status === 'completed' || status === 'checked in' || status === 'returned') {
         stats.completed++;
       }
 
@@ -558,9 +559,9 @@ export default function MyRequestsPage() {
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
                 <SelectItem value="checked out">Checked Out</SelectItem>
-                <SelectItem value="checked in">Completed</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="returned">Completed</SelectItem>
               </SelectContent>
             </Select>
           </div>

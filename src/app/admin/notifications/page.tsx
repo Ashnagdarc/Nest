@@ -43,7 +43,7 @@ export default function AdminNotificationsPage() {
 
   useEffect(() => {
     // Initialize audio
-    audioRef.current = new Audio('/sounds/notification.mp3');
+    audioRef.current = new Audio('/sounds/notification-bell.mp3');
     audioRef.current.volume = soundVolume / 100;
 
     // Load user preferences from localStorage
@@ -588,7 +588,7 @@ export default function AdminNotificationsPage() {
       </Card>
 
       {/* Sound element for notifications */}
-      <audio ref={soundRef} src="/sounds/notification.mp3" />
+      <audio ref={soundRef} src="/sounds/notification-bell.mp3" />
     </motion.div>
   );
 }

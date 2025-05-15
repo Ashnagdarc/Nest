@@ -16,8 +16,8 @@ export type NotificationSoundType = 'bell' | 'reminder' | 'login';
 // URLs for our sounds
 const SOUND_URLS: Record<NotificationSoundType, string> = {
     bell: '/sounds/notification-bell.mp3',
-    reminder: '/sounds/notification-reminder.mp3',
-    login: '/sounds/login-notification.mp3',
+    reminder: '/sounds/mixkit-alert-bells-echo-765.mp3',
+    login: '/sounds/notification.mp3',
 };
 
 // Controls if sounds are enabled (respects user preferences)

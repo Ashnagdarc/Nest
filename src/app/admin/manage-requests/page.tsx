@@ -53,7 +53,7 @@ import successAnimation from "@/../public/animations/success.json";
 import rejectAnimation from "@/../public/animations/reject.json";
 
 // --- Import the notification sound ---
-const NOTIFICATION_SOUND_URL = '/sounds/notification.mp3'; // Add this sound file to your public folder
+const NOTIFICATION_SOUND_URL = '/sounds/notification-bell.mp3'; // Add this sound file to your public folder
 
 type StatusHistory = { status: string; timestamp: Date; note?: string }[];
 type GearDetail = { name: string; description: string; specs: string };
