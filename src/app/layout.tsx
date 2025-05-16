@@ -7,6 +7,8 @@ import { ThemeProvider } from 'next-themes';
 import { NotificationProvider } from "@/components/notifications/NotificationProvider";
 import { SupabaseErrorBoundary } from "@/components/supabase-error-boundary";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+// Import the console error interceptor to filter Supabase Realtime noise
+import '@/utils/intercept-console-error';
 
 const inter = Inter({ subsets: ['latin'] });
 

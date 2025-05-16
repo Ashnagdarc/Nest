@@ -6,15 +6,19 @@ import { Button } from "@/components/ui/button";
 import { PackageCheck, Clock, Bell, Box, Calendar, Search, ArrowUpDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { AnnouncementsWidget } from "@/components/dashboard/AnnouncementsWidget";
 import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
+import { PopularGearWidget } from "@/components/dashboard/PopularGearWidget";
+import { QuickActions } from "@/components/dashboard/QuickActions";
 import { LoadingState } from "@/components/ui/loading-state";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { logError, logInfo } from '@/lib/logger';
+import { logger } from '@/utils/logger';
 import { useToast } from "@/hooks/use-toast";
+import { createSupabaseSubscription } from "@/utils/supabase-subscription";
 
 interface Profile {
   id: string;
@@ -26,7 +30,9 @@ interface Profile {
 
 interface Gear {
   id: string;
+  name?: string;
   due_date: string | null;
+  status?: string;
 }
 
 export default function UserDashboardPage() {
@@ -71,26 +77,42 @@ export default function UserDashboardPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
+      // Get all gears checked out to the user with additional details
       const { data: checkouts, error: checkoutsError } = await supabase
         .from('gears')
-        .select('id, due_date')
+        .select('id, name, due_date, status')
         .eq('checked_out_to', session.user.id);
 
-      if (checkoutsError) throw checkoutsError;
+      if (checkoutsError) {
+        logger.error('Error fetching user checked out gears:', { error: checkoutsError });
+        throw checkoutsError;
+      }
 
       const now = new Date();
-      const checkedOutCount = checkouts?.length || 0;
-      const overdueCount = checkouts?.filter((gear: Gear) =>
-        gear.due_date && new Date(gear.due_date) < now
-      ).length || 0;
+      const checkedOutGears = checkouts || [];
 
+      // Count overdue items
+      const overdueGears = checkedOutGears.filter((gear: Gear) =>
+        gear.due_date && new Date(gear.due_date) < now
+      );
+
+      // Update the stats with correct counts
       setUserStats(prev => [
-        { ...prev[0], value: checkedOutCount },
-        { ...prev[1], value: overdueCount },
+        { ...prev[0], value: checkedOutGears.length },
+        { ...prev[1], value: overdueGears.length },
         prev[2]
       ]);
+
+      // Log sync information for debugging
+      logger.info("Dashboard stats updated", {
+        context: 'fetchUserStats',
+        checkedOut: checkedOutGears.length,
+        overdue: overdueGears.length,
+        userId: session.user.id,
+        overdueItems: overdueGears.map((g: Gear) => ({ id: g.id, name: g.name, due: g.due_date }))
+      });
     } catch (error: unknown) {
-      console.error('Error fetching user stats:', error);
+      logger.error('Error fetching user stats:', { error });
     }
   };
 
@@ -234,6 +256,7 @@ export default function UserDashboardPage() {
 
   useEffect(() => {
     let mounted = true;
+    let cleanup: (() => void) | undefined;
 
     const setupDashboard = async () => {
       try {
@@ -302,6 +325,26 @@ export default function UserDashboardPage() {
             })
           ]);
           logInfo('Parallel data fetches completed', 'setupDashboard');
+
+          // Setup real-time subscriptions
+          const gearsSubscription = createSupabaseSubscription({
+            supabase,
+            channel: 'dashboard-gears-changes',
+            config: {
+              event: '*',
+              schema: 'public',
+              table: 'gears'
+            },
+            callback: () => {
+              fetchUserStats();
+              fetchAvailableGears();
+            }
+          });
+
+          // Store the cleanup function
+          cleanup = () => {
+            gearsSubscription.unsubscribe();
+          };
         }
       } catch (error) {
         logError(error, 'setupDashboard', {
@@ -324,7 +367,13 @@ export default function UserDashboardPage() {
     };
 
     setupDashboard();
-    return () => { mounted = false; };
+
+    return () => {
+      if (cleanup) {
+        cleanup();
+      }
+      mounted = false;
+    };
   }, [supabase, toast]);
 
   const cardVariants = {
@@ -374,6 +423,15 @@ export default function UserDashboardPage() {
           </div>
         </motion.div>
 
+        {/* Quick Actions Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+        >
+          <QuickActions />
+        </motion.div>
+
         {/* Stats Cards */}
         {isLoading ? (
           <LoadingState variant="cards" count={3} />
@@ -409,12 +467,28 @@ export default function UserDashboardPage() {
           {/* Left Column */}
           <div className="space-y-6">
             <UpcomingEvents />
-            <AnnouncementsWidget />
+            <PopularGearWidget />
           </div>
 
-          {/* Right Column */}
+          {/* Right Column - Combined Activity and Announcements */}
           <div className="space-y-6">
-            <RecentActivity />
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-md">Activity & Announcements</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="grid grid-cols-1 divide-y">
+                  <div className="p-4">
+                    <h3 className="text-sm font-medium mb-2">Recent Activity</h3>
+                    <RecentActivity embedded={true} />
+                  </div>
+                  <div className="p-4">
+                    <h3 className="text-sm font-medium mb-2">Announcements</h3>
+                    <AnnouncementsWidget embedded={true} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

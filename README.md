@@ -44,6 +44,7 @@ GearFlow is a modern web application for managing equipment rentals, inventory t
 - [Troubleshooting](#-troubleshooting)
 - [License](#-license)
 - [Project Maintenance](#-project-maintenance)
+- [Realtime Updates](#-realtime-updates)
 
 ## Overview
 
@@ -353,20 +354,45 @@ We follow conventional commits:
 ##  Troubleshooting
 
 ### Common Issues
-1. **Database Connection**
-   - Verify Supabase credentials
-   - Check network connectivity
-   - Confirm database permissions
 
-2. **Build Errors**
-   - Clear `.next` directory
-   - Update dependencies
-   - Check TypeScript errors
+#### Supabase Realtime Subscription Issues
 
-### Support
-- Create an issue for bugs
-- Join our Discord community
-- Check documentation
+If you're experiencing issues with real-time updates not working, follow these steps:
+
+1. **Enable Realtime for Your Tables**
+
+   GearFlow uses Supabase Realtime for live updates. You need to explicitly enable this feature for the tables you want to monitor:
+
+   ```bash
+   # Run our realtime setup helper script
+   node scripts/enable-realtime.js
+   ```
+
+   This script will guide you through enabling Realtime for the following required tables:
+   - gears
+   - gear_requests
+   - gear_maintenance
+   - gear_activity_log
+   - notifications
+   - profiles
+
+2. **Verify Realtime Configuration**
+
+   To check if your tables are properly configured for Realtime:
+
+   ```bash
+   npx tsx src/utils/supabase-realtime-checker.ts
+   ```
+
+   This utility will show which tables have Realtime enabled or disabled and provide guidance if needed.
+
+3. **Fallback Mechanism**
+
+   GearFlow has a built-in fallback mechanism that automatically switches to polling if Realtime subscriptions fail. You'll see a notification when this happens.
+
+### Database Schema Issues
+
+If you encounter errors related to incorrect column names or missing tables:
 
 ## 📄 License
 
@@ -427,3 +453,40 @@ The web push notifications feature has been removed from the project due to comp
 - Removing notification API endpoints
 
 The application still maintains in-app notifications through the Supabase database, but no longer supports browser push notifications.
+
+## Enabling Realtime Updates
+
+For optimal dashboard functionality, you should enable Realtime in your Supabase project:
+
+1. Go to your Supabase dashboard and select your project
+2. Navigate to Database → Replication
+3. Find the "Realtime" section 
+4. Enable Realtime for all tables that need updates:
+   - gear_requests
+   - gears
+   - checkins
+   - announcements
+   - gear_maintenance
+   - gear_request_gears
+
+If Realtime is not enabled, the application will automatically fall back to polling, but real-time updates provide a better user experience.
+
+## Realtime Updates
+
+GearFlow uses Supabase Realtime to provide live updates to the user interface. When data changes in the database, the UI updates automatically without requiring a page refresh.
+
+### How Realtime Works
+
+The application implements a robust realtime update system with fallback mechanisms:
+
+1. **Primary Method**: Supabase Realtime subscriptions for instant updates
+2. **Fallback**: Automatic polling if Realtime is unavailable (every 20 minutes)
+3. **Adaptive**: Detects available timestamp columns for efficient polling
+
+### Troubleshooting Realtime
+
+If you experience issues with realtime updates:
+
+1. Ensure Realtime is enabled in Supabase for your tables
+2. Check that tables have timestamp columns (created_at, updated_at)
+3. Run diagnostic tools: `npm run realtime:check`

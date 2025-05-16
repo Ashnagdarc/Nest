@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { RealtimeChannel, SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
-import { createErrorLogger } from '@/lib/error-handling';
-
-const logError = createErrorLogger('SupabaseSubscription');
+import { logger } from '@/utils/logger';
+import { createSupabaseSubscription } from '@/utils/supabase-subscription';
 
 type SubscriptionConfig = {
     event: 'INSERT' | 'UPDATE' | 'DELETE' | '*';
@@ -22,15 +21,21 @@ interface UseSupabaseSubscriptionProps<T extends Record<string, any>> {
     callback: SubscriptionCallback<T>;
     onError?: (error: unknown) => void;
     enabled?: boolean;
+    pollingInterval?: number;
 }
 
+/**
+ * A simplified hook for Supabase real-time subscriptions
+ * This version avoids using complex error handling that was causing issues
+ */
 export function useSupabaseSubscription<T extends Record<string, any>>({
     supabase,
     channel: channelName,
     config,
     callback,
     onError,
-    enabled = true
+    enabled = true,
+    pollingInterval = 1200000 // Extended from 10s to 20min (1200 seconds) to dramatically reduce refresh frequency
 }: UseSupabaseSubscriptionProps<T>) {
     const channelRef = useRef<RealtimeChannel | null>(null);
 
@@ -41,114 +46,65 @@ export function useSupabaseSubscription<T extends Record<string, any>>({
 
         let mounted = true;
 
-        const setupSubscription = async () => {
+        const setupSubscription = () => {
             try {
                 // Clean up existing subscription if any
                 if (channelRef.current) {
-                    await supabase.removeChannel(channelRef.current);
+                    supabase.removeChannel(channelRef.current);
                 }
 
-                // Create new subscription
-                const channel = supabase
-                    .channel(channelName)
-                    .on<T>(
-                        'postgres_changes' as any, // Type assertion needed due to Supabase types limitation
-                        {
-                            event: config.event,
-                            schema: config.schema,
-                            table: config.table,
-                            filter: config.filter
-                        },
-                        (payload: RealtimePostgresChangesPayload<T>) => {
-                            if (mounted) {
-                                try {
-                                    callback(payload);
-                                } catch (error) {
-                                    logError(error, `processing ${config.table} subscription payload`);
-                                    onError?.(error);
-                                }
+                // Use the non-hook version for better reliability
+                const subscription = createSupabaseSubscription({
+                    supabase,
+                    channel: channelName,
+                    config,
+                    callback: (payload: RealtimePostgresChangesPayload<T>) => {
+                        if (mounted) {
+                            try {
+                                callback(payload);
+                            } catch (err) {
+                                const error = err instanceof Error ? err : new Error(`Unknown error: ${String(err)}`);
+                                logger.error(error, { context: 'subscription callback' });
+                                if (onError) onError(error);
                             }
                         }
-                    )
-                    .subscribe((status) => {
-                        console.log(`Subscription status for ${channelName}:`, status);
-
-                        if (status === 'SUBSCRIBED') {
-                            console.log(`Successfully subscribed to ${config.table} changes`);
-                        } else if (status === 'CLOSED') {
-                            console.log(`Subscription to ${config.table} closed`);
-                        } else if (status === 'CHANNEL_ERROR') {
-                            const error = new Error(`Subscription error for ${config.table}`);
-                            logError(error, 'channel error');
-                            onError?.(error);
+                    },
+                    onError: (error: unknown) => {
+                        if (mounted && onError) {
+                            onError(error);
                         }
-                    });
+                    },
+                    pollingInterval
+                });
 
-                channelRef.current = channel;
-            } catch (error) {
-                logError(error, `setting up ${config.table} subscription`);
-                onError?.(error);
+                // Store unsubscribe function
+                return subscription.unsubscribe;
+            } catch (err) {
+                const error = err instanceof Error ? err : new Error(`Unknown error: ${String(err)}`);
+                logger.error(error, { context: 'subscription setup' });
+                if (onError) onError(error);
+                return () => { };
             }
         };
 
-        setupSubscription();
+        const unsubscribe = setupSubscription();
 
         return () => {
             mounted = false;
-
-            // Clean up subscription
-            if (channelRef.current) {
-                supabase.removeChannel(channelRef.current)
-                    .catch(error => {
-                        logError(error, `cleaning up ${config.table} subscription`);
-                    });
-            }
+            unsubscribe();
         };
-    }, [supabase, channelName, config, callback, onError, enabled]);
+    }, [supabase, channelName, config, callback, onError, enabled, pollingInterval]);
 
     return {
-        unsubscribe: async () => {
+        unsubscribe: () => {
             if (channelRef.current) {
                 try {
-                    await supabase.removeChannel(channelRef.current);
+                    supabase.removeChannel(channelRef.current);
                     channelRef.current = null;
-                } catch (error) {
-                    logError(error, `manually unsubscribing from ${config.table}`);
-                    throw error;
+                } catch (err) {
+                    logger.error(`Error unsubscribing: ${String(err)}`, { context: 'subscription' });
                 }
             }
         }
     };
-}
-
-// Usage example:
-/*
-interface GearRecord {
-  id: string;
-  name: string;
-  status: string;
-  user_id: string;
-}
-
-const { unsubscribe } = useSupabaseSubscription<GearRecord>({
-  supabase,
-  channel: 'gear-updates',
-  config: {
-    event: '*',
-    schema: 'public',
-    table: 'gears',
-    filter: `user_id=eq.${userId}`
-  },
-  callback: (payload) => {
-    console.log('Received update:', payload);
-    refreshData();
-  },
-  onError: (error) => {
-    toast({
-      title: 'Subscription Error',
-      description: getErrorMessage(error),
-      variant: 'destructive'
-    });
-  }
-});
-*/ 
+} 
