@@ -84,6 +84,7 @@ tsconfig.tsbuildinfo
 # Temporary files
 *.tmp
 *~
+*.backup
 
 # Environment variables
 .env
