@@ -79,7 +79,28 @@ export default function AdminNotificationsPage() {
         return;
       }
 
-      // Fetch notifications and read status
+      // Try using the RPC function first
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_notifications', { 
+        p_limit: 100, 
+        p_offset: 0 
+      });
+
+      if (!rpcError && rpcData) {
+        setNotifications(rpcData.map((n: any) => ({
+          id: n.id,
+          type: n.type,
+          content: n.message || n.content,
+          timestamp: new Date(n.created_at),
+          read: n.is_read,
+          link: n.link,
+          metadata: n.metadata
+        })));
+        return;
+      }
+
+      console.log('RPC failed, falling back to direct fetch:', rpcError);
+
+      // Fallback: Fetch notifications and read status directly
       const [notificationsResult, readNotificationsResult] = await Promise.all([
         supabase
           .from('notifications')
@@ -185,34 +206,50 @@ export default function AdminNotificationsPage() {
         prev.map(n => (n.id === id ? { ...n, read: true } : n))
       );
 
-      // Update both notifications and read_notifications tables
-      const [notificationUpdate, readNotificationInsert] = await Promise.all([
-        // Update the notifications table
-        supabase.rpc('mark_notification_as_read', {
-          notification_id: id
-        }),
-        // Insert into read_notifications table
-        supabase
-          .from('read_notifications')
-          .upsert([
-            {
-              user_id: user.id,
-              notification_id: id
-            }
-          ])
-      ]);
-
-      if (notificationUpdate.error || readNotificationInsert.error) {
-        console.error('Error updating notification status:', {
-          notificationError: notificationUpdate.error,
-          readNotificationError: readNotificationInsert.error
-        });
-
-        // Revert UI state if the update failed
-        setNotifications(prev =>
-          prev.map(n => n.id === id ? { ...n, read: false } : n)
+      // Also insert into read_notifications first to ensure the relationship is recorded
+      const { error: readError } = await supabase
+        .from('read_notifications')
+        .upsert(
+          { user_id: user.id, notification_id: id },
+          { onConflict: 'user_id,notification_id' }
         );
-        return;
+
+      if (readError) {
+        console.error('Error updating read_notifications:', readError);
+      }
+
+      // Update notification as read using direct update
+      // Try using the stored procedure first
+      const { error: procError } = await supabase.rpc('mark_notification_as_read', {
+        notification_id: id
+      });
+
+      if (procError) {
+        console.log('Stored procedure failed, falling back to direct update:', procError);
+        
+        // Fallback to direct update
+        const { error: updateError } = await supabase
+          .from('notifications')
+          .update({
+            is_read: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id);
+
+        if (updateError) {
+          console.error('Error updating notification status:', {
+            error: updateError,
+            code: updateError.code,
+            details: updateError.details,
+            message: updateError.message
+          });
+
+          // Revert UI state if the update failed
+          setNotifications(prev =>
+            prev.map(n => n.id === id ? { ...n, read: false } : n)
+          );
+          return;
+        }
       }
 
       // Log activity
@@ -240,48 +277,62 @@ export default function AdminNotificationsPage() {
         return;
       }
 
-      // Get all unread notification IDs
-      const unreadIds = notifications
-        .filter(n => !n.read)
-        .map(n => n.id);
-
-      if (unreadIds.length === 0) return;
-
       // Update UI immediately
       setNotifications(prev =>
         prev.map(n => ({ ...n, read: true }))
       );
 
-      // Update both notifications and read_notifications tables
-      const [notificationsUpdate, readNotificationsInsert] = await Promise.all([
-        // Update all notifications
-        supabase.rpc('mark_all_notifications_as_read'),
-        // Insert all into read_notifications table
-        supabase
+      // Try using the stored procedure first
+      const { error: procError } = await supabase.rpc('mark_all_notifications_as_read');
+
+      if (procError) {
+        console.log('Stored procedure failed, falling back to direct update:', procError);
+
+        // Fallback to direct update
+        const { error: updateError } = await supabase
+          .from('notifications')
+          .update({
+            is_read: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('is_read', false);
+
+        if (updateError) {
+          console.error('Error marking all as read:', {
+            error: updateError,
+            code: updateError.code,
+            details: updateError.details,
+            message: updateError.message
+          });
+          // Refresh notifications to get current state
+          fetchNotifications();
+          return;
+        }
+      }
+
+      // Also update the read_notifications table
+      const unreadNotifications = notifications.filter(n => !n.read);
+      if (unreadNotifications.length > 0) {
+        const { error: readError } = await supabase
           .from('read_notifications')
           .upsert(
-            unreadIds.map(id => ({
+            unreadNotifications.map(n => ({
               user_id: user.id,
-              notification_id: id
-            }))
-          )
-      ]);
+              notification_id: n.id
+            })),
+            { onConflict: 'user_id,notification_id' }
+          );
 
-      if (notificationsUpdate.error || readNotificationsInsert.error) {
-        console.error('Error marking all as read:', {
-          notificationsError: notificationsUpdate.error,
-          readNotificationsError: readNotificationsInsert.error
-        });
-        // Refresh notifications to get current state
-        fetchNotifications();
-        return;
+        if (readError) {
+          console.error('Error updating read_notifications:', readError);
+        }
       }
 
       // Log activity
       await supabase.from('admin_activity_log').insert({
         admin_id: user.id,
         activity_type: 'mark_all_notifications_read',
-        details: { count: unreadIds.length }
+        details: { count: notifications.filter(n => !n.read).length }
       });
 
     } catch (error) {

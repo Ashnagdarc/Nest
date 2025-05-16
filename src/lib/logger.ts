@@ -39,20 +39,34 @@ const sendToServer = async (level: LogLevel, message: string, context: string, m
 
 // Helper functions for common log types
 export const logError = (error: any, context: string, metadata?: any) => {
+    // Ensure error is properly formatted
+    let errorObj: Error;
+    if (error instanceof Error) {
+        errorObj = error;
+    } else if (typeof error === 'string') {
+        errorObj = new Error(error);
+    } else if (error && typeof error === 'object') {
+        errorObj = new Error(JSON.stringify(error));
+    } else {
+        errorObj = new Error('An unknown error occurred');
+    }
+    
     const logData: LogData = {
-        message: error.message || 'An error occurred',
+        message: errorObj.message || 'An error occurred',
         context,
         timestamp: getTimestamp(),
-        stack: error.stack,
+        stack: errorObj.stack,
+        originalError: error, // Keep the original error for debugging
         ...metadata
     };
 
-    // Log to console
+    // Log to console with better formatting
     console.error('[Error]', logData);
 
     // Send to server
     sendToServer('error', logData.message, context, {
-        stack: error.stack,
+        stack: errorObj.stack,
+        originalError: error,
         ...metadata
     });
 };

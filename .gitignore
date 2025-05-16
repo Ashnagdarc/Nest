@@ -89,7 +89,24 @@ tsconfig.tsbuildinfo
 .env
 .env.local
 .env.*.local
+.env.development.local
+.env.development
+.env.production
+.env.production.local
+.env.test
+.env.test.local
 
 # Cursor specific
 .cursor/
 .cursor/mcp.json
+
+# Additional temp files
+.modified
+**/tsconfig.tsbuildinfo
+
+# Supabase
+**/supabase/.branches/
+**/supabase/.temp/
+
+# Project-specific
+/Gearflow logo.png

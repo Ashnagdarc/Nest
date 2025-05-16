@@ -1,4 +1,26 @@
-# GearFlow by Eden Oasis
+# GearFlow - Equipment Rental & Management System
+
+GearFlow is a modern web application for managing equipment rentals, inventory tracking, and reservations.
+
+## Features
+
+- Equipment inventory management
+- Gear rental and reservation system
+- User management with admin and regular user roles
+- Responsive design for all device sizes
+- Check-in/check-out tracking
+- Calendar scheduling
+- Booking history
+- Administrative analytics
+
+## Tech Stack
+
+- **Frontend**: React, Next.js 15, TailwindCSS, TypeScript
+- **Backend**: Supabase (PostgreSQL, Auth, Storage)
+- **UI Components**: Radix UI
+- **State Management**: React Context API
+- **Styling**: Tailwind CSS with shadcn/ui components
+- **Notifications**: Web Push API by Eden Oasis
 
 <div align="center">
   <img src="public/logo.png" alt="GearFlow Logo" width="120"/>
@@ -119,6 +141,16 @@ GearFlow is a comprehensive equipment management platform designed specifically 
    NEXT_PUBLIC_SUPABASE_URL=your-project-url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
    # WARNING: Never commit the service role key or share it publicly
+   SUPABASE_SERVICE_ROLE_KEY=your-service-key
+   # For Supabase CLI operations
+   SUPABASE_ACCESS_TOKEN=your-access-token
+   ```
+   
+   For convenience, you can copy from our template:
+   ```bash
+   cp .env.local.example .env.local
+   # Then edit .env.local with your actual values
+   ```
    # Keep this key secure and only use it for trusted server-side operations
    SUPABASE_SERVICE_ROLE_KEY=your-service-key
 
@@ -181,6 +213,42 @@ GearFlow is a comprehensive equipment management platform designed specifically 
 ```
 
 ## 🧪 Development
+
+### Helper Scripts
+
+We've created two helper scripts to streamline development:
+
+#### Development Helper
+
+```bash
+# Start development server
+./dev.sh start
+
+# Database operations
+./dev.sh db:pull    # Pull latest schema
+./dev.sh db:push    # Push schema changes
+./dev.sh db:reset   # Reset local database
+
+# Migrations
+./dev.sh migrate        # Run migrations
+./dev.sh migrate:new    # Create new migration
+
+# Functions
+./dev.sh functions:list    # List functions
+./dev.sh functions:serve   # Serve functions locally
+./dev.sh functions:deploy  # Deploy functions
+```
+
+#### Supabase CLI Helper
+
+```bash
+# Run any Supabase CLI command securely
+./supabase-cli.sh [command]
+
+# Examples
+./supabase-cli.sh projects list
+./supabase-cli.sh db diff
+```
 
 ### Available Scripts
 
