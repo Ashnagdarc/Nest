@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
 import { Skeleton } from "@/components/ui/skeleton";
 import { WeeklyActivityReport } from "@/components/reports/WeeklyActivityReport";
+import { subscribeToTable, unsubscribeFromTable, RealtimeSubscription } from '@/lib/utils/realtime-utils';
+import logger from '@/lib/logger';
 
 interface Gear {
   id: string;
@@ -665,46 +667,42 @@ export default function ReportsPage() {
 
   // Add a subscription for real-time updates
   useEffect(() => {
-    // Create a subscription for gear requests changes
-    const requestsChannel = supabase.channel('reports-requests-changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'gear_requests'
-      }, () => {
-        console.log('Gear requests changed, refreshing data...');
-        fetchData();
-      })
-      .subscribe();
+    // Create subscriptions for all relevant tables
+    const subscriptions: RealtimeSubscription[] = [];
 
-    // Create a subscription for gear maintenance/damage changes
-    const maintenanceChannel = supabase.channel('reports-maintenance-changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'gear_maintenance'
-      }, () => {
-        console.log('Gear maintenance changed, refreshing data...');
+    try {
+      // Subscribe to gear requests changes
+      const requestsSub = subscribeToTable('gear_requests', '*', () => {
+        logger.info('Gear requests changed, refreshing data...', 'Reports');
         fetchData();
-      })
-      .subscribe();
+      });
+      if (requestsSub) subscriptions.push(requestsSub);
 
-    // Create a subscription for gear activity log changes
-    const activityLogChannel = supabase.channel('reports-activity-log-changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'gear_activity_log'
-      }, () => {
-        console.log('Activity log changed, refreshing data...');
+      // Subscribe to gear maintenance/damage changes
+      const maintenanceSub = subscribeToTable('gear_maintenance', '*', () => {
+        logger.info('Gear maintenance changed, refreshing data...', 'Reports');
         fetchData();
-      })
-      .subscribe();
+      });
+      if (maintenanceSub) subscriptions.push(maintenanceSub);
 
+      // Subscribe to gear activity log changes
+      const activityLogSub = subscribeToTable('gear_activity_log', '*', () => {
+        logger.info('Activity log changed, refreshing data...', 'Reports');
+        fetchData();
+      });
+      if (activityLogSub) subscriptions.push(activityLogSub);
+    } catch (error) {
+      logger.error(error, 'Error setting up realtime subscriptions for reports page');
+      toast({
+        title: "Realtime updates unavailable",
+        description: "You'll need to refresh manually to see the latest data.",
+        variant: "destructive"
+      });
+    }
+
+    // Return cleanup function
     return () => {
-      supabase.removeChannel(requestsChannel);
-      supabase.removeChannel(maintenanceChannel);
-      supabase.removeChannel(activityLogChannel);
+      subscriptions.forEach(unsubscribeFromTable);
     };
   }, []);
 
