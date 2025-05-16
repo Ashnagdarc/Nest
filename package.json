@@ -47,7 +47,6 @@
     "@tanstack/react-query": "^5.66.0",
     "@types/axios": "^0.9.36",
     "@types/react-select": "^5.0.0",
-    "@types/web-push": "^3.6.4",
     "@vercel/speed-insights": "^1.2.0",
     "axios": "^1.9.0",
     "class-variance-authority": "^0.7.1",
@@ -82,7 +81,6 @@
     "recharts": "^2.15.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
-    "web-push": "^3.6.7",
     "zod": "^3.24.2"
   },
   "devDependencies": {

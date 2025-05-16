@@ -43,6 +43,7 @@ GearFlow is a modern web application for managing equipment rentals, inventory t
 - [Contributing](#-contributing)
 - [Troubleshooting](#-troubleshooting)
 - [License](#-license)
+- [Project Maintenance](#-project-maintenance)
 
 ## Overview
 
@@ -397,3 +398,32 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Monitor application logs
 - Keep dependencies updated
 - Follow OWASP security guidelines
+
+## Project Maintenance
+
+### Code Cleanup for Production
+
+Before deploying to production or committing to GitHub, run the following scripts to clean up the codebase:
+
+```bash
+# Check for console.log statements and TODOs
+node scripts/prepare-for-production.js
+
+# Automatically replace console.log statements with proper logger calls
+node scripts/cleanup-console-logs.js
+```
+
+The `prepare-for-production.js` script will identify console.log statements and TODO/FIXME comments that should be addressed before production deployment.
+
+The `cleanup-console-logs.js` script will automatically replace console.log statements with appropriate logger calls, creating backups of modified files with a .backup extension.
+
+### Removed Features
+
+The web push notifications feature has been removed from the project due to compatibility issues with Vercel deployment. This included:
+
+- Removing web-push and @types/web-push dependencies
+- Deleting push-notifications.ts, notifications.ts utility files
+- Removing notification service worker
+- Removing notification API endpoints
+
+The application still maintains in-app notifications through the Supabase database, but no longer supports browser push notifications.
