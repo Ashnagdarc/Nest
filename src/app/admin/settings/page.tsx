@@ -16,9 +16,9 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Save, Bell, Lock, User, Settings, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client'; // Import Supabase client
-import type { Database } from '@/types/supabase'; // Import Supabase types
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { useIsMobile } from '@/hooks/use-mobile'; // Add this import for responsive handling
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -60,16 +60,39 @@ type PasswordFormValues = z.infer<typeof passwordSchema>;
 type BrandingFormValues = z.infer<typeof brandingSchema>;
 type AppSettingsFormValues = z.infer<typeof appSettingsSchema>;
 
-// Type aliases from Supabase schema
-type Profile = Database['public']['Tables']['profiles']['Row'];
-type AppSettings = Database['public']['Tables']['app_settings']['Row'];
-type ProfileUpdate = Database['public']['Tables']['profiles']['Update'];
+// Define simple types rather than relying on generated Database types
+type Profile = {
+    id: string;
+    email: string;
+    full_name: string | null;
+    avatar_url: string | null;
+    phone: string | null;
+    department: string | null;
+    role: string;
+    updated_at: string;
+    [key: string]: any; // Allow for additional properties
+};
+
+type AppSetting = {
+    key: string;
+    value: string | null;
+    updated_at: string;
+};
+
+type ProfileUpdate = {
+    full_name?: string | null;
+    phone?: string | null;
+    department?: string | null;
+    updated_at?: string;
+    [key: string]: any; // Allow for additional update properties
+};
 
 // --- Component ---
 export default function AdminSettingsPage() {
     const { toast } = useToast();
     const router = useRouter();
     const supabase = createClient();
+    const isMobile = useIsMobile();
 
     // --- State ---
     const [adminUser, setAdminUser] = useState<Profile | null>(null);
@@ -171,7 +194,7 @@ export default function AdminSettingsPage() {
                 if (settingsData) {
                     console.log("AdminSettings: Settings data fetched:", settingsData);
                     const settings: Partial<AppSettingsFormValues & { logoUrl?: string }> = {};
-                    settingsData.forEach(setting => {
+                    settingsData.forEach((setting: AppSetting) => {
                         if (setting.key === 'logoUrl') settings.logoUrl = setting.value ?? undefined;
                         if (setting.key === 'emailNotifications') settings.emailNotifications = setting.value === 'true';
                         if (setting.key === 'autoApproveRequests') settings.autoApproveRequests = setting.value === 'true';
@@ -486,22 +509,22 @@ export default function AdminSettingsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
-            className="space-y-8"
+            className="space-y-8 max-w-full"
         >
-            <h1 className="text-3xl font-bold text-foreground">Admin Settings</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Admin Settings</h1>
 
             {/* Admin Profile Settings */}
             <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={0}>
-                <Card>
+                <Card className="overflow-hidden">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-primary" /> Admin Profile</CardTitle>
-                        <CardDescription>Update your personal details.</CardDescription>
+                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><User className="h-5 w-5 text-primary flex-shrink-0" /> Admin Profile</CardTitle>
+                        <CardDescription className="text-sm">Update your personal details.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Form {...profileForm}>
                             <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
-                                <div className="flex items-center gap-4 mb-4">
-                                    <Avatar className="h-16 w-16">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4">
+                                    <Avatar className="h-16 w-16 flex-shrink-0">
                                         <AvatarImage key={avatarUrl} src={avatarUrl || 'https://picsum.photos/seed/adminsettings/100/100'} alt={adminUser.full_name || ''} data-ai-hint="admin avatar settings" />
                                         <AvatarFallback>{getInitials(adminUser.full_name)}</AvatarFallback>
                                     </Avatar>
@@ -509,7 +532,7 @@ export default function AdminSettingsPage() {
                                         control={profileForm.control}
                                         name="profilePicture"
                                         render={({ field }) => (
-                                            <FormItem className="flex-grow">
+                                            <FormItem className="flex-grow w-full">
                                                 <FormLabel>Update Profile Picture</FormLabel>
                                                 <FormControl>
                                                     <Input
@@ -518,7 +541,7 @@ export default function AdminSettingsPage() {
                                                         onChange={(e) => field.onChange(e.target.files)}
                                                         onBlur={field.onBlur}
                                                         name={field.name}
-                                                        className="text-xs"
+                                                        className="text-xs w-full"
                                                     />
                                                 </FormControl>
                                                 <FormMessage />
@@ -526,14 +549,16 @@ export default function AdminSettingsPage() {
                                         )}
                                     />
                                 </div>
-                                <FormField control={profileForm.control} name="fullName" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                <FormField control={profileForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} disabled /></FormControl><FormDescription>Email cannot be changed here.</FormDescription><FormMessage /></FormItem>)} />
-                                <FormField control={profileForm.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Phone Number <span className="text-muted-foreground">(Optional)</span></FormLabel><FormControl><Input type="tel" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                <FormField control={profileForm.control} name="department" render={({ field }) => (<FormItem><FormLabel>Department/Team <span className="text-muted-foreground">(Optional)</span></FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormField control={profileForm.control} name="fullName" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                                    <FormField control={profileForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} disabled /></FormControl><FormDescription className="text-xs">Email cannot be changed here.</FormDescription><FormMessage /></FormItem>)} />
+                                    <FormField control={profileForm.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Phone Number <span className="text-muted-foreground text-xs">(Optional)</span></FormLabel><FormControl><Input type="tel" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                                    <FormField control={profileForm.control} name="department" render={({ field }) => (<FormItem><FormLabel>Department/Team <span className="text-muted-foreground text-xs">(Optional)</span></FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                                </div>
                                 <div className="flex justify-end">
                                     <Button type="submit" disabled={isProfileLoading}>
-                                        <Save className="mr-2 h-4 w-4" />
-                                        {isProfileLoading ? 'Saving Profile...' : 'Save Profile'}
+                                        <Save className="mr-2 h-4 w-4 flex-shrink-0" />
+                                        <span className="truncate">{isProfileLoading ? 'Saving Profile...' : 'Save Profile'}</span>
                                     </Button>
                                 </div>
                             </form>
@@ -544,21 +569,35 @@ export default function AdminSettingsPage() {
 
             {/* Admin Password Settings */}
             <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={1}>
-                <Card>
+                <Card className="overflow-hidden">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Lock className="h-5 w-5 text-primary" /> Change Password</CardTitle>
-                        <CardDescription>Update your account password.</CardDescription>
+                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><Lock className="h-5 w-5 text-primary flex-shrink-0" /> Change Password</CardTitle>
+                        <CardDescription className="text-sm">Update your account password.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Form {...passwordForm}>
                             <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
                                 {/* Removed current password field as Supabase doesn't require it for logged-in user update */}
-                                <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (<FormItem><FormLabel>New Password</FormLabel><FormControl><Input type="password" placeholder="Min. 8 characters" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                <FormField control={passwordForm.control} name="confirmNewPassword" render={({ field }) => (<FormItem><FormLabel>Confirm New Password</FormLabel><FormControl><Input type="password" placeholder="Retype new password" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-sm">New Password</FormLabel>
+                                            <FormControl><Input type="password" placeholder="Min. 8 characters" {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                    <FormField control={passwordForm.control} name="confirmNewPassword" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-sm">Confirm New Password</FormLabel>
+                                            <FormControl><Input type="password" placeholder="Retype new password" {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                </div>
                                 <div className="flex justify-end">
                                     <Button type="submit" disabled={isPasswordLoading}>
-                                        <Save className="mr-2 h-4 w-4" />
-                                        {isPasswordLoading ? 'Updating Password...' : 'Update Password'}
+                                        <Save className="mr-2 h-4 w-4 flex-shrink-0" />
+                                        <span className="truncate">{isPasswordLoading ? 'Updating Password...' : 'Update Password'}</span>
                                     </Button>
                                 </div>
                             </form>
@@ -569,16 +608,16 @@ export default function AdminSettingsPage() {
 
             {/* Branding Settings */}
             <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={2}>
-                <Card>
+                <Card className="overflow-hidden">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><ImageIcon className="h-5 w-5 text-primary" /> Branding</CardTitle>
-                        <CardDescription>Customize the application's appearance. Ensure 'branding' bucket exists in Supabase Storage.</CardDescription>
+                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><ImageIcon className="h-5 w-5 text-primary flex-shrink-0" /> Branding</CardTitle>
+                        <CardDescription className="text-sm">Customize the application's appearance. Ensure 'branding' bucket exists in Supabase Storage.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Form {...brandingForm}>
                             <form onSubmit={brandingForm.handleSubmit(onBrandingSubmit)} className="space-y-4">
-                                <div className="flex items-center gap-4 mb-4">
-                                    <p className="font-medium">Current Logo:</p>
+                                <div className="flex flex-wrap items-center gap-4 mb-4">
+                                    <p className="font-medium text-sm">Current Logo:</p>
                                     {currentLogoUrl ? (
                                         <Image
                                             key={currentLogoUrl}
@@ -599,7 +638,7 @@ export default function AdminSettingsPage() {
                                     name="logo"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Upload New Logo</FormLabel>
+                                            <FormLabel className="text-sm">Upload New Logo</FormLabel>
                                             <FormControl>
                                                 <Input
                                                     type="file"
@@ -607,17 +646,18 @@ export default function AdminSettingsPage() {
                                                     onChange={(e) => field.onChange(e.target.files)}
                                                     onBlur={field.onBlur}
                                                     name={field.name}
+                                                    className="w-full text-sm"
                                                 />
                                             </FormControl>
-                                            <FormDescription>Recommended size: 80x80 pixels. Supports JPG, PNG, SVG.</FormDescription>
+                                            <FormDescription className="text-xs">Recommended size: 80x80 pixels. Supports JPG, PNG, SVG.</FormDescription>
                                             <FormMessage />
                                         </FormItem>
                                     )}
                                 />
                                 <div className="flex justify-end">
                                     <Button type="submit" disabled={isBrandingLoading}>
-                                        <Save className="mr-2 h-4 w-4" />
-                                        {isBrandingLoading ? 'Saving Logo...' : 'Save Logo'}
+                                        <Save className="mr-2 h-4 w-4 flex-shrink-0" />
+                                        <span className="truncate">{isBrandingLoading ? 'Saving Logo...' : 'Save Logo'}</span>
                                     </Button>
                                 </div>
                             </form>
@@ -629,25 +669,25 @@ export default function AdminSettingsPage() {
 
             {/* App Settings (General, Notifications) */}
             <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={3}>
-                <Card>
+                <Card className="overflow-hidden">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Settings className="h-5 w-5 text-primary" /> Application Settings</CardTitle>
-                        <CardDescription>Configure general application behavior and notifications.</CardDescription>
+                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><Settings className="h-5 w-5 text-primary flex-shrink-0" /> Application Settings</CardTitle>
+                        <CardDescription className="text-sm">Configure general application behavior and notifications.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Form {...appSettingsForm}>
                             <form onSubmit={appSettingsForm.handleSubmit(onAppSettingsSubmit)} className="space-y-6">
-                                <div className="space-y-4 p-4 border rounded-md">
-                                    <h3 className="font-medium text-lg">General</h3>
+                                <div className="space-y-4 p-3 sm:p-4 border rounded-md">
+                                    <h3 className="font-medium text-base md:text-lg">General</h3>
                                     <Separator className="my-2" />
                                     <FormField
                                         control={appSettingsForm.control}
                                         name="autoApproveRequests"
                                         render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                                                <div className="space-y-0.5">
-                                                    <FormLabel>Auto-Approve Requests</FormLabel>
-                                                    <FormDescription>
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
+                                                <div className="space-y-0.5 pr-2">
+                                                    <FormLabel className="text-sm">Auto-Approve Requests</FormLabel>
+                                                    <FormDescription className="text-xs sm:text-sm">
                                                         Automatically approve gear requests upon submission.
                                                     </FormDescription>
                                                 </div>
@@ -662,11 +702,11 @@ export default function AdminSettingsPage() {
                                         name="maxCheckoutDuration"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Maximum Checkout Duration (Days)</FormLabel>
+                                                <FormLabel className="text-sm">Maximum Checkout Duration (Days)</FormLabel>
                                                 <FormControl>
-                                                    <Input type="number" className="max-w-[150px]" min="1" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 0)} />
+                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="1" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 0)} />
                                                 </FormControl>
-                                                <FormDescription>
+                                                <FormDescription className="text-xs sm:text-sm">
                                                     Set the default maximum number of days a gear item can be checked out.
                                                 </FormDescription>
                                                 <FormMessage />
@@ -675,17 +715,17 @@ export default function AdminSettingsPage() {
                                     />
                                 </div>
 
-                                <div className="space-y-4 p-4 border rounded-md">
-                                    <h3 className="font-medium text-lg flex items-center gap-2"><Bell className="h-4 w-4" /> Notifications</h3>
+                                <div className="space-y-4 p-3 sm:p-4 border rounded-md">
+                                    <h3 className="font-medium text-base md:text-lg flex items-center gap-2"><Bell className="h-4 w-4 flex-shrink-0" /> Notifications</h3>
                                     <Separator className="my-2" />
                                     <FormField
                                         control={appSettingsForm.control}
                                         name="emailNotifications"
                                         render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                                                <div className="space-y-0.5">
-                                                    <FormLabel>Enable Admin Email Notifications</FormLabel>
-                                                    <FormDescription>
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
+                                                <div className="space-y-0.5 pr-2">
+                                                    <FormLabel className="text-sm">Enable Admin Email Notifications</FormLabel>
+                                                    <FormDescription className="text-xs sm:text-sm">
                                                         Receive email alerts for important events (new requests, etc.).
                                                     </FormDescription>
                                                 </div>
@@ -699,8 +739,8 @@ export default function AdminSettingsPage() {
 
                                 <div className="flex justify-end pt-2">
                                     <Button type="submit" disabled={isAppSettingsLoading}>
-                                        <Save className="mr-2 h-4 w-4" />
-                                        {isAppSettingsLoading ? "Saving App Settings..." : "Save App Settings"}
+                                        <Save className="mr-2 h-4 w-4 flex-shrink-0" />
+                                        <span className="truncate">{isAppSettingsLoading ? "Saving App Settings..." : "Save App Settings"}</span>
                                     </Button>
                                 </div>
                             </form>

@@ -1,7 +1,7 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { sendPushNotification } from '../../../../lib/push-notifications';
+import { sendPushNotification } from '@/lib/external/push-notifications';
 
 export const runtime = 'nodejs';
 

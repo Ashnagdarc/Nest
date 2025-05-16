@@ -16,9 +16,10 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Save, User, Lock, Bell } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client'; // Import Supabase client
-import type { Database } from '@/types/supabase'; // Import Supabase types
 import { useRouter } from 'next/navigation';
 import { createProfileNotification } from '@/lib/notifications';
+import { useIsMobile } from '@/hooks/use-mobile'; // Add mobile detection
+import { Session as SupabaseSession, User as SupabaseUser } from '@supabase/supabase-js';
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -45,15 +46,34 @@ const passwordSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileSchema>;
 type PasswordFormValues = z.infer<typeof passwordSchema>;
 
-// Supabase type aliases
-type Profile = Database['public']['Tables']['profiles']['Row'];
-type ProfileUpdate = Database['public']['Tables']['profiles']['Update'];
+// Define custom types for database entities
+type Profile = {
+    id: string;
+    email?: string;
+    full_name?: string | null;
+    avatar_url?: string | null;
+    phone?: string | null;
+    department?: string | null;
+    role?: string;
+    updated_at?: string;
+    [key: string]: any; // Allow for additional properties
+};
+
+type ProfileUpdate = {
+    full_name?: string | null;
+    phone?: string | null;
+    department?: string | null;
+    avatar_url?: string | null;
+    updated_at?: string;
+    [key: string]: any; // Allow for additional update properties
+};
 
 // --- Component ---
 export default function UserSettingsPage() {
     const { toast } = useToast();
     const router = useRouter();
     const supabase = createClient();
+    const isMobile = useIsMobile();
 
     // --- State ---
     const [currentUserData, setCurrentUserData] = useState<Profile | null>(null);
@@ -111,7 +131,7 @@ export default function UserSettingsPage() {
         };
 
         // Listen for Auth changes to get user ID
-        const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: SupabaseSession | null) => {
             if (session?.user && !currentUserData) { // Fetch only if user exists and data isn't loaded
                 console.log("UserSettings: Auth state change, fetching profile for", session.user.id);
                 fetchData(session.user.id);
@@ -128,7 +148,7 @@ export default function UserSettingsPage() {
         });
 
         // Initial fetch if session already exists
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        supabase.auth.getSession().then(({ data: { session } }: { data: { session: SupabaseSession | null } }) => {
             if (session?.user) {
                 fetchData(session.user.id);
             } else {
@@ -297,22 +317,25 @@ export default function UserSettingsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
-            className="space-y-8"
+            className="space-y-6 max-w-full"
         >
-            <h1 className="text-3xl font-bold text-foreground">My Settings</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">My Settings</h1>
 
             {/* Profile Settings */}
             <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={0}>
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-primary" /> Profile Information</CardTitle>
-                        <CardDescription>Update your personal details.</CardDescription>
+                <Card className="overflow-hidden">
+                    <CardHeader className="space-y-1">
+                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+                            <User className="h-5 w-5 text-primary flex-shrink-0" />
+                            <span className="truncate">Profile Information</span>
+                        </CardTitle>
+                        <CardDescription className="text-sm">Update your personal details.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Form {...profileForm}>
                             <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
-                                <div className="flex items-center gap-4 mb-4">
-                                    <Avatar className="h-16 w-16">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4">
+                                    <Avatar className="h-16 w-16 flex-shrink-0">
                                         <AvatarImage key={currentUserData.avatar_url} src={currentUserData.avatar_url || 'https://picsum.photos/seed/usersettings/100/100'} alt={currentUserData.full_name || ''} data-ai-hint="user avatar settings" />
                                         <AvatarFallback>{getInitials(currentUserData.full_name)}</AvatarFallback>
                                     </Avatar>
@@ -320,15 +343,15 @@ export default function UserSettingsPage() {
                                         control={profileForm.control}
                                         name="profilePicture"
                                         render={({ field: { value, onChange, ...fieldProps } }) => (
-                                            <FormItem className="flex-grow">
-                                                <FormLabel>Update Profile Picture</FormLabel>
+                                            <FormItem className="flex-grow w-full">
+                                                <FormLabel className="text-sm">Update Profile Picture</FormLabel>
                                                 <FormControl>
                                                     <Input
                                                         {...fieldProps}
                                                         type="file"
                                                         accept="image/*"
                                                         onChange={(event) => onChange(event.target.files)}
-                                                        className="text-xs"
+                                                        className="text-xs w-full"
                                                     />
                                                 </FormControl>
                                                 <FormMessage />
@@ -336,14 +359,41 @@ export default function UserSettingsPage() {
                                         )}
                                     />
                                 </div>
-                                <FormField control={profileForm.control} name="fullName" render={({ field }) => (<FormItem> <FormLabel>Full Name</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem>)} />
-                                <FormField control={profileForm.control} name="email" render={({ field }) => (<FormItem> <FormLabel>Email</FormLabel> <FormControl><Input {...field} disabled /></FormControl> <FormDescription>Email cannot be changed.</FormDescription> <FormMessage /> </FormItem>)} />
-                                <FormField control={profileForm.control} name="phone" render={({ field }) => (<FormItem> <FormLabel>Phone Number <span className="text-muted-foreground">(Optional)</span></FormLabel> <FormControl><Input type="tel" {...field} /></FormControl> <FormMessage /> </FormItem>)} />
-                                <FormField control={profileForm.control} name="department" render={({ field }) => (<FormItem> <FormLabel>Department/Team <span className="text-muted-foreground">(Optional)</span></FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem>)} />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormField control={profileForm.control} name="fullName" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-sm">Full Name</FormLabel>
+                                            <FormControl><Input {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                    <FormField control={profileForm.control} name="email" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-sm">Email</FormLabel>
+                                            <FormControl><Input {...field} disabled /></FormControl>
+                                            <FormDescription className="text-xs">Email cannot be changed.</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                    <FormField control={profileForm.control} name="phone" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-sm">Phone Number <span className="text-muted-foreground text-xs">(Optional)</span></FormLabel>
+                                            <FormControl><Input type="tel" {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                    <FormField control={profileForm.control} name="department" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-sm">Department/Team <span className="text-muted-foreground text-xs">(Optional)</span></FormLabel>
+                                            <FormControl><Input {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                </div>
                                 <div className="flex justify-end">
                                     <Button type="submit" disabled={isProfileLoading}>
-                                        <Save className="mr-2 h-4 w-4" />
-                                        {isProfileLoading ? 'Saving Profile...' : 'Save Profile'}
+                                        <Save className="mr-2 h-4 w-4 flex-shrink-0" />
+                                        <span className="truncate">{isProfileLoading ? 'Saving Profile...' : 'Save Profile'}</span>
                                     </Button>
                                 </div>
                             </form>
@@ -354,31 +404,44 @@ export default function UserSettingsPage() {
 
             {/* Password Settings */}
             <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={1}>
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Lock className="h-5 w-5 text-primary" /> Change Password</CardTitle>
-                        <CardDescription>Update your account password.</CardDescription>
+                <Card className="overflow-hidden">
+                    <CardHeader className="space-y-1">
+                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+                            <Lock className="h-5 w-5 text-primary flex-shrink-0" />
+                            <span className="truncate">Change Password</span>
+                        </CardTitle>
+                        <CardDescription className="text-sm">Update your account password.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Form {...passwordForm}>
                             <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
-                                <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>New Password</FormLabel>
-                                        <FormControl>
-                                            <Input type="password" placeholder="Min. 8 characters" {...field} />
-                                        </FormControl>
-                                        <FormDescription>
-                                            For your security, use a strong, unique password. We recommend using a password manager like <a href="https://1password.com/" target="_blank" rel="noopener noreferrer" className="underline text-primary">1Password</a>, <a href="https://bitwarden.com/" target="_blank" rel="noopener noreferrer" className="underline text-primary">Bitwarden</a>, or <a href="https://www.lastpass.com/" target="_blank" rel="noopener noreferrer" className="underline text-primary">LastPass</a> to generate and store secure passwords.
-                                        </FormDescription>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                <FormField control={passwordForm.control} name="confirmNewPassword" render={({ field }) => (<FormItem> <FormLabel>Confirm New Password</FormLabel> <FormControl><Input type="password" placeholder="Retype new password" {...field} /></FormControl> <FormMessage /> </FormItem>)} />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="md:col-span-2">
+                                        <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-sm">New Password</FormLabel>
+                                                <FormControl>
+                                                    <Input type="password" placeholder="Min. 8 characters" {...field} />
+                                                </FormControl>
+                                                <FormDescription className="text-xs">
+                                                    For your security, use a strong, unique password.
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                    </div>
+                                    <FormField control={passwordForm.control} name="confirmNewPassword" render={({ field }) => (
+                                        <FormItem className="md:col-span-2">
+                                            <FormLabel className="text-sm">Confirm New Password</FormLabel>
+                                            <FormControl><Input type="password" placeholder="Retype new password" {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                </div>
                                 <div className="flex justify-end">
                                     <Button type="submit" disabled={isPasswordLoading}>
-                                        <Save className="mr-2 h-4 w-4" />
-                                        {isPasswordLoading ? 'Updating Password...' : 'Update Password'}
+                                        <Save className="mr-2 h-4 w-4 flex-shrink-0" />
+                                        <span className="truncate">{isPasswordLoading ? 'Updating Password...' : 'Update Password'}</span>
                                     </Button>
                                 </div>
                             </form>
@@ -389,50 +452,45 @@ export default function UserSettingsPage() {
 
             {/* Notification Settings */}
             <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={2}>
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5 text-primary" /> Notification Preferences</CardTitle>
-                        <CardDescription>Choose which email notifications you receive. (Feature Placeholder)</CardDescription>
+                <Card className="overflow-hidden">
+                    <CardHeader className="space-y-1">
+                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+                            <Bell className="h-5 w-5 text-primary flex-shrink-0" />
+                            <span className="truncate">Notification Preferences</span>
+                        </CardTitle>
+                        <CardDescription className="text-sm">Choose which email notifications you receive.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex items-center justify-between space-x-2 p-4 border rounded-md bg-muted/50 opacity-70">
-                            <Label htmlFor="email-approval" className="flex flex-col space-y-1">
-                                <span>Request Approved</span>
-                                <span className="font-normal leading-snug text-muted-foreground text-sm">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border rounded-md bg-muted/50 opacity-70">
+                            <Label htmlFor="email-approval" className="flex flex-col space-y-1 mb-2 sm:mb-0 pr-2">
+                                <span className="text-sm font-medium">Request Approved</span>
+                                <span className="font-normal leading-snug text-muted-foreground text-xs">
                                     Get notified when your gear request is approved.
                                 </span>
                             </Label>
                             <Switch id="email-approval" checked={notificationSettings.emailOnApproval} onCheckedChange={(checked) => handleNotificationChange('emailOnApproval', checked)} disabled />
                         </div>
-                        <div className="flex items-center justify-between space-x-2 p-4 border rounded-md bg-muted/50 opacity-70">
-                            <Label htmlFor="email-rejection" className="flex flex-col space-y-1">
-                                <span>Request Rejected</span>
-                                <span className="font-normal leading-snug text-muted-foreground text-sm">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border rounded-md bg-muted/50 opacity-70">
+                            <Label htmlFor="email-rejection" className="flex flex-col space-y-1 mb-2 sm:mb-0 pr-2">
+                                <span className="text-sm font-medium">Request Rejected</span>
+                                <span className="font-normal leading-snug text-muted-foreground text-xs">
                                     Get notified when your gear request is rejected.
                                 </span>
                             </Label>
                             <Switch id="email-rejection" checked={notificationSettings.emailOnRejection} onCheckedChange={(checked) => handleNotificationChange('emailOnRejection', checked)} disabled />
                         </div>
-                        <div className="flex items-center justify-between space-x-2 p-4 border rounded-md bg-muted/50 opacity-70">
-                            <Label htmlFor="email-due-soon" className="flex flex-col space-y-1">
-                                <span>Gear Due Soon Reminder</span>
-                                <span className="font-normal leading-snug text-muted-foreground text-sm">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border rounded-md bg-muted/50 opacity-70">
+                            <Label htmlFor="email-due-soon" className="flex flex-col space-y-1 mb-2 sm:mb-0 pr-2">
+                                <span className="text-sm font-medium">Gear Due Soon Reminder</span>
+                                <span className="font-normal leading-snug text-muted-foreground text-xs">
                                     Receive a reminder before your checked-out gear is due.
                                 </span>
                             </Label>
                             <Switch id="email-due-soon" checked={notificationSettings.emailOnDueSoon} onCheckedChange={(checked) => handleNotificationChange('emailOnDueSoon', checked)} disabled />
                         </div>
-                        {/* Optional: Explicit Save Button if auto-save on toggle is not desired
-                         <div className="flex justify-end pt-2">
-                            <Button onClick={() => handleSaveNotificationSettings(notificationSettings)} disabled={isNotificationLoading}>
-                                <Save className="mr-2 h-4 w-4" />
-                                {isNotificationLoading ? "Saving..." : "Save Notifications"}
-                            </Button>
-                        </div> */}
                     </CardContent>
                 </Card>
             </motion.div>
-
         </motion.div>
     );
 }

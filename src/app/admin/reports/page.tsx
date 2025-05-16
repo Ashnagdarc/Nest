@@ -1,991 +1,1072 @@
-"use client"
+"use client";
 
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart as BarChartIcon, LineChartIcon, Package, AlertTriangle, Calendar, SheetIcon, Download, CheckCircle, RefreshCw, Filter, Users, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart, Line } from 'recharts';
-import { useState, useEffect, useRef } from 'react';
 import type { DateRange } from 'react-day-picker';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
-import { format, subDays } from 'date-fns';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { subDays, format, getISOWeek, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
 import { Skeleton } from "@/components/ui/skeleton";
-import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
-import { Input } from "@/components/ui/input";
-import { PostgrestError } from '@supabase/supabase-js';
+import { WeeklyActivityReport } from "@/components/reports/WeeklyActivityReport";
 
-interface GearCheckout {
+interface Gear {
   id: string;
-  gear_id: string;
-  checkout_date: string;
-  checkin_date: string | null;
-  gears?: {
-    name: string;
-  };
+  name: string;
+  full_name?: string;
+  category?: string;
 }
 
 interface GearRequest {
-  id: number;
-  created_at: string;
-  status: string;
+  id?: string;
+  gear_ids?: string[];
+  gears?: Gear[];
 }
 
-interface GearMaintenance {
-  id: number;
+interface PopularGear {
+  name: string;
+  count: number;
+  fullName: string;
+}
+
+interface PopularGearResult {
   gear_id: string;
-  status: string;
-  description: string;
-  performed_at: string;
-  performed_by: string;
-  created_at: string;
-  maintenance_type: string;
+  name: string;
+  full_name: string;
+  request_count: number;
 }
 
-interface Profile {
+interface WeeklyTrend {
+  week: string;
+  weekLabel: string;
+  requests: number;
+  damages: number;
+}
+
+interface ActivityLogEntry {
   id: string;
+  type: string;
+  timestamp: string;
   status: string;
+  gearName: string;
+  gearCategory?: string;
+  gearImage?: string;
+  userName: string;
+  userAvatar?: string;
+  notes?: string;
+  details?: any;
+}
+
+interface AnalyticsData {
+  totalRequests: number;
+  totalDamageReports: number;
+  popularGears: Array<PopularGear>;
+  weeklyTrends: Array<WeeklyTrend>;
+  recentActivity: Array<ActivityLogEntry>;
+}
+
+interface RequestData {
+  created_at: string;
 }
 
 interface GearData {
   id: string;
   name: string;
   category?: string;
-  created_at: string;
+  image_url?: string;
+  full_name?: string;
 }
 
-type WeeklyUsage = {
-  week: string;
-  requests: number;
-  damage: number;
-};
-
-type PopularGear = {
-  name: string;
-  requests: number;
-};
-
-interface RawCheckoutLog {
+interface ProfileData {
   id: string;
-  checkout_date: string;
-  status: string;
-  profiles?: {
-    full_name: string;
-    email: string;
-  };
-  gears?: {
-    name: string;
-  };
+  full_name?: string;
+  avatar_url?: string;
 }
 
-interface CheckoutLog {
+interface ActivityData {
   id: string;
-  userName: string;
-  gearName: string;
-  checkoutDate: Date;
-  status: string;
-  user?: {
-    full_name: string;
-    email: string;
-  };
-  gears?: Array<{
-    name: string;
-  }>;
-}
-
-// Update the type definitions at the top of the file
-type RealtimePayload = {
-  [key: string]: any;
-  type: string;
-  table: string;
-  schema: string;
-  commit_timestamp: string;
-  eventType: string;
-  new: { [key: string]: any };
-  old: { [key: string]: any };
-};
-
-// Add these type definitions
-type GearRequestPayload = RealtimePostgresChangesPayload<{
-  old: GearRequest | null;
-  new: GearRequest;
-}>;
-
-type GearPayload = RealtimePostgresChangesPayload<{
-  old: GearData | null;
-  new: GearData;
-}>;
-
-// Add new interface for activity log
-interface GearActivityLog {
-  id: number;
-  gear_id: string;
-  user_id: string;
+  gear_id?: string;
+  user_id?: string;
+  activity_type: string;
+  status?: string;
+  notes?: string;
+  details?: any;
   created_at: string;
-  gears?: {
-    name: string;
-  };
-}
-
-// Update AnalyticsData interface
-interface AnalyticsData {
-  totalRequests: number;
-  totalCheckouts: number;
-  totalCheckins: number;
-  totalDamageReports: number;
-  totalRepairs: number;
-  activeUsers: number;
-  popularGears: Array<{ name: string; count: number }>;
-  weeklyTrends: Array<{
-    week: string;
-    requests: number;
-    checkouts: number;
-    damages: number;
-    activities: number;
-  }>;
-  recentActivities: Array<{
-    id: number;
-    gearName: string;
-    userName: string;
-    actionType: string;
-    description: string;
-    timestamp: string;
-  }>;
+  updated_at?: string;
 }
 
 export default function ReportsPage() {
-  const supabase = createClient();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 30), // Last 30 days
-    to: new Date() // Current date
+    from: subDays(new Date(), 30),
+    to: new Date()
   });
-  const [weeklyUsage, setWeeklyUsage] = useState<WeeklyUsage[]>([]);
-  const [popularGears, setPopularGears] = useState<PopularGear[]>([]);
-  const [checkoutLog, setCheckoutLog] = useState<CheckoutLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [totalRequests, setTotalRequests] = useState(0);
-  const [totalDamages, setTotalDamages] = useState(0);
-  const [mostPopularGear, setMostPopularGear] = useState<string>('None');
-  const channelRef = useRef<RealtimeChannel | null>(null);
-  const { toast } = useToast();
-  const [searchTerm, setSearchTerm] = useState('');
   const [analytics, setAnalytics] = useState<AnalyticsData>({
     totalRequests: 0,
-    totalCheckouts: 0,
-    totalCheckins: 0,
     totalDamageReports: 0,
-    totalRepairs: 0,
-    activeUsers: 0,
     popularGears: [],
     weeklyTrends: [],
-    recentActivities: []
+    recentActivity: []
   });
+  const { toast } = useToast();
+  const supabase = createClient();
 
-  // Define initializeData at the component level so it's accessible to all effects and handlers
-  const initializeData = async () => {
-    setIsLoading(true);
-    console.log('Initializing data fetch with date range:', dateRange);
+  async function fetchPopularGears(): Promise<PopularGear[]> {
     try {
-      // First check if tables exist
-      const { data: tablesExist, error: checkError } = await supabase
+      if (!dateRange?.from || !dateRange?.to) {
+        throw new Error('Invalid date range');
+      }
+
+      console.log('Fetching popular gears for date range:', {
+        from: dateRange.from.toISOString(),
+        to: dateRange.to.toISOString()
+      });
+
+      // First try using the RPC function
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('get_popular_gears', {
+          start_date: dateRange.from.toISOString(),
+          end_date: dateRange.to.toISOString()
+        });
+
+      if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+        console.log('Successfully fetched popular gears via RPC', rpcData);
+        return rpcData.map(item => ({
+          name: item.name || 'Unknown Gear',
+          fullName: item.full_name || 'Unknown Gear',
+          count: Number(item.request_count) || 0
+        }));
+      }
+
+      // If RPC fails or returns empty, try the direct query approach
+      console.warn('RPC method did not return data, trying direct query:', rpcError);
+
+      // Log more detailed error for debugging
+      if (rpcError) {
+        console.error('RPC Error Details:', {
+          message: rpcError.message,
+          code: rpcError.code,
+          details: rpcError.details,
+          hint: rpcError.hint
+        });
+      }
+
+      // First check if gear_requests table has gear_ids field or gears join capability
+      const { data: tableInfo, error: tableError } = await supabase
         .from('gear_requests')
-        .select('count', { count: 'exact', head: true })
+        .select('*')
         .limit(1);
 
-      if (checkError) {
-        console.error('Error checking tables:', checkError);
-        throw new Error('Failed to check database tables');
+      if (tableError) {
+        console.error('Error checking gear_requests table:', tableError);
+        throw new Error(`Failed to check gear_requests table: ${tableError.message}`);
       }
 
-      // Fetch all data first, then process errors
-      console.log('Fetching data from all tables...');
-
-      const [
-        requestsResult,
-        damageResult,
-        usersResult,
-        checkoutsResult,
-        activityLogResult
-      ] = await Promise.all([
+      const hasGearIds = tableInfo && tableInfo[0] && 'gear_ids' in tableInfo[0];
+      const directQuery = hasGearIds
+        ? // Use gear_ids array if it exists
         supabase
           .from('gear_requests')
-          .select('id, created_at, status')
-          .gte('created_at', dateRange?.from?.toISOString() || '')
-          .lte('created_at', dateRange?.to?.toISOString() || ''),
-
-        supabase
-          .from('gear_maintenance')
           .select(`
-            id,
-            gear_id,
-            status,
-            description,
-            performed_at,
-            performed_by,
-            created_at,
-            maintenance_type,
-            gears!gear_maintenance_gear_id_fkey (
-              name
-            )
-          `)
-          .gte('created_at', dateRange?.from?.toISOString() || '')
-          .lte('created_at', dateRange?.to?.toISOString() || ''),
-
+              id,
+              gear_ids
+            `)
+          .gte('created_at', dateRange.from.toISOString())
+          .lte('created_at', dateRange.to.toISOString())
+        : // Otherwise try to use a join or relationship
         supabase
-          .from('profiles')
-          .select('id, status')
-          .eq('status', 'active'),
-
-        supabase
-          .from('gear_checkouts')
+          .from('gear_requests')
           .select(`
+          id,
+          gears (
             id,
-            checkout_date,
-            status,
-            profiles!gear_checkouts_user_id_fkey (
-              full_name,
-              email
-            ),
-            gears!gear_checkouts_gear_id_fkey (
-              name
-            )
-          `)
-          .gte('checkout_date', dateRange?.from?.toISOString() || '')
-          .lte('checkout_date', dateRange?.to?.toISOString() || '')
-          .order('checkout_date', { ascending: false }),
+            name,
+            full_name
+          )
+        `)
+          .gte('created_at', dateRange.from.toISOString())
+          .lte('created_at', dateRange.to.toISOString());
 
-        supabase
-          .from('gear_activity_log')
-          .select(`
-            id,
-            gear_id,
-            user_id,
-            created_at,
-            gears!gear_activity_log_gear_id_fkey (
-              name
-            )
-          `)
-          .gte('created_at', dateRange?.from?.toISOString() || '')
-          .lte('created_at', dateRange?.to?.toISOString() || '')
-          .order('created_at', { ascending: false })
-      ]);
+      const { data: requestData, error: queryError } = await directQuery;
 
-      // Log all responses for debugging
-      console.log('API Responses:', {
-        requests: requestsResult,
-        damage: damageResult,
-        users: usersResult,
-        checkouts: checkoutsResult,
-        activityLog: activityLogResult
-      });
-
-      // Check for errors in any response
-      const errors = [];
-      if (requestsResult.error) errors.push(`Requests: ${requestsResult.error.message}`);
-      if (damageResult.error) errors.push(`Maintenance: ${damageResult.error.message}`);
-      if (usersResult.error) errors.push(`Users: ${usersResult.error.message}`);
-      if (checkoutsResult.error) errors.push(`Checkouts: ${checkoutsResult.error.message}`);
-      if (activityLogResult.error) errors.push(`Activity Log: ${activityLogResult.error.message}`);
-
-      if (errors.length > 0) {
-        throw new Error(`Data fetch errors:\n${errors.join('\n')}`);
+      if (queryError) {
+        console.error('Query Error Details:', {
+          message: queryError.message,
+          code: queryError.code,
+          details: queryError.details,
+          hint: queryError.hint
+        });
+        throw new Error(`Failed to query gear requests: ${queryError.message}`);
       }
 
-      // Process analytics data
-      const gearCounts = new Map<string, number>();
-      (checkoutsResult.data || []).forEach((checkout: any) => {
-        const gearName = checkout.gears?.name || 'Unknown Gear';
-        gearCounts.set(gearName, (gearCounts.get(gearName) || 0) + 1);
-      });
+      if (!Array.isArray(requestData)) {
+        throw new Error('Invalid response format: expected an array of gear requests');
+      }
 
-      const popularGears = Array.from(gearCounts.entries())
-        .map(([name, count]) => ({ name, count }))
+      // Process and aggregate the gear usage data
+      const gearUsage = new Map<string, { name: string; fullName: string; count: number }>();
+
+      if (hasGearIds) {
+        // Process gear_ids array approach
+        const gearIds = requestData.flatMap(request => request.gear_ids || []);
+
+        if (gearIds.length > 0) {
+          // Fetch gear details for all the unique IDs
+          const uniqueIds = [...new Set(gearIds)];
+          const { data: gearsData, error: gearsError } = await supabase
+            .from('gears')
+            .select('id, name, full_name')
+            .in('id', uniqueIds);
+
+          if (gearsError) {
+            throw new Error(`Failed to fetch gear details: ${gearsError.message}`);
+          }
+
+          // Create a lookup map for gear details
+          const gearDetailsMap = new Map();
+          gearsData?.forEach(gear => {
+            gearDetailsMap.set(gear.id, {
+              name: gear.name,
+              fullName: gear.full_name || gear.name
+            });
+          });
+
+          // Count occurrences of each gear ID
+          gearIds.forEach(gearId => {
+            if (!gearId) return;
+            const details = gearDetailsMap.get(gearId) || { name: 'Unknown', fullName: 'Unknown Gear' };
+            const existing = gearUsage.get(gearId) || {
+              name: details.name,
+              fullName: details.fullName,
+              count: 0
+            };
+            gearUsage.set(gearId, { ...existing, count: existing.count + 1 });
+          });
+        }
+      } else {
+        // Process using gears relationship approach
+        requestData.forEach((request: GearRequest) => {
+          if (request.gears) {
+            // Process array of gears if gears is an array
+            if (Array.isArray(request.gears)) {
+              request.gears.forEach((gear: Gear) => {
+                if (gear && typeof gear === 'object' && 'id' in gear && 'name' in gear) {
+                  const key = String(gear.id);
+                  const name = String(gear.name);
+                  const fullName = gear.full_name ? String(gear.full_name) : name;
+
+                  const existing = gearUsage.get(key) || {
+                    name,
+                    fullName,
+                    count: 0
+                  };
+                  gearUsage.set(key, { ...existing, count: existing.count + 1 });
+                }
+              });
+            }
+            // Otherwise just log that we got an unexpected format
+            else {
+              console.warn('Unexpected gears format in request:', request.id);
+            }
+          }
+        });
+      }
+
+      const result = Array.from(gearUsage.values())
         .sort((a, b) => b.count - a.count)
-        .slice(0, 5);
+        .map(item => ({
+          name: item.name,
+          fullName: item.fullName,
+          count: item.count
+        }));
 
-      // Process activity log data
-      const recentActivities = (activityLogResult.data || []).map((log: GearActivityLog) => ({
-        id: log.id,
-        gearName: log.gears?.name || 'Unknown Gear',
-        userName: 'Unknown User',
-        actionType: 'Activity',
-        description: 'N/A',
-        timestamp: log.created_at
-      }));
+      if (result.length === 0) {
+        console.info('No popular gears found in the selected date range');
+      } else {
+        console.log(`Found ${result.length} popular gears`, result);
+      }
 
-      // Process weekly trends
-      const weeklyData = new Map<string, { requests: number; checkouts: number; damages: number; activities: number }>();
-
-      (requestsResult.data || []).forEach((request: GearRequest) => {
-        const week = format(new Date(request.created_at), 'yyyy-ww');
-        const current = weeklyData.get(week) || { requests: 0, checkouts: 0, damages: 0, activities: 0 };
-        weeklyData.set(week, { ...current, requests: current.requests + 1 });
-      });
-
-      (checkoutsResult.data || []).forEach((checkout: any) => {
-        const week = format(new Date(checkout.checkout_date), 'yyyy-ww');
-        const current = weeklyData.get(week) || { requests: 0, checkouts: 0, damages: 0, activities: 0 };
-        weeklyData.set(week, { ...current, checkouts: current.checkouts + 1 });
-      });
-
-      (damageResult.data || []).forEach((damage: GearMaintenance) => {
-        const week = format(new Date(damage.created_at), 'yyyy-ww');
-        const current = weeklyData.get(week) || { requests: 0, checkouts: 0, damages: 0, activities: 0 };
-        weeklyData.set(week, { ...current, damages: current.damages + 1 });
-      });
-
-      // Add activity log to weekly trends
-      (activityLogResult.data || []).forEach((activity: GearActivityLog) => {
-        const week = format(new Date(activity.created_at), 'yyyy-ww');
-        const current = weeklyData.get(week) || { requests: 0, checkouts: 0, damages: 0, activities: 0 };
-        weeklyData.set(week, { ...current, activities: current.activities + 1 });
-      });
-
-      const weeklyTrends = Array.from(weeklyData.entries())
-        .map(([week, data]) => ({ week, ...data }))
-        .sort((a, b) => a.week.localeCompare(b.week));
-
-      // Update state
-      setAnalytics({
-        totalRequests: requestsResult.data?.length || 0,
-        totalCheckouts: checkoutsResult.data?.length || 0,
-        totalCheckins: 0,
-        totalDamageReports: (damageResult.data || []).filter((d: GearMaintenance) => d.maintenance_type === 'Damage Report')?.length || 0,
-        totalRepairs: (damageResult.data || []).filter((d: GearMaintenance) => d.status === 'Under Repair')?.length || 0,
-        activeUsers: usersResult.data?.length || 0,
-        popularGears,
-        weeklyTrends,
-        recentActivities: recentActivities.slice(0, 10) // Show only the 10 most recent activities
-      });
-
-      // Process checkout logs
-      const processedLogs: CheckoutLog[] = (checkoutsResult.data || []).map((log: any) => ({
-        id: log.id,
-        userName: log.profiles?.full_name || 'Unknown User',
-        gearName: log.gears?.name || 'Unknown Gear',
-        checkoutDate: new Date(log.checkout_date),
-        status: log.status || 'Unknown',
-        user: log.profiles,
-        gears: log.gears ? [log.gears] : []
-      }));
-
-      setCheckoutLog(processedLogs);
-      console.log('Data processing completed successfully');
+      return result;
 
     } catch (error) {
-      console.error('Error during data initialization:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data';
-      console.error('Detailed error:', errorMessage);
-      setError(errorMessage);
+      console.error('Error fetching popular gears:', error);
+      throw error;
+    }
+  }
+
+  // Add weekly trends fetching logic
+  async function fetchWeeklyTrends(): Promise<WeeklyTrend[]> {
+    try {
+      console.log('Fetching weekly trends for date range:', {
+        from: dateRange?.from?.toISOString() || '',
+        to: dateRange?.to?.toISOString() || ''
+      });
+
+      // Try to get weekly trends data
+      const [requestsResult, damagesResult] = await Promise.all([
+        supabase
+          .from('gear_requests')
+          .select('created_at')
+          .gte('created_at', dateRange?.from?.toISOString() || '')
+          .lte('created_at', dateRange?.to?.toISOString() || ''),
+        supabase
+          .from('gear_maintenance')
+          .select('created_at')
+          .eq('maintenance_type', 'Damage Report')
+          .gte('created_at', dateRange?.from?.toISOString() || '')
+          .lte('created_at', dateRange?.to?.toISOString() || '')
+      ]);
+
+      if (requestsResult.error) throw requestsResult.error;
+      if (damagesResult.error) throw damagesResult.error;
+
+      const weeklyData: Record<string, { requests: number; damages: number }> = {};
+
+      // Process request data
+      requestsResult.data?.forEach((request: RequestData) => {
+        const date = new Date(request.created_at);
+        const weekKey = `${format(date, 'yyyy')}-${getISOWeek(date)}`;
+        if (!weeklyData[weekKey]) {
+          weeklyData[weekKey] = { requests: 0, damages: 0 };
+        }
+        weeklyData[weekKey].requests++;
+      });
+
+      // Process damage reports data
+      damagesResult.data?.forEach((damage: RequestData) => {
+        const date = new Date(damage.created_at);
+        const weekKey = `${format(date, 'yyyy')}-${getISOWeek(date)}`;
+        if (!weeklyData[weekKey]) {
+          weeklyData[weekKey] = { requests: 0, damages: 0 };
+        }
+        weeklyData[weekKey].damages++;
+      });
+
+      // If we have no data and this is dev mode, create sample data
+      if (Object.keys(weeklyData).length === 0 && process.env.NODE_ENV !== 'production') {
+        console.log('Creating sample weekly trends data for development');
+        const today = new Date();
+        const lastWeek = subDays(today, 7);
+
+        const weekKey1 = `${format(lastWeek, 'yyyy')}-${getISOWeek(lastWeek)}`;
+        const weekKey2 = `${format(today, 'yyyy')}-${getISOWeek(today)}`;
+
+        weeklyData[weekKey1] = { requests: 3, damages: 0 };
+        weeklyData[weekKey2] = { requests: 5, damages: 1 };
+      }
+
+      return Object.entries(weeklyData)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([week, data]) => ({
+          week,
+          weekLabel: `Week ${week.split('-')[1]}`,
+          requests: data.requests,
+          damages: data.damages
+        }));
+    } catch (err) {
+      console.error('Error fetching weekly trends:', err);
+      throw err; // Propagate the error for better handling in fetchData
+    }
+  }
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log('Fetching analytics data...');
+
+      // Get total requests count
+      const { data: requestsData, error: requestsError } = await supabase
+        .from('gear_requests')
+        .select('id', { count: 'exact' })
+        .gte('created_at', dateRange?.from?.toISOString() || '')
+        .lte('created_at', dateRange?.to?.toISOString() || '');
+
+      if (requestsError) throw requestsError;
+
+      // Get total damage reports count
+      const { data: damageData, error: damageError } = await supabase
+        .from('gear_maintenance')
+        .select('id', { count: 'exact' })
+        .eq('maintenance_type', 'Damage Report')
+        .gte('created_at', dateRange?.from?.toISOString() || '')
+        .lte('created_at', dateRange?.to?.toISOString() || '');
+
+      if (damageError) throw damageError;
+
+      // Try to get popular gears using the RPC function first
+      let popularGears: PopularGear[] = [];
+      try {
+        const { data: rpcData, error: rpcError } = await supabase
+          .rpc('get_popular_gears', {
+            start_date: dateRange?.from?.toISOString() || '',
+            end_date: dateRange?.to?.toISOString() || ''
+          });
+
+        if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+          console.log('Successfully fetched popular gears via RPC', rpcData);
+          popularGears = rpcData.map(item => ({
+            name: item.name || 'Unknown Gear',
+            fullName: item.full_name || item.name || 'Unknown Gear',
+            count: Number(item.request_count) || 0
+          }));
+        } else {
+          // Fall back to direct query if RPC fails
+          console.warn('RPC method did not return data, trying direct query:', rpcError);
+
+          // Extract all gear IDs from requests
+          const { data: gearRequestsData, error: gearError } = await supabase
+            .from('gear_requests')
+            .select('gear_ids')
+            .gte('created_at', dateRange?.from?.toISOString() || '')
+            .lte('created_at', dateRange?.to?.toISOString() || '');
+
+          if (gearError) throw gearError;
+
+          // Extract all gear IDs
+          const allGearIds = gearRequestsData
+            ?.filter(req => req.gear_ids && Array.isArray(req.gear_ids))
+            .flatMap(req => req.gear_ids || []);
+
+          if (allGearIds && allGearIds.length > 0) {
+            // Count occurrences of each gear ID
+            const gearCounts: Record<string, number> = {};
+            allGearIds.forEach((gearId: string) => {
+              if (!gearId) return;
+              gearCounts[gearId] = (gearCounts[gearId] || 0) + 1;
+            });
+
+            // Get top 5 gear IDs
+            const topGearIds = Object.entries(gearCounts)
+              .sort(([, countA], [, countB]) => countB - countA)
+              .slice(0, 5)
+              .map(([id]) => id);
+
+            if (topGearIds.length > 0) {
+              // Fetch gear details
+              const { data: gearsData, error: gearsError } = await supabase
+                .from('gears')
+                .select('id, name, category')
+                .in('id', topGearIds);
+
+              if (gearsError) throw gearsError;
+
+              // Create popular gears result
+              popularGears = topGearIds.map(id => {
+                const gear = gearsData?.find((g: { id: string }) => g.id === id);
+                return {
+                  name: gear?.name || 'Unknown Gear',
+                  fullName: gear?.category ? `${gear.name} (${gear.category})` : gear?.name || 'Unknown Gear',
+                  count: gearCounts[id]
+                };
+              });
+            }
+          }
+        }
+      } catch (gearError) {
+        console.error('Error fetching popular gears:', gearError);
+        // Continue without popular gears data
+      }
+
+      // Get recent activity log data
+      let recentActivity: ActivityLogEntry[] = [];
+      try {
+        console.log('Fetching activity log data from database...');
+
+        // First check if the gear_activity_log table exists and has data
+        const { count, error: countError } = await supabase
+          .from('gear_activity_log')
+          .select('*', { count: 'exact', head: true });
+
+        if (countError) {
+          console.error('Error checking gear_activity_log table:', countError);
+          throw countError;
+        }
+
+        console.log(`Found ${count} total entries in gear_activity_log table`);
+
+        if (count && count > 0) {
+          // First, fetch just the activity log data without joins
+          const { data: activityData, error: activityError } = await supabase
+            .from('gear_activity_log')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(15);
+
+          if (activityError) {
+            console.error('Error fetching activity log data:', activityError);
+            throw activityError;
+          }
+
+          if (!activityData || activityData.length === 0) {
+            console.log('No activity log entries found in the selected date range');
+            return;
+          }
+
+          console.log('Successfully fetched activity log data:', activityData.length, 'entries');
+          console.log('First entry sample:', JSON.stringify(activityData[0], null, 2));
+
+          // Get the gear IDs and user IDs
+          const gearIds = activityData
+            .map((activity: ActivityData) => activity.gear_id)
+            .filter((id): id is string => id !== null && id !== undefined);
+
+          const userIds = activityData
+            .map((activity: ActivityData) => activity.user_id)
+            .filter((id): id is string => id !== null && id !== undefined);
+
+          // Fetch gear details separately  
+          const { data: gearsData, error: gearsError } = await supabase
+            .from('gears')
+            .select('id, name, category, image_url')
+            .in('id', gearIds);
+
+          if (gearsError) {
+            console.error('Error fetching gear details:', gearsError);
+            // Continue with what we have - don't throw
+          }
+
+          // Fetch user details separately
+          const { data: profilesData, error: profilesError } = await supabase
+            .from('profiles')
+            .select('id, full_name, avatar_url')
+            .in('id', userIds);
+
+          if (profilesError) {
+            console.error('Error fetching profile details:', profilesError);
+            // Continue with what we have - don't throw
+          }
+
+          // Create lookup maps for fast access
+          const gearMap = new Map<string, GearData>();
+          if (gearsData) {
+            gearsData.forEach((gear: GearData) => {
+              gearMap.set(gear.id, gear);
+            });
+          }
+
+          const userMap = new Map<string, ProfileData>();
+          if (profilesData) {
+            profilesData.forEach((profile: ProfileData) => {
+              userMap.set(profile.id, profile);
+            });
+          }
+
+          // Create a function to generate avatar URL if not available
+          const getAvatarUrl = (name: string) => {
+            // Generate a deterministic color based on the name
+            const colors = ['0D8ABC', 'E03A3F', '32A852', '7047EB', 'F9A826', '2E86C1', 'CB4335', '28B463', '8E44AD', 'D68910'];
+            const hash = name.split('').reduce((a, b) => {
+              a = ((a << 5) - a) + b.charCodeAt(0);
+              return a & a;
+            }, 0);
+            const colorIndex = Math.abs(hash) % colors.length;
+            const color = colors[colorIndex];
+
+            return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=${color}&color=fff`;
+          };
+
+          // Map the activity data with gear and user details
+          recentActivity = activityData.map((activity: ActivityData) => {
+            const gear = activity.gear_id ? gearMap.get(activity.gear_id) : undefined;
+            const user = activity.user_id ? userMap.get(activity.user_id) : undefined;
+
+            const gearName = gear?.name || 'Unknown Gear';
+            const userName = user?.full_name || 'Unknown User';
+
+            return {
+              id: activity.id,
+              type: activity.activity_type,
+              timestamp: activity.created_at,
+              status: activity.status || 'Unknown',
+              gearName: gearName,
+              gearCategory: gear?.category,
+              gearImage: gear?.image_url,
+              userName: userName,
+              userAvatar: user?.avatar_url || getAvatarUrl(userName),
+              notes: activity.notes,
+              details: activity.details
+            };
+          });
+
+          console.log('Successfully processed activity data with gear and user details');
+        } else {
+          console.log('No activity log entries found in the database');
+        }
+      } catch (activityError) {
+        console.error('Error in activity log processing:', activityError);
+        // Continue without activity log data
+      }
+
+      // Get weekly trends
+      const weeklyTrends = await fetchWeeklyTrends();
+
+      // If we have no popular gears and this is dev mode, create sample data
+      if (popularGears.length === 0 && process.env.NODE_ENV !== 'production') {
+        console.log('Creating sample popular gears data for development');
+        popularGears = [
+          { name: 'Sony A7 III', fullName: 'Sony A7 III (Camera)', count: 12 },
+          { name: 'Canon EOS R5', fullName: 'Canon EOS R5 (Camera)', count: 8 },
+          { name: 'Dell XPS 15', fullName: 'Dell XPS 15 (Laptop)', count: 6 },
+          { name: 'Godox SL60W', fullName: 'Godox SL60W (Lighting)', count: 4 },
+          { name: 'Samsung 4K Monitor', fullName: 'Samsung 4K Monitor (Monitor)', count: 3 }
+        ];
+      }
+
+      // Update analytics state
+      setAnalytics({
+        totalRequests: requestsData?.length || 0,
+        totalDamageReports: damageData?.length || 0,
+        popularGears,
+        weeklyTrends,
+        recentActivity
+      });
+
+      console.log('Analytics data updated successfully with the following data:',
+        `- Total Requests: ${requestsData?.length || 0}`,
+        `- Total Damage Reports: ${damageData?.length || 0}`,
+        `- Popular Gears: ${popularGears.length}`,
+        `- Weekly Trends: ${weeklyTrends.length}`,
+        `- Recent Activity: ${recentActivity.length}`
+      );
+
+      // Show success toast if this was a manual refresh
+      if (!isLoading) {
+        toast({
+          title: "Data refreshed",
+          description: "Analytics data has been updated.",
+        });
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError('Failed to load analytics data: ' + errorMessage);
+      console.error('Error loading analytics:', err);
+
+      toast({
+        title: "Error loading data",
+        description: errorMessage,
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Data fetching effect
   useEffect(() => {
-    initializeData();
+    fetchData();
   }, [dateRange]);
 
-  // Update the realtime subscription handlers
+  // Add a subscription for real-time updates
   useEffect(() => {
-    const setupRealtimeSubscription = async () => {
-      if (channelRef.current) {
-        console.log('Removing existing realtime subscription');
-        await supabase.removeChannel(channelRef.current);
-      }
+    // Create a subscription for gear requests changes
+    const requestsChannel = supabase.channel('reports-requests-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'gear_requests'
+      }, () => {
+        console.log('Gear requests changed, refreshing data...');
+        fetchData();
+      })
+      .subscribe();
 
-      console.log('Setting up new realtime subscription');
-      const channel = supabase.channel('reports-analytics-changes')
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'gear_requests' },
-          (payload: RealtimePostgresChangesPayload<RealtimePayload>) => {
-            console.log('Realtime update from gear_requests:', payload);
-            toast({
-              title: "Data Updated",
-              description: "New request data available. Refreshing reports...",
-            });
-            initializeData();
-          }
-        )
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'gear_checkouts' },
-          (payload: RealtimePostgresChangesPayload<RealtimePayload>) => {
-            console.log('Realtime update from gear_checkouts:', payload);
-            initializeData();
-          }
-        )
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'gear_maintenance' },
-          (payload: RealtimePostgresChangesPayload<RealtimePayload>) => {
-            console.log('Realtime update from gear_maintenance:', payload);
-            initializeData();
-          }
-        );
+    // Create a subscription for gear maintenance/damage changes
+    const maintenanceChannel = supabase.channel('reports-maintenance-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'gear_maintenance'
+      }, () => {
+        console.log('Gear maintenance changed, refreshing data...');
+        fetchData();
+      })
+      .subscribe();
 
-      await channel.subscribe((status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR') => {
-        console.log('Realtime subscription status:', status);
-      });
-
-      channelRef.current = channel;
-    };
-
-    setupRealtimeSubscription();
+    // Create a subscription for gear activity log changes
+    const activityLogChannel = supabase.channel('reports-activity-log-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'gear_activity_log'
+      }, () => {
+        console.log('Activity log changed, refreshing data...');
+        fetchData();
+      })
+      .subscribe();
 
     return () => {
-      if (channelRef.current) {
-        console.log('Cleaning up realtime subscription');
-        supabase.removeChannel(channelRef.current);
-      }
+      supabase.removeChannel(requestsChannel);
+      supabase.removeChannel(maintenanceChannel);
+      supabase.removeChannel(activityLogChannel);
     };
   }, []);
-
-  const cardVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: {
-        delay: i * 0.1,
-        duration: 0.5,
-        ease: "easeOut",
-      },
-    }),
-  };
-
-  const tableContainerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.05,
-        delayChildren: 0.1, // Delay children animation slightly
-      }
-    }
-  };
-
-  const tableRowVariants = {
-    hidden: { y: 10, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.3,
-        ease: "easeOut"
-      }
-    }
-  };
-
-  // Function to handle date range changes
-  const handleDateChange = (newDateRange: DateRange | undefined) => {
-    // Ensure we don't allow future dates
-    const now = new Date();
-    const adjustedRange = newDateRange ? {
-      from: newDateRange.from,
-      to: newDateRange.to && newDateRange.to > now ? now : newDateRange.to
-    } : undefined;
-
-    setDateRange(adjustedRange);
-    console.log("Selected date range:", adjustedRange);
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'checked out':
-        return <Badge variant="secondary"><Package className="mr-1 h-3 w-3" /> {status}</Badge>;
-      case 'checked in':
-        return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white"><CheckCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
-      case 'overdue':
-        return <Badge variant="destructive"><AlertTriangle className="mr-1 h-3 w-3" /> {status}</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
-  // Function to handle CSV download for checkout log
-  const downloadCheckoutLogCSV = () => {
-    const dataToDownload = checkoutLog; // Use actual data
-
-    if (dataToDownload.length === 0) {
-      toast({ title: "No Data", description: "There is no checkout log data to download.", variant: "destructive" });
-      return;
-    }
-
-    const headers = ['Log ID', 'User Name', 'Gear Name', 'Checkout Date', 'Status'];
-
-    const csvData = checkoutLog.map(log => [
-      `"${log.id}"`,
-      `"${log.userName}"`,
-      `"${log.gearName}"`,
-      format(log.checkoutDate, 'yyyy-MM-dd HH:mm'),
-      `"${log.status}"`
-    ]);
-
-    const csvContent = [
-      headers,
-      ...csvData
-    ];
-
-    const csv = csvContent.map(row => row.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `checkout_log_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    link.click();
-
-    toast({ title: "Download Started", description: "Checkout log (CSV format) is downloading." });
-  };
-
-  // Manual refresh handler
-  const handleRefresh = () => {
-    initializeData();
-    toast({
-      title: "Refreshing Data",
-      description: "Fetching the latest reports and analytics...",
-    });
-  };
-
-  const exportToCSV = () => {
-    const csvData = checkoutLog.map(log => [
-      `"${log.id}"`,
-      `"${log.userName}"`,
-      `"${log.gearName}"`,
-      format(log.checkoutDate, 'yyyy-MM-dd HH:mm'),
-      `"${log.status}"`
-    ]);
-
-    const csvContent = [
-      ['Log ID', 'User Name', 'Gear Name', 'Checkout Date', 'Status'],
-      ...csvData
-    ];
-
-    const csv = csvContent.map(row => row.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `checkout_log_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    link.click();
-  };
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="space-y-6"
+      className="space-y-6 container mx-auto py-8"
     >
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold text-foreground">Reports & Analytics</h1>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <h1 className="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
         <div className="flex items-center gap-2">
-          <DatePickerWithRange dateRange={dateRange} onDateRangeChange={handleDateChange} />
+          <DatePickerWithRange
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+          />
           <Button
             variant="outline"
-            size="icon"
-            onClick={handleRefresh}
-            disabled={isRefreshing || isLoading}
-            title="Refresh Data"
+            onClick={fetchData}
+            disabled={isLoading}
+            className="ml-2 h-10 w-10 p-0"
+            aria-label="Refresh data"
           >
-            <RefreshCw className={isRefreshing || isLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            {isLoading ? (
+              <svg className="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7.5 0a7.5 7.5 0 11-7.5 7.5A7.5 7.5 0 017.5 0zm3.75 7.5a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" fill="currentColor" />
+              </svg>
+            )}
           </Button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-destructive/15 border border-destructive text-destructive px-4 py-3 rounded-lg">
-          <div className="flex items-start">
-            <AlertTriangle className="h-5 w-5 mr-2 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium">{error}</p>
-              <p className="text-xs mt-1">Please try refreshing the data or contact support if the issue persists.</p>
+        <div className="bg-destructive/10 text-destructive p-4 rounded-lg mb-6 border border-destructive/20">
+          <p className="font-medium">{error}</p>
+          <p className="text-sm mt-1">Please try refreshing the data or contact support if the issue persists.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        {/* Total Requests Card */}
+        <Card className="relative overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-8 w-16 bg-muted rounded animate-pulse"></div>
+            ) : (
+              <div className="text-3xl font-bold">{analytics.totalRequests}</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Total Damage Reports Card */}
+        <Card className="relative overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Damage Reports</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-8 w-16 bg-muted rounded animate-pulse"></div>
+            ) : (
+              <div className="text-3xl font-bold">{analytics.totalDamageReports}</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Most Popular Gear Card */}
+        <Card className="relative overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Most Popular Gear</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-8 w-32 bg-muted rounded animate-pulse"></div>
+            ) : analytics.popularGears.length > 0 ? (
+              <div>
+                <div className="text-2xl font-bold truncate">
+                  {analytics.popularGears[0].name}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {analytics.popularGears[0].count} requests
+                </div>
+              </div>
+            ) : (
+              <div className="text-lg font-semibold text-muted-foreground">No data</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        {/* Weekly Usage Trends */}
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="20" x2="18" y2="10"></line>
+                  <line x1="12" y1="20" x2="12" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <CardTitle className="text-base">Weekly Usage Trends</CardTitle>
+              </div>
+            </div>
+            <CardDescription>Requests vs. Damage Reports over the selected period</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="h-[300px] flex items-center justify-center bg-muted/20 p-6">
+                <div className="flex flex-col items-center gap-2">
+                  <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <p className="text-sm text-muted-foreground">Loading chart data...</p>
+                </div>
+              </div>
+            ) : analytics.weeklyTrends.length > 0 ? (
+              <div className="h-[300px] px-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={analytics.weeklyTrends} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                    <XAxis dataKey="weekLabel" className="text-xs" tick={{ fill: 'hsl(var(--foreground))' }} />
+                    <YAxis className="text-xs" tick={{ fill: 'hsl(var(--foreground))' }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--popover))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '0.5rem',
+                        color: 'hsl(var(--foreground))'
+                      }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: 10 }} />
+                    <Bar dataKey="requests" fill="hsl(var(--primary))" name="Requests" barSize={40} radius={[4, 4, 0, 0]} />
+                    <Line
+                      type="monotone"
+                      dataKey="damages"
+                      stroke="hsl(var(--destructive))"
+                      name="Damages"
+                      strokeWidth={2}
+                      dot={{ strokeWidth: 2, r: 4, fill: 'hsl(var(--background))' }}
+                      activeDot={{ strokeWidth: 0, r: 6, fill: 'hsl(var(--destructive))' }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground p-6">
+                <p>No usage data available for the selected period</p>
+                <Button variant="link" onClick={() => setDateRange({ from: subDays(new Date(), 90), to: new Date() })}>
+                  View Last 90 Days
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Most Popular Gears */}
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <CardTitle className="text-base">Most Popular Gears</CardTitle>
+              </div>
+            </div>
+            <CardDescription>Top 5 most requested gears in the selected period</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <div className="h-5 bg-muted rounded animate-pulse w-32"></div>
+                    <div className="h-6 bg-muted rounded animate-pulse w-16"></div>
+                  </div>
+                ))}
+              </div>
+            ) : analytics.popularGears.length > 0 ? (
+              <div className="space-y-4">
+                {analytics.popularGears.map((gear, index) => (
+                  <div key={index} className="flex items-center justify-between group hover:bg-muted/50 p-2 rounded-md transition-colors">
+                    <span className="font-medium">{gear.name}</span>
+                    <Badge variant="secondary" className="group-hover:bg-background">{gear.count} requests</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <p>No gear request data available for the selected period</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Weekly Activity Report */}
+      <Card className="overflow-hidden mb-6">
+        <WeeklyActivityReport dateRange={dateRange} />
+      </Card>
+
+      {/* Recent Activity Log */}
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 7.8L8 5v10l4 2.8L16 15V5l-4 2.8z" />
+                <path d="M8 15l4 2.8" />
+                <path d="M16 15l-4 2.8" />
+                <path d="M12 4v3.8" />
+                <path d="M12 15v4" />
+              </svg>
+              <CardTitle className="text-base">Recent Activity Log</CardTitle>
             </div>
           </div>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="overflow-hidden">
-                <CardHeader className="pb-2">
-                  <Skeleton className="h-5 w-1/3 mb-2" />
-                  <Skeleton className="h-4 w-1/2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-16 mb-4" />
-                  <Skeleton className="h-4 w-full" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-5 w-1/4" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-[200px] w-full rounded-lg" />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-5 w-1/4" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-[200px] w-full rounded-lg" />
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        <>
-          {/* Summary Cards - Top Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <motion.div
-              custom={0}
-              initial="hidden"
-              animate="visible"
-              variants={cardVariants}
-            >
-              <Card className="overflow-hidden">
-                <div className="h-1 bg-blue-500"></div>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <BarChartIcon className="h-4 w-4 text-blue-500" />
-                    Total Requests (Period)
-                  </CardTitle>
-                  <CardDescription>Equipment requested during selected timeframe</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">{analytics.totalRequests}</div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              custom={1}
-              initial="hidden"
-              animate="visible"
-              variants={cardVariants}
-            >
-              <Card className="overflow-hidden">
-                <div className="h-1 bg-orange-500"></div>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-orange-500" />
-                    Damage Reports (Period)
-                  </CardTitle>
-                  <CardDescription>Reported damages during selected timeframe</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">{analytics.totalDamageReports}</div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              custom={2}
-              initial="hidden"
-              animate="visible"
-              variants={cardVariants}
-            >
-              <Card className="overflow-hidden">
-                <div className="h-1 bg-purple-500"></div>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <LineChartIcon className="h-4 w-4 text-purple-500" />
-                    Most Popular Gear
-                  </CardTitle>
-                  <CardDescription>Most requested item during selected timeframe</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-xl font-bold truncate">{analytics.popularGears[0]?.name || 'None'}</div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </div>
-
-          {/* Usage Trends Chart */}
-          {!isLoading && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <Card className="overflow-hidden">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <LineChartIcon className="h-5 w-5 text-primary" />
-                        Weekly Usage Trends
-                      </CardTitle>
-                      <CardDescription>Requests vs. Damage Reports over the selected period</CardDescription>
+          <CardDescription>Latest gear activities from the system</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-6 space-y-4">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-muted animate-pulse"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-muted rounded animate-pulse w-3/4"></div>
+                    <div className="h-3 bg-muted rounded animate-pulse w-1/2"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : analytics.recentActivity.length > 0 ? (
+            <div className="px-6 divide-y divide-border">
+              {analytics.recentActivity.map((activity) => (
+                <div key={activity.id} className="py-4 flex items-start gap-3 hover:bg-muted/10 transition-colors">
+                  {activity.userAvatar ? (
+                    <div className="w-10 h-10 rounded-full overflow-hidden border border-border flex-shrink-0">
+                      <img src={activity.userAvatar} alt={activity.userName} className="w-full h-full object-cover" />
                     </div>
-                    <Badge variant="outline" className="font-mono text-xs">
-                      {dateRange?.from && dateRange?.to ? (
-                        format(dateRange.from, 'MMM d, yyyy') + ' - ' + format(dateRange.to, 'MMM d, yyyy')
-                      ) : (
-                        'All Time'
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+                      {activity.userName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+
+                  <div className="flex-1">
+                    <div className="flex flex-col space-y-1">
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-medium">
+                          <span className="font-semibold">{activity.userName}</span> {' '}
+                          <span className="text-muted-foreground">
+                            {activity.type === 'Check-out' && 'checked out'}
+                            {activity.type === 'Check-in' && 'returned'}
+                            {activity.type === 'Maintenance' && 'sent for maintenance'}
+                            {activity.type === 'Request' && 'requested'}
+                            {activity.type === 'Status Change' && 'changed status of'}
+                          </span>
+                          {' '}<span className="font-semibold">{activity.gearName}</span>
+                          {activity.gearCategory && (
+                            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs ml-1">
+                              {activity.gearCategory}
+                            </span>
+                          )}
+                        </p>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                          {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${activity.status === 'Completed' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                          activity.status === 'Pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                            activity.status === 'Cancelled' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                              'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                          }`}>
+                          <svg className="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            {activity.type === 'Check-out' && (
+                              <path d="M9 14l6-6 M15 14V8h-6" />
+                            )}
+                            {activity.type === 'Check-in' && (
+                              <path d="M15 10l-6 6 M9 10V16h6" />
+                            )}
+                            {activity.type === 'Maintenance' && (
+                              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                            )}
+                            {activity.type === 'Request' && (
+                              <path d="M9 12h6 M12 9v6" />
+                            )}
+                            {activity.type === 'Status Change' && (
+                              <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            )}
+                          </svg>
+                          {activity.status}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(activity.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {activity.notes && (
+                        <div className="mt-2 p-2 bg-muted/30 rounded text-sm">
+                          <p className="italic text-muted-foreground">{activity.notes}</p>
+                        </div>
                       )}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="px-0 pb-0">
-                  {weeklyUsage.length === 0 ? (
-                    <div className="text-center py-10 text-muted-foreground">
-                      <p className="mb-2">No usage data available for the selected period</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDateRange({
-                          from: subDays(new Date(), 90),
-                          to: new Date()
-                        })}
-                      >
-                        View Last 90 Days
-                      </Button>
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={350}>
-                      <ComposedChart
-                        data={weeklyUsage}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 30 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                        <XAxis
-                          dataKey="week"
-                          tick={{ fontSize: 12 }}
-                          tickFormatter={(value) => {
-                            const parts = value.split('-W');
-                            return `W${parts[1]} `;
-                          }}
-                        />
-                        <YAxis
-                          yAxisId="left"
-                          orientation="left"
-                          tick={{ fontSize: 12 }}
-                          tickFormatter={(value) => (value === 0 ? '0' : value)}
-                        />
-                        <YAxis
-                          yAxisId="right"
-                          orientation="right"
-                          tick={{ fontSize: 12 }}
-                          tickFormatter={(value) => (value === 0 ? '0' : value)}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'var(--background)',
-                            borderColor: 'var(--border)',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                          }}
-                          formatter={(value: any) => [`${value} `, '']}
-                          labelFormatter={(label) => {
-                            const parts = label.split('-W');
-                            return `Week ${parts[1]}, ${parts[0]} `;
-                          }}
-                        />
-                        <Legend formatter={(value) => value === 'requests' ? 'Equipment Requests' : 'Damage Reports'} />
-                        <Bar
-                          yAxisId="left"
-                          dataKey="requests"
-                          fill="var(--primary)"
-                          opacity={0.8}
-                          radius={[4, 4, 0, 0]}
-                          name="requests"
-                        />
-                        <Line
-                          yAxisId="right"
-                          type="monotone"
-                          dataKey="damage"
-                          stroke="var(--destructive)"
-                          strokeWidth={3}
-                          dot={{ r: 4 }}
-                          activeDot={{ r: 6, stroke: 'var(--destructive)', strokeWidth: 2 }}
-                          name="damage"
-                        />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-          )}
 
-          {/* Popular Gears */}
-          {!isLoading && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-            >
-              {/* Most Popular Gears */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChartIcon className="h-5 w-5 text-primary" />
-                    Most Popular Gears
-                  </CardTitle>
-                  <CardDescription>Top 5 most requested gears in the selected period</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {analytics.popularGears.length === 0 ? (
-                    <div className="text-center py-5 text-muted-foreground">
-                      <p>No gear request data available for the selected period</p>
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={250}>
-                      <ComposedChart
-                        layout="vertical"
-                        data={analytics.popularGears}
-                        margin={{ top: 10, right: 10, left: 20, bottom: 10 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} horizontal={true} vertical={false} />
-                        <XAxis type="number" tick={{ fontSize: 12 }} />
-                        <YAxis
-                          dataKey="name"
-                          type="category"
-                          tick={{ fontSize: 12 }}
-                          width={120}
-                          tickFormatter={(value) => value.length > 15 ? `${value.substring(0, 15)}...` : value}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'var(--background)',
-                            borderColor: 'var(--border)',
-                            borderRadius: '8px'
-                          }}
-                          formatter={(value: any) => [`${value} requests`, '']}
-                          labelFormatter={(label) => label}
-                        />
-                        <Bar
-                          dataKey="count"
-                          fill="var(--primary)"
-                          radius={[0, 4, 4, 0]}
-                          label={{
-                            position: 'right',
-                            fill: 'var(--foreground)',
-                            fontSize: 12
-                          }}
-                        />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Gear Checkout Log */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <SheetIcon className="h-5 w-5 text-primary" />
-                        Gear Checkout Log
-                      </CardTitle>
-                      <CardDescription>Detailed log of gear checkouts for the selected period</CardDescription>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={exportToCSV} disabled={checkoutLog.length === 0}>
-                      <Download className="h-4 w-4 mr-2" />
-                      <span>Export CSV</span>
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {checkoutLog.length === 0 ? (
-                    <div className="text-center py-10 text-muted-foreground px-6">
-                      <p>No checkout data available for the selected period</p>
-                    </div>
-                  ) : (
-                    <div className="max-h-[400px] overflow-auto">
-                      <Table>
-                        <TableHeader className="sticky top-0 bg-background">
-                          <TableRow>
-                            <TableHead>User</TableHead>
-                            <TableHead>Gear</TableHead>
-                            <TableHead className="hidden md:table-cell">Date</TableHead>
-                            <TableHead className="text-right">Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {checkoutLog.slice(0, 5).map((log, index) => (
-                            <TableRow key={log.id} className="hover:bg-muted/30">
-                              <TableCell className="font-medium">{log.userName}</TableCell>
-                              <TableCell>{log.gearName}</TableCell>
-                              <TableCell className="hidden md:table-cell">
-                                {format(log.checkoutDate, 'MMM d, yyyy')}
-                              </TableCell>
-                              <TableCell className="text-right">{getStatusBadge(log.status)}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                        {checkoutLog.length > 5 && (
-                          <TableCaption className="px-4">
-                            <Button variant="ghost" size="sm" className="w-full">
-                              View all {checkoutLog.length} entries
-                            </Button>
-                          </TableCaption>
-                        )}
-                      </Table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-          )}
-
-          {/* Recent Activity Log */}
-          {!isLoading && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <SheetIcon className="h-5 w-5 text-primary" />
-                    Recent Activity Log
-                  </CardTitle>
-                  <CardDescription>Latest gear-related activities across the system</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {analytics.recentActivities.length === 0 ? (
-                    <div className="text-center py-5 text-muted-foreground">
-                      <p>No recent activities found for the selected period</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {analytics.recentActivities.map((activity) => (
-                        <div key={activity.id} className="flex items-start gap-4 p-2 rounded-lg hover:bg-muted/50">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">{activity.gearName}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge variant="outline" className="text-xs">
-                                {activity.actionType}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                by {activity.userName} • {format(new Date(activity.timestamp), 'MMM d, h:mm a')}
-                              </span>
-                            </div>
+                      {activity.gearImage && (
+                        <div className="mt-2 flex justify-start">
+                          <div className="w-20 h-20 rounded-md overflow-hidden border border-border shadow-sm hover:shadow-md transition-shadow">
+                            <img
+                              src={activity.gearImage}
+                              alt={activity.gearName}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
                           </div>
                         </div>
-                      ))}
+                      )}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center p-12 text-center">
+              <div className="max-w-md space-y-4">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="mx-auto opacity-50">
+                  <path d="M12 7.8L8 5v10l4 2.8L16 15V5l-4 2.8z" />
+                  <path d="M8 15l4 2.8" />
+                  <path d="M16 15l-4 2.8" />
+                  <path d="M12 4v3.8" />
+                  <path d="M12 15v4" />
+                </svg>
+                <p className="text-muted-foreground">No activity data found in the selected date range.</p>
+                <p className="text-sm text-muted-foreground">
+                  Try selecting a different date range or check that your activity log is properly configured.
+                </p>
+                <div className="flex justify-center gap-2">
+                  <Button variant="outline" onClick={() => setDateRange({ from: subDays(new Date(), 90), to: new Date() })}>
+                    View Last 90 Days
+                  </Button>
+                  <Button variant="outline" onClick={fetchData}>
+                    Refresh Data
+                  </Button>
+                </div>
+              </div>
+            </div>
           )}
-        </>
-      )}
+        </CardContent>
+      </Card>
     </motion.div>
   );
 }

@@ -21,10 +21,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { LayoutDashboard, Search, PlusSquare, ListChecks, UploadCloud, History, Bell, Settings, LogOut, PanelLeft, Calendar } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
-import { createClient } from '@/lib/supabase/client'; // Import Supabase client
+import { createClient } from '@/lib/supabase/client';
 import ThemeToggle from '@/components/ThemeToggle';
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
-import type { Database } from '@/types/supabase';
+import { useIsMobile } from '@/hooks/use-mobile';
+import CustomHamburger from '@/components/CustomHamburger';
 
 const userNavItems = [
   { href: '/user/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -38,7 +39,8 @@ const userNavItems = [
   { href: '/user/settings', label: 'Settings', icon: Settings },
 ];
 
-type Profile = Database['public']['Tables']['profiles']['Row'];
+// Use any for Profile type if the database types aren't set up properly
+type Profile = any;
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -46,6 +48,15 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   const supabase = createClient();
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const isMobile = useIsMobile();
+  const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+
+  // Toggle function for hamburger and sidebar sync
+  const toggleSidebar = () => {
+    setIsHamburgerOpen(!isHamburgerOpen);
+    setSidebarOpen(!sidebarOpen);
+  };
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -112,18 +123,33 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <Sidebar>
-        <SidebarHeader className="items-center justify-center p-4">
+    <SidebarProvider defaultOpen={!isMobile}>
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="p-4">
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
-              {/* Hamburger icon for mobile */}
-              <SidebarTrigger className="md:hidden mr-2" />
-              <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary">
-                <span>GearFlow User</span>
+              {/* Sidebar trigger for desktop */}
+              <SidebarTrigger className="hidden md:flex">
+                <PanelLeft className="h-4 w-4" />
+              </SidebarTrigger>
+              {/* Hamburger for mobile */}
+              <div className="md:hidden">
+                <SidebarTrigger>
+                  <CustomHamburger
+                    size={20}
+                    direction="right"
+                    toggled={isHamburgerOpen}
+                    toggle={toggleSidebar}
+                  />
+                </SidebarTrigger>
+              </div>
+              <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary truncate group-data-[collapsible=icon]:hidden">
+                <span className="truncate">GearFlow User</span>
               </Link>
             </div>
-            <ThemeToggle />
+            <div className="group-data-[state=collapsed]:hidden">
+              <ThemeToggle />
+            </div>
           </div>
         </SidebarHeader>
         <Separator />
@@ -138,8 +164,8 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
                     asChild
                   >
                     <Link href={item.href} className="flex items-center gap-2">
-                      <item.icon />
-                      <span>{item.label}</span>
+                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      <span className="truncate">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -152,40 +178,56 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
           {isLoadingUser ? (
             <div className="flex items-center gap-3 mb-2 animate-pulse">
               <Avatar className="h-10 w-10 bg-muted rounded-full"></Avatar>
-              <div className="space-y-1">
+              <div className="space-y-1 group-data-[state=collapsed]:hidden">
                 <div className="h-4 bg-muted rounded w-20"></div>
                 <div className="h-3 bg-muted rounded w-24"></div>
               </div>
             </div>
           ) : currentUser ? (
-            <div className="flex items-center gap-3 mb-2">
-              <Avatar className="h-10 w-10">
-                {/* Use currentUser.avatar_url from Supabase profile */}
+            <div className="flex items-center gap-3 mb-2 group-data-[state=collapsed]:justify-center">
+              <Avatar className="h-10 w-10 flex-shrink-0">
                 <AvatarImage src={currentUser.avatar_url || `https://picsum.photos/seed/${currentUser.email}/100/100`} alt={currentUser.full_name || 'User'} data-ai-hint="user avatar" />
                 <AvatarFallback>{getInitials(currentUser.full_name)}</AvatarFallback>
               </Avatar>
-              <div className="flex flex-col text-sm truncate">
-                {/* Use currentUser.full_name and currentUser.email from Supabase profile */}
-                <span className="font-semibold text-foreground">{currentUser.full_name || 'User'}</span>
-                <span className="text-xs text-muted-foreground">{currentUser.email || 'user@example.com'}</span>
+              <div className="flex flex-col text-sm max-w-[calc(100%-52px)] group-data-[state=collapsed]:hidden">
+                <span className="font-semibold text-foreground truncate">{currentUser.full_name || 'User'}</span>
+                <span className="text-xs text-muted-foreground truncate">{currentUser.email || 'user@example.com'}</span>
               </div>
             </div>
           ) : (
             <div className="text-xs text-destructive">Error loading user</div>
           )}
-          <Button variant="outline" size="sm" className="w-full justify-start" onClick={handleLogout} disabled={isLoadingUser}>
-            <LogOut className="mr-2 h-4 w-4" />
-            {isLoadingUser ? 'Logging out...' : 'Logout'}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full group-data-[state=collapsed]:p-2 group-data-[state=collapsed]:justify-center group-data-[state=expanded]:justify-start"
+            onClick={handleLogout}
+            disabled={isLoadingUser}
+          >
+            <LogOut className="h-4 w-4 flex-shrink-0 group-data-[state=expanded]:mr-2" />
+            <span className="truncate group-data-[state=collapsed]:hidden">
+              {isLoadingUser ? 'Logging out...' : 'Logout'}
+            </span>
           </Button>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
         {/* Header for mobile view with hamburger trigger */}
         <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-background px-4 md:hidden">
-          <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-primary">
-            <span>GearFlow User</span>
+          <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-primary truncate max-w-[70%]">
+            <span className="truncate">GearFlow User</span>
           </Link>
-          <SidebarTrigger className="ml-auto" />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <SidebarTrigger>
+              <CustomHamburger
+                size={20}
+                direction="right"
+                toggled={isHamburgerOpen}
+                toggle={toggleSidebar}
+              />
+            </SidebarTrigger>
+          </div>
         </div>
         <div className="p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
           <motion.div
@@ -194,6 +236,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.4, ease: 'easeInOut' }}
+            className="max-w-full"
           >
             {/* Render children only if user loading is complete and user exists */}
             {!isLoadingUser && currentUser ? children : (

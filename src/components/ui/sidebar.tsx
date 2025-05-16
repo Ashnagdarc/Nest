@@ -24,8 +24,8 @@ import {
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "16rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem"
-const SIDEBAR_WIDTH_ICON = "3rem"
+const SIDEBAR_WIDTH_MOBILE = "16rem"
+const SIDEBAR_WIDTH_ICON = "3.5rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 type SidebarContext = {
@@ -226,26 +226,26 @@ const Sidebar = React.forwardRef<
         data-variant={variant}
         data-side={side}
       >
-        {/* This is what handles the sidebar gap on desktop */}
+        {/* Improved sidebar gap calculations for better responsiveness */}
         <div
           className={cn(
-            "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
+            "duration-300 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-in-out",
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
-              ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
+              ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.2))]"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]"
           )}
         />
         <div
           className={cn(
-            "duration-200 fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex",
+            "duration-300 fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-in-out md:flex",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
-            // Adjust the padding for floating and inset variants.
+            // Adjust the padding for floating and inset variants with better calcs
             variant === "floating" || variant === "inset"
-              ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
+              ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.2))]"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
             className
           )}
@@ -359,11 +359,19 @@ const SidebarHeader = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => {
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
+
   return (
     <div
       ref={ref}
       data-sidebar="header"
-      className={cn("flex flex-col gap-2 p-2", className)}
+      data-state={state}
+      className={cn(
+        "flex flex-col gap-2 p-2 transition-all duration-300",
+        collapsed && "items-center justify-center",
+        className
+      )}
       {...props}
     />
   )
@@ -374,11 +382,19 @@ const SidebarFooter = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => {
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
+
   return (
     <div
       ref={ref}
       data-sidebar="footer"
-      className={cn("flex flex-col gap-2 p-2", className)}
+      data-state={state}
+      className={cn(
+        "flex flex-col gap-2 p-2 transition-all duration-300",
+        collapsed && "items-center justify-center",
+        className
+      )}
       {...props}
     />
   )
@@ -484,7 +500,7 @@ const SidebarGroupContent = React.forwardRef<
   <div
     ref={ref}
     data-sidebar="group-content"
-    className={cn("w-full text-sm", className)}
+    className={cn("w-full text-sm overflow-hidden", className)}
     {...props}
   />
 ))
@@ -538,62 +554,120 @@ const sidebarMenuButtonVariants = cva(
   }
 )
 
+// Enhanced responsive SidebarMenuButton component
 const SidebarMenuButton = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<"button"> & {
-    asChild?: boolean
-    isActive?: boolean
-    tooltip?: string | React.ComponentProps<typeof TooltipContent>
-  } & VariantProps<typeof sidebarMenuButtonVariants>
->(
-  (
-    {
-      asChild = false,
-      isActive = false,
-      variant = "default",
-      size = "default",
-      tooltip,
-      className,
-      ...props
-    },
-    ref
-  ) => {
-    const Comp = asChild ? Slot : "button"
-    const { isMobile, state } = useSidebar()
+    isActive?: boolean;
+    tooltip?: React.ReactNode;
+    asChild?: boolean;
+  }
+>(({ className, isActive, tooltip, asChild = false, ...props }, ref) => {
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
 
-    const button = (
-      <Comp
-        ref={ref}
-        data-sidebar="menu-button"
-        data-size={size}
-        data-active={isActive}
-        className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
-        {...props}
-      />
-    )
+  // Base button styles for reuse
+  const buttonClasses = cn(
+    "group/menu-button relative flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none ring-foreground transition-colors focus-visible:ring-2",
+    "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+    collapsed && "justify-center",
+    isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+    className
+  );
 
-    if (!tooltip) {
-      return button
+  // Handle Link components (asChild=true)
+  if (asChild) {
+    const child = props.children as React.ReactElement;
+    const childProps = {
+      'data-sidebar': 'menu-button',
+      'data-state': isActive ? 'active' : undefined,
+      className: buttonClasses,
+    };
+
+    // Extract icon and text
+    let childElements = React.Children.toArray(child.props.children);
+    // Make a special version for collapsed state that only shows icon
+    const collapsedChild = React.cloneElement(
+      child,
+      childProps,
+      // Only render the icon (assuming it's the first child)
+      collapsed ? childElements[0] : child.props.children
+    );
+
+    if (collapsed) {
+      // Show tooltip in collapsed state
+      const childElement = childElements[1] as React.ReactElement;
+      const tooltipText = tooltip ||
+        (childElement && typeof childElement.props?.children === 'string'
+          ? childElement.props.children
+          : '');
+
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {collapsedChild}
+          </TooltipTrigger>
+          <TooltipContent side="right" align="center">
+            {tooltipText}
+          </TooltipContent>
+        </Tooltip>
+      );
     }
 
-    if (typeof tooltip === "string") {
-      tooltip = {
-        children: tooltip,
-      }
-    }
+    // Just return modified child in expanded state
+    return collapsedChild;
+  }
 
+  // Content for the button (regular button mode)
+  const buttonChildren = (
+    <>
+      {collapsed ? (
+        // Only show icon in collapsed state
+        React.Children.toArray(props.children)[0]
+      ) : (
+        // Show all children in expanded state
+        props.children
+      )}
+    </>
+  );
+
+  // Regular button implementation
+  if (collapsed) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent
-          side="right"
-          align="center"
-          hidden={state !== "collapsed" || isMobile}
-          {...tooltip}
-        />
+        <TooltipTrigger asChild>
+          <button
+            ref={ref}
+            type="button"
+            data-sidebar="menu-button"
+            data-state={isActive ? "active" : undefined}
+            className={buttonClasses}
+            {...props}
+          >
+            {buttonChildren}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right" align="center">
+          {tooltip || (typeof props.children === 'string' ? props.children : '')}
+        </TooltipContent>
       </Tooltip>
-    )
+    );
   }
+
+  // Regular expanded button
+  return (
+    <button
+      ref={ref}
+      type="button"
+      data-sidebar="menu-button"
+      data-state={isActive ? "active" : undefined}
+      className={buttonClasses}
+      {...props}
+    >
+      {buttonChildren}
+    </button>
+  );
+}
 )
 SidebarMenuButton.displayName = "SidebarMenuButton"
 

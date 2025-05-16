@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Calendar as CalendarIcon2, CheckCircle, XCircle, Info, Box, Loader2 } from "lucide-react";
+import { Check, Box, Loader2, CalendarDays, Clock, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -61,17 +61,18 @@ const eventStyleGetter = (event: any) => {
     const isOwnBooking = event.resource?.isOwnBooking;
 
     let style: React.CSSProperties = {
-        borderRadius: '6px',
-        opacity: 0.9,
+        borderRadius: '8px',
+        opacity: 1,
         color: 'white',
         border: '0px',
         display: 'block',
         fontSize: '0.85em',
-        padding: '4px 8px',
+        padding: '6px 10px',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-        height: '100%'
+        height: '100%',
+        overflow: 'hidden'
     };
 
     if (event.resource?.color) {
@@ -79,27 +80,33 @@ const eventStyleGetter = (event: any) => {
     } else {
         switch (status) {
             case 'approved':
-                style.backgroundColor = '#3b82f6';
-                style.boxShadow = '0 2px 4px rgba(59,130,246,0.2)';
+                style.backgroundColor = '#22c55e';
+                style.boxShadow = '0 2px 4px rgba(34,197,94,0.2)';
                 break;
             case 'pending':
-                style.backgroundColor = '#6b7280';
-                style.boxShadow = '0 2px 4px rgba(107,114,128,0.2)';
+                style.backgroundColor = '#f59e0b';
+                style.boxShadow = '0 2px 4px rgba(245,158,11,0.2)';
                 break;
             case 'rejected':
                 style.backgroundColor = '#ef4444';
                 style.boxShadow = '0 2px 4px rgba(239,68,68,0.2)';
                 break;
             default:
-                style.backgroundColor = isOwnBooking ? '#3b82f6' : '#6b7280';
+                style.backgroundColor = '#6b7280';
+                style.boxShadow = '0 2px 4px rgba(107,114,128,0.2)';
         }
     }
 
+    // Add a highlight effect for the user's own bookings
     if (isOwnBooking) {
         style.border = '2px solid rgba(255,255,255,0.5)';
+        style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
     }
 
-    return { style };
+    return {
+        style,
+        className: 'hover:scale-[1.02] hover:shadow-md transition-all'
+    };
 };
 
 // Custom toolbar to show current date range and navigation
@@ -312,13 +319,12 @@ export default function UserCalendarPage() {
         });
     };
 
-    // Submit booking request
+    // Handle booking submission
     const handleBookingSubmit = async () => {
         if (selectedGears.length === 0 || !selectedDates.start || !selectedDates.end || !bookingReason || !currentUserId) {
             toast({
                 title: "Missing Information",
-                description: "Please select at least one gear and fill in all required fields.",
-                variant: "destructive",
+                description: "Please select at least one gear and fill in all required fields."
             });
             return;
         }
@@ -331,13 +337,15 @@ export default function UserCalendarPage() {
         if (endDate < startDate) {
             toast({
                 title: "Invalid Dates",
-                description: "End date must be after start date.",
-                variant: "destructive",
+                description: "End date must be after start date."
             });
             return;
         }
 
         try {
+            // Start loading state
+            setIsLoading(true);
+
             // Check for booking conflicts for each gear
             for (const gearId of selectedGears) {
                 const { data: hasConflict } = await supabase
@@ -351,51 +359,57 @@ export default function UserCalendarPage() {
                     const conflictingGear = availableGear.find(g => g.id === gearId);
                     toast({
                         title: "Booking Conflict",
-                        description: `${conflictingGear?.name || 'Selected gear'} is already booked for the selected time period.`,
-                        variant: "destructive",
+                        description: `${conflictingGear?.name || 'Selected gear'} is already booked for the selected time period.`
                     });
                     return;
                 }
             }
 
-            // Create bookings for each selected gear
-            const bookingPromises: Promise<any>[] = selectedGears.map(async (gearId: string) => {
-                const gear = availableGear.find(g => g.id === gearId);
-                return supabase
-                    .from('gear_calendar_bookings')
-                    .insert([{
-                        gear_id: gearId,
-                        user_id: currentUserId,
-                        title: `${gear?.name || 'Gear'} Booking`,
-                        start_date: startDate.toISOString(),
-                        end_date: endDate.toISOString(),
-                        status: 'Pending',
-                        reason: bookingReason,
-                        is_all_day: false,
-                        color: '#6b7280' // Default pending color
-                    }])
-                    .select();
-            });
+            // Calculate duration in days
+            const durationInDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
-            await Promise.all(bookingPromises);
+            // Use the helper function to handle the reservation
+            const { data: requestData, error: requestError } = await supabase
+                .rpc('handle_gear_reservation', {
+                    p_gear_ids: selectedGears,
+                    p_user_id: currentUserId,
+                    p_reason: bookingReason,
+                    p_start_date: startDate.toISOString(),
+                    p_end_date: endDate.toISOString(),
+                    p_duration: `${durationInDays} days`
+                });
+
+            if (requestError) throw requestError;
 
             toast({
                 title: "Booking Requests Submitted",
-                description: `Your reservation requests for ${selectedGears.length} gear(s) have been submitted for approval.`,
+                description: `Your reservation requests for ${selectedGears.length} gear(s) have been submitted for approval.`
             });
 
-            // Close dialog and refetch events
+            // Reset form state
             setSelectedSlot(null);
             setSelectedGears([]);
-            fetchEvents();
+            setSelectedGearOptions([]);
+            setBookingReason("");
 
+            // Refetch calendar data to show new bookings
+            await fetchEvents();
+
+            // Navigate to My Requests page so user can see their request
+            router.push('/user/my-requests');
         } catch (error: any) {
             console.error("Error creating bookings:", error);
+            loggerError(error, 'handleBookingSubmit', {
+                userId: currentUserId,
+                selectedGears,
+                error: error.message
+            });
             toast({
                 title: "Booking Failed",
-                description: error.message || "Could not create bookings. Please try again.",
-                variant: "destructive",
+                description: error.message || "Could not create bookings. Please try again."
             });
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -403,32 +417,51 @@ export default function UserCalendarPage() {
         <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-2xl font-bold">Gear Reservation Calendar</CardTitle>
+                    <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                        <CalendarDays className="h-6 w-6" />
+                        Gear Reservation Calendar
+                    </CardTitle>
                     <CardDescription className="text-lg">
-                        View existing reservations and make new booking requests. Click on a date to book gear.
+                        View existing reservations and make new booking requests. Click on any time slot to book gear.
                     </CardDescription>
-                    <div className="flex flex-wrap gap-2 mt-4">
-                        <Button
-                            variant={viewMode === 'month' ? 'default' : 'outline'}
-                            onClick={() => setViewMode('month')}
-                            className="min-w-[100px]"
-                        >
-                            Month
-                        </Button>
-                        <Button
-                            variant={viewMode === 'week' ? 'default' : 'outline'}
-                            onClick={() => setViewMode('week')}
-                            className="min-w-[100px]"
-                        >
-                            Week
-                        </Button>
-                        <Button
-                            variant={viewMode === 'day' ? 'default' : 'outline'}
-                            onClick={() => setViewMode('day')}
-                            className="min-w-[100px]"
-                        >
-                            Day
-                        </Button>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mt-4">
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                variant={viewMode === 'month' ? 'default' : 'outline'}
+                                onClick={() => setViewMode('month')}
+                                className="min-w-[100px]"
+                            >
+                                <CalendarDays className="h-4 w-4 mr-2" />
+                                Month
+                            </Button>
+                            <Button
+                                variant={viewMode === 'week' ? 'default' : 'outline'}
+                                onClick={() => setViewMode('week')}
+                                className="min-w-[100px]"
+                            >
+                                <CalendarDays className="h-4 w-4 mr-2" />
+                                Week
+                            </Button>
+                            <Button
+                                variant={viewMode === 'day' ? 'default' : 'outline'}
+                                onClick={() => setViewMode('day')}
+                                className="min-w-[100px]"
+                            >
+                                <Clock className="h-4 w-4 mr-2" />
+                                Day
+                            </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200 py-2">
+                                <Check className="h-3 w-3 text-green-500 mr-1" /> Approved
+                            </Badge>
+                            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200 py-2">
+                                <AlertCircle className="h-3 w-3 text-amber-500 mr-1" /> Pending
+                            </Badge>
+                            <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200 py-2">
+                                <AlertCircle className="h-3 w-3 text-red-500 mr-1" /> Rejected
+                            </Badge>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -438,20 +471,8 @@ export default function UserCalendarPage() {
                             <p>Loading calendar data...</p>
                         </div>
                     ) : (
-                        <>
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200 py-2">
-                                    <Box className="h-3 w-3 text-blue-500 mr-1" /> Your Bookings
-                                </Badge>
-                                <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-200 py-2">
-                                    <Box className="h-3 w-3 text-gray-500 mr-1" /> Other Bookings
-                                </Badge>
-                                <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200 py-2">
-                                    <Box className="h-3 w-3 text-green-500 mr-1" /> Available
-                                </Badge>
-                            </div>
-
-                            <div className="h-[600px] bg-white dark:bg-gray-900 rounded-lg border border-input shadow-sm">
+                        <div className="mt-4">
+                            <div className="h-[600px] bg-white dark:bg-gray-900 rounded-lg border border-input shadow-sm overflow-hidden">
                                 <Calendar
                                     localizer={localizer}
                                     events={events}
@@ -467,11 +488,10 @@ export default function UserCalendarPage() {
                                     tooltipAccessor={(event: any) =>
                                         `${event.title}\nStatus: ${event.resource.status}\n${event.resource.reason ? `Reason: ${event.resource.reason}` : ''}`
                                     }
-                                    style={{ height: 600 }}
                                     className="rounded-lg"
                                 />
                             </div>
-                        </>
+                        </div>
                     )}
                 </CardContent>
             </Card>
@@ -481,128 +501,102 @@ export default function UserCalendarPage() {
                 <DialogContent className="sm:max-w-[600px]">
                     <DialogHeader>
                         <DialogTitle className="text-xl">Book Gear</DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="text-base">
                             Create new gear reservation requests. Select multiple gear items if needed.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="grid gap-6 py-4">
                         <div className="space-y-4">
-                            <label className="text-sm font-medium">
-                                Available Gear
-                            </label>
-                            {availableGear.length > 0 ? (
-                                <ReactSelect<GearOption, true>
-                                    isMulti
-                                    options={availableGear.map((gear: any) => ({
-                                        value: gear.id,
-                                        label: `${gear.name} (${gear.category})`
-                                    }))}
-                                    value={selectedGearOptions}
-                                    onChange={(selected: MultiValue<GearOption>) => {
-                                        const selectedArray = Array.from(selected);
-                                        console.log("Selected gear:", selectedArray);
-                                        setSelectedGearOptions(selectedArray);
-                                        setSelectedGears(selectedArray.map(item => item.value));
-                                    }}
-                                    className="w-full"
-                                    classNames={{
-                                        control: (state) =>
-                                            `!min-h-10 !bg-background !border-input !rounded-md ${state.isFocused ? '!border-ring !ring-2 !ring-ring !ring-offset-2' : ''
-                                            }`,
-                                        placeholder: () => '!text-muted-foreground',
-                                        input: () => '!text-foreground',
-                                        option: (state) =>
-                                            `!bg-background !text-foreground ${state.isFocused ? '!bg-accent !text-accent-foreground' : ''
-                                            }`,
-                                        multiValue: () => '!bg-primary/10 !rounded-md',
-                                        multiValueLabel: () => '!text-primary !text-sm',
-                                        multiValueRemove: () => '!text-primary !hover:bg-destructive/20 !rounded-r-md',
-                                        menu: () => '!bg-popover !border !border-input !rounded-md !shadow-md',
-                                        menuList: () => '!p-1',
-                                    }}
-                                    theme={(theme) => ({
-                                        ...theme,
-                                        colors: {
-                                            ...theme.colors,
-                                            primary: 'var(--primary)',
-                                            primary75: 'var(--primary-foreground)',
-                                            primary50: 'var(--primary-foreground)',
-                                            primary25: 'var(--primary-foreground)',
-                                            danger: 'var(--destructive)',
-                                            dangerLight: 'var(--destructive)',
-                                        },
-                                    })}
-                                />
-                            ) : (
-                                <div className="text-sm text-gray-500">No gear available</div>
-                            )}
-                        </div>
-
-                        <div className="space-y-4">
-                            <label className="text-sm font-medium">
-                                Date Range:
-                            </label>
-                            <div className="flex flex-col sm:flex-row items-center gap-2">
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant={"outline"}
-                                            className={cn(
-                                                "w-full sm:w-[240px] justify-start text-left font-normal",
-                                                !selectedDates.start && "text-muted-foreground"
+                            <div className="space-y-2">
+                                <h4 className="font-medium text-sm">Selected Time Period</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="flex flex-col space-y-1">
+                                        <span className="text-sm text-muted-foreground">Start</span>
+                                        <div className="p-3 rounded-md bg-muted/50">
+                                            {selectedDates.start ? (
+                                                <time className="text-sm font-medium">
+                                                    {format(selectedDates.start, 'PPp')}
+                                                </time>
+                                            ) : (
+                                                <span className="text-sm text-muted-foreground">Not selected</span>
                                             )}
-                                        >
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {selectedDates.start ? format(selectedDates.start, "PPP") : "Select start date"}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                        <CalendarComponent
-                                            mode="single"
-                                            selected={selectedDates.start}
-                                            onSelect={(date) => setSelectedDates({ ...selectedDates, start: date })}
-                                            initialFocus
-                                        />
-                                    </PopoverContent>
-                                </Popover>
-                                <span className="text-muted-foreground">to</span>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant={"outline"}
-                                            className={cn(
-                                                "w-full sm:w-[240px] justify-start text-left font-normal",
-                                                !selectedDates.end && "text-muted-foreground"
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col space-y-1">
+                                        <span className="text-sm text-muted-foreground">End</span>
+                                        <div className="p-3 rounded-md bg-muted/50">
+                                            {selectedDates.end ? (
+                                                <time className="text-sm font-medium">
+                                                    {format(selectedDates.end, 'PPp')}
+                                                </time>
+                                            ) : (
+                                                <span className="text-sm text-muted-foreground">Not selected</span>
                                             )}
-                                        >
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {selectedDates.end ? format(selectedDates.end, "PPP") : "Select end date"}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                        <CalendarComponent
-                                            mode="single"
-                                            selected={selectedDates.end}
-                                            onSelect={(date) => setSelectedDates({ ...selectedDates, end: date })}
-                                            initialFocus
-                                        />
-                                    </PopoverContent>
-                                </Popover>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
 
-                        <div className="space-y-4">
-                            <label htmlFor="reason" className="text-sm font-medium">
-                                Reason for Booking:
-                            </label>
-                            <Textarea
-                                id="reason"
-                                value={bookingReason}
-                                onChange={(e) => setBookingReason(e.target.value)}
-                                placeholder="Briefly describe why you need this gear"
-                                className="min-h-[100px]"
-                            />
+                            <div className="space-y-2">
+                                <h4 className="font-medium text-sm">Available Gear</h4>
+                                {availableGear.length > 0 ? (
+                                    <div className="p-4 rounded-lg border bg-card">
+                                        <ReactSelect<GearOption, true>
+                                            isMulti
+                                            options={availableGear.map((gear: any) => ({
+                                                value: gear.id,
+                                                label: `${gear.name} (${gear.category})`
+                                            }))}
+                                            value={selectedGearOptions}
+                                            onChange={(selected: MultiValue<GearOption>) => {
+                                                const selectedArray = Array.from(selected);
+                                                setSelectedGearOptions(selectedArray);
+                                                setSelectedGears(selectedArray.map(item => item.value));
+                                            }}
+                                            placeholder="Select gear items..."
+                                            className="w-full"
+                                            classNames={{
+                                                control: (state) =>
+                                                    cn(
+                                                        '!min-h-10 !bg-background !border-input !rounded-md',
+                                                        state.isFocused && '!border-ring !ring-2 !ring-ring !ring-offset-2'
+                                                    ),
+                                                placeholder: () => '!text-muted-foreground',
+                                                input: () => '!text-foreground',
+                                                option: (state) =>
+                                                    cn(
+                                                        '!text-sm',
+                                                        state.isSelected && '!bg-primary !text-primary-foreground',
+                                                        !state.isSelected && state.isFocused && '!bg-accent !text-accent-foreground'
+                                                    ),
+                                                multiValue: () => '!bg-primary/20 !rounded-md',
+                                                multiValueLabel: () => '!text-sm !text-primary-foreground',
+                                                multiValueRemove: () => '!text-primary-foreground !hover:bg-primary/30 !rounded-r-md'
+                                            }}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-center p-8 rounded-lg border border-dashed">
+                                        <div className="text-center">
+                                            <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground/70" />
+                                            <p className="mt-2 text-sm text-muted-foreground">No gear available for this time period</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <h4 className="font-medium text-sm">Booking Details</h4>
+                                <div className="space-y-4">
+                                    <Textarea
+                                        placeholder="Describe the purpose of your booking..."
+                                        value={bookingReason}
+                                        onChange={(e) => setBookingReason(e.target.value)}
+                                        className="min-h-[100px] resize-none"
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -612,11 +606,10 @@ export default function UserCalendarPage() {
                         </Button>
                         <Button
                             onClick={handleBookingSubmit}
-                            disabled={selectedGears.length === 0}
+                            disabled={selectedGears.length === 0 || !bookingReason.trim()}
                             className="min-w-[120px]"
                         >
-                            Submit Request
-                            {selectedGears.length > 0 && ` (${selectedGears.length})`}
+                            {selectedGears.length > 0 ? `Request (${selectedGears.length})` : 'Submit Request'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -628,6 +621,7 @@ export default function UserCalendarPage() {
                     <DialogHeader>
                         <DialogTitle className="text-xl">Booking Details</DialogTitle>
                     </DialogHeader>
+
                     {selectedEvent && (
                         <div className="space-y-6">
                             <div className="p-4 rounded-lg bg-muted/50">
@@ -647,19 +641,31 @@ export default function UserCalendarPage() {
                                 <h4 className="text-sm font-medium mb-2">Status</h4>
                                 <Badge variant="outline" className={cn(
                                     "text-base py-1.5",
-                                    selectedEvent.resource.status === 'Approved' && "bg-blue-100 text-blue-800",
-                                    selectedEvent.resource.status === 'Pending' && "bg-gray-100 text-gray-800",
+                                    selectedEvent.resource.status === 'Approved' && "bg-green-100 text-green-800",
+                                    selectedEvent.resource.status === 'Pending' && "bg-amber-100 text-amber-800",
                                     selectedEvent.resource.status === 'Rejected' && "bg-red-100 text-red-800"
                                 )}>
                                     {selectedEvent.resource.status}
                                 </Badge>
+                                {selectedEvent.resource.approvedBy && (
+                                    <p className="text-sm text-muted-foreground mt-2">
+                                        Approved by {selectedEvent.resource.approvedBy}
+                                        {selectedEvent.resource.approvedAt && ` on ${format(new Date(selectedEvent.resource.approvedAt), 'PPp')}`}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="p-4 rounded-lg bg-muted/50">
                                 <h4 className="text-sm font-medium mb-2">Booking Period</h4>
                                 <div className="space-y-1">
-                                    <p><strong>From:</strong> {format(selectedEvent.start, 'PPP pp')}</p>
-                                    <p><strong>To:</strong> {format(selectedEvent.end, 'PPP pp')}</p>
+                                    <p className="flex items-center gap-2">
+                                        <Clock className="h-4 w-4" />
+                                        <span><strong>From:</strong> {format(selectedEvent.start, 'PPp')}</span>
+                                    </p>
+                                    <p className="flex items-center gap-2">
+                                        <Clock className="h-4 w-4" />
+                                        <span><strong>To:</strong> {format(selectedEvent.end, 'PPp')}</span>
+                                    </p>
                                 </div>
                             </div>
 
@@ -682,4 +688,4 @@ export default function UserCalendarPage() {
             </Dialog>
         </div>
     );
-} 
+}

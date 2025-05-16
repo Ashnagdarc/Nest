@@ -50,16 +50,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const supabase = createClient(); // Create Supabase client instance
   const [adminUser, setAdminUser] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
-
-  // Track hamburger state separately from sidebar
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
+  const { toast } = useToast();
 
-  // Toggle function for hamburger and sidebar sync
+  // Improved toggle function for hamburger and sidebar sync
   const toggleSidebar = () => {
     setIsHamburgerOpen(!isHamburgerOpen);
-    // Any additional sidebar toggle logic if needed
+    setSidebarOpen(!sidebarOpen);
   };
 
   useEffect(() => {
@@ -205,10 +204,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <SidebarProvider defaultOpen={!isMobile}>
-      <Sidebar>
-        <SidebarHeader className="items-center justify-center p-4">
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="p-4">
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
+              <SidebarTrigger className="hidden md:flex">
+                <PanelLeft className="h-4 w-4" />
+              </SidebarTrigger>
               <div className="md:hidden">
                 <SidebarTrigger>
                   <CustomHamburger
@@ -219,11 +221,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   />
                 </SidebarTrigger>
               </div>
-              <Link href="/admin/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary">
-                <span>GearFlow Admin</span>
+              <Link href="/admin/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary truncate group-data-[collapsible=icon]:hidden">
+                <span className="truncate">GearFlow Admin</span>
               </Link>
             </div>
-            <ThemeToggle />
+            <div className="group-data-[state=collapsed]:hidden">
+              <ThemeToggle />
+            </div>
           </div>
         </SidebarHeader>
         <Separator />
@@ -238,8 +242,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     asChild
                   >
                     <Link href={item.href} className="flex items-center gap-2">
-                      <item.icon />
-                      <span>{item.label}</span>
+                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      <span className="truncate">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -252,37 +256,43 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {isLoadingUser ? (
             <div className="flex items-center gap-3 mb-2 animate-pulse">
               <Avatar className="h-10 w-10 bg-muted rounded-full"></Avatar>
-              <div className="space-y-1">
+              <div className="space-y-1 group-data-[state=collapsed]:hidden">
                 <div className="h-4 bg-muted rounded w-20"></div>
                 <div className="h-3 bg-muted rounded w-24"></div>
               </div>
             </div>
           ) : adminUser ? (
-            <div className="flex items-center gap-3 mb-2">
-              <Avatar className="h-10 w-10">
-                {/* Use adminUser.avatar_url from Supabase profile */}
+            <div className="flex items-center gap-3 mb-2 group-data-[state=collapsed]:justify-center">
+              <Avatar className="h-10 w-10 flex-shrink-0">
                 <AvatarImage src={adminUser.avatar_url || `https://picsum.photos/seed/${adminUser.email}/100/100`} alt={adminUser.full_name || 'Admin'} data-ai-hint="admin avatar" />
                 <AvatarFallback>{getInitials(adminUser.full_name)}</AvatarFallback>
               </Avatar>
-              <div className="flex flex-col text-sm truncate">
-                {/* Use adminUser.full_name and adminUser.email from Supabase profile */}
-                <span className="font-semibold text-foreground">{adminUser.full_name || 'Admin User'}</span>
-                <span className="text-xs text-muted-foreground">{adminUser.email || 'admin@example.com'}</span>
+              <div className="flex flex-col text-sm max-w-[calc(100%-52px)] group-data-[state=collapsed]:hidden">
+                <span className="font-semibold text-foreground truncate">{adminUser.full_name || 'Admin User'}</span>
+                <span className="text-xs text-muted-foreground truncate">{adminUser.email || 'admin@example.com'}</span>
               </div>
             </div>
           ) : (
             <div className="text-xs text-destructive">Error loading user</div>
           )}
-          <Button variant="outline" size="sm" className="w-full justify-start" onClick={handleLogout} disabled={isLoadingUser}>
-            <LogOut className="mr-2 h-4 w-4" />
-            {isLoadingUser ? 'Logging out...' : 'Logout'}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full group-data-[state=collapsed]:p-2 group-data-[state=collapsed]:justify-center group-data-[state=expanded]:justify-start"
+            onClick={handleLogout}
+            disabled={isLoadingUser}
+          >
+            <LogOut className="h-4 w-4 flex-shrink-0 group-data-[state=expanded]:mr-2" />
+            <span className="truncate group-data-[state=collapsed]:hidden">
+              {isLoadingUser ? 'Logging out...' : 'Logout'}
+            </span>
           </Button>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
         <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-background px-4 md:hidden">
-          <Link href="/admin/dashboard" className="flex items-center gap-2 font-semibold text-primary">
-            <span>GearFlow Admin</span>
+          <Link href="/admin/dashboard" className="flex items-center gap-2 font-semibold text-primary truncate max-w-[70%]">
+            <span className="truncate">GearFlow Admin</span>
           </Link>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -303,6 +313,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.4, ease: 'easeInOut' }}
+            className="max-w-full"
           >
             {/* Render children only if user loading is complete and user is verified admin */}
             {!isLoadingUser && adminUser ? children : (
