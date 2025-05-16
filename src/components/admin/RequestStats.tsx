@@ -56,27 +56,28 @@ export function RequestStats({ stats, onViewCategory }: RequestStatsProps) {
     ];
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="flex flex-wrap -mx-1.5">
             {categories.map((category, index) => (
                 <motion.div
                     key={category.key}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
+                    className="w-full xs:w-1/2 xl:w-1/4 p-1.5"
                 >
                     <Card
-                        className={`cursor-pointer transition-all duration-200 hover:shadow-md border-l-4 ${category.borderColor}`}
+                        className={`cursor-pointer transition-all duration-200 hover:shadow-md border-l-4 ${category.borderColor} h-full`}
                         onClick={() => onViewCategory(category.key)}
                     >
-                        <CardHeader className="pb-2">
+                        <CardHeader className="pb-1 px-3 pt-3">
                             <CardTitle className="text-sm font-medium text-muted-foreground">
                                 {category.label}
                             </CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <div className={`p-2 rounded-full ${category.bgColor}`}>
+                        <CardContent className="px-3 pb-3">
+                            <div className="flex items-center justify-between flex-wrap xs:flex-nowrap">
+                                <div className="flex items-center gap-2 w-full xs:w-auto">
+                                    <div className={`p-2 rounded-full ${category.bgColor} flex-shrink-0`}>
                                         <category.icon className={`h-5 w-5 ${category.color}`} />
                                     </div>
                                     <div>
@@ -91,7 +92,7 @@ export function RequestStats({ stats, onViewCategory }: RequestStatsProps) {
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className={`${category.color} hover:${category.bgColor}`}
+                                    className={`${category.color} hover:${category.bgColor} mt-2 xs:mt-0 w-full xs:w-auto`}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onViewCategory(category.key);
