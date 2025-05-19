@@ -96,15 +96,19 @@ export default function AdminCalendarPage() {
         setIsLoading(true);
         try {
             // Get current user for admin check
-            const { data: { user } } = await supabase.auth.getUser();
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+            console.log('AdminCalendarPage: user', user, 'userError', userError);
+
             if (!user) throw new Error('Not authenticated');
 
             // Check if user is admin
-            const { data: profile } = await supabase
+            const { data: profile, error: profileError } = await supabase
                 .from('profiles')
-                .select('role')
+                .select('role, full_name, email')
                 .eq('id', user.id)
                 .single();
+
+            console.log('AdminCalendarPage: profile', profile, 'profileError', profileError);
 
             if (!profile || profile.role !== 'Admin') {
                 throw new Error('Not authorized');
@@ -116,9 +120,9 @@ export default function AdminCalendarPage() {
                 .select('*')
                 .order('start_date');
 
+            console.log('AdminCalendarPage: bookingsData', bookingsData, 'bookingsError', bookingsError);
+
             if (bookingsError) {
-                console.error('Error fetching bookings:', bookingsError);
-                loggerError(bookingsError, 'fetchEvents (admin)', { error: bookingsError });
                 throw bookingsError;
             }
 
@@ -147,8 +151,7 @@ export default function AdminCalendarPage() {
 
             setEvents(calendarEvents);
         } catch (error) {
-            console.error('Error fetching calendar data:', error);
-            loggerError(error, 'fetchEvents (admin)', { error });
+            console.error('Error fetching calendar data (detailed):', error);
             toast({
                 title: "Error",
                 description: "Failed to load calendar data. Please refresh the page.",
