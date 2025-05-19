@@ -16,7 +16,6 @@
     "cleanup-tables": "ts-node scripts/cleanup-tables.ts",
     "realtime:check": "tsx src/utils/supabase-realtime-checker.ts",
     "realtime:setup": "node scripts/db/enable-realtime.js",
-    "postinstall": "node scripts/post-update.js",
     "troubleshoot:realtime": "node scripts/troubleshooting/check-realtime-tables.js",
     "add-timestamps": "node scripts/db/add-timestamp-columns.js",
     "cleanup": "node scripts/cleanup-codebase.js"
