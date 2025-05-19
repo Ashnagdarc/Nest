@@ -142,6 +142,7 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
                                     <SelectItem value="Microphone">Microphone</SelectItem>
                                     <SelectItem value="Laptop">Laptop</SelectItem>
                                     <SelectItem value="Other">Other</SelectItem>
+                                    <SelectItem value="Cars">Cars</SelectItem>
                                 </SelectContent>
                             </Select>
                             <FormMessage />

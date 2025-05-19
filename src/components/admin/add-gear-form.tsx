@@ -122,6 +122,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
                   <SelectItem value="Lighting">Lighting</SelectItem>
                   <SelectItem value="Lens">Lens</SelectItem>
                   <SelectItem value="Accessory">Accessory</SelectItem>
+                  <SelectItem value="Cars">Cars</SelectItem>
                   {/* Add more categories */}
                 </SelectContent>
               </Select>
