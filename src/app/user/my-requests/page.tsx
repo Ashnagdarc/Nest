@@ -57,6 +57,7 @@ export default function MyRequestsPage() {
     rejected: 0,
     completed: 0
   });
+  const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchRequests = async () => {
@@ -336,6 +337,7 @@ export default function MyRequestsPage() {
   };
 
   const handleCancelRequest = async (requestId: string) => {
+    setCancellingRequestId(requestId);
     try {
       // Get the request details first
       const { data: request, error: requestError } = await supabase
@@ -392,6 +394,8 @@ export default function MyRequestsPage() {
         description: error instanceof Error ? error.message : "Failed to cancel request. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      setCancellingRequestId(null);
     }
   };
 
@@ -656,6 +660,8 @@ export default function MyRequestsPage() {
                               size="sm"
                               onClick={() => handleCancelRequest(req.id)}
                               className="hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                              loading={cancellingRequestId === req.id}
+                              disabled={cancellingRequestId === req.id}
                             >
                               <RotateCcw className="mr-1 h-3 w-3" /> Cancel
                             </Button>
@@ -820,6 +826,8 @@ export default function MyRequestsPage() {
                   handleCancelRequest(selectedRequest.id);
                   setShowDetailsModal(false);
                 }}
+                loading={cancellingRequestId === selectedRequest.id}
+                disabled={cancellingRequestId === selectedRequest.id}
               >
                 Cancel Request
               </Button>

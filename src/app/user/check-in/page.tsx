@@ -795,9 +795,7 @@ export default function CheckInGearPage() {
                     <CardDescription className="max-w-md mb-8">
                       You currently have no gear checked out. Browse our available equipment and request some gear to get started.
                     </CardDescription>
-                    <Button size="lg" asChild>
-                      <a href="/user/browse">Browse Available Gear</a>
-                    </Button>
+                    <Button size="lg" asChild><a href="/user/browse">Browse Available Gear</a></Button>
                   </Card>
                 ) : (
                   <form onSubmit={handleCheckinSubmit}>

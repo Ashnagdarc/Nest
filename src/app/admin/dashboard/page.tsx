@@ -28,20 +28,20 @@ function Dashboard() {
 
   const handleRefresh = () => {
     refreshData();
-    toast({
+          toast({
       title: "Dashboard refreshed",
       description: "All data has been updated",
-      variant: "default",
-    });
+            variant: "default",
+          });
   };
 
   // Function to handle category selection
   const handleViewCategory = (category: string) => {
-    toast({
+      toast({
       title: `${category} selected`,
       description: `Viewing ${category} inventory`,
-      variant: "default",
-    });
+        variant: "default",
+      });
   };
 
   return (
@@ -95,11 +95,11 @@ function Dashboard() {
           </Suspense>
 
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
+          <Card>
+            <CardHeader>
                 <CardTitle>Equipment Requests</CardTitle>
-              </CardHeader>
-              <CardContent>
+            </CardHeader>
+            <CardContent>
                 <Suspense fallback={<div>Loading request stats...</div>}>
                   <RequestStats
                     stats={{
@@ -111,13 +111,13 @@ function Dashboard() {
                     onViewCategory={handleViewCategory}
                   />
                 </Suspense>
-              </CardContent>
-            </Card>
+                        </CardContent>
+                      </Card>
 
             <Suspense fallback={<div>Loading utilization data...</div>}>
               <UtilizationSection />
             </Suspense>
-          </div>
+                        </div>
 
           <Suspense fallback={<div>Loading activities...</div>}>
             <ActivitiesSection />
@@ -171,7 +171,7 @@ function Dashboard() {
           GearFlow Admin Dashboard • &copy; {new Date().getFullYear()}
         </p>
       </footer>
-    </div>
+                              </div>
   );
 }
 

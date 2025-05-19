@@ -227,14 +227,10 @@ export function EditItemModal({ itemId, open, onOpenChange, onSaved }: EditItemM
                     </Button>
                     <Button
                         onClick={handleSave}
+                        loading={saving}
                         disabled={loading || saving}
                     >
-                        {saving ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Saving...
-                            </>
-                        ) : 'Save Changes'}
+                        Save Changes
                     </Button>
                 </DialogFooter>
             </DialogContent>

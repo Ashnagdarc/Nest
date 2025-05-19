@@ -391,9 +391,9 @@ export default function UserSettingsPage() {
                                     )} />
                                 </div>
                                 <div className="flex justify-end">
-                                    <Button type="submit" disabled={isProfileLoading}>
+                                    <Button type="submit" loading={isProfileLoading}>
                                         <Save className="mr-2 h-4 w-4 flex-shrink-0" />
-                                        <span className="truncate">{isProfileLoading ? 'Saving Profile...' : 'Save Profile'}</span>
+                                        <span className="truncate">Save Profile</span>
                                     </Button>
                                 </div>
                             </form>
@@ -439,9 +439,9 @@ export default function UserSettingsPage() {
                                     )} />
                                 </div>
                                 <div className="flex justify-end">
-                                    <Button type="submit" disabled={isPasswordLoading}>
+                                    <Button type="submit" loading={isPasswordLoading}>
                                         <Save className="mr-2 h-4 w-4 flex-shrink-0" />
-                                        <span className="truncate">{isPasswordLoading ? 'Updating Password...' : 'Update Password'}</span>
+                                        <span className="truncate">Update Password</span>
                                     </Button>
                                 </div>
                             </form>

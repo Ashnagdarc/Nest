@@ -183,8 +183,8 @@ export default function ReportsPage() {
           .lte('created_at', dateRange.to.toISOString())
         : // Otherwise try to use a join or relationship
         supabase
-          .from('gear_requests')
-          .select(`
+        .from('gear_requests')
+        .select(`
           id,
           gears (
             id,
@@ -192,8 +192,8 @@ export default function ReportsPage() {
             full_name
           )
         `)
-          .gte('created_at', dateRange.from.toISOString())
-          .lte('created_at', dateRange.to.toISOString());
+        .gte('created_at', dateRange.from.toISOString())
+        .lte('created_at', dateRange.to.toISOString());
 
       const { data: requestData, error: queryError } = await directQuery;
 
@@ -213,7 +213,7 @@ export default function ReportsPage() {
 
       // Process and aggregate the gear usage data
       const gearUsage = new Map<string, { name: string; fullName: string; count: number }>();
-
+      
       if (hasGearIds) {
         // Process gear_ids array approach
         const gearIds = requestData.flatMap(request => request.gear_ids || []);
@@ -232,7 +232,7 @@ export default function ReportsPage() {
 
           // Create a lookup map for gear details
           const gearDetailsMap = new Map();
-          gearsData?.forEach(gear => {
+          gearsData?.forEach((gear: { id: string; name: string; full_name?: string | null }) => {
             gearDetailsMap.set(gear.id, {
               name: gear.name,
               fullName: gear.full_name || gear.name
@@ -313,9 +313,9 @@ export default function ReportsPage() {
       // Try to get weekly trends data
       const [requestsResult, damagesResult] = await Promise.all([
         supabase
-          .from('gear_requests')
-          .select('created_at')
-          .gte('created_at', dateRange?.from?.toISOString() || '')
+        .from('gear_requests')
+        .select('created_at')
+        .gte('created_at', dateRange?.from?.toISOString() || '')
           .lte('created_at', dateRange?.to?.toISOString() || ''),
         supabase
           .from('gear_maintenance')
@@ -434,8 +434,8 @@ export default function ReportsPage() {
 
           // Extract all gear IDs
           const allGearIds = gearRequestsData
-            ?.filter(req => req.gear_ids && Array.isArray(req.gear_ids))
-            .flatMap(req => req.gear_ids || []);
+            ?.filter((req: { gear_ids?: string[] | null }) => req.gear_ids && Array.isArray(req.gear_ids))
+            .flatMap((req: { gear_ids?: string[] | null }) => req.gear_ids || []);
 
           if (allGearIds && allGearIds.length > 0) {
             // Count occurrences of each gear ID
@@ -518,11 +518,11 @@ export default function ReportsPage() {
           // Get the gear IDs and user IDs
           const gearIds = activityData
             .map((activity: ActivityData) => activity.gear_id)
-            .filter((id): id is string => id !== null && id !== undefined);
+            .filter((id: string | undefined): id is string => id !== null && id !== undefined);
 
           const userIds = activityData
             .map((activity: ActivityData) => activity.user_id)
-            .filter((id): id is string => id !== null && id !== undefined);
+            .filter((id: string | undefined): id is string => id !== null && id !== undefined);
 
           // Fetch gear details separately  
           const { data: gearsData, error: gearsError } = await supabase
@@ -716,14 +716,14 @@ export default function ReportsPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <h1 className="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
         <div className="flex items-center gap-2">
-          <DatePickerWithRange
-            dateRange={dateRange}
-            onDateRangeChange={setDateRange}
-          />
-          <Button
+        <DatePickerWithRange 
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+        />
+        <Button
             variant="outline"
-            onClick={fetchData}
-            disabled={isLoading}
+          onClick={fetchData}
+          disabled={isLoading}
             className="ml-2 h-10 w-10 p-0"
             aria-label="Refresh data"
           >
@@ -735,9 +735,9 @@ export default function ReportsPage() {
             ) : (
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M7.5 0a7.5 7.5 0 11-7.5 7.5A7.5 7.5 0 017.5 0zm3.75 7.5a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" fill="currentColor" />
-              </svg>
+          </svg>
             )}
-          </Button>
+        </Button>
         </div>
       </div>
 
@@ -835,10 +835,10 @@ export default function ReportsPage() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis dataKey="weekLabel" className="text-xs" tick={{ fill: 'hsl(var(--foreground))' }} />
                     <YAxis className="text-xs" tick={{ fill: 'hsl(var(--foreground))' }} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'hsl(var(--popover))',
-                        border: '1px solid hsl(var(--border))',
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--popover))',
+                      border: '1px solid hsl(var(--border))',
                         borderRadius: '0.5rem',
                         color: 'hsl(var(--foreground))'
                       }}
@@ -854,9 +854,9 @@ export default function ReportsPage() {
                       dot={{ strokeWidth: 2, r: 4, fill: 'hsl(var(--background))' }}
                       activeDot={{ strokeWidth: 0, r: 6, fill: 'hsl(var(--destructive))' }}
                     />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground p-6">
                 <p>No usage data available for the selected period</p>
@@ -912,25 +912,25 @@ export default function ReportsPage() {
         </Card>
       </div>
 
-      {/* Weekly Activity Report */}
+        {/* Weekly Activity Report */}
       <Card className="overflow-hidden mb-6">
-        <WeeklyActivityReport dateRange={dateRange} />
-      </Card>
-
-      {/* Recent Activity Log */}
+          <WeeklyActivityReport dateRange={dateRange} />
+        </Card>
+        
+        {/* Recent Activity Log */}
       <Card className="overflow-hidden">
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 7.8L8 5v10l4 2.8L16 15V5l-4 2.8z" />
                 <path d="M8 15l4 2.8" />
                 <path d="M16 15l-4 2.8" />
                 <path d="M12 4v3.8" />
                 <path d="M12 15v4" />
-              </svg>
-              <CardTitle className="text-base">Recent Activity Log</CardTitle>
-            </div>
+                </svg>
+                <CardTitle className="text-base">Recent Activity Log</CardTitle>
+              </div>
           </div>
           <CardDescription>Latest gear activities from the system</CardDescription>
         </CardHeader>
@@ -1063,8 +1063,8 @@ export default function ReportsPage() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
     </motion.div>
   );
 }

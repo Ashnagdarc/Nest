@@ -108,7 +108,7 @@ export default function ForgotPasswordPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: 0.2 }}
                 >
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button type="submit" className="w-full" loading={isLoading} disabled={isLoading}>
                     {isLoading ? 'Sending...' : 'Send Reset Link'}
                   </Button>
                 </motion.div>

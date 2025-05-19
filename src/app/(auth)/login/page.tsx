@@ -184,7 +184,7 @@ export default function LoginPage() {
         style={{ minHeight: '300px' }}
       >
         <DotLottieReact
-          src="https://lottie.host/7b3dbab2-79c3-4502-ad70-d2ac4f2019fd/w0NcTSsIly.lottie"
+          src="https://lottie.host/ecb3f86e-9b08-4197-aa9d-fe162b0fd192/dV5hd6Y1tl.lottie"
           loop
           autoplay
           style={{ width: 150, height: 150 }}
@@ -209,6 +209,14 @@ export default function LoginPage() {
           {showSuccessAnimation ? SuccessAnimationComponent : (
             <>
               <CardHeader className="space-y-1 text-center">
+                <div className="flex justify-center py-4">
+                  <DotLottieReact
+                    src="https://lottie.host/ecb3f86e-9b08-4197-aa9d-fe162b0fd192/dV5hd6Y1tl.lottie"
+                    loop
+                    autoplay
+                    style={{ width: 150, height: 150 }}
+                  />
+                </div>
                 <CardTitle className="text-2xl font-bold text-primary">Welcome Back!</CardTitle>
                 <CardDescription>Enter your credentials to access GearFlow</CardDescription>
               </CardHeader>
@@ -247,7 +255,7 @@ export default function LoginPage() {
                       transition={{ duration: 0.5, delay: 0.2 }}
                       whileTap={{ scale: 0.98 }}
                     >
-                      <Button type="submit" className="w-full" disabled={isLoading}>
+                      <Button type="submit" className="w-full" loading={isLoading} disabled={isLoading}>
                         {isLoading ? 'Logging in...' : 'Login'}
                       </Button>
                     </motion.div>
