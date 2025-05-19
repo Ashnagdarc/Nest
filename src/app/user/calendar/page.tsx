@@ -53,6 +53,8 @@ interface BookingDates {
 interface GearOption {
     value: string;
     label: string;
+    isDisabled?: boolean;
+    conflict?: boolean;
 }
 
 // Custom event styling with better visual feedback
@@ -161,6 +163,9 @@ const CustomToolbar = ({ label, onNavigate, onView }: any) => {
     );
 };
 
+// Add this helper to detect dark mode
+const isDarkMode = typeof window !== 'undefined' && (document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches);
+
 export default function UserCalendarPage() {
     const [events, setEvents] = useState<any[]>([]);
     const [selectedGears, setSelectedGears] = useState<string[]>([]);
@@ -176,6 +181,7 @@ export default function UserCalendarPage() {
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
     const [selectedEvent, setSelectedEvent] = useState<any>(null);
+    const [availableGearOptions, setAvailableGearOptions] = useState<GearOption[]>([]);
 
     const supabase = useMemo(() => createClient(), []);
     const router = useRouter();
@@ -413,6 +419,44 @@ export default function UserCalendarPage() {
         }
     };
 
+    // Add this useEffect to dynamically check conflicts but show all available gear
+    useEffect(() => {
+        if (!selectedDates.start || !selectedDates.end) return;
+
+        const fetchAvailableGearWithConflicts = async () => {
+            const { data: gearList, error } = await supabase
+                .from('gears')
+                .select('id, name, category, status')
+                .eq('status', 'Available');
+
+            if (error) {
+                // handle error
+                return;
+            }
+
+            // Check for conflicts for each gear
+            const gearOptions = await Promise.all(
+                gearList.map(async (gear) => {
+                    const { data: hasConflict } = await supabase.rpc('check_gear_booking_conflict', {
+                        p_gear_id: gear.id,
+                        p_start_date: selectedDates.start.toISOString(),
+                        p_end_date: selectedDates.end.toISOString()
+                    });
+                    return {
+                        value: gear.id,
+                        label: `${gear.name} (${gear.category})`,
+                        isDisabled: !!hasConflict,
+                        conflict: !!hasConflict
+                    };
+                })
+            );
+            setAvailableGear(gearList); // still used elsewhere if needed
+            setAvailableGearOptions(gearOptions);
+        };
+
+        fetchAvailableGearWithConflicts();
+    }, [selectedDates.start, selectedDates.end]);
+
     return (
         <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
             <Card>
@@ -513,27 +557,21 @@ export default function UserCalendarPage() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="flex flex-col space-y-1">
                                         <span className="text-sm text-muted-foreground">Start</span>
-                                        <div className="p-3 rounded-md bg-muted/50">
-                                            {selectedDates.start ? (
-                                                <time className="text-sm font-medium">
-                                                    {format(selectedDates.start, 'PPp')}
-                                                </time>
-                                            ) : (
-                                                <span className="text-sm text-muted-foreground">Not selected</span>
-                                            )}
-                                        </div>
+                                        <CalendarComponent
+                                            mode="single"
+                                            selected={selectedDates.start}
+                                            onSelect={(date) => setSelectedDates(dates => ({ ...dates, start: date }))}
+                                            className="rounded-md border"
+                                        />
                                     </div>
                                     <div className="flex flex-col space-y-1">
                                         <span className="text-sm text-muted-foreground">End</span>
-                                        <div className="p-3 rounded-md bg-muted/50">
-                                            {selectedDates.end ? (
-                                                <time className="text-sm font-medium">
-                                                    {format(selectedDates.end, 'PPp')}
-                                                </time>
-                                            ) : (
-                                                <span className="text-sm text-muted-foreground">Not selected</span>
-                                            )}
-                                        </div>
+                                        <CalendarComponent
+                                            mode="single"
+                                            selected={selectedDates.end}
+                                            onSelect={(date) => setSelectedDates(dates => ({ ...dates, end: date }))}
+                                            className="rounded-md border"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -544,10 +582,7 @@ export default function UserCalendarPage() {
                                     <div className="p-4 rounded-lg border bg-card">
                                         <ReactSelect<GearOption, true>
                                             isMulti
-                                            options={availableGear.map((gear: any) => ({
-                                                value: gear.id,
-                                                label: `${gear.name} (${gear.category})`
-                                            }))}
+                                            options={availableGearOptions}
                                             value={selectedGearOptions}
                                             onChange={(selected: MultiValue<GearOption>) => {
                                                 const selectedArray = Array.from(selected);
@@ -556,23 +591,54 @@ export default function UserCalendarPage() {
                                             }}
                                             placeholder="Select gear items..."
                                             className="w-full"
-                                            classNames={{
-                                                control: (state) =>
-                                                    cn(
-                                                        '!min-h-10 !bg-background !border-input !rounded-md',
-                                                        state.isFocused && '!border-ring !ring-2 !ring-ring !ring-offset-2'
-                                                    ),
-                                                placeholder: () => '!text-muted-foreground',
-                                                input: () => '!text-foreground',
-                                                option: (state) =>
-                                                    cn(
-                                                        '!text-sm',
-                                                        state.isSelected && '!bg-primary !text-primary-foreground',
-                                                        !state.isSelected && state.isFocused && '!bg-accent !text-accent-foreground'
-                                                    ),
-                                                multiValue: () => '!bg-primary/20 !rounded-md',
-                                                multiValueLabel: () => '!text-sm !text-primary-foreground',
-                                                multiValueRemove: () => '!text-primary-foreground !hover:bg-primary/30 !rounded-r-md'
+                                            isOptionDisabled={(option) => option.isDisabled}
+                                            formatOptionLabel={(option) => (
+                                                <span title={option.isDisabled ? 'Already booked for this period' : ''} style={option.isDisabled ? { color: isDarkMode ? '#888' : '#aaa' } : {}}>
+                                                    {option.label}
+                                                </span>
+                                            )}
+                                            styles={{
+                                                menu: (provided) => ({
+                                                    ...provided,
+                                                    backgroundColor: isDarkMode ? '#18181b' : '#fff',
+                                                    color: isDarkMode ? '#f4f4f5' : '#222',
+                                                }),
+                                                option: (provided, state) => ({
+                                                    ...provided,
+                                                    backgroundColor: state.isSelected
+                                                        ? (isDarkMode ? '#27272a' : '#e0e7ff')
+                                                        : state.isFocused
+                                                        ? (isDarkMode ? '#27272a' : '#f1f5f9')
+                                                        : isDarkMode ? '#18181b' : '#fff',
+                                                    color: state.isDisabled
+                                                        ? (isDarkMode ? '#888' : '#aaa')
+                                                        : (isDarkMode ? '#f4f4f5' : '#222'),
+                                                    cursor: state.isDisabled ? 'not-allowed' : 'pointer',
+                                                    opacity: state.isDisabled ? 0.7 : 1,
+                                                }),
+                                                control: (provided, state) => ({
+                                                    ...provided,
+                                                    backgroundColor: isDarkMode ? '#18181b' : '#fff',
+                                                    borderColor: state.isFocused ? (isDarkMode ? '#6366f1' : '#6366f1') : (isDarkMode ? '#27272a' : '#e5e7eb'),
+                                                    boxShadow: state.isFocused ? (isDarkMode ? '0 0 0 2px #6366f1' : '0 0 0 2px #6366f1') : 'none',
+                                                }),
+                                                multiValue: (provided) => ({
+                                                    ...provided,
+                                                    backgroundColor: isDarkMode ? '#27272a' : '#e0e7ff',
+                                                    color: isDarkMode ? '#f4f4f5' : '#222',
+                                                }),
+                                                singleValue: (provided) => ({
+                                                    ...provided,
+                                                    color: isDarkMode ? '#f4f4f5' : '#222',
+                                                }),
+                                                input: (provided) => ({
+                                                    ...provided,
+                                                    color: isDarkMode ? '#f4f4f5' : '#222',
+                                                }),
+                                                placeholder: (provided) => ({
+                                                    ...provided,
+                                                    color: isDarkMode ? '#888' : '#888',
+                                                }),
                                             }}
                                         />
                                     </div>

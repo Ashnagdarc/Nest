@@ -1507,6 +1507,7 @@ $$;
                   <SelectItem value="Drone">Drone</SelectItem>
                   <SelectItem value="Audio">Audio</SelectItem>
                   <SelectItem value="Lighting">Lighting</SelectItem>
+                  <SelectItem value="Cars">Cars</SelectItem>
                   {/* Add more categories as needed */}
                 </SelectContent>
               </Select>
