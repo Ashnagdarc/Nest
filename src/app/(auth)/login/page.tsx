@@ -183,10 +183,12 @@ export default function LoginPage() {
         className="flex flex-col items-center justify-center p-10"
         style={{ minHeight: '300px' }}
       >
-        <DotLottieReact
-          src="https://lottie.host/ecb3f86e-9b08-4197-aa9d-fe162b0fd192/dV5hd6Y1tl.lottie"
+        <video
+          src="/animations/Animation%20-%201746543995336.webm"
           loop
-          autoplay
+          autoPlay
+          muted
+          playsInline
           style={{ width: 150, height: 150 }}
         />
         <p className="mt-4 text-lg font-semibold text-primary">Login Successful!</p>
@@ -210,10 +212,12 @@ export default function LoginPage() {
             <>
               <CardHeader className="space-y-1 text-center">
                 <div className="flex justify-center py-4">
-                  <DotLottieReact
-                    src="https://lottie.host/ecb3f86e-9b08-4197-aa9d-fe162b0fd192/dV5hd6Y1tl.lottie"
+                  <video
+                    src="/animations/Animation%20-%201746543995336.webm"
                     loop
-                    autoplay
+                    autoPlay
+                    muted
+                    playsInline
                     style={{ width: 150, height: 150 }}
                   />
                 </div>
