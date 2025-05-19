@@ -406,7 +406,9 @@ export default function UserHistoryPage() {
               <h3 className="text-lg font-semibold mb-2">No Activity Found</h3>
               <p className="text-muted-foreground mb-4">You haven't performed any gear-related activities yet.</p>
               <Button asChild>
-                <a href="/user/browse">Browse Available Gear</a>
+                <a href="/user/browse">
+                  <span>Browse Available Gear</span>
+                </a>
               </Button>
             </motion.div>
           )}

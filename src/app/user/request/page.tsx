@@ -505,9 +505,9 @@ export default function RequestGearPage() {
               whileTap={{ scale: 0.98 }}
               className="flex justify-end pt-4"
             >
-              <Button type="submit" disabled={isLoading || form.watch("selectedGears").length === 0}>
+              <Button type="submit" loading={isLoading} disabled={form.watch("selectedGears").length === 0}>
                 <Send className="mr-2 h-4 w-4" />
-                {isLoading ? 'Submitting...' : 'Submit Request'}
+                Submit Request
               </Button>
             </motion.div>
           </motion.div>

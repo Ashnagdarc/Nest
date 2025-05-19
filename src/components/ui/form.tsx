@@ -106,8 +106,19 @@ FormLabel.displayName = "FormLabel"
 const FormControl = React.forwardRef<
   React.ElementRef<typeof Slot>,
   React.ComponentPropsWithoutRef<typeof Slot>
->(({ ...props }, ref) => {
+>(({ children, ...props }, ref) => {
   const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
+
+  if (!React.isValidElement(children) || Array.isArray(children)) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error(
+        "[FormControl] You must pass exactly one valid React element as a child."
+      );
+    }
+    throw new Error(
+      "[FormControl] You must pass exactly one valid React element as a child."
+    );
+  }
 
   return (
     <Slot
@@ -120,7 +131,9 @@ const FormControl = React.forwardRef<
       }
       aria-invalid={!!error}
       {...props}
-    />
+    >
+      {children}
+    </Slot>
   )
 })
 FormControl.displayName = "FormControl"

@@ -14,6 +14,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from "@/hooks/use-toast";
 import dynamic from 'next/dynamic';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 
 // Dynamically import Lottie
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -50,7 +52,7 @@ export default function SignupPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -68,7 +70,7 @@ export default function SignupPage() {
 
   const onSubmit = async (data: SignupFormValues) => {
     setIsLoading(true);
-    setShowSuccessAnimation(false);
+    setShowSuccessModal(false);
     console.log("[Signup Attempt] Starting for email:", data.email);
 
     try {
@@ -92,8 +94,7 @@ export default function SignupPage() {
         throw new Error(result.error || 'Failed to create account');
       }
 
-      // Success sequence
-      setShowSuccessAnimation(true);
+      setShowSuccessModal(true);
       setIsLoading(false);
 
       toast({
@@ -103,9 +104,10 @@ export default function SignupPage() {
         duration: 7000,
       });
 
-      // Redirect after delay
-      await new Promise(resolve => setTimeout(resolve, 2500));
-      router.push('/login');
+      setTimeout(() => {
+        setShowSuccessModal(false);
+        router.push('/dashboard');
+      }, 3000);
 
     } catch (error) {
       setIsLoading(false);
@@ -129,6 +131,21 @@ export default function SignupPage() {
 
   return (
     <div className="container mx-auto flex min-h-screen flex-col items-center justify-center p-4">
+      {/* Success Modal */}
+      <Dialog open={showSuccessModal}>
+        <DialogContent className="flex flex-col items-center justify-center gap-4">
+          <DotLottieReact
+            src="https://lottie.host/0572b41a-7744-422d-be6a-5b33e5bf060c/JtagAl0ppy.lottie"
+            loop
+            autoplay
+            style={{ width: 180, height: 180 }}
+          />
+          <h3 className="mt-2 text-xl font-semibold text-primary">Account Created!</h3>
+          <p className="text-center text-muted-foreground">
+            Welcome to GearFlow. Redirecting to your dashboard...
+          </p>
+        </DialogContent>
+      </Dialog>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -141,30 +158,46 @@ export default function SignupPage() {
             <CardDescription>Enter your information to get started</CardDescription>
           </CardHeader>
 
-          {showSuccessAnimation ? (
-            <CardContent className="flex flex-col items-center justify-center p-6">
-              <Lottie
-                animationData={successAnimation}
-                loop={false}
-                style={{ width: 150, height: 150 }}
-              />
-              <h3 className="mt-4 text-xl font-semibold text-primary">Account Created!</h3>
-              <p className="text-center text-muted-foreground">
-                Please check your email to verify your account.
-              </p>
-            </CardContent>
-          ) : (
-            <CardContent>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="fullName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John Doe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="john@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid gap-4 sm:grid-cols-2">
                   <FormField
                     control={form.control}
-                    name="fullName"
+                    name="phone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Full Name</FormLabel>
+                        <FormLabel>Phone (Optional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="John Doe" {...field} />
+                          <Input type="tel" placeholder="(555) 555-5555" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -173,121 +206,92 @@ export default function SignupPage() {
 
                   <FormField
                     control={form.control}
-                    name="email"
+                    name="department"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Email</FormLabel>
+                        <FormLabel>Department (Optional)</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="john@example.com" {...field} />
+                          <Input placeholder="e.g., Marketing" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="phone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Phone (Optional)</FormLabel>
-                          <FormControl>
-                            <Input type="tel" placeholder="(555) 555-5555" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Must be at least 8 characters with 1 uppercase, 1 lowercase, 1 number, and 1 special character.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                    <FormField
-                      control={form.control}
-                      name="department"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Department (Optional)</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g., Marketing" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
-                          <Input type="password" {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          Must be at least 8 characters with 1 uppercase, 1 lowercase, 1 number, and 1 special character.
-                        </FormDescription>
+                <FormField
+                  control={form.control}
+                  name="terms"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>
+                          I accept the{' '}
+                          <Link href="/terms" className="text-primary hover:underline">
+                            terms and conditions
+                          </Link>
+                        </FormLabel>
                         <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                      </div>
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="confirmPassword"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Confirm Password</FormLabel>
-                        <FormControl>
-                          <Input type="password" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <Button
+                  type="submit"
+                  className="w-full"
+                  loading={isLoading}
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Creating Account..." : "Create Account"}
+                </Button>
 
-                  <FormField
-                    control={form.control}
-                    name="terms"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>
-                            I accept the{' '}
-                            <Link href="/terms" className="text-primary hover:underline">
-                              terms and conditions
-                            </Link>
-                          </FormLabel>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Creating Account..." : "Create Account"}
-                  </Button>
-
-                  <p className="text-center text-sm text-muted-foreground">
-                    Already have an account?{' '}
-                    <Link href="/login" className="text-primary hover:underline">
-                      Sign in
-                    </Link>
-                  </p>
-                </form>
-              </Form>
-            </CardContent>
-          )}
+                <p className="text-center text-sm text-muted-foreground">
+                  Already have an account?{' '}
+                  <Link href="/login" className="text-primary hover:underline">
+                    Sign in
+                  </Link>
+                </p>
+              </form>
+            </Form>
+          </CardContent>
         </Card>
       </motion.div>
     </div>

@@ -299,15 +299,15 @@ export function subscribeToTable(
     let subscription: RealtimeSubscription | null = null;
 
     const setupSubscription = () => {
-        try {
+    try {
             const channelName = `public:${tableName}:${Date.now()}`;
             logger.info(`Setting up realtime subscription for ${tableName}`, 'Realtime');
 
-            const channel = supabase
+        const channel = supabase
                 .channel(channelName)
-                .on(
-                    'postgres_changes',
-                    { event, schema: 'public', table: tableName },
+            .on(
+                'postgres_changes',
+                { event, schema: 'public', table: tableName },
                     (payload: RealtimePostgresChangesPayload<any>) => {
                         const recordId = payload.new?.id || (payload.old as any)?.id;
                         logger.debug(`Received ${event} on ${tableName}`, 'Realtime event', {
@@ -315,9 +315,9 @@ export function subscribeToTable(
                             event,
                             recordId
                         });
-                        callback(payload);
-                    }
-                )
+                    callback(payload);
+                }
+            )
                 .on('system', { event: 'error' }, (error: any) => {
                     // Only log actual errors, not info messages labeled as errors
                     if (error && error.message &&
@@ -370,9 +370,9 @@ export function subscribeToTable(
                 isActive: false // Will be updated by subscribe callback
             };
 
-            activeSubscriptions.push(subscription);
-            return subscription;
-        } catch (error) {
+        activeSubscriptions.push(subscription);
+        return subscription;
+    } catch (error) {
             logger.error(error, `Error subscribing to ${tableName}`);
 
             // Retry with exponential backoff
@@ -397,8 +397,8 @@ export function subscribeToTable(
                 return dummySubscription;
             }
 
-            return null;
-        }
+        return null;
+    }
     };
 
     return setupSubscription();
@@ -414,7 +414,7 @@ export function unsubscribeFromTable(subscription: RealtimeSubscription): void {
 
         // Unsubscribe from the channel if it exists
         if (subscription.channel) {
-            subscription.channel.unsubscribe();
+        subscription.channel.unsubscribe();
         }
 
         activeSubscriptions = activeSubscriptions.filter(
@@ -443,10 +443,10 @@ export function cleanupAllSubscriptions(): void {
 }
 
 interface DashboardCallbacks {
-    onGearUpdate?: (payload: any) => void;
-    onMaintenanceUpdate?: (payload: any) => void;
-    onRequestUpdate?: (payload: any) => void;
-    onNotificationUpdate?: (payload: any) => void;
+  onGearUpdate?: (payload: any) => void;
+  onMaintenanceUpdate?: (payload: any) => void;
+  onRequestUpdate?: (payload: any) => void;
+  onNotificationUpdate?: (payload: any) => void;
     onActivityLogUpdate?: (payload: any) => void;
 }
 
@@ -454,31 +454,31 @@ interface DashboardCallbacks {
  * Sets up all necessary real-time subscriptions for the admin dashboard
  */
 export function setupAdminDashboardSubscriptions(callbacks: DashboardCallbacks): () => void {
-    const subscriptions: RealtimeSubscription[] = [];
+  const subscriptions: RealtimeSubscription[] = [];
 
-    // Subscribe to gear changes
-    if (callbacks.onGearUpdate) {
-        const sub = subscribeToTable('gears', '*', callbacks.onGearUpdate);
-        if (sub) subscriptions.push(sub);
-    }
+  // Subscribe to gear changes
+  if (callbacks.onGearUpdate) {
+    const sub = subscribeToTable('gears', '*', callbacks.onGearUpdate);
+    if (sub) subscriptions.push(sub);
+  }
 
-    // Subscribe to maintenance records
-    if (callbacks.onMaintenanceUpdate) {
-        const sub = subscribeToTable('gear_maintenance', '*', callbacks.onMaintenanceUpdate);
-        if (sub) subscriptions.push(sub);
-    }
+  // Subscribe to maintenance records
+  if (callbacks.onMaintenanceUpdate) {
+    const sub = subscribeToTable('gear_maintenance', '*', callbacks.onMaintenanceUpdate);
+    if (sub) subscriptions.push(sub);
+  }
 
-    // Subscribe to gear requests
-    if (callbacks.onRequestUpdate) {
-        const sub = subscribeToTable('gear_requests', '*', callbacks.onRequestUpdate);
-        if (sub) subscriptions.push(sub);
-    }
+  // Subscribe to gear requests
+  if (callbacks.onRequestUpdate) {
+    const sub = subscribeToTable('gear_requests', '*', callbacks.onRequestUpdate);
+    if (sub) subscriptions.push(sub);
+  }
 
-    // Subscribe to notifications
-    if (callbacks.onNotificationUpdate) {
-        const sub = subscribeToTable('notifications', '*', callbacks.onNotificationUpdate);
-        if (sub) subscriptions.push(sub);
-    }
+  // Subscribe to notifications
+  if (callbacks.onNotificationUpdate) {
+    const sub = subscribeToTable('notifications', '*', callbacks.onNotificationUpdate);
+    if (sub) subscriptions.push(sub);
+  }
 
     // Subscribe to activity log
     if (callbacks.onActivityLogUpdate) {
@@ -486,10 +486,10 @@ export function setupAdminDashboardSubscriptions(callbacks: DashboardCallbacks):
         if (sub) subscriptions.push(sub);
     }
 
-    // Return cleanup function
-    return () => {
-        subscriptions.forEach(unsubscribeFromTable);
-    };
+  // Return cleanup function
+  return () => {
+    subscriptions.forEach(unsubscribeFromTable);
+  };
 }
 
 /**

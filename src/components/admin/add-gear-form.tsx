@@ -238,8 +238,8 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
               Cancel
             </Button>
           </DialogClose>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? "Adding..." : "Add Gear"}
+          <Button type="submit" loading={isLoading} disabled={isLoading}>
+            Add Gear
           </Button>
         </DialogFooter>
       </form>
