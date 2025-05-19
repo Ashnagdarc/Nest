@@ -7,6 +7,7 @@ import { ThemeProvider } from 'next-themes';
 import { NotificationProvider } from "@/components/notifications/NotificationProvider";
 import { SupabaseErrorBoundary } from "@/components/supabase-error-boundary";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 // Import the console error interceptor to filter Supabase Realtime noise
 import '@/utils/intercept-console-error';
 
@@ -57,6 +58,7 @@ export default function RootLayout({
             </ReactQueryProvider>
           </NotificationProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );

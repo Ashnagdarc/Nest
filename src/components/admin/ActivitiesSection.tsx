@@ -96,7 +96,7 @@ export function ActivitiesSection() {
             // Also get recent gear activity to supplement
             const { data: gears, error: gearsError } = await supabase
                 .from('gears')
-                .select('id, name, created_at, created_by')
+                .select('id, name, created_at')
                 .order('created_at', { ascending: false })
                 .limit(5);
 
