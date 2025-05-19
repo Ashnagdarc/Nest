@@ -1,26 +1,23 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Dependencies
+# Node dependencies
 node_modules/
-/.pnp
+
+# Yarn
+.pnp
 .pnp.js
 .yarn/install-state.gz
 .yarn/unplugged
+.yarnrc.yml
+yarn.lock
 
-# Testing
-/coverage
-
-# Next.js build files
+# Build output
 /.next/
 /out/
-
-# Production
-/build
-
-# Misc
-.DS_Store
-*.pem
-**/.DS_Store
+/build/
+dist
+tmp
+build/
 
 # Logs
 logs/
@@ -32,61 +29,26 @@ pnpm-debug.log*
 lerna-debug.log*
 *.log.*
 
-# Local configuration
-.env.Local
-.env.Development.local
-.vercel
+# Coverage
+/coverage
 
-# Editor directories and files
-.vscode/*
+# Editor files
+.vscode/
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-*.sublime-workspace
 .idea/
+*.sublime-workspace
 *.swp
 *.swo
 
-# Compiled output
-dist
-tmp
-build/
+# Misc
+.DS_Store
+**/.DS_Store
+*.pem
 
-# Folders
-.turbo
-
-# Optional eslint cache
-.eslintcache
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarnrc.yml
-yarn.lock
-
-# Docusaurus files
-.docusaurus
-
-# Next-Auth specific
-next-auth.session-token
-
-# TypeScript
-tsconfig.tsbuildinfo
-
-# IDX specific
-.idx/
-
-# Temporary files
-*.tmp
-*~
-*.backup
-
-# Environment variables
+# Local config
 .env
 .env.local
 .env.*.local
@@ -97,17 +59,38 @@ tsconfig.tsbuildinfo
 .env.test
 .env.test.local
 
-# Cursor specific
+# Next-Auth
+next-auth.session-token
+
+# TypeScript
+*.tsbuildinfo
+**/tsconfig.tsbuildinfo
+
+# Turbo
+.turbo
+
+# REPL history
+.node_repl_history
+
+# Docusaurus
+.docusaurus
+
+# IDX
+.idx/
+
+# Temporary files
+*.tmp
+*~
+*.backup
+.modified
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
+
+# Cursor
 .cursor/
 .cursor/mcp.json
 
-# Additional temp files
-.modified
-**/tsconfig.tsbuildinfo
-
-# Supabase
-**/supabase/.branches/
-**/supabase/.temp/
-
 # Project-specific
-/Gearflow logo.png
+Gearflow logo.png
