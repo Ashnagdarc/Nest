@@ -44,6 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useSearchParams } from 'next/navigation';
 
 // --- Dynamically import Lottie ---
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -212,11 +213,13 @@ interface StatusHistoryItem {
 
 export default function ManageRequestsPage() {
   const supabase = createClient();
+  const searchParams = useSearchParams();
+  const statusParam = searchParams.get('status');
   const [requests, setRequests] = useState<GearRequest[]>([]); // Now fetched from DB
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [filterUser, setFilterUser] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all'); // Added status filter
+  const [filterStatus, setFilterStatus] = useState(statusParam || 'all');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [gearFilter, setGearFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
@@ -1047,6 +1050,12 @@ export default function ManageRequestsPage() {
   const handleBatchReject = () => {
     setRequestToReject(selectedRequests[0]); // Open rejection dialog for first request
   };
+
+  useEffect(() => {
+    if (statusParam && statusParam !== filterStatus) {
+      setFilterStatus(statusParam);
+    }
+  }, [statusParam]);
 
   return (
     <motion.div
