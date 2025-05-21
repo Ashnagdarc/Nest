@@ -10,6 +10,11 @@ import { logger } from "@/utils/logger";
 import { createSupabaseSubscription } from "@/utils/supabase-subscription";
 import { motion } from "framer-motion";
 import { EmptyState } from "./EmptyState";
+import { DatePickerWithRange } from '@/components/ui/date-range-picker';
+import { format, subDays } from 'date-fns';
+import { TrendingUp, TrendingDown } from 'lucide-react';
+import type { DateRange } from 'react-day-picker';
+import { useToast } from '@/hooks/use-toast';
 
 interface PopularGear {
     id: string;
@@ -23,25 +28,117 @@ interface PopularGear {
 export function PopularGearWidget() {
     const [popularGear, setPopularGear] = useState<PopularGear[]>([]);
     const [loading, setLoading] = useState(true);
+    const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 30), to: new Date() });
+    const [trendData, setTrendData] = useState<Record<string, 'up' | 'down' | null>>({});
     const supabase = createClient();
+    const { toast } = useToast();
 
-    // Fetch popular gear data
+    // Fetch popular gear data for the selected date range
     const fetchPopularGear = async () => {
         try {
             setLoading(true);
-
-            // Call the stored function
-            const { data, error } = await supabase
-                .rpc('get_popular_gears', { limit_count: 5 });
-
-            if (error) {
-                logger.error("Error calling get_popular_gears function:", error);
-                throw error;
+            if (!dateRange?.from || !dateRange?.to) {
+                setPopularGear([]);
+                setLoading(false);
+                return;
             }
 
-            setPopularGear(data || []);
-        } catch (error) {
-            logger.error("Error fetching popular gear:", error);
+            // 1. Try the RPC function first
+            const { data, error } = await supabase
+                .rpc('get_popular_gears', { start_date: dateRange.from.toISOString(), end_date: dateRange.to.toISOString() });
+
+            if (!error && Array.isArray(data) && data.length > 0) {
+                setPopularGear(data);
+            } else {
+                // 2. Log the error in detail
+                logger.error("PopularGear RPC error", {
+                    code: error?.code,
+                    message: error?.message,
+                    details: error?.details,
+                    hint: error?.hint,
+                    raw: error
+                });
+
+                // 3. Fallback: Direct query to gear_requests and gears
+                const { data: requests, error: reqError } = await supabase
+                    .from('gear_requests')
+                    .select('gear_ids')
+                    .gte('created_at', dateRange.from.toISOString())
+                    .lte('created_at', dateRange.to.toISOString());
+
+                if (reqError) {
+                    logger.error("PopularGear fallback query error", {
+                        code: reqError.code,
+                        message: reqError.message,
+                        details: reqError.details,
+                        hint: reqError.hint,
+                        raw: reqError
+                    });
+                    setPopularGear([]);
+                    setLoading(false);
+                    return;
+                }
+
+                // Count gear requests
+                const allGearIds = requests
+                    ?.filter((req: { gear_ids?: string[] | null }) => req.gear_ids && Array.isArray(req.gear_ids))
+                    .flatMap((req: { gear_ids?: string[] | null }) => req.gear_ids || []);
+
+                if (allGearIds && allGearIds.length > 0) {
+                    const gearCounts: Record<string, number> = {};
+                    allGearIds.forEach((gearId: string) => {
+                        if (!gearId) return;
+                        gearCounts[gearId] = (gearCounts[gearId] || 0) + 1;
+                    });
+
+                    // Get top 5 gear IDs
+                    const topGearIds = Object.entries(gearCounts)
+                        .sort(([, countA], [, countB]) => countB - countA)
+                        .slice(0, 5)
+                        .map(([id]) => id);
+
+                    if (topGearIds.length > 0) {
+                        const { data: gears, error: gearsError } = await supabase
+                            .from('gears')
+                            .select('id, name, category, image_url, status')
+                            .in('id', topGearIds);
+
+                        if (gearsError) {
+                            logger.error("PopularGear fallback gear fetch error", {
+                                code: gearsError.code,
+                                message: gearsError.message,
+                                details: gearsError.details,
+                                hint: gearsError.hint,
+                                raw: gearsError
+                            });
+                            setPopularGear([]);
+                            setLoading(false);
+                            return;
+                        }
+
+                        // Map to the expected format
+                        const popularGear = topGearIds.map(id => {
+                            const gear = gears?.find((g: { id: string }) => g.id === id);
+                            return {
+                                id,
+                                name: gear?.name || 'Unknown Gear',
+                                category: gear?.category || 'Unknown',
+                                image_url: gear?.image_url || null,
+                                checkout_count: gearCounts[id],
+                                status: gear?.status || 'Unknown'
+                            };
+                        });
+                        setPopularGear(popularGear);
+                    } else {
+                        setPopularGear([]);
+                    }
+                } else {
+                    setPopularGear([]);
+                }
+            }
+        } catch (error: any) {
+            logger.error("PopularGear unexpected error", { error });
+            setPopularGear([]);
         } finally {
             setLoading(false);
         }
@@ -82,7 +179,7 @@ export function PopularGearWidget() {
             gearSubscription.unsubscribe();
             requestSubscription.unsubscribe();
         };
-    }, [supabase]);
+    }, [dateRange]);
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -121,84 +218,68 @@ export function PopularGearWidget() {
 
     return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-md">Popular Equipment</CardTitle>
-                <Link href="/user/browse">
-                    <Button variant="ghost" size="sm" className="h-8 gap-1">
-                        <Eye className="h-3.5 w-3.5" />
-                        <span className="text-xs">View All</span>
-                    </Button>
-                </Link>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">Popular Equipment
+                    <span className="ml-auto">
+                        <DatePickerWithRange dateRange={dateRange} onDateRangeChange={setDateRange} />
+                    </span>
+                </CardTitle>
             </CardHeader>
             <CardContent>
                 {loading ? (
-                    // Loading state with skeletons
                     <div className="space-y-4">
-                        {[1, 2, 3].map(i => (
+                        {[1, 2, 3].map((_, i) => (
                             <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-                                <Skeleton className="w-12 h-12 rounded-md flex-shrink-0" />
-                                <div className="space-y-2 flex-1">
+                                <Skeleton className="h-10 w-10 rounded" />
+                                <div className="flex-1 space-y-2">
                                     <Skeleton className="h-4 w-3/4" />
-                                    <div className="flex gap-2">
-                                        <Skeleton className="h-3 w-16" />
-                                        <Skeleton className="h-3 w-16" />
-                                    </div>
+                                    <Skeleton className="h-3 w-1/2" />
                                 </div>
-                                <Skeleton className="h-6 w-20 rounded-full" />
+                                <Skeleton className="h-6 w-16 rounded-full" />
                             </div>
                         ))}
                     </div>
                 ) : popularGear.length > 0 ? (
-                    // Gear items
-                    <div className="space-y-3">
-                        {popularGear.map((gear, index) => (
+                    <div className="space-y-4">
+                        {popularGear.map((gear) => (
                             <motion.div
                                 key={gear.id}
-                                initial={{ opacity: 0, y: 10 }}
+                                initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.1 }}
+                                transition={{ duration: 0.3 }}
+                                className="flex items-center gap-3 p-3 rounded-lg bg-muted/30"
                             >
-                                <Link
-                                    href={`/user/browse?id=${gear.id}`}
-                                    className="flex items-center p-3 rounded-lg hover:bg-muted/50 transition-colors"
-                                >
-                                    <div className="flex-shrink-0 w-12 h-12 relative rounded-md overflow-hidden mr-3 bg-muted">
-                                        {gear.image_url ? (
-                                            <img
-                                                src={gear.image_url}
-                                                alt={gear.name}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        ) : renderImagePlaceholder(gear.category)}
+                                {gear.image_url ? (
+                                    <img src={gear.image_url} alt={gear.name} className="h-10 w-10 rounded object-cover" />
+                                ) : (
+                                    <div className="h-10 w-10 rounded bg-gray-200 flex items-center justify-center text-lg font-bold text-gray-500">{gear.name[0]}</div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <h4 className="font-medium text-sm truncate">{gear.name}</h4>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <Badge variant="outline" className="text-xs">{gear.category}</Badge>
+                                        <span className="text-xs text-muted-foreground">{gear.checkout_count} {gear.checkout_count === 1 ? 'checkout' : 'checkouts'}</span>
+                                        {trendData[gear.id] === 'up' && <TrendingUp className="h-4 w-4 text-green-500" aria-label="Trending Up" />}
+                                        {trendData[gear.id] === 'down' && <TrendingDown className="h-4 w-4 text-red-500" aria-label="Trending Down" />}
                                     </div>
-
-                                    <div className="flex-1 min-w-0">
-                                        <h4 className="font-medium text-sm truncate">{gear.name}</h4>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <Badge variant="outline" className="text-xs">
-                                                {gear.category}
-                                            </Badge>
-                                            <span className="text-xs text-muted-foreground">
-                                                {gear.checkout_count} {gear.checkout_count === 1 ? 'checkout' : 'checkouts'}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <Badge className={getStatusColor(gear.status)}>
-                                        {gear.status}
-                                    </Badge>
-                                </Link>
+                                </div>
+                                <Badge className={getStatusColor(gear.status)}>{gear.status}</Badge>
+                                <Link href={`/user/browse?gear=${gear.id}`}><Button size="sm" variant="outline" aria-label="View Details">View Details</Button></Link>
+                                <Link href={`/user/request?gear=${gear.id}`}><Button size="sm" aria-label="Request Again">Request Again</Button></Link>
                             </motion.div>
                         ))}
                     </div>
                 ) : (
-                    <EmptyState
-                        icon="📊"
-                        title="No popular gear"
-                        description="Equipment popularity data will appear here"
-                        actionLink="/user/browse"
-                        actionText="Browse Equipment"
-                    />
+                    <>
+                        <EmptyState
+                            icon="📊"
+                            title="No popular gear"
+                            description="Equipment popularity data will appear here"
+                        />
+                        <div className="flex justify-center mt-4">
+                            <Link href="/user/browse"><Button>Browse Equipment</Button></Link>
+                        </div>
+                    </>
                 )}
             </CardContent>
         </Card>
