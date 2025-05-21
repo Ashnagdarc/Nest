@@ -10,47 +10,55 @@ import { logger } from "@/utils/logger";
 import { createSupabaseSubscription } from "@/utils/supabase-subscription";
 import { motion } from "framer-motion";
 import { EmptyState } from "./EmptyState";
-import { DatePickerWithRange } from '@/components/ui/date-range-picker';
-import { format, subDays } from 'date-fns';
 import { TrendingUp, TrendingDown } from 'lucide-react';
-import type { DateRange } from 'react-day-picker';
-import { useToast } from '@/hooks/use-toast';
 
 interface PopularGear {
-    id: string;
+    gear_id: string;
     name: string;
-    category: string;
-    image_url: string | null;
-    checkout_count: number;
-    status: string;
+    full_name: string;
+    request_count: number;
+    category?: string;
+    image_url?: string | null;
+    status?: string;
 }
 
 export function PopularGearWidget() {
     const [popularGear, setPopularGear] = useState<PopularGear[]>([]);
     const [loading, setLoading] = useState(true);
-    const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 30), to: new Date() });
     const [trendData, setTrendData] = useState<Record<string, 'up' | 'down' | null>>({});
     const supabase = createClient();
-    const { toast } = useToast();
 
-    // Fetch popular gear data for the selected date range
+    // Fetch popular gear data with a date range (last 30 days)
     const fetchPopularGear = async () => {
         try {
             setLoading(true);
-            if (!dateRange?.from || !dateRange?.to) {
-                setPopularGear([]);
-                setLoading(false);
-                return;
-            }
-
-            // 1. Try the RPC function first
-            const { data, error } = await supabase
-                .rpc('get_popular_gears', { start_date: dateRange.from.toISOString(), end_date: dateRange.to.toISOString() });
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(endDate.getDate() - 7);
+            // Call the RPC with date arguments
+            const { data, error } = await supabase.rpc('get_popular_gears', {
+                start_date: startDate.toISOString(),
+                end_date: endDate.toISOString(),
+            });
 
             if (!error && Array.isArray(data) && data.length > 0) {
-                setPopularGear(data);
+                // Fetch extra details for each gear (category, image_url, status)
+                const gearIds = data.map((g: any) => g.gear_id);
+                const { data: gearDetails, error: gearDetailsError } = await supabase
+                    .from('gears')
+                    .select('id, category, image_url, status')
+                    .in('id', gearIds);
+                const detailsMap = new Map();
+                gearDetails?.forEach((g: any) => detailsMap.set(g.id, g));
+                setPopularGear(
+                    data.map((g: any) => ({
+                        ...g,
+                        category: detailsMap.get(g.gear_id)?.category || '',
+                        image_url: detailsMap.get(g.gear_id)?.image_url || null,
+                        status: detailsMap.get(g.gear_id)?.status || '',
+                    }))
+                );
             } else {
-                // 2. Log the error in detail
                 logger.error("PopularGear RPC error", {
                     code: error?.code,
                     message: error?.message,
@@ -58,83 +66,7 @@ export function PopularGearWidget() {
                     hint: error?.hint,
                     raw: error
                 });
-
-                // 3. Fallback: Direct query to gear_requests and gears
-                const { data: requests, error: reqError } = await supabase
-                    .from('gear_requests')
-                    .select('gear_ids')
-                    .gte('created_at', dateRange.from.toISOString())
-                    .lte('created_at', dateRange.to.toISOString());
-
-                if (reqError) {
-                    logger.error("PopularGear fallback query error", {
-                        code: reqError.code,
-                        message: reqError.message,
-                        details: reqError.details,
-                        hint: reqError.hint,
-                        raw: reqError
-                    });
-                    setPopularGear([]);
-                    setLoading(false);
-                    return;
-                }
-
-                // Count gear requests
-                const allGearIds = requests
-                    ?.filter((req: { gear_ids?: string[] | null }) => req.gear_ids && Array.isArray(req.gear_ids))
-                    .flatMap((req: { gear_ids?: string[] | null }) => req.gear_ids || []);
-
-                if (allGearIds && allGearIds.length > 0) {
-                    const gearCounts: Record<string, number> = {};
-                    allGearIds.forEach((gearId: string) => {
-                        if (!gearId) return;
-                        gearCounts[gearId] = (gearCounts[gearId] || 0) + 1;
-                    });
-
-                    // Get top 5 gear IDs
-                    const topGearIds = Object.entries(gearCounts)
-                        .sort(([, countA], [, countB]) => countB - countA)
-                        .slice(0, 5)
-                        .map(([id]) => id);
-
-                    if (topGearIds.length > 0) {
-                        const { data: gears, error: gearsError } = await supabase
-                            .from('gears')
-                            .select('id, name, category, image_url, status')
-                            .in('id', topGearIds);
-
-                        if (gearsError) {
-                            logger.error("PopularGear fallback gear fetch error", {
-                                code: gearsError.code,
-                                message: gearsError.message,
-                                details: gearsError.details,
-                                hint: gearsError.hint,
-                                raw: gearsError
-                            });
-                            setPopularGear([]);
-                            setLoading(false);
-                            return;
-                        }
-
-                        // Map to the expected format
-                        const popularGear = topGearIds.map(id => {
-                            const gear = gears?.find((g: { id: string }) => g.id === id);
-                            return {
-                                id,
-                                name: gear?.name || 'Unknown Gear',
-                                category: gear?.category || 'Unknown',
-                                image_url: gear?.image_url || null,
-                                checkout_count: gearCounts[id],
-                                status: gear?.status || 'Unknown'
-                            };
-                        });
-                        setPopularGear(popularGear);
-                    } else {
-                        setPopularGear([]);
-                    }
-                } else {
-                    setPopularGear([]);
-                }
+                setPopularGear([]);
             }
         } catch (error: any) {
             logger.error("PopularGear unexpected error", { error });
@@ -147,7 +79,7 @@ export function PopularGearWidget() {
     useEffect(() => {
         fetchPopularGear();
 
-        // Set up subscription to gear changes
+        // Set up subscription to gear changes only
         const gearSubscription = createSupabaseSubscription({
             supabase,
             channel: 'popular-gear-updates',
@@ -161,25 +93,10 @@ export function PopularGearWidget() {
             }
         });
 
-        // Set up subscription to gear_request_gears changes
-        const requestSubscription = createSupabaseSubscription({
-            supabase,
-            channel: 'popular-gear-request-updates',
-            config: {
-                event: '*',
-                schema: 'public',
-                table: 'gear_request_gears'
-            },
-            callback: () => {
-                fetchPopularGear();
-            }
-        });
-
         return () => {
             gearSubscription.unsubscribe();
-            requestSubscription.unsubscribe();
         };
-    }, [dateRange]);
+    }, []);
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -219,11 +136,7 @@ export function PopularGearWidget() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="flex items-center gap-2">Popular Equipment
-                    <span className="ml-auto">
-                        <DatePickerWithRange dateRange={dateRange} onDateRangeChange={setDateRange} />
-                    </span>
-                </CardTitle>
+                <CardTitle className="flex items-center gap-2">Popular Equipment</CardTitle>
             </CardHeader>
             <CardContent>
                 {loading ? (
@@ -243,7 +156,7 @@ export function PopularGearWidget() {
                     <div className="space-y-4">
                         {popularGear.map((gear) => (
                             <motion.div
-                                key={gear.id}
+                                key={gear.gear_id}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.3 }}
@@ -258,14 +171,14 @@ export function PopularGearWidget() {
                                     <h4 className="font-medium text-sm truncate">{gear.name}</h4>
                                     <div className="flex items-center gap-2 mt-1">
                                         <Badge variant="outline" className="text-xs">{gear.category}</Badge>
-                                        <span className="text-xs text-muted-foreground">{gear.checkout_count} {gear.checkout_count === 1 ? 'checkout' : 'checkouts'}</span>
-                                        {trendData[gear.id] === 'up' && <TrendingUp className="h-4 w-4 text-green-500" aria-label="Trending Up" />}
-                                        {trendData[gear.id] === 'down' && <TrendingDown className="h-4 w-4 text-red-500" aria-label="Trending Down" />}
+                                        <span className="text-xs text-muted-foreground">{gear.request_count} {gear.request_count === 1 ? 'checkout' : 'checkouts'}</span>
+                                        {trendData[gear.gear_id] === 'up' && <TrendingUp className="h-4 w-4 text-green-500" aria-label="Trending Up" />}
+                                        {trendData[gear.gear_id] === 'down' && <TrendingDown className="h-4 w-4 text-red-500" aria-label="Trending Down" />}
                                     </div>
                                 </div>
-                                <Badge className={getStatusColor(gear.status)}>{gear.status}</Badge>
-                                <Link href={`/user/browse?gear=${gear.id}`}><Button size="sm" variant="outline" aria-label="View Details">View Details</Button></Link>
-                                <Link href={`/user/request?gear=${gear.id}`}><Button size="sm" aria-label="Request Again">Request Again</Button></Link>
+                                <Badge className={getStatusColor(gear.status || "")}>{gear.status}</Badge>
+                                <Link href={`/user/browse?gear=${gear.gear_id}`}><Button size="sm" variant="outline" aria-label="View Details">View Details</Button></Link>
+                                <Link href={`/user/request?gear=${gear.gear_id}`}><Button size="sm" aria-label="Request Again">Request Again</Button></Link>
                             </motion.div>
                         ))}
                     </div>
@@ -274,7 +187,7 @@ export function PopularGearWidget() {
                         <EmptyState
                             icon="📊"
                             title="No popular gear"
-                            description="Equipment popularity data will appear here"
+                            description="No equipment requests have been made yet. Popularity data will appear here once users start making requests."
                         />
                         <div className="flex justify-center mt-4">
                             <Link href="/user/browse"><Button>Browse Equipment</Button></Link>
