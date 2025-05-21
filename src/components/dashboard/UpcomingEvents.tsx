@@ -9,6 +9,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "./EmptyState";
 import { logger } from "@/utils/logger";
 import { createSupabaseSubscription } from "@/utils/supabase-subscription";
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
+import { format, isToday, isThisWeek, isAfter, addDays } from 'date-fns';
 
 interface Event {
     id: string;
@@ -22,8 +26,11 @@ interface Event {
 
 export function UpcomingEvents() {
     const supabase = createClient();
+    const { toast } = useToast();
     const [events, setEvents] = useState<Event[]>([]);
+    const [pendingEvents, setPendingEvents] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [newEventToast, setNewEventToast] = useState(false);
 
     const fetchEvents = async () => {
         try {
@@ -39,7 +46,7 @@ export function UpcomingEvents() {
             // Fetch checkout requests for the user
             const { data: checkoutRequests, error: checkoutError } = await supabase
                 .from('gear_requests')
-                .select('id, gear_ids, created_at, status, due_date')
+                .select('id, gear_ids, created_at, status, due_date, approved_at')
                 .eq('user_id', session.user.id)
                 .in('status', ['Approved', 'Pending', 'CheckedOut']);
 
@@ -104,46 +111,49 @@ export function UpcomingEvents() {
             const tomorrow = new Date(today);
             tomorrow.setDate(tomorrow.getDate() + 1);
 
-            // Process checkout requests as events - handle multiple gear items per request
+            // Separate pending requests for special section
+            const pendingRequests = (checkoutRequests || []).filter((r: any) => r.status === 'Pending');
+            // Main events: only CheckedOut and Approved
             const checkoutEvents = (checkoutRequests || []).flatMap((request: any) => {
-                const date = request.status === 'CheckedOut'
-                    ? request.due_date  // For checked out items, show due date
-                    : request.created_at; // For pending/approved, show request date
-
-                // Handle gear_ids as an array
-                const gearIdList = Array.isArray(request.gear_ids) ? request.gear_ids : [request.gear_ids];
-
-                // Create an event for each gear item in the request
-                return gearIdList.filter(Boolean).map((gearId: string) => {
-                    const eventDate = new Date(date);
-                    let status: Event["status"] = "upcoming";
-                    let type: Event["type"] = "return";
-                    let title = "";
-
-                    if (eventDate < now) {
-                        status = "overdue";
-                    } else if (eventDate >= today && eventDate < tomorrow) {
-                        status = "today";
-                    }
-
-                    if (request.status === 'CheckedOut') {
-                        type = "return";
-                        title = `${gearDetails[gearId]?.name || 'Equipment'} Return`;
-                    } else {
-                        type = "pickup";
-                        title = `${gearDetails[gearId]?.name || 'Equipment'} Pickup`;
-                    }
-
-                    return {
-                        id: `${request.id}-${gearId}`,
-                        title,
-                        date,
-                        type,
-                        status,
-                        gear_id: gearId,
-                        user_id: session.user.id
-                    };
-                });
+                if (request.status === 'CheckedOut') {
+                    // Use due_date for returns
+                    const gearIdList = Array.isArray(request.gear_ids) ? request.gear_ids : [request.gear_ids];
+                    return gearIdList.filter(Boolean).map((gearId: string) => {
+                        const eventDate = new Date(request.due_date);
+                        let status: Event["status"] = "upcoming";
+                        if (eventDate < now) status = "overdue";
+                        else if (eventDate >= today && eventDate < tomorrow) status = "today";
+                        return {
+                            id: `${request.id}-${gearId}`,
+                            title: `${gearDetails[gearId]?.name || 'Equipment'} Return`,
+                            date: request.due_date,
+                            type: "return",
+                            status,
+                            gear_id: gearId,
+                            user_id: session.user.id
+                        };
+                    });
+                } else if (request.status === 'Approved') {
+                    // Use approved_at or created_at for pickup, never overdue
+                    const pickupDate = request.approved_at || request.created_at;
+                    const gearIdList = Array.isArray(request.gear_ids) ? request.gear_ids : [request.gear_ids];
+                    return gearIdList.filter(Boolean).map((gearId: string) => {
+                        const eventDate = new Date(pickupDate);
+                        let status: Event["status"] = "upcoming";
+                        if (eventDate >= today && eventDate < tomorrow) status = "today";
+                        return {
+                            id: `${request.id}-${gearId}`,
+                            title: `${gearDetails[gearId]?.name || 'Equipment'} Pickup`,
+                            date: pickupDate,
+                            type: "pickup",
+                            status,
+                            gear_id: gearId,
+                            user_id: session.user.id
+                        };
+                    });
+                }
+                // Exclude Pending from main events
+                return [];
             });
 
             // Process maintenance events
@@ -173,6 +183,7 @@ export function UpcomingEvents() {
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
             setEvents(allEvents);
+            setPendingEvents(pendingRequests);
         } catch (error) {
             // Fix error handling - ensure we have a proper error object
             if (error instanceof Error) {
@@ -280,6 +291,46 @@ export function UpcomingEvents() {
         };
     };
 
+    // Group events by date
+    const groupedEvents = {
+        today: [] as Event[],
+        thisWeek: [] as Event[],
+        later: [] as Event[],
+    };
+    events.forEach(event => {
+        const eventDate = new Date(event.date);
+        if (isToday(eventDate)) groupedEvents.today.push(event);
+        else if (isThisWeek(eventDate, { weekStartsOn: 1 })) groupedEvents.thisWeek.push(event);
+        else if (isAfter(eventDate, addDays(new Date(), 7))) groupedEvents.later.push(event);
+        else groupedEvents.thisWeek.push(event);
+    });
+
+    // Helper for action buttons
+    const renderActionButton = (event: Event) => {
+        if (event.type === 'return' && event.status === 'overdue') {
+            return <Link href="/user/check-in"><Button size="sm" aria-label="Check In Now">Check In Now</Button></Link>;
+        }
+        return <Link href={`/user/my-requests`}><Button size="sm" variant="outline" aria-label="View Request">View Request</Button></Link>;
+    };
+
+    // Helper for enhanced badges
+    const getEnhancedStatusBadge = (event: Event) => {
+        if (event.type === 'pickup') return <Badge className="bg-blue-100 text-blue-800" aria-label="Ready for Pickup">Ready for Pickup</Badge>;
+        if (event.type === 'return' && event.status === 'overdue') return <Badge className="bg-red-100 text-red-800" aria-label="Overdue">Overdue</Badge>;
+        if (event.type === 'return' && event.status === 'today') return <Badge className="bg-green-100 text-green-800" aria-label="Due Today">Due Today</Badge>;
+        if (event.type === 'return') return <Badge className="bg-yellow-100 text-yellow-800" aria-label="Due Soon">Due Soon</Badge>;
+        if (event.type === 'maintenance') return <Badge className="bg-purple-100 text-purple-800" aria-label="Maintenance">Maintenance</Badge>;
+        return <Badge>{event.status}</Badge>;
+    };
+
+    // Toast for new events
+    useEffect(() => {
+        if (newEventToast) {
+            toast({ title: 'New Event', description: 'A new event has been added to your schedule.' });
+            setNewEventToast(false);
+        }
+    }, [newEventToast, toast]);
+
     return (
         <Card>
             <CardHeader>
@@ -303,40 +354,87 @@ export function UpcomingEvents() {
                                 </div>
                             ))}
                         </div>
-                    ) : events.length > 0 ? (
-                        <div className="space-y-4">
-                            {events.map((event, index) => (
-                                <motion.div
-                                    key={event.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.1 }}
-                                    className="flex items-start gap-3 p-3 rounded-lg bg-muted/30"
-                                >
-                                    <div className="text-2xl">{getTypeIcon(event.type)}</div>
+                    ) : (
+                        <>
+                            {Object.entries(groupedEvents).map(([group, groupEvents]) => (
+                                groupEvents.length > 0 && (
+                                    <div key={group} className="mb-4">
+                                        <div className="font-semibold text-sm mb-2" aria-label={group}>
+                                            {group === 'today' ? 'Today' : group === 'thisWeek' ? 'This Week' : 'Later'}
+                                        </div>
+                                        <div className="space-y-4">
+                                            {groupEvents.map((event, index) => (
+                                                <motion.div
+                                                    key={event.id}
+                                                    initial={{ opacity: 0, y: 20 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ delay: index * 0.1 }}
+                                                    className="flex items-start gap-3 p-3 rounded-lg bg-muted/30"
+                                                >
+                                                    <div className="text-2xl" aria-label={event.type}>{getTypeIcon(event.type)}</div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="font-medium text-sm truncate">{event.title}</h4>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <Clock className="h-3 w-3 text-muted-foreground" />
+                                                            <span className="text-xs text-muted-foreground">
+                                                                {formatDate(event.date).formatted}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {getEnhancedStatusBadge(event)}
+                                                    {renderActionButton(event)}
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
+                            ))}
+                            {events.length === 0 && (
+                                <>
+                                    <EmptyState
+                                        icon="📅"
+                                        title="No upcoming events"
+                                        description="You don't have any upcoming events scheduled."
+                                    />
+                                    <div className="flex justify-center mt-4">
+                                        <Link href="/user/browse"><Button>Browse Gear</Button></Link>
+                                    </div>
+                                </>
+                            )}
+                        </>
+                    )}
+                </ScrollArea>
+                {pendingEvents.length > 0 && (
+                    <div className="mt-6">
+                        <CardTitle className="flex items-center gap-2 text-base">Awaiting Approval</CardTitle>
+                        <div className="space-y-2 mt-2">
+                            {pendingEvents.map((request: any, idx: number) => (
+                                <div key={request.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                                    <div className="text-2xl">📦</div>
                                     <div className="flex-1 min-w-0">
-                                        <h4 className="font-medium text-sm truncate">{event.title}</h4>
+                                        <h4 className="font-medium text-sm truncate">
+                                            {request.gear_ids?.length > 1 ? `${request.gear_ids.length} Items` : 'Equipment'} Pickup
+                                        </h4>
                                         <div className="flex items-center gap-2 mt-1">
                                             <Clock className="h-3 w-3 text-muted-foreground" />
                                             <span className="text-xs text-muted-foreground">
-                                                {formatDate(event.date).formatted}
+                                                {formatDate(request.created_at).formatted}
                                             </span>
                                         </div>
+                                        {request.reason && (
+                                            <div className="text-xs text-muted-foreground">Reason: {request.reason}</div>
+                                        )}
+                                        {request.destination && (
+                                            <div className="text-xs text-muted-foreground">Destination: {request.destination}</div>
+                                        )}
                                     </div>
-                                    <Badge className={getStatusColor(event.status)}>
-                                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                                    </Badge>
-                                </motion.div>
+                                    <Badge className="bg-yellow-500/10 text-yellow-700" aria-label="Awaiting Approval">Awaiting Approval</Badge>
+                                    <Link href={`/user/my-requests`}><Button size="sm" variant="outline" aria-label="View Request">View Request</Button></Link>
+                                </div>
                             ))}
                         </div>
-                    ) : (
-                        <EmptyState
-                            icon="📅"
-                            title="No upcoming events"
-                            description="You don't have any upcoming events scheduled"
-                        />
-                    )}
-                </ScrollArea>
+                    </div>
+                )}
             </CardContent>
         </Card>
     );

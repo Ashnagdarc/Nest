@@ -75,35 +75,34 @@ export default function UserDashboardPage() {
   const fetchUserStats = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
-
-      // Get all gears checked out to the user with additional details
+      if (!session?.user) {
+        console.warn('No session found for user stats');
+        return;
+      }
+      // Fetch checked out gears with status filter
       const { data: checkouts, error: checkoutsError } = await supabase
         .from('gears')
-        .select('id, name, due_date, status')
-        .eq('checked_out_to', session.user.id);
-
+        .select('id, name, due_date, status, checked_out_to')
+        .eq('checked_out_to', session.user.id)
+        .eq('status', 'Checked Out');
       if (checkoutsError) {
         logger.error('Error fetching user checked out gears:', { error: checkoutsError });
+        toast({ title: 'Error', description: 'Failed to fetch checked out gears.', variant: 'destructive' });
         throw checkoutsError;
       }
-
+      console.log('Checked out gears:', checkouts, 'User:', session.user.id);
       const now = new Date();
       const checkedOutGears = checkouts || [];
-
       // Count overdue items
       const overdueGears = checkedOutGears.filter((gear: Gear) =>
         gear.due_date && new Date(gear.due_date) < now
       );
-
-      // Update the stats with correct counts
+      console.log('Overdue gears:', overdueGears);
       setUserStats(prev => [
         { ...prev[0], value: checkedOutGears.length },
         { ...prev[1], value: overdueGears.length },
         prev[2]
       ]);
-
-      // Log sync information for debugging
       logger.info("Dashboard stats updated", {
         context: 'fetchUserStats',
         checkedOut: checkedOutGears.length,
@@ -113,6 +112,7 @@ export default function UserDashboardPage() {
       });
     } catch (error: unknown) {
       logger.error('Error fetching user stats:', { error });
+      toast({ title: 'Error', description: 'Failed to fetch user stats.', variant: 'destructive' });
     }
   };
 
@@ -436,27 +436,42 @@ export default function UserDashboardPage() {
         {isLoading ? (
           <LoadingState variant="cards" count={3} />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-            {userStats.map((stat, index) => (
-              <motion.div key={stat.title} custom={index} initial="hidden" animate="visible" variants={cardVariants}>
-                <Link href={stat.link} passHref>
-                  <Card className="shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">
-                        {stat.title}
-                      </CardTitle>
-                      <div className={`p-2 rounded-full ${stat.bgColor}`}>
-                        <stat.icon className={`h-4 w-4 ${stat.color}`} />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{stat.value}</div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {stat.description}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </Link>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {userStats.map((stat, i) => (
+              <motion.div
+                key={stat.title}
+                custom={i}
+                initial="hidden"
+                animate="visible"
+                variants={cardVariants}
+                className="w-full"
+              >
+                <Card className="h-full">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                      <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                      {stat.title}
+                    </CardTitle>
+                    <Badge
+                      className={
+                        'text-base px-3 py-1 font-bold shadow-none ' +
+                        (stat.title === 'Checked Out Gears' ? 'bg-blue-600 text-white' :
+                          stat.title === 'Overdue Gears' ? 'bg-red-600 text-white' :
+                            stat.title === 'Available Gears' ? 'bg-green-600 text-white' :
+                              'bg-gray-600 text-white')
+                      }
+                    >
+                      {stat.value}
+                    </Badge>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-2">{stat.description}</p>
+                    {stat.value === 0 && (
+                      <div className="text-xs text-muted-foreground italic">No {stat.title.toLowerCase()}.</div>
+                    )}
+                    <Link href={stat.link} className="text-blue-500 hover:underline text-xs">View details</Link>
+                  </CardContent>
+                </Card>
               </motion.div>
             ))}
           </div>
