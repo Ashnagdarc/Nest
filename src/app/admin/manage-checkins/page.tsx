@@ -58,6 +58,7 @@ export default function ManageCheckinsPage() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
 
   useEffect(() => {
     fetchCheckins();
@@ -330,7 +331,7 @@ export default function ManageCheckinsPage() {
 
   const handleRejectCheckin = async () => {
     if (!selectedCheckin || !rejectionReason.trim()) return;
-
+    setIsRejecting(true);
     try {
       // Step 1: Update checkin status
       const { error: checkinError } = await supabase
@@ -401,6 +402,7 @@ export default function ManageCheckinsPage() {
         variant: "destructive",
       });
     } finally {
+      setIsRejecting(false);
       setShowRejectDialog(false);
       setSelectedCheckin(null);
       setRejectionReason('');
@@ -696,6 +698,7 @@ export default function ManageCheckinsPage() {
               variant="destructive"
               onClick={handleRejectCheckin}
               disabled={!rejectionReason.trim()}
+              loading={isRejecting}
             >
               Reject Check-in
             </Button>
