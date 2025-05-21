@@ -45,6 +45,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSearchParams } from 'next/navigation';
+import { sendApprovalEmail } from '@/lib/email';
 
 // --- Dynamically import Lottie ---
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -501,6 +502,23 @@ export default function ManageRequestsPage() {
         'Gear Request Approved',
         `Your gear request has been approved and checked out. You can now pick up your equipment.`
       );
+
+      // Send approval email to the user (if email is available)
+      const userEmail = request?.profiles?.email;
+      const userName = request?.profiles?.full_name || '';
+      const gearList = Array.isArray(request.gearNames) ? request.gearNames.join(', ') : '';
+      if (userEmail) {
+        try {
+          await sendApprovalEmail({
+            to: userEmail,
+            userName,
+            gearList,
+            dueDate: formattedDueDate,
+          });
+        } catch (emailError) {
+          console.warn('Failed to send approval email:', emailError);
+        }
+      }
 
       // Show success animation
       setShowAnimation({ type: 'approve', id: requestId });

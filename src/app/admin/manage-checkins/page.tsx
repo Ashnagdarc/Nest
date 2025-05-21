@@ -57,6 +57,7 @@ export default function ManageCheckinsPage() {
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [isApproving, setIsApproving] = useState(false);
 
   useEffect(() => {
     fetchCheckins();
@@ -181,7 +182,7 @@ export default function ManageCheckinsPage() {
 
   const handleApproveCheckin = async () => {
     if (!selectedCheckin) return;
-
+    setIsApproving(true);
     try {
       // Step 1: Update checkin status
       const { error: checkinError } = await supabase
@@ -281,6 +282,30 @@ export default function ManageCheckinsPage() {
         `Your check-in for ${selectedCheckin.gearName} has been approved.`
       );
 
+      // Step 7: Send check-in confirmation email
+      // Fetch user email and name
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('id', selectedCheckin.userId)
+        .single();
+      if (userProfile?.email) {
+        await fetch('/api/send-gear-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: userProfile.email,
+            subject: 'Your Gear Check-in Has Been Approved',
+            html:
+              `<h2>Hi ${userProfile.full_name || 'there'},</h2>` +
+              `<p>Your check-in for <b>${selectedCheckin.gearName}</b> has been <b>approved</b> by the admin team.</p>` +
+              `<p>If you have any questions, please contact the admin team.</p>` +
+              `<br/>` +
+              `<p>Thank you,<br/>Eden Oasis Realty Team</p>`
+          }),
+        });
+      }
+
       toast({
         title: "Check-in Approved",
         description: "The gear has been successfully checked in.",
@@ -298,6 +323,8 @@ export default function ManageCheckinsPage() {
         description: error instanceof Error ? error.message : "Failed to approve check-in. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -333,6 +360,30 @@ export default function ManageCheckinsPage() {
         'Check-in Rejected',
         `Your check-in for ${selectedCheckin.gearName} was rejected. Reason: ${rejectionReason}`
       );
+
+      // Step 4: Send rejection email
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('id', selectedCheckin.userId)
+        .single();
+      if (userProfile?.email) {
+        await fetch('/api/send-gear-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: userProfile.email,
+            subject: 'Your Gear Check-in Was Rejected',
+            html:
+              `<h2>Hi ${userProfile.full_name || 'there'},</h2>` +
+              `<p>Your check-in for <b>${selectedCheckin.gearName}</b> was <b>rejected</b> by the admin team.</p>` +
+              `<p><b>Reason:</b> ${rejectionReason}</p>` +
+              `<p>If you have any questions, please contact the admin team.</p>` +
+              `<br/>` +
+              `<p>Thank you,<br/>Eden Oasis Realty Team</p>`
+          }),
+        });
+      }
 
       toast({
         title: "Check-in Rejected",
@@ -613,7 +664,7 @@ export default function ManageCheckinsPage() {
             <DialogClose asChild>
               <Button variant="outline">Cancel</Button>
             </DialogClose>
-            <Button onClick={handleApproveCheckin}>Approve Check-in</Button>
+            <Button onClick={handleApproveCheckin} loading={isApproving}>Approve Check-in</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
