@@ -504,7 +504,7 @@ export default function ManageUsersPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              {getConfirmationDetails()}
+              {getConfirmationDetails()?.description ?? ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -526,7 +526,7 @@ export default function ManageUsersPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm User Update</AlertDialogTitle>
             <AlertDialogDescription>
-              {getConfirmationDetails()}
+              {getConfirmationDetails()?.description ?? ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -499,39 +499,50 @@ export default function MyRequestsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
-          <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{requestStats.total}</div>
-            <div className="text-sm text-blue-700 dark:text-blue-300">Total Requests</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800 rounded-lg shadow-sm w-full max-w-full">
+          <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
+            <Package className="h-6 w-6 text-blue-400 dark:text-blue-300 flex-shrink-0" />
+            <div className="flex flex-col items-start justify-center">
+              <div className="text-base sm:text-2xl font-bold text-blue-600 dark:text-blue-400">{requestStats.total}</div>
+              <div className="text-xs sm:text-sm text-blue-700 dark:text-blue-300">Total Requests</div>
+            </div>
           </CardContent>
         </Card>
-
-        <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800">
-          <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">{requestStats.pending}</div>
-            <div className="text-sm text-amber-700 dark:text-amber-300">Pending</div>
+        <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800 rounded-lg shadow-sm w-full max-w-full">
+          <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
+            <Clock className="h-6 w-6 text-amber-400 dark:text-amber-300 flex-shrink-0" />
+            <div className="flex flex-col items-start justify-center">
+              <div className="text-base sm:text-2xl font-bold text-amber-600 dark:text-amber-400">{requestStats.pending}</div>
+              <div className="text-xs sm:text-sm text-amber-700 dark:text-amber-300">Pending</div>
+            </div>
           </CardContent>
         </Card>
-
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800">
-          <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold text-green-600 dark:text-green-400">{requestStats.approved}</div>
-            <div className="text-sm text-green-700 dark:text-green-300">Approved</div>
+        <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800 rounded-lg shadow-sm w-full max-w-full">
+          <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
+            <CheckCircle className="h-6 w-6 text-green-400 dark:text-green-300 flex-shrink-0" />
+            <div className="flex flex-col items-start justify-center">
+              <div className="text-base sm:text-2xl font-bold text-green-600 dark:text-green-400">{requestStats.approved}</div>
+              <div className="text-xs sm:text-sm text-green-700 dark:text-green-300">Approved</div>
+            </div>
           </CardContent>
         </Card>
-
-        <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 border-red-200 dark:border-red-800">
-          <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold text-red-600 dark:text-red-400">{requestStats.rejected}</div>
-            <div className="text-sm text-red-700 dark:text-red-300">Rejected</div>
+        <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 border-red-200 dark:border-red-800 rounded-lg shadow-sm w-full max-w-full">
+          <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
+            <XCircle className="h-6 w-6 text-red-400 dark:text-red-300 flex-shrink-0" />
+            <div className="flex flex-col items-start justify-center">
+              <div className="text-base sm:text-2xl font-bold text-red-600 dark:text-red-400">{requestStats.rejected}</div>
+              <div className="text-xs sm:text-sm text-red-700 dark:text-red-300">Rejected</div>
+            </div>
           </CardContent>
         </Card>
-
-        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800">
-          <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">{requestStats.completed}</div>
-            <div className="text-sm text-purple-700 dark:text-purple-300">Completed</div>
+        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800 rounded-lg shadow-sm w-full max-w-full">
+          <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
+            <BarChart3 className="h-6 w-6 text-purple-400 dark:text-purple-300 flex-shrink-0" />
+            <div className="flex flex-col items-start justify-center">
+              <div className="text-base sm:text-2xl font-bold text-purple-600 dark:text-purple-400">{requestStats.completed}</div>
+              <div className="text-xs sm:text-sm text-purple-700 dark:text-purple-300">Completed</div>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -542,14 +553,14 @@ export default function MyRequestsPage() {
           <CardDescription>Track the status of your gear checkout requests.</CardDescription>
 
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 mt-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 mt-4">
             <div className="relative flex-grow">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search gear, location, reason..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
+                className="pl-8 w-full"
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -578,101 +589,142 @@ export default function MyRequestsPage() {
               <p>Loading your requests...</p>
             </div>
           ) : filteredRequests.length > 0 ? (
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="overflow-x-auto"
-            >
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="font-medium">Requested Gear(s)</TableHead>
-                    <TableHead className="font-medium">Requested On</TableHead>
-                    <TableHead className="font-medium">Duration</TableHead>
-                    <TableHead className="font-medium">Destination</TableHead>
-                    <TableHead className="font-medium">Status</TableHead>
-                    <TableHead className="font-medium">Team Members</TableHead>
-                    <TableHead className="text-right font-medium">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRequests.map((req) => (
-                    <motion.tr
-                      key={req.id}
-                      variants={itemVariants}
-                      className={`${req.id === highlightRequestId ? "bg-muted" : ""} hover:bg-muted/50 transition-colors`}
-                    >
-                      <TableCell className="font-medium">
-                        {req.gears && req.gears.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {req.gears.map((gear: any) => (
-                              <div key={gear.id} className="flex items-center gap-2">
-                                <span className="text-sm font-medium">{gear.name || 'Unnamed Gear'}</span>
-                                {gear.category && (
-                                  <Badge variant="outline" className="text-xs">
-                                    {gear.category}
-                                  </Badge>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          'No gear selected'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {req.created_at ? (
-                          <div className="flex flex-col">
-                            <span>{formatDate(req.created_at)}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {format(new Date(req.created_at), 'h:mm a')}
-                            </span>
-                          </div>
-                        ) : 'N/A'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="font-normal">
-                          {formatDuration(req)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {req.destination || 'N/A'}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(req.status || 'Unknown')}</TableCell>
-                      <TableCell className="text-xs max-w-[200px] truncate" title={formatTeamMembers(req)}>
-                        {formatTeamMembers(req)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => viewRequestDetails(req)}
-                            className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
-
-                          {req.status === 'Pending' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleCancelRequest(req.id)}
-                              className="hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
-                              loading={cancellingRequestId === req.id}
-                              disabled={cancellingRequestId === req.id}
-                            >
-                              <RotateCcw className="mr-1 h-3 w-3" /> Cancel
-                            </Button>
+            <>
+              {/* Card/List view for mobile, table for sm+ */}
+              <div className="block sm:hidden space-y-3 mt-4">
+                {filteredRequests.map((req) => (
+                  <Card key={req.id} className="rounded-lg shadow-sm p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-semibold text-base truncate max-w-[60%]">
+                        {req.gears && req.gears.length > 0 ? req.gears.map((gear: any) => gear.name).join(", ") : 'No gear selected'}
+                      </div>
+                      {getStatusBadge(req.status || 'Unknown')}
+                    </div>
+                    <div className="text-xs text-muted-foreground mb-1">Requested: {formatDate(req.created_at)}</div>
+                    <div className="text-xs text-muted-foreground mb-1">Duration: {formatDuration(req)}</div>
+                    <div className="text-xs text-muted-foreground mb-1">Destination: {req.destination || 'N/A'}</div>
+                    <div className="text-xs text-muted-foreground mb-1">Team: {formatTeamMembers(req)}</div>
+                    <div className="flex justify-end gap-2 mt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => viewRequestDetails(req)}
+                        className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {req.status === 'Pending' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCancelRequest(req.id)}
+                          className="hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                          loading={cancellingRequestId === req.id}
+                          disabled={cancellingRequestId === req.id}
+                        >
+                          <RotateCcw className="mr-1 h-4 w-4" /> Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+              {/* Table for sm+ */}
+              <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="overflow-x-auto hidden sm:block mt-4"
+              >
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-medium">Requested Gear(s)</TableHead>
+                      <TableHead className="font-medium">Requested On</TableHead>
+                      <TableHead className="font-medium">Duration</TableHead>
+                      <TableHead className="font-medium">Destination</TableHead>
+                      <TableHead className="font-medium">Status</TableHead>
+                      <TableHead className="font-medium">Team Members</TableHead>
+                      <TableHead className="text-right font-medium">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRequests.map((req) => (
+                      <motion.tr
+                        key={req.id}
+                        variants={itemVariants}
+                        className={`${req.id === highlightRequestId ? "bg-muted" : ""} hover:bg-muted/50 transition-colors`}
+                      >
+                        <TableCell className="font-medium">
+                          {req.gears && req.gears.length > 0 ? (
+                            <div className="space-y-1.5">
+                              {req.gears.map((gear: any) => (
+                                <div key={gear.id} className="flex items-center gap-2">
+                                  <span className="text-sm font-medium">{gear.name || 'Unnamed Gear'}</span>
+                                  {gear.category && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {gear.category}
+                                    </Badge>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            'No gear selected'
                           )}
-                        </div>
-                      </TableCell>
-                    </motion.tr>
-                  ))}
-                </TableBody>
-              </Table>
-            </motion.div>
+                        </TableCell>
+                        <TableCell>
+                          {req.created_at ? (
+                            <div className="flex flex-col">
+                              <span>{formatDate(req.created_at)}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(req.created_at), 'h:mm a')}
+                              </span>
+                            </div>
+                          ) : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="font-normal">
+                            {formatDuration(req)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {req.destination || 'N/A'}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(req.status || 'Unknown')}</TableCell>
+                        <TableCell className="text-xs max-w-[200px] truncate" title={formatTeamMembers(req)}>
+                          {formatTeamMembers(req)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => viewRequestDetails(req)}
+                              className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
+                            {req.status === 'Pending' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCancelRequest(req.id)}
+                                className="hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                                loading={cancellingRequestId === req.id}
+                                disabled={cancellingRequestId === req.id}
+                              >
+                                <RotateCcw className="mr-1 h-3 w-3" /> Cancel
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </motion.tr>
+                    ))}
+                  </TableBody>
+                </Table>
+              </motion.div>
+            </>
           ) : (
             <motion.div
               initial={{ opacity: 0 }}

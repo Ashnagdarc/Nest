@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { logError as loggerError, logInfo as loggerInfo } from '@/lib/logger';
 import { Checkbox } from "@/components/ui/checkbox";
 import ReactSelect, { MultiValue } from "react-select";
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const localizer = momentLocalizer(moment);
 
@@ -182,6 +183,8 @@ export default function UserCalendarPage() {
     const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
     const [selectedEvent, setSelectedEvent] = useState<any>(null);
     const [availableGearOptions, setAvailableGearOptions] = useState<GearOption[]>([]);
+    const isMobile = useIsMobile();
+    const [mobileSelectedDay, setMobileSelectedDay] = useState<Date>(new Date());
 
     const supabase = useMemo(() => createClient(), []);
     const router = useRouter();
@@ -436,7 +439,13 @@ export default function UserCalendarPage() {
 
             // Check for conflicts for each gear
             const gearOptions = await Promise.all(
-                gearList.map(async (gear) => {
+                gearList.map(async function (gear: any) {
+                    if (!selectedDates.start || !selectedDates.end) return {
+                        value: gear.id,
+                        label: `${gear.name} (${gear.category})`,
+                        isDisabled: true,
+                        conflict: false
+                    };
                     const { data: hasConflict } = await supabase.rpc('check_gear_booking_conflict', {
                         p_gear_id: gear.id,
                         p_start_date: selectedDates.start.toISOString(),
@@ -457,9 +466,20 @@ export default function UserCalendarPage() {
         fetchAvailableGearWithConflicts();
     }, [selectedDates.start, selectedDates.end]);
 
+    // Filter events for the selected day (mobile)
+    const mobileDayEvents = events.filter(e => {
+        if (!mobileSelectedDay) return false;
+        const start = new Date(e.start);
+        return (
+            start.getFullYear() === mobileSelectedDay.getFullYear() &&
+            start.getMonth() === mobileSelectedDay.getMonth() &&
+            start.getDate() === mobileSelectedDay.getDate()
+        );
+    });
+
     return (
-        <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-            <Card>
+        <div className="container mx-auto py-8 px-0 md:px-4 lg:px-6">
+            <Card className="w-full max-w-full">
                 <CardHeader>
                     <CardTitle className="text-2xl font-bold flex items-center gap-2">
                         <CalendarDays className="h-6 w-6" />
@@ -468,12 +488,12 @@ export default function UserCalendarPage() {
                     <CardDescription className="text-lg">
                         View existing reservations and make new booking requests. Click on any time slot to book gear.
                     </CardDescription>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mt-4">
-                        <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center sm:gap-4 mt-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2">
                             <Button
                                 variant={viewMode === 'month' ? 'default' : 'outline'}
                                 onClick={() => setViewMode('month')}
-                                className="min-w-[100px]"
+                                className="min-w-[90px] py-2 px-3 text-sm"
                             >
                                 <CalendarDays className="h-4 w-4 mr-2" />
                                 Month
@@ -481,7 +501,7 @@ export default function UserCalendarPage() {
                             <Button
                                 variant={viewMode === 'week' ? 'default' : 'outline'}
                                 onClick={() => setViewMode('week')}
-                                className="min-w-[100px]"
+                                className="min-w-[90px] py-2 px-3 text-sm"
                             >
                                 <CalendarDays className="h-4 w-4 mr-2" />
                                 Week
@@ -489,20 +509,20 @@ export default function UserCalendarPage() {
                             <Button
                                 variant={viewMode === 'day' ? 'default' : 'outline'}
                                 onClick={() => setViewMode('day')}
-                                className="min-w-[100px]"
+                                className="min-w-[90px] py-2 px-3 text-sm"
                             >
                                 <Clock className="h-4 w-4 mr-2" />
                                 Day
                             </Button>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200 py-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2">
+                            <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200 py-1 px-2 text-xs sm:text-sm">
                                 <Check className="h-3 w-3 text-green-500 mr-1" /> Approved
                             </Badge>
-                            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200 py-2">
+                            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200 py-1 px-2 text-xs sm:text-sm">
                                 <AlertCircle className="h-3 w-3 text-amber-500 mr-1" /> Pending
                             </Badge>
-                            <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200 py-2">
+                            <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200 py-1 px-2 text-xs sm:text-sm">
                                 <AlertCircle className="h-3 w-3 text-red-500 mr-1" /> Rejected
                             </Badge>
                         </div>
@@ -515,34 +535,99 @@ export default function UserCalendarPage() {
                             <p>Loading calendar data...</p>
                         </div>
                     ) : (
-                        <div className="mt-4">
-                            <div className="h-[600px] bg-white dark:bg-gray-900 rounded-lg border border-input shadow-sm overflow-hidden">
-                                <Calendar
-                                    localizer={localizer}
-                                    events={events}
-                                    startAccessor="start"
-                                    endAccessor="end"
-                                    selectable
-                                    onSelectSlot={handleSelectSlot}
-                                    onSelectEvent={handleSelectEvent}
-                                    view={viewMode}
-                                    onView={(view) => setViewMode(view as 'month' | 'week' | 'day')}
-                                    eventPropGetter={eventStyleGetter}
-                                    popup
-                                    tooltipAccessor={(event: any) =>
-                                        `${event.title}\nStatus: ${event.resource.status}\n${event.resource.reason ? `Reason: ${event.resource.reason}` : ''}`
-                                    }
-                                    className="rounded-lg"
-                                />
-                            </div>
-                        </div>
+                        <>
+                            {/* Mobile view: date picker + list */}
+                            {isMobile ? (
+                                <div className="flex flex-col gap-4 w-full max-w-full">
+                                    <div className="flex items-center justify-between mb-2 w-full max-w-full">
+                                        <CalendarComponent
+                                            mode="single"
+                                            selected={mobileSelectedDay}
+                                            onSelect={d => { if (d) setMobileSelectedDay(d); }}
+                                            className="rounded-md border w-full max-w-full"
+                                        />
+                                        <Button
+                                            className="ml-2 px-3 py-2"
+                                            onClick={() => setSelectedSlot({
+                                                start: mobileSelectedDay,
+                                                end: mobileSelectedDay,
+                                                slots: mobileSelectedDay ? [mobileSelectedDay] : [],
+                                                action: 'select',
+                                                resourceId: undefined
+                                            })}
+                                        >
+                                            +
+                                        </Button>
+                                    </div>
+                                    <div className="space-y-3 w-full max-w-full">
+                                        {mobileDayEvents.length === 0 ? (
+                                            <div className="text-center text-muted-foreground py-8">No bookings for this day.</div>
+                                        ) : (
+                                            mobileDayEvents.map(event => (
+                                                <Card key={event.id} className="w-full max-w-full">
+                                                    <CardContent className="py-3 px-4 flex flex-col gap-1 w-full max-w-full">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-semibold text-base">{event.title}</span>
+                                                            <Badge variant="outline" className={
+                                                                event.resource.status === 'Approved' ? 'bg-green-100 text-green-800 border-green-200' :
+                                                                    event.resource.status === 'Pending' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                                                                        event.resource.status === 'Rejected' ? 'bg-red-100 text-red-800 border-red-200' : ''
+                                                            }>
+                                                                {event.resource.status}
+                                                            </Badge>
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                            {format(new Date(event.start), 'p')} - {format(new Date(event.end), 'p')}
+                                                        </div>
+                                                        {event.resource.reason && (
+                                                            <div className="text-xs text-muted-foreground">{event.resource.reason}</div>
+                                                        )}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="self-end mt-2"
+                                                            onClick={() => setSelectedEvent(event)}
+                                                        >
+                                                            Details
+                                                        </Button>
+                                                    </CardContent>
+                                                </Card>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                // Desktop: full calendar grid
+                                <div className="mt-4 w-full max-w-full">
+                                    <div className="h-[400px] md:h-[600px] bg-white dark:bg-gray-900 rounded-lg border border-input shadow-sm overflow-hidden w-full max-w-full">
+                                        <Calendar
+                                            localizer={localizer}
+                                            events={events}
+                                            startAccessor="start"
+                                            endAccessor="end"
+                                            selectable
+                                            onSelectSlot={handleSelectSlot}
+                                            onSelectEvent={handleSelectEvent}
+                                            view={viewMode}
+                                            onView={(view) => setViewMode(view as 'month' | 'week' | 'day')}
+                                            eventPropGetter={eventStyleGetter}
+                                            popup
+                                            tooltipAccessor={(event: any) =>
+                                                `${event.title}\nStatus: ${event.resource.status}\n${event.resource.reason ? `Reason: ${event.resource.reason}` : ''}`
+                                            }
+                                            className="rounded-lg"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     )}
                 </CardContent>
             </Card>
 
             {/* Booking Dialog */}
             <Dialog open={!!selectedSlot} onOpenChange={(open) => !open && setSelectedSlot(null)}>
-                <DialogContent className="sm:max-w-[600px]">
+                <DialogContent className="w-full max-w-[95vw] p-1 sm:max-w-[600px] sm:p-6">
                     <DialogHeader>
                         <DialogTitle className="text-xl">Book Gear</DialogTitle>
                         <DialogDescription className="text-base">
@@ -550,36 +635,25 @@ export default function UserCalendarPage() {
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="grid gap-6 py-4">
-                        <div className="space-y-4">
-                            <div className="space-y-2">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-1 py-2">
+                        <div className="space-y-3">
+                            <div className="space-y-1">
                                 <h4 className="font-medium text-sm">Selected Time Period</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div className="flex flex-col space-y-1">
-                                        <span className="text-sm text-muted-foreground">Start</span>
-                                        <CalendarComponent
-                                            mode="single"
-                                            selected={selectedDates.start}
-                                            onSelect={(date) => setSelectedDates(dates => ({ ...dates, start: date }))}
-                                            className="rounded-md border"
-                                        />
-                                    </div>
-                                    <div className="flex flex-col space-y-1">
-                                        <span className="text-sm text-muted-foreground">End</span>
-                                        <CalendarComponent
-                                            mode="single"
-                                            selected={selectedDates.end}
-                                            onSelect={(date) => setSelectedDates(dates => ({ ...dates, end: date }))}
-                                            className="rounded-md border"
-                                        />
-                                    </div>
+                                <div className="flex flex-col space-y-1 w-full responsive-calendar-wrapper overflow-x-auto max-w-full">
+                                    <span className="text-sm text-muted-foreground">Start</span>
+                                    <CalendarComponent
+                                        mode="single"
+                                        selected={selectedDates.start}
+                                        onSelect={(date) => setSelectedDates(dates => ({ ...dates, start: date }))}
+                                        className="rounded-md border w-full responsive-calendar"
+                                    />
                                 </div>
                             </div>
 
                             <div className="space-y-2">
                                 <h4 className="font-medium text-sm">Available Gear</h4>
                                 {availableGear.length > 0 ? (
-                                    <div className="p-4 rounded-lg border bg-card">
+                                    <div className="p-2 sm:p-4 rounded-lg border bg-card w-full">
                                         <ReactSelect<GearOption, true>
                                             isMulti
                                             options={availableGearOptions}
@@ -590,8 +664,8 @@ export default function UserCalendarPage() {
                                                 setSelectedGears(selectedArray.map(item => item.value));
                                             }}
                                             placeholder="Select gear items..."
-                                            className="w-full"
-                                            isOptionDisabled={(option) => option.isDisabled}
+                                            className="w-full max-w-full"
+                                            isOptionDisabled={(option, _selectValue) => !!option.isDisabled}
                                             formatOptionLabel={(option) => (
                                                 <span title={option.isDisabled ? 'Already booked for this period' : ''} style={option.isDisabled ? { color: isDarkMode ? '#888' : '#aaa' } : {}}>
                                                     {option.label}
@@ -608,8 +682,8 @@ export default function UserCalendarPage() {
                                                     backgroundColor: state.isSelected
                                                         ? (isDarkMode ? '#27272a' : '#e0e7ff')
                                                         : state.isFocused
-                                                        ? (isDarkMode ? '#27272a' : '#f1f5f9')
-                                                        : isDarkMode ? '#18181b' : '#fff',
+                                                            ? (isDarkMode ? '#27272a' : '#f1f5f9')
+                                                            : isDarkMode ? '#18181b' : '#fff',
                                                     color: state.isDisabled
                                                         ? (isDarkMode ? '#888' : '#aaa')
                                                         : (isDarkMode ? '#f4f4f5' : '#222'),
@@ -643,7 +717,7 @@ export default function UserCalendarPage() {
                                         />
                                     </div>
                                 ) : (
-                                    <div className="flex items-center justify-center p-8 rounded-lg border border-dashed">
+                                    <div className="flex items-center justify-center p-4 rounded-lg border border-dashed w-full">
                                         <div className="text-center">
                                             <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground/70" />
                                             <p className="mt-2 text-sm text-muted-foreground">No gear available for this time period</p>
@@ -654,26 +728,26 @@ export default function UserCalendarPage() {
 
                             <div className="space-y-2">
                                 <h4 className="font-medium text-sm">Booking Details</h4>
-                                <div className="space-y-4">
+                                <div className="space-y-2">
                                     <Textarea
                                         placeholder="Describe the purpose of your booking..."
                                         value={bookingReason}
                                         onChange={(e) => setBookingReason(e.target.value)}
-                                        className="min-h-[100px] resize-none"
+                                        className="min-h-[80px] resize-none w-full"
                                     />
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setSelectedSlot(null)}>
+                    <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:gap-4 w-full">
+                        <Button variant="outline" className="w-full sm:w-auto" onClick={() => setSelectedSlot(null)}>
                             Cancel
                         </Button>
                         <Button
                             onClick={handleBookingSubmit}
                             disabled={selectedGears.length === 0 || !bookingReason.trim()}
-                            className="min-w-[120px]"
+                            className="w-full sm:w-auto min-w-[120px]"
                         >
                             {selectedGears.length > 0 ? `Request (${selectedGears.length})` : 'Submit Request'}
                         </Button>

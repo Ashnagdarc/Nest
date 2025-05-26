@@ -64,28 +64,30 @@ export function QuickActions() {
                 <CardTitle className="text-md">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {actions.map((action, index) => (
-                        <motion.div
-                            key={action.label}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
-                        >
-                            <Link href={action.href}>
-                                <Button
-                                    variant={action.variant}
-                                    className="w-full h-auto py-4 px-2 flex flex-col items-center justify-center gap-2"
-                                >
-                                    {action.icon}
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-medium">{action.label}</span>
-                                        <span className="text-xs font-normal opacity-80">{action.description}</span>
-                                    </div>
-                                </Button>
-                            </Link>
-                        </motion.div>
-                    ))}
+                <div className="w-full overflow-x-auto">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-3 w-full">
+                        {actions.map((action, index) => (
+                            <motion.div
+                                key={action.label}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.1 }}
+                            >
+                                <Link href={action.href} className="block w-full h-full">
+                                    <Button
+                                        variant={action.variant}
+                                        className="w-full h-full min-h-[88px] flex-1 flex flex-col items-center justify-center gap-2 rounded-lg text-center break-words"
+                                    >
+                                        {action.icon}
+                                        <div className="flex flex-col w-full text-center">
+                                            <span className="text-sm font-medium break-words">{action.label}</span>
+                                            <span className="text-xs font-normal opacity-80 break-words">{action.description}</span>
+                                        </div>
+                                    </Button>
+                                </Link>
+                            </motion.div>
+                        ))}
+                    </div>
                 </div>
             </CardContent>
         </Card>
