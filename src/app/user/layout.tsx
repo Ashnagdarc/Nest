@@ -26,6 +26,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { useIsMobile } from '@/hooks/use-mobile';
 import CustomHamburger from '@/components/CustomHamburger';
+import { useUserProfile } from '@/components/providers/user-profile-provider';
 
 const userNavItems = [
   { href: '/user/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -46,8 +47,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
-  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
-  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const { profile: currentUser, isLoading: isLoadingUser, refreshProfile } = useUserProfile();
   const isMobile = useIsMobile();
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
@@ -58,65 +58,12 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
     setSidebarOpen(!sidebarOpen);
   };
 
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      try {
-        // Get the current session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-        if (sessionError) {
-          throw sessionError;
-        }
-
-        if (!session?.user) {
-          router.push('/login');
-          return;
-        }
-
-        // Fetch the user's profile
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profileError) {
-          throw profileError;
-        }
-
-        if (!profile) {
-          console.error('No profile found for user');
-          router.push('/login');
-          return;
-        }
-
-        setCurrentUser(profile);
-      } catch (error) {
-        console.error('Error fetching user profile:', error);
-        router.push('/login');
-      } finally {
-        setIsLoadingUser(false);
-      }
-    };
-
-    fetchUserProfile();
-  }, [router, supabase]);
-
   const handleLogout = async () => {
-    setIsLoadingUser(true); // Show loading state during logout
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error("Error signing out:", error);
-        // Handle logout error if needed
-      } else {
-        setCurrentUser(null); // Clear user state
-        router.push('/login'); // Redirect after successful logout
-      }
+      await supabase.auth.signOut();
+      router.push('/login');
     } catch (error) {
       console.error("Unexpected error during sign out:", error);
-    } finally {
-      setIsLoadingUser(false); // Hide loading state
     }
   };
 

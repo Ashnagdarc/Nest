@@ -59,6 +59,8 @@ const requestSchema = z.object({
 
 type RequestFormValues = z.infer<typeof requestSchema>;
 
+const REQUEST_FORM_DRAFT_KEY = "user-request-gear-form-draft";
+
 export default function RequestGearPage() {
   const searchParams = useSearchParams();
   const preselectedGearId = searchParams.get('gearId');
@@ -81,13 +83,27 @@ export default function RequestGearPage() {
     },
   });
 
-  // Effect to update form default value if preselectedGearId changes
+  // Restore draft from localStorage on mount
   useEffect(() => {
-    if (preselectedGearId) {
-      form.reset({ ...form.getValues(), selectedGears: [preselectedGearId] });
+    const draft = localStorage.getItem(REQUEST_FORM_DRAFT_KEY);
+    if (draft) {
+      try {
+        const values = JSON.parse(draft);
+        form.reset({ ...form.getValues(), ...values });
+      } catch { }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preselectedGearId, form.reset]);
+  }, [form]);
+
+  // Save form state to localStorage on change
+  useEffect(() => {
+    const subscription = form.watch((values) => {
+      localStorage.setItem(REQUEST_FORM_DRAFT_KEY, JSON.stringify(values));
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
+
+  // Clear draft on submit
+  const clearRequestDraft = () => localStorage.removeItem(REQUEST_FORM_DRAFT_KEY);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }: { data: { user: any } }) => {
@@ -199,6 +215,8 @@ export default function RequestGearPage() {
           'Your gear request has been sent for approval.'
         );
       }
+
+      clearRequestDraft();
     } catch (error: any) {
       console.error('Error submitting request:', error.message || error);
       console.error('Error details:', JSON.stringify(error, null, 2));

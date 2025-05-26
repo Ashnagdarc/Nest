@@ -8,6 +8,7 @@ import { NotificationProvider } from "@/components/notifications/NotificationPro
 import { SupabaseErrorBoundary } from "@/components/supabase-error-boundary";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
+import { UserProfileProvider } from '@/components/providers/user-profile-provider';
 // Import the console error interceptor to filter Supabase Realtime noise
 import '@/utils/intercept-console-error';
 
@@ -51,7 +52,9 @@ export default function RootLayout({
           <NotificationProvider>
             <ReactQueryProvider>
               <SupabaseErrorBoundary>
-                {children}
+                <UserProfileProvider>
+                  {children}
+                </UserProfileProvider>
               </SupabaseErrorBoundary>
               <Toaster />
               <SpeedInsights />

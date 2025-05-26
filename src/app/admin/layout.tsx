@@ -28,6 +28,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { useToast } from "@/hooks/use-toast";
 import type { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
+import { useUserProfile } from '@/components/providers/user-profile-provider';
 
 const adminNavItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: Home },
@@ -47,9 +48,8 @@ type Profile = any;
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient(); // Create Supabase client instance
-  const [adminUser, setAdminUser] = useState<Profile | null>(null);
-  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const supabase = createClient();
+  const { profile: adminUser, isLoading: isLoadingUser, refreshProfile } = useUserProfile();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
@@ -61,142 +61,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setSidebarOpen(!sidebarOpen);
   };
 
-  useEffect(() => {
-    const fetchAdminData = async (userId: string) => {
-      try {
-        setIsLoadingUser(true);
-        console.log("AdminLayout: Fetching profile for user ID:", userId);
-
-        // Fetch profile data from Supabase 'profiles' table
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single();
-
-        if (profileError) {
-          console.error("AdminLayout: Error fetching admin profile:", profileError.message);
-          // Clear any stored data
-          localStorage.removeItem('supabase.auth.token');
-          sessionStorage.clear();
-          await supabase.auth.signOut();
-          toast({
-            title: "Authentication Error",
-            description: "There was a problem verifying your admin access. Please log in again.",
-            variant: "destructive",
-          });
-          router.push('/login?error=fetcherror');
-          setIsLoadingUser(false);
-          return;
-        }
-
-        if (!profile) {
-          console.error("AdminLayout: Admin profile not found for UID:", userId);
-          // Clear any stored data
-          localStorage.removeItem('supabase.auth.token');
-          sessionStorage.clear();
-          await supabase.auth.signOut();
-          toast({
-            title: "Profile Not Found",
-            description: "Your user profile could not be found. Please contact support.",
-            variant: "destructive",
-          });
-          router.push('/login?error=noprofile');
-          setIsLoadingUser(false);
-          return;
-        }
-
-        // Verify if the user has Admin role
-        if (profile.role !== 'Admin') {
-          console.warn("AdminLayout: User is not an Admin. Redirecting.");
-          // Clear any stored data
-          localStorage.removeItem('supabase.auth.token');
-          sessionStorage.clear();
-          await supabase.auth.signOut();
-          toast({
-            title: "Unauthorized Access",
-            description: "You do not have administrator privileges. Please log in with an admin account.",
-            variant: "destructive",
-          });
-          router.push('/login?error=unauthorized');
-          setIsLoadingUser(false);
-          return;
-        }
-
-        console.log("AdminLayout: Admin profile loaded:", profile);
-        setAdminUser(profile);
-        setIsLoadingUser(false);
-      } catch (error) {
-        console.error("AdminLayout: Unexpected error:", error);
-        // Clear any stored data
-        localStorage.removeItem('supabase.auth.token');
-        sessionStorage.clear();
-        await supabase.auth.signOut();
-        toast({
-          title: "Error",
-          description: "An unexpected error occurred. Please try again later.",
-          variant: "destructive",
-        });
-        router.push('/login?error=unknown');
-        setIsLoadingUser(false);
-      }
-    };
-
-    // Listen for Supabase Auth state changes
-    const { data: authListener } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        console.log("AdminLayout: Auth state change - SIGNED_IN");
-        fetchAdminData(session.user.id);
-      } else if (event === 'SIGNED_OUT') {
-        console.log("AdminLayout: Auth state change - SIGNED_OUT");
-        setAdminUser(null);
-        setIsLoadingUser(false);
-        router.push('/login');
-      } else if (event === 'INITIAL_SESSION' && session?.user) {
-        console.log("AdminLayout: Auth state change - INITIAL_SESSION");
-        fetchAdminData(session.user.id);
-      } else if (event === 'INITIAL_SESSION' && !session?.user) {
-        console.log("AdminLayout: Auth state change - INITIAL_SESSION (no user), redirecting");
-        setIsLoadingUser(false);
-        router.push('/login');
-      }
-      // Handle other events like PASSWORD_RECOVERY, USER_UPDATED if needed
-    });
-
-    // Initial check in case the listener doesn't fire immediately
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
-      if (session?.user && !adminUser) { // Fetch only if user exists and not already loaded
-        console.log("AdminLayout: Initial session check found user, fetching data.");
-        fetchAdminData(session.user.id);
-      } else if (!session?.user) {
-        console.log("AdminLayout: Initial session check found no user.");
-        setIsLoadingUser(false); // Ensure loading stops if no initial session
-        // Redirect might happen via listener, or could be added here too
-      }
-    });
-
-    // Cleanup subscription on unmount
-    return () => {
-      authListener?.subscription.unsubscribe();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]); // Dependency on router and supabase client (though client is stable)
-
   const handleLogout = async () => {
-    setIsLoadingUser(true); // Show loading state during logout
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error("Error signing out:", error);
-        // Handle logout error if needed (e.g., show toast)
-      } else {
-        setAdminUser(null); // Clear user state
-        router.push('/login'); // Redirect after successful logout
-      }
+      await supabase.auth.signOut();
+      router.push('/login');
     } catch (error) {
       console.error("Unexpected error during sign out:", error);
-    } finally {
-      setIsLoadingUser(false); // Hide loading state
     }
   };
 

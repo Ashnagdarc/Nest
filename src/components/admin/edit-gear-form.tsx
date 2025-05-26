@@ -46,6 +46,7 @@ interface EditGearFormProps {
 export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearFormProps) {
     console.log("EditGearForm received gear:", gear); // Debug log
     const [imagePreview, setImagePreview] = useState<string | null>(gear?.image_url || null);
+    const LOCAL_STORAGE_KEY = gear?.id ? `edit-gear-form-draft-${gear.id}` : undefined;
 
     const form = useForm<GearFormValues>({
         resolver: zodResolver(gearSchema),
@@ -60,6 +61,34 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
             image: undefined,
         },
     });
+
+    // Restore draft from localStorage on mount
+    useEffect(() => {
+        if (!LOCAL_STORAGE_KEY) return;
+        const draft = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (draft) {
+            try {
+                const values = JSON.parse(draft);
+                form.reset({ ...form.getValues(), ...values });
+            } catch { }
+        }
+    }, [form, LOCAL_STORAGE_KEY]);
+
+    // Save form state to localStorage on change
+    useEffect(() => {
+        if (!LOCAL_STORAGE_KEY) return;
+        const subscription = form.watch((values) => {
+            // Don't persist File objects (image)
+            const { image, ...rest } = values;
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(rest));
+        });
+        return () => subscription.unsubscribe();
+    }, [form, LOCAL_STORAGE_KEY]);
+
+    // Clear draft on submit or cancel
+    const clearDraft = () => {
+        if (LOCAL_STORAGE_KEY) localStorage.removeItem(LOCAL_STORAGE_KEY);
+    };
 
     // Update form when gear changes
     useEffect(() => {
@@ -99,6 +128,7 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
     const handleFormSubmit = (data: GearFormValues) => {
         console.log("Form submitted with values:", data); // Debug log
         onSubmit(data);
+        clearDraft();
     };
 
     return (
@@ -133,14 +163,16 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
                                 <SelectContent>
                                     <SelectItem value="Camera">Camera</SelectItem>
                                     <SelectItem value="Lens">Lens</SelectItem>
+                                    <SelectItem value="Drone">Drone</SelectItem>
                                     <SelectItem value="Audio">Audio</SelectItem>
+                                    <SelectItem value="Laptop">Laptop</SelectItem>
+                                    <SelectItem value="Monitor">Monitor</SelectItem>
+                                    <SelectItem value="Cables">Cables</SelectItem>
                                     <SelectItem value="Lighting">Lighting</SelectItem>
                                     <SelectItem value="Tripod">Tripod</SelectItem>
                                     <SelectItem value="Gimbal">Gimbal</SelectItem>
                                     <SelectItem value="Computer">Computer</SelectItem>
-                                    <SelectItem value="Monitor">Monitor</SelectItem>
                                     <SelectItem value="Microphone">Microphone</SelectItem>
-                                    <SelectItem value="Laptop">Laptop</SelectItem>
                                     <SelectItem value="Other">Other</SelectItem>
                                     <SelectItem value="Cars">Cars</SelectItem>
                                 </SelectContent>
@@ -267,7 +299,7 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
 
                 <DialogFooter className="pt-4">
                     <DialogClose asChild>
-                        <Button type="button" variant="outline">
+                        <Button type="button" variant="outline" onClick={clearDraft}>
                             Cancel
                         </Button>
                     </DialogClose>

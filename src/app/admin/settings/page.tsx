@@ -19,6 +19,8 @@ import { createClient } from '@/lib/supabase/client'; // Import Supabase client
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-mobile'; // Add this import for responsive handling
+import { useUserProfile } from '@/components/providers/user-profile-provider';
+import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -83,9 +85,13 @@ type ProfileUpdate = {
     full_name?: string | null;
     phone?: string | null;
     department?: string | null;
+    avatar_url?: string | null;
     updated_at?: string;
     [key: string]: any; // Allow for additional update properties
 };
+
+// Add at the top:
+const ADMIN_PROFILE_FORM_DRAFT_KEY = "admin-profile-form-draft";
 
 // --- Component ---
 export default function AdminSettingsPage() {
@@ -93,6 +99,7 @@ export default function AdminSettingsPage() {
     const router = useRouter();
     const supabase = createClient();
     const isMobile = useIsMobile();
+    const { refreshProfile } = useUserProfile();
 
     // --- State ---
     const [adminUser, setAdminUser] = useState<Profile | null>(null);
@@ -103,13 +110,40 @@ export default function AdminSettingsPage() {
     const [isPasswordLoading, setIsPasswordLoading] = useState(false);
     const [isBrandingLoading, setIsBrandingLoading] = useState(false);
     const [isAppSettingsLoading, setIsAppSettingsLoading] = useState(false);
+    const [showCropper, setShowCropper] = useState(false);
+    const [rawImage, setRawImage] = useState<string | null>(null);
+    const [croppedFile, setCroppedFile] = useState<File | null>(null);
 
     // --- Forms ---
     const profileForm = useForm<ProfileFormValues>({
         resolver: zodResolver(profileSchema),
         defaultValues: { fullName: '', email: '', phone: '', department: '', profilePicture: undefined },
     });
-    // Removed currentPassword from defaultValues
+
+    // Restore draft from localStorage on mount
+    useEffect(() => {
+        const draft = localStorage.getItem(ADMIN_PROFILE_FORM_DRAFT_KEY);
+        if (draft) {
+            try {
+                const values = JSON.parse(draft);
+                profileForm.reset({ ...profileForm.getValues(), ...values });
+            } catch { }
+        }
+    }, [profileForm]);
+
+    // Save form state to localStorage on change
+    useEffect(() => {
+        const subscription = profileForm.watch((values) => {
+            // Don't persist File objects (profilePicture)
+            const { profilePicture, ...rest } = values;
+            localStorage.setItem(ADMIN_PROFILE_FORM_DRAFT_KEY, JSON.stringify(rest));
+        });
+        return () => subscription.unsubscribe();
+    }, [profileForm]);
+
+    // Clear draft on submit
+    const clearAdminProfileDraft = () => localStorage.removeItem(ADMIN_PROFILE_FORM_DRAFT_KEY);
+
     const passwordForm = useForm<PasswordFormValues>({ resolver: zodResolver(passwordSchema), defaultValues: { newPassword: '', confirmNewPassword: '' } });
     const brandingForm = useForm<BrandingFormValues>({ resolver: zodResolver(brandingSchema), defaultValues: { logo: undefined } });
     const appSettingsForm = useForm<AppSettingsFormValues>({
@@ -260,36 +294,38 @@ export default function AdminSettingsPage() {
         let newAvatarUrl: string | null = avatarUrl; // Start with current URL from state
 
         // --- Handle Profile Picture Upload (Supabase Storage) ---
-        if (data.profilePicture && data.profilePicture.length > 0) {
-            const file = data.profilePicture[0] as File;
+        let file: File | undefined = undefined;
+        if (data.profilePicture) {
+            if (data.profilePicture instanceof FileList) {
+                file = data.profilePicture[0];
+            } else if (data.profilePicture instanceof File) {
+                file = data.profilePicture;
+            }
+        }
+        if (file) {
             const storagePath = `avatars/${adminUser.id}/${Date.now()}_${file.name}`;
-            console.log("AdminSettings: Uploading new avatar to", storagePath);
+            console.log("AdminSettings: Uploading new avatar file", file, "to", storagePath);
 
             // --- Delete old avatar if exists ---
             if (avatarUrl) {
-                // Extract the file path from the full URL
                 try {
                     const urlParts = new URL(avatarUrl);
-                    // Pathname usually starts with /storage/v1/object/public/BUCKET_NAME/
                     const pathSegments = urlParts.pathname.split('/');
-                    // Find the bucket name index, the rest is the file path
-                    const bucketIndex = pathSegments.findIndex(segment => segment === 'avatars'); // Assuming 'avatars' is your bucket name
+                    const bucketIndex = pathSegments.findIndex(segment => segment === 'avatars');
                     if (bucketIndex !== -1) {
-                        const oldStoragePath = pathSegments.slice(bucketIndex + 1).join('/'); // Get the part after the bucket name
+                        const oldStoragePath = pathSegments.slice(bucketIndex + 1).join('/');
                         console.log("AdminSettings: Attempting to remove old avatar at path:", oldStoragePath);
                         const { error: removeError } = await supabase.storage
-                            .from('avatars') // Specify your bucket name
+                            .from('avatars')
                             .remove([oldStoragePath]);
                         if (removeError) {
                             console.error("Error removing old avatar:", removeError.message);
-                            // Don't block the upload for this, maybe log it
                         } else {
                             console.log("Old avatar removed from Storage.");
                         }
                     } else {
                         console.warn("Could not determine old avatar path from URL:", avatarUrl);
                     }
-
                 } catch (urlParseError) {
                     console.error("Error parsing old avatar URL:", urlParseError);
                 }
@@ -297,22 +333,19 @@ export default function AdminSettingsPage() {
 
             // --- Upload new avatar ---
             const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('avatars') // Ensure bucket name is correct
+                .from('avatars')
                 .upload(storagePath, file);
 
             if (uploadError) {
                 console.error("Error uploading avatar to Storage:", uploadError);
                 toast({ title: "Upload Failed", description: "Could not upload profile picture.", variant: "destructive" });
-                // Keep the old URL if upload failed
             } else {
                 console.log("New avatar uploaded, getting public URL...");
                 const { data: urlData } = supabase.storage
                     .from('avatars')
                     .getPublicUrl(uploadData.path);
-                newAvatarUrl = urlData?.publicUrl || newAvatarUrl; // Update URL if public URL retrieved
+                newAvatarUrl = urlData?.publicUrl || newAvatarUrl;
                 console.log("New avatar URL:", newAvatarUrl);
-
-                // Update local state immediately for UI display
                 setAvatarUrl(newAvatarUrl);
             }
         }
@@ -322,19 +355,17 @@ export default function AdminSettingsPage() {
         if (user) {
             console.log("AdminSettings: Updating Supabase Auth metadata...");
             const { error: updateAuthError } = await supabase.auth.updateUser({
-                data: { // Use the 'data' field for metadata
+                data: {
                     full_name: data.fullName,
                     avatar_url: newAvatarUrl,
                 }
             });
             if (updateAuthError) {
                 console.error("Error updating Supabase Auth user metadata:", updateAuthError);
-                // Don't block the profile update for this, maybe just log
             } else {
                 console.log("Supabase Auth metadata updated.");
             }
         }
-
 
         // --- Update Supabase Profile Table ---
         console.log("AdminSettings: Updating profile table...");
@@ -342,6 +373,7 @@ export default function AdminSettingsPage() {
             full_name: data.fullName,
             phone: data.phone || null,
             department: data.department || null,
+            avatar_url: newAvatarUrl,
             updated_at: new Date().toISOString(),
         };
 
@@ -351,7 +383,7 @@ export default function AdminSettingsPage() {
         const { error: profileUpdateError } = await supabase
             .from('profiles')
             .update(profileUpdateData)
-            .eq('id', adminUser.id); // Ensure updating the correct profile
+            .eq('id', adminUser.id);
 
         if (profileUpdateError) {
             console.error("Error updating Supabase profile:", profileUpdateError.message);
@@ -360,17 +392,19 @@ export default function AdminSettingsPage() {
             console.log("AdminSettings: Profile table updated successfully.");
             // Optimistically update local state
             setAdminUser((prev: Profile | null) => prev ? { ...prev, ...profileUpdateData } : null);
-            profileForm.reset({ // Reset form with updated data
-                ...profileForm.getValues(), // Keep email
+            profileForm.reset({
+                ...profileForm.getValues(),
                 fullName: data.fullName,
                 phone: data.phone || '',
                 department: data.department || '',
-                profilePicture: undefined, // Clear file input
+                profilePicture: undefined,
             });
             toast({ title: "Profile Updated", description: "Your profile information has been saved." });
+            await refreshProfile();
         }
 
         setIsProfileLoading(false);
+        clearAdminProfileDraft();
     };
 
     const onPasswordSubmit = async (data: PasswordFormValues) => {
@@ -538,7 +572,20 @@ export default function AdminSettingsPage() {
                                                     <Input
                                                         type="file"
                                                         accept="image/*"
-                                                        onChange={(e) => field.onChange(e.target.files)}
+                                                        onChange={async (e) => {
+                                                            const file = e.target.files?.[0];
+                                                            console.log('File input onChange fired. File:', file);
+                                                            if (file) {
+                                                                const reader = new FileReader();
+                                                                reader.onload = (ev) => {
+                                                                    console.log('FileReader loaded. DataURL:', ev.target?.result);
+                                                                    setRawImage(ev.target?.result as string);
+                                                                    setShowCropper(true);
+                                                                    console.log('setRawImage and setShowCropper(true) called.');
+                                                                };
+                                                                reader.readAsDataURL(file);
+                                                            }
+                                                        }}
                                                         onBlur={field.onBlur}
                                                         name={field.name}
                                                         className="text-xs w-full"
@@ -748,6 +795,22 @@ export default function AdminSettingsPage() {
                     </CardContent>
                 </Card>
             </motion.div>
+
+            {showCropper && (
+                (() => { console.log('Rendering ImageCropperModal. showCropper:', showCropper, 'rawImage:', rawImage); return null; })(),
+                <ImageCropperModal
+                    open={showCropper}
+                    imageSrc={rawImage}
+                    onClose={() => setShowCropper(false)}
+                    onCropComplete={async (croppedBlob) => {
+                        const croppedFile = new File([croppedBlob], 'avatar.jpg', { type: 'image/jpeg' });
+                        setCroppedFile(croppedFile);
+                        profileForm.setValue('profilePicture', croppedFile);
+                        setShowCropper(false);
+                    }}
+                    aspect={1}
+                />
+            )}
 
         </motion.div>
     );

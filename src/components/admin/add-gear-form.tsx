@@ -21,7 +21,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog"; // Import for close button
 
@@ -46,6 +46,8 @@ interface AddGearFormProps {
   onSubmit: (data: GearFormValues) => void; // Callback function
 }
 
+const LOCAL_STORAGE_KEY = "add-gear-form-draft";
+
 export default function AddGearForm({ onSubmit }: AddGearFormProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -64,6 +66,30 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
     },
   });
 
+  // Restore draft from localStorage on mount
+  useEffect(() => {
+    const draft = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (draft) {
+      try {
+        const values = JSON.parse(draft);
+        form.reset({ ...form.getValues(), ...values });
+      } catch { }
+    }
+  }, [form]);
+
+  // Save form state to localStorage on change
+  useEffect(() => {
+    const subscription = form.watch((values) => {
+      // Don't persist File objects (image)
+      const { image, ...rest } = values;
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(rest));
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
+
+  // Clear draft on submit or cancel
+  const clearDraft = () => localStorage.removeItem(LOCAL_STORAGE_KEY);
+
   const handleFormSubmit = async (data: GearFormValues) => {
     setIsLoading(true);
     console.log("Form data submitted:", data);
@@ -81,6 +107,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
 
     onSubmit(data); // Call the callback function passed via props
     form.reset(); // Reset form after successful submission
+    clearDraft();
     setIsLoading(false);
     // Modal should be closed by the parent component using the onOpenChange prop of Dialog
   };
@@ -116,11 +143,14 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="Camera">Camera</SelectItem>
-                  <SelectItem value="Tripod">Tripod</SelectItem>
+                  <SelectItem value="Lens">Lens</SelectItem>
                   <SelectItem value="Drone">Drone</SelectItem>
                   <SelectItem value="Audio">Audio</SelectItem>
+                  <SelectItem value="Laptop">Laptop</SelectItem>
+                  <SelectItem value="Monitor">Monitor</SelectItem>
+                  <SelectItem value="Cables">Cables</SelectItem>
                   <SelectItem value="Lighting">Lighting</SelectItem>
-                  <SelectItem value="Lens">Lens</SelectItem>
+                  <SelectItem value="Tripod">Tripod</SelectItem>
                   <SelectItem value="Accessory">Accessory</SelectItem>
                   <SelectItem value="Cars">Cars</SelectItem>
                   {/* Add more categories */}
@@ -235,7 +265,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
 
         <DialogFooter className="pt-4">
           <DialogClose asChild>
-            <Button type="button" variant="outline">
+            <Button type="button" variant="outline" onClick={clearDraft}>
               Cancel
             </Button>
           </DialogClose>

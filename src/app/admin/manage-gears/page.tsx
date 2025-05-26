@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PlusCircle, Filter, Edit, Trash2, Download, Upload, CheckSquare, Square, Wrench, Camera, Video, Mic, Speaker, Smartphone, MonitorSmartphone, Monitor, Laptop, Box, LucideIcon, Lightbulb, CheckCircle, AlertTriangle } from 'lucide-react';
+import { PlusCircle, Filter, Edit, Trash2, Download, Upload, CheckSquare, Square, Wrench, Camera, Video, Mic, Speaker, Smartphone, MonitorSmartphone, Monitor, Laptop, Box, LucideIcon, Lightbulb, CheckCircle, AlertTriangle, Aperture, AirVent, Cable, Puzzle, Car, RotateCcw } from 'lucide-react';
 // Import Dialog components if using for Add/Edit form
 import {
   Dialog,
@@ -35,46 +35,52 @@ import { z } from 'zod';
 
 type Gear = any;
 
+// Category icon and color mapping
+const categoryIcons: Record<string, LucideIcon> = {
+  camera: Camera,
+  lens: Aperture,
+  drone: AirVent,
+  audio: Speaker,
+  laptop: Laptop,
+  monitor: Monitor,
+  cables: Cable,
+  lighting: Lightbulb,
+  tripod: Video,
+  accessory: Puzzle,
+  cars: Car,
+  gimbal: RotateCcw,
+  microphone: Mic,
+  computer: Monitor,
+  other: Box,
+};
+const categoryColors: Record<string, string> = {
+  camera: 'bg-blue-100 text-blue-800',
+  lens: 'bg-purple-100 text-purple-800',
+  drone: 'bg-cyan-100 text-cyan-800',
+  audio: 'bg-green-100 text-green-800',
+  laptop: 'bg-indigo-100 text-indigo-800',
+  monitor: 'bg-teal-100 text-teal-800',
+  cables: 'bg-yellow-100 text-yellow-800',
+  lighting: 'bg-orange-100 text-orange-800',
+  tripod: 'bg-pink-100 text-pink-800',
+  accessory: 'bg-gray-100 text-gray-800',
+  cars: 'bg-red-100 text-red-800',
+  gimbal: 'bg-fuchsia-100 text-fuchsia-800',
+  microphone: 'bg-emerald-100 text-emerald-800',
+  computer: 'bg-slate-100 text-slate-800',
+  other: 'bg-gray-200 text-gray-700',
+};
+
 // Helper function to get an icon based on category
 const getCategoryIcon = (category?: string, size = 24) => {
-  let Icon: LucideIcon = Box;
-
-  switch (category?.toLowerCase()) {
-    case 'camera':
-      Icon = Camera;
-      break;
-    case 'lens':
-      Icon = Camera;
-      break;
-    case 'tripod':
-      Icon = Video;
-      break;
-    case 'gimbal':
-      Icon = Video;
-      break;
-    case 'audio':
-      Icon = Speaker;
-      break;
-    case 'microphone':
-      Icon = Mic;
-      break;
-    case 'lighting':
-      Icon = Lightbulb;
-      break;
-    case 'laptop':
-      Icon = Laptop;
-      break;
-    case 'monitor':
-      Icon = Monitor;
-      break;
-    case 'computer':
-      Icon = Monitor;
-      break;
-    default:
-      Icon = Box;
-  }
-
+  const key = (category || '').toLowerCase();
+  const Icon = categoryIcons[key] || Box;
   return <Icon size={size} className="text-muted-foreground" />;
+};
+
+const getCategoryBadgeClass = (category?: string) => {
+  const key = (category || '').toLowerCase();
+  return categoryColors[key] || 'bg-gray-200 text-gray-700';
 };
 
 export default function ManageGearsPage() {
@@ -108,6 +114,10 @@ export default function ManageGearsPage() {
   const [showSqlDialog, setShowSqlDialog] = useState(false);
   const [sqlToRun, setSqlToRun] = useState('');
   const [isDatabaseFixed, setIsDatabaseFixed] = useState(false);
+
+  // --- UI State Preservation ---
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionRef = useRef<number>(0);
 
   // Maintenance form state and logic
   const maintenanceForm = useForm({
@@ -156,9 +166,9 @@ export default function ManageGearsPage() {
     // Set up real-time subscription
     const channel = supabase
       .channel('public:gears')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gears' }, () => {
-        fetchGears();
-      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gears' }, fetchGears)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gears' }, fetchGears)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gears' }, fetchGears)
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
@@ -181,6 +191,10 @@ export default function ManageGearsPage() {
   }, []);
 
   async function fetchGears() {
+    // Preserve scroll position before fetching
+    if (listContainerRef.current) {
+      scrollPositionRef.current = listContainerRef.current.scrollTop;
+    }
     setLoading(true);
     console.log("Fetching gears with real-time updates...");
 
@@ -255,6 +269,12 @@ export default function ManageGearsPage() {
       setGears([]);
     } finally {
       setLoading(false);
+      // Restore scroll position after fetching
+      setTimeout(() => {
+        if (listContainerRef.current) {
+          listContainerRef.current.scrollTop = scrollPositionRef.current;
+        }
+      }, 0);
     }
   }
 
@@ -1502,12 +1522,16 @@ $$;
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="Camera">Camera</SelectItem>
-                  <SelectItem value="Tripod">Tripod</SelectItem>
-                  <SelectItem value="Drone">Drone</SelectItem>
-                  <SelectItem value="Audio">Audio</SelectItem>
-                  <SelectItem value="Lighting">Lighting</SelectItem>
-                  <SelectItem value="Cars">Cars</SelectItem>
+                  <SelectItem value="Camera"><span className="inline-flex items-center gap-1">{getCategoryIcon('Camera', 14)} Camera</span></SelectItem>
+                  <SelectItem value="Lens"><span className="inline-flex items-center gap-1">{getCategoryIcon('Lens', 14)} Lens</span></SelectItem>
+                  <SelectItem value="Drone"><span className="inline-flex items-center gap-1">{getCategoryIcon('Drone', 14)} Drone</span></SelectItem>
+                  <SelectItem value="Audio"><span className="inline-flex items-center gap-1">{getCategoryIcon('Audio', 14)} Audio</span></SelectItem>
+                  <SelectItem value="Laptop"><span className="inline-flex items-center gap-1">{getCategoryIcon('Laptop', 14)} Laptop</span></SelectItem>
+                  <SelectItem value="Monitor"><span className="inline-flex items-center gap-1">{getCategoryIcon('Monitor', 14)} Monitor</span></SelectItem>
+                  <SelectItem value="Cables"><span className="inline-flex items-center gap-1">{getCategoryIcon('Cables', 14)} Cables</span></SelectItem>
+                  <SelectItem value="Lighting"><span className="inline-flex items-center gap-1">{getCategoryIcon('Lighting', 14)} Lighting</span></SelectItem>
+                  <SelectItem value="Tripod"><span className="inline-flex items-center gap-1">{getCategoryIcon('Tripod', 14)} Tripod</span></SelectItem>
+                  <SelectItem value="Cars"><span className="inline-flex items-center gap-1">{getCategoryIcon('Cars', 14)} Cars</span></SelectItem>
                   {/* Add more categories as needed */}
                 </SelectContent>
               </Select>
@@ -1541,6 +1565,7 @@ $$;
             </div>
           ) : (
             <motion.div
+              ref={listContainerRef}
               variants={containerVariants}
               initial="hidden"
               animate="visible"
@@ -1619,7 +1644,10 @@ $$;
                       <TableCell className="hidden md:table-cell">
                         <div className="inline-flex items-center gap-2">
                           {getCategoryIcon(gear.category, 16)}
-                          <span>{gear.category}</span>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium text-xs ${getCategoryBadgeClass(gear.category)}`}>
+                            {getCategoryIcon(gear.category, 14)}
+                            {gear.category}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
