@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import dynamic from 'next/dynamic';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { DotLottieReact } from '@lottiefiles/dotlottie-react';
+import { createClient } from '@/lib/supabase/client';
 
 // Dynamically import Lottie
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -53,6 +54,7 @@ export default function SignupPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const supabase = createClient();
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -92,6 +94,37 @@ export default function SignupPage() {
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to create account');
+      }
+
+      // If a profile photo was provided, upload it and update avatar_url
+      if (data.profilePicture && (data.profilePicture instanceof FileList ? data.profilePicture[0] : data.profilePicture)) {
+        let file: File | undefined = undefined;
+        if (data.profilePicture instanceof FileList) {
+          file = data.profilePicture[0];
+        } else if (data.profilePicture instanceof File) {
+          file = data.profilePicture;
+        }
+        if (file) {
+          // Get the user id from the backend (if returned), or fetch the user
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const fileExt = file.name.split('.').pop();
+            const filePath = `${user.id}/avatar.${fileExt}`;
+            const { error: uploadError, data: uploadData } = await supabase.storage
+              .from('avatars')
+              .upload(filePath, file, { upsert: true });
+            if (!uploadError && uploadData) {
+              const { data: urlData } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(uploadData.path);
+              const avatarUrl = urlData?.publicUrl;
+              if (avatarUrl) {
+                // Update the user's profile with the avatar_url
+                await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', user.id);
+              }
+            }
+          }
+        }
       }
 
       setShowSuccessModal(true);
@@ -270,6 +303,26 @@ export default function SignupPage() {
                         </FormLabel>
                         <FormMessage />
                       </div>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="profilePicture"
+                  render={({ field: { value, onChange, ...fieldProps } }) => (
+                    <FormItem>
+                      <FormLabel>Profile Photo (Optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...fieldProps}
+                          type="file"
+                          accept="image/*"
+                          onChange={e => onChange(e.target.files)}
+                        />
+                      </FormControl>
+                      <FormDescription>Upload a profile photo to personalize your account.</FormDescription>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />

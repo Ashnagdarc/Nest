@@ -44,6 +44,32 @@ export function EditItemModal({ itemId, open, onOpenChange, onSaved }: EditItemM
         notes: ''
     });
 
+    // --- Draft persistence ---
+    const LOCAL_STORAGE_KEY = itemId ? `edit-item-modal-draft-${itemId}` : undefined;
+
+    // Restore draft from localStorage on mount
+    useEffect(() => {
+        if (!LOCAL_STORAGE_KEY) return;
+        const draft = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (draft) {
+            try {
+                const values = JSON.parse(draft);
+                setItem((prev: any) => ({ ...prev, ...values }));
+            } catch { }
+        }
+    }, [LOCAL_STORAGE_KEY]);
+
+    // Save form state to localStorage on change
+    useEffect(() => {
+        if (!LOCAL_STORAGE_KEY) return;
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(item));
+    }, [item, LOCAL_STORAGE_KEY]);
+
+    // Clear draft on save or cancel
+    const clearDraft = () => {
+        if (LOCAL_STORAGE_KEY) localStorage.removeItem(LOCAL_STORAGE_KEY);
+    };
+
     useEffect(() => {
         if (open && itemId) {
             loadItem(itemId);
@@ -100,6 +126,7 @@ export function EditItemModal({ itemId, open, onOpenChange, onSaved }: EditItemM
 
             onSaved();
             onOpenChange(false);
+            clearDraft();
         } catch (error: any) {
             toast({
                 title: "Error saving item",
@@ -113,17 +140,17 @@ export function EditItemModal({ itemId, open, onOpenChange, onSaved }: EditItemM
 
     function handleInputChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
         const { name, value } = e.target;
-        setItem(prev => ({ ...prev, [name]: value }));
+        setItem((prev: any) => ({ ...prev, [name]: value }));
     }
 
     function handleSelectChange(name: string, value: string) {
-        setItem(prev => ({ ...prev, [name]: value }));
+        setItem((prev: any) => ({ ...prev, [name]: value }));
     }
 
     if (!open) return null;
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={(val) => { onOpenChange(val); if (!val) clearDraft(); }}>
             <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
                     <DialogTitle>Edit Item</DialogTitle>
@@ -220,7 +247,7 @@ export function EditItemModal({ itemId, open, onOpenChange, onSaved }: EditItemM
                 <DialogFooter>
                     <Button
                         variant="outline"
-                        onClick={() => onOpenChange(false)}
+                        onClick={() => { onOpenChange(false); clearDraft(); }}
                         disabled={saving}
                     >
                         Cancel

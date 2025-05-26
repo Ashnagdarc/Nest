@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createClient } from '@/lib/supabase/client';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { logger } from "@/utils/logger";
 import { createSupabaseSubscription } from "@/utils/supabase-subscription";
 import { motion } from "framer-motion";
 import { EmptyState } from "./EmptyState";
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box } from 'lucide-react';
 
 interface PopularGear {
     gear_id: string;
@@ -27,6 +27,54 @@ export function PopularGearWidget() {
     const [loading, setLoading] = useState(true);
     const [trendData, setTrendData] = useState<Record<string, 'up' | 'down' | null>>({});
     const supabase = createClient();
+
+    // --- UI State Preservation ---
+    const listContainerRef = useRef<HTMLDivElement | null>(null);
+    const scrollPositionRef = useRef<number>(0);
+
+    const categoryIcons: Record<string, any> = {
+        camera: Camera,
+        lens: Aperture,
+        drone: AirVent,
+        audio: Speaker,
+        laptop: Laptop,
+        monitor: Monitor,
+        cables: Cable,
+        lighting: Lightbulb,
+        tripod: Video,
+        accessory: Puzzle,
+        cars: Car,
+        gimbal: RotateCcw,
+        microphone: Mic,
+        computer: Monitor,
+        other: Box,
+    };
+    const categoryColors: Record<string, string> = {
+        camera: 'bg-blue-100 text-blue-800',
+        lens: 'bg-purple-100 text-purple-800',
+        drone: 'bg-cyan-100 text-cyan-800',
+        audio: 'bg-green-100 text-green-800',
+        laptop: 'bg-indigo-100 text-indigo-800',
+        monitor: 'bg-teal-100 text-teal-800',
+        cables: 'bg-yellow-100 text-yellow-800',
+        lighting: 'bg-orange-100 text-orange-800',
+        tripod: 'bg-pink-100 text-pink-800',
+        accessory: 'bg-gray-100 text-gray-800',
+        cars: 'bg-red-100 text-red-800',
+        gimbal: 'bg-fuchsia-100 text-fuchsia-800',
+        microphone: 'bg-emerald-100 text-emerald-800',
+        computer: 'bg-slate-100 text-slate-800',
+        other: 'bg-gray-200 text-gray-700',
+    };
+    const getCategoryIcon = (category?: string, size = 16) => {
+        const key = (category || '').toLowerCase();
+        const Icon = categoryIcons[key] || Box;
+        return <Icon size={size} className="inline-block mr-1 align-text-bottom text-muted-foreground" />;
+    };
+    const getCategoryBadgeClass = (category?: string) => {
+        const key = (category || '').toLowerCase();
+        return categoryColors[key] || 'bg-gray-200 text-gray-700';
+    };
 
     // Fetch popular gear data with a date range (last 30 days)
     const fetchPopularGear = async () => {
@@ -76,25 +124,47 @@ export function PopularGearWidget() {
         }
     };
 
-    useEffect(() => {
-        fetchPopularGear();
-
-        // Set up subscription to gear changes only
-        const gearSubscription = createSupabaseSubscription({
-            supabase,
-            channel: 'popular-gear-updates',
-            config: {
-                event: '*',
-                schema: 'public',
-                table: 'gears'
-            },
-            callback: () => {
-                fetchPopularGear();
+    const fetchPopularGearWithScroll = async () => {
+        // Preserve scroll position before fetching
+        if (listContainerRef.current) {
+            scrollPositionRef.current = listContainerRef.current.scrollTop;
+        }
+        await fetchPopularGear();
+        // Restore scroll position after fetching
+        setTimeout(() => {
+            if (listContainerRef.current) {
+                listContainerRef.current.scrollTop = scrollPositionRef.current;
             }
-        });
+        }, 0);
+    };
+
+    useEffect(() => {
+        fetchPopularGearWithScroll();
+
+        // Set up subscriptions for INSERT, UPDATE, DELETE events
+        const unsubscribes = [
+            createSupabaseSubscription({
+                supabase,
+                channel: 'popular-gear-updates-insert',
+                config: { event: 'INSERT', schema: 'public', table: 'gears' },
+                callback: fetchPopularGearWithScroll
+            }),
+            createSupabaseSubscription({
+                supabase,
+                channel: 'popular-gear-updates-update',
+                config: { event: 'UPDATE', schema: 'public', table: 'gears' },
+                callback: fetchPopularGearWithScroll
+            }),
+            createSupabaseSubscription({
+                supabase,
+                channel: 'popular-gear-updates-delete',
+                config: { event: 'DELETE', schema: 'public', table: 'gears' },
+                callback: fetchPopularGearWithScroll
+            })
+        ];
 
         return () => {
-            gearSubscription.unsubscribe();
+            unsubscribes.forEach(u => u.unsubscribe());
         };
     }, []);
 
@@ -153,7 +223,7 @@ export function PopularGearWidget() {
                         ))}
                     </div>
                 ) : popularGear.length > 0 ? (
-                    <div className="space-y-4">
+                    <div ref={listContainerRef} className="space-y-4">
                         {popularGear.map((gear) => (
                             <motion.div
                                 key={gear.gear_id}
@@ -170,7 +240,10 @@ export function PopularGearWidget() {
                                 <div className="flex-1 min-w-0">
                                     <h4 className="font-medium text-sm truncate">{gear.name}</h4>
                                     <div className="flex items-center gap-2 mt-1">
-                                        <Badge variant="outline" className="text-xs">{gear.category}</Badge>
+                                        <Badge variant="outline" className={`text-xs ${getCategoryBadgeClass(gear.category)}`}>
+                                            {getCategoryIcon(gear.category, 12)}
+                                            {gear.category}
+                                        </Badge>
                                         <span className="text-xs text-muted-foreground">{gear.request_count} {gear.request_count === 1 ? 'checkout' : 'checkouts'}</span>
                                         {trendData[gear.gear_id] === 'up' && <TrendingUp className="h-4 w-4 text-green-500" aria-label="Trending Up" />}
                                         {trendData[gear.gear_id] === 'down' && <TrendingDown className="h-4 w-4 text-red-500" aria-label="Trending Down" />}

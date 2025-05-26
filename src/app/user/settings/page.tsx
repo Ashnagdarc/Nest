@@ -20,6 +20,8 @@ import { useRouter } from 'next/navigation';
 import { createProfileNotification } from '@/lib/notifications';
 import { useIsMobile } from '@/hooks/use-mobile'; // Add mobile detection
 import { Session as SupabaseSession, User as SupabaseUser } from '@supabase/supabase-js';
+import { useUserProfile } from '@/components/providers/user-profile-provider';
+import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -68,12 +70,16 @@ type ProfileUpdate = {
     [key: string]: any; // Allow for additional update properties
 };
 
+// Add at the top:
+const PROFILE_FORM_DRAFT_KEY = "user-profile-form-draft";
+
 // --- Component ---
 export default function UserSettingsPage() {
     const { toast } = useToast();
     const router = useRouter();
     const supabase = createClient();
     const isMobile = useIsMobile();
+    const { refreshProfile } = useUserProfile();
 
     // --- State ---
     const [currentUserData, setCurrentUserData] = useState<Profile | null>(null);
@@ -86,6 +92,9 @@ export default function UserSettingsPage() {
     const [isPasswordLoading, setIsPasswordLoading] = useState(false);
     const [isNotificationLoading, setIsNotificationLoading] = useState(false);
     const [isLoadingUser, setIsLoadingUser] = useState(true);
+    const [showCropper, setShowCropper] = useState(false);
+    const [rawImage, setRawImage] = useState<string | null>(null);
+    const [croppedFile, setCroppedFile] = useState<File | null>(null);
 
     // --- Effects ---
     useEffect(() => {
@@ -169,6 +178,30 @@ export default function UserSettingsPage() {
     const profileForm = useForm<ProfileFormValues>({ resolver: zodResolver(profileSchema), defaultValues: { fullName: '', email: '', phone: '', department: '', profilePicture: undefined } });
     const passwordForm = useForm<PasswordFormValues>({ resolver: zodResolver(passwordSchema), defaultValues: { newPassword: '', confirmNewPassword: '' } });
 
+    // Restore draft from localStorage on mount
+    useEffect(() => {
+        const draft = localStorage.getItem(PROFILE_FORM_DRAFT_KEY);
+        if (draft) {
+            try {
+                const values = JSON.parse(draft);
+                profileForm.reset({ ...profileForm.getValues(), ...values });
+            } catch { }
+        }
+    }, [profileForm]);
+
+    // Save form state to localStorage on change
+    useEffect(() => {
+        const subscription = profileForm.watch((values) => {
+            // Don't persist File objects (profilePicture)
+            const { profilePicture, ...rest } = values;
+            localStorage.setItem(PROFILE_FORM_DRAFT_KEY, JSON.stringify(rest));
+        });
+        return () => subscription.unsubscribe();
+    }, [profileForm]);
+
+    // Clear draft on submit
+    const clearProfileDraft = () => localStorage.removeItem(PROFILE_FORM_DRAFT_KEY);
+
     // --- Handlers ---
     const onProfileSubmit = async (data: ProfileFormValues) => {
         setIsProfileLoading(true);
@@ -183,13 +216,22 @@ export default function UserSettingsPage() {
 
             // Handle avatar upload if there's a new file
             let newAvatarUrl = currentUserData?.avatar_url;
-            if (data.profilePicture && data.profilePicture instanceof File) {
-                const fileExt = data.profilePicture.name.split('.').pop();
+            let file: File | undefined = undefined;
+            if (data.profilePicture) {
+                if (data.profilePicture instanceof FileList) {
+                    file = data.profilePicture[0];
+                } else if (data.profilePicture instanceof File) {
+                    file = data.profilePicture;
+                }
+            }
+            if (file) {
+                console.log("UserSettings: Uploading new avatar file", file);
+                const fileExt = file.name.split('.').pop();
                 const filePath = `${user.id}/avatar.${fileExt}`;
 
                 const { error: uploadError, data: uploadData } = await supabase.storage
                     .from('avatars')
-                    .upload(filePath, data.profilePicture, { upsert: true });
+                    .upload(filePath, file, { upsert: true });
 
                 if (uploadError) {
                     console.error("Error uploading avatar to Storage:", uploadError);
@@ -234,11 +276,16 @@ export default function UserSettingsPage() {
                 throw new Error(`Failed to update profile: ${updateError.message}`);
             }
 
+            // Update local state so UI reflects new avatar immediately
+            setCurrentUserData((prev) => prev ? { ...prev, ...profileUpdateData } : null);
+
             // Create notification for the user
             await createProfileNotification(user.id, 'update');
 
             toast({ title: "Profile Updated", description: "Your profile has been updated successfully." });
-            profileForm.reset(data); // Reset form with new values
+            profileForm.reset({ ...data, profilePicture: undefined }); // Reset form with new values
+            clearProfileDraft();
+            await refreshProfile(); // Ensure sidebar and all consumers get the latest profile
 
         } catch (error: any) {
             console.error("Profile update error:", error);
@@ -350,7 +397,17 @@ export default function UserSettingsPage() {
                                                         {...fieldProps}
                                                         type="file"
                                                         accept="image/*"
-                                                        onChange={(event) => onChange(event.target.files)}
+                                                        onChange={async (event) => {
+                                                            const file = event.target.files?.[0];
+                                                            if (file) {
+                                                                const reader = new FileReader();
+                                                                reader.onload = (ev) => {
+                                                                    setRawImage(ev.target?.result as string);
+                                                                    setShowCropper(true);
+                                                                };
+                                                                reader.readAsDataURL(file);
+                                                            }
+                                                        }}
                                                         className="text-xs w-full"
                                                     />
                                                 </FormControl>
@@ -359,6 +416,20 @@ export default function UserSettingsPage() {
                                         )}
                                     />
                                 </div>
+                                {showCropper && (
+                                    <ImageCropperModal
+                                        open={showCropper}
+                                        imageSrc={rawImage}
+                                        onClose={() => setShowCropper(false)}
+                                        onCropComplete={async (croppedBlob) => {
+                                            const croppedFile = new File([croppedBlob], 'avatar.jpg', { type: 'image/jpeg' });
+                                            setCroppedFile(croppedFile);
+                                            profileForm.setValue('profilePicture', croppedFile);
+                                            setShowCropper(false);
+                                        }}
+                                        aspect={1}
+                                    />
+                                )}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <FormField control={profileForm.control} name="fullName" render={({ field }) => (
                                         <FormItem>

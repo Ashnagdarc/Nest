@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
@@ -143,6 +143,9 @@ export default function CheckInGearPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [checkInHistory, setCheckInHistory] = useState<CheckInHistory[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+  // --- UI State Preservation ---
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionRef = useRef<number>(0);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -155,115 +158,28 @@ export default function CheckInGearPage() {
   useEffect(() => {
     if (!userId) return;
 
-    const fetchCheckedOutGears = async () => {
-      console.log('Fetching checked out gears for user:', userId);
-
-      try {
-        const { data: checkedOutGears, error: gearError } = await supabase
-          .from('gears')
-          .select(`
-            id,
-            name,
-            status,
-            category,
-            image_url,
-            checked_out_to,
-            due_date,
-            current_request_id,
-            last_checkout_date
-          `)
-          .eq('checked_out_to', userId)
-          .eq('status', 'Checked Out');
-
-        if (gearError) {
-          console.error('Error fetching checked out gears:', {
-            message: gearError.message,
-            details: gearError.details,
-            hint: gearError.hint,
-            code: gearError.code
-          });
-
-          toast({
-            title: "Error",
-            description: `Failed to fetch checked out gear: ${gearError.message}`,
-            variant: "destructive"
-          });
-          return;
-        }
-
-        if (!checkedOutGears) {
-          console.log('No checked out gears found');
-          setCheckedOutGears([]);
-          return;
-        }
-
-        // Add debug logging for image URLs
-        console.log('Raw gear data image URLs:', checkedOutGears.map((g: GearData) => ({
-          id: g.id,
-          name: g.name,
-          image_url: g.image_url
-        })));
-
-        const processedGears = checkedOutGears.map((gear: GearData): ProcessedGear => {
-          // Debug log for each gear's image processing
-          console.log(`Processing gear ${gear.id} (${gear.name}) image:`, {
-            raw_url: gear.image_url,
-            is_string: typeof gear.image_url === 'string',
-            length: gear.image_url?.length,
-            trimmed_length: gear.image_url?.trim().length
-          });
-
-          return {
-            id: gear.id,
-            name: gear.name,
-            status: gear.status,
-            category: gear.category,
-            image_url: isValidImageUrl(gear.image_url) ? gear.image_url : null,
-            current_request_id: gear.current_request_id,
-            due_date: gear.due_date,
-            last_checkout_date: gear.last_checkout_date,
-            checked_out_to: gear.checked_out_to
-          };
-        });
-
-        // Debug log processed gears
-        console.log('Processed gear image URLs:', processedGears.map((g: ProcessedGear) => ({
-          id: g.id,
-          name: g.name,
-          image_url: g.image_url
-        })));
-
-        setCheckedOutGears(processedGears);
-
-      } catch (error) {
-        console.error('Exception in fetchCheckedOutGears:', {
-          error,
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined
-        });
-
-        toast({
-          title: "Error",
-          description: error instanceof Error
-            ? `Error: ${error.message}`
-            : "An unexpected error occurred. Please try refreshing the page.",
-          variant: "destructive"
-        });
+    const fetchCheckedOutGearsWithScroll = async () => {
+      // Preserve scroll position before fetching
+      if (listContainerRef.current) {
+        scrollPositionRef.current = listContainerRef.current.scrollTop;
       }
+      await fetchCheckedOutGear();
+      // Restore scroll position after fetching
+      setTimeout(() => {
+        if (listContainerRef.current) {
+          listContainerRef.current.scrollTop = scrollPositionRef.current;
+        }
+      }, 0);
     };
 
-    fetchCheckedOutGears();
+    fetchCheckedOutGearsWithScroll(); // Initial fetch with scroll preservation
 
-    // Set up real-time subscription
+    // Set up real-time subscription (filtered events)
     const gearChannel = supabase
       .channel('gear_changes')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'gears', filter: `checked_out_to=eq.${userId}` },
-        (payload: RealtimePostgresChangesPayload<{ [key: string]: any }>) => {
-          console.log('Received gear change:', payload);
-          fetchCheckedOutGears();
-        }
-      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gears', filter: `checked_out_to=eq.${userId}` }, fetchCheckedOutGearsWithScroll)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gears', filter: `checked_out_to=eq.${userId}` }, fetchCheckedOutGearsWithScroll)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gears', filter: `checked_out_to=eq.${userId}` }, fetchCheckedOutGearsWithScroll)
       .subscribe();
 
     return () => {
@@ -358,10 +274,6 @@ export default function CheckInGearPage() {
       console.error("Error in fetchCheckedOutGear:", error);
     }
   };
-
-  useEffect(() => {
-    fetchCheckedOutGear();
-  }, []);
 
   const handleCheckinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -826,7 +738,7 @@ export default function CheckInGearPage() {
                           </CardHeader>
                           <CardContent>
                             <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px] w-full rounded-md border">
-                              <div className="p-4 space-y-3">
+                              <div ref={listContainerRef} className="p-4 space-y-3">
                                 {checkedOutGears.map((gear) => renderGearCard(gear))}
                               </div>
                             </ScrollArea>

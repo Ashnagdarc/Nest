@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import Image from 'next/image';
 import Link from 'next/link';
-import { Eye, PackagePlus } from 'lucide-react'; // Icons for view details and request
+import { Eye, PackagePlus, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box } from 'lucide-react'; // Icons for view details and request
 import { createClient } from '@/lib/supabase/client';
 import { createGearNotification } from '@/lib/notifications';
 import { useToast } from "@/hooks/use-toast";
@@ -29,6 +29,53 @@ interface Gear {
   updated_at?: string | null;
 }
 
+const categoryIcons: Record<string, any> = {
+  camera: Camera,
+  lens: Aperture,
+  drone: AirVent,
+  audio: Speaker,
+  laptop: Laptop,
+  monitor: Monitor,
+  cables: Cable,
+  lighting: Lightbulb,
+  tripod: Video,
+  accessory: Puzzle,
+  cars: Car,
+  gimbal: RotateCcw,
+  microphone: Mic,
+  computer: Monitor,
+  other: Box,
+};
+
+const categoryColors: Record<string, string> = {
+  camera: 'bg-blue-100 text-blue-800',
+  lens: 'bg-purple-100 text-purple-800',
+  drone: 'bg-cyan-100 text-cyan-800',
+  audio: 'bg-green-100 text-green-800',
+  laptop: 'bg-indigo-100 text-indigo-800',
+  monitor: 'bg-teal-100 text-teal-800',
+  cables: 'bg-yellow-100 text-yellow-800',
+  lighting: 'bg-orange-100 text-orange-800',
+  tripod: 'bg-pink-100 text-pink-800',
+  accessory: 'bg-gray-100 text-gray-800',
+  cars: 'bg-red-100 text-red-800',
+  gimbal: 'bg-fuchsia-100 text-fuchsia-800',
+  microphone: 'bg-emerald-100 text-emerald-800',
+  computer: 'bg-slate-100 text-slate-800',
+  other: 'bg-gray-200 text-gray-700',
+};
+
+const getCategoryIcon = (category?: string, size = 18) => {
+  const key = (category || '').toLowerCase();
+  const Icon = categoryIcons[key] || Box;
+  return <Icon size={size} className="inline-block mr-1 align-text-bottom text-muted-foreground" />;
+};
+
+const getCategoryBadgeClass = (category?: string) => {
+  const key = (category || '').toLowerCase();
+  return categoryColors[key] || 'bg-gray-200 text-gray-700';
+};
+
 export default function BrowseGearsPage() {
   const supabase = createClient();
   const { toast } = useToast();
@@ -38,14 +85,18 @@ export default function BrowseGearsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
+  // --- UI State Preservation ---
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionRef = useRef<number>(0);
+
   useEffect(() => {
     fetchGears();
-    // Set up real-time subscription
+    // Set up real-time subscription (filtered events)
     const channel = supabase
       .channel('public:gears')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gears' }, () => {
-        fetchGears();
-      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gears' }, fetchGears)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gears' }, fetchGears)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gears' }, fetchGears)
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
@@ -53,6 +104,10 @@ export default function BrowseGearsPage() {
   }, []);
 
   async function fetchGears() {
+    // Preserve scroll position before fetching
+    if (listContainerRef.current) {
+      scrollPositionRef.current = listContainerRef.current.scrollTop;
+    }
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -84,6 +139,12 @@ export default function BrowseGearsPage() {
       });
     } finally {
       setIsLoading(false);
+      // Restore scroll position after fetching
+      setTimeout(() => {
+        if (listContainerRef.current) {
+          listContainerRef.current.scrollTop = scrollPositionRef.current;
+        }
+      }, 0);
     }
   }
 
@@ -248,11 +309,14 @@ export default function BrowseGearsPage() {
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
                   <SelectItem value="Camera">Camera</SelectItem>
-                  <SelectItem value="Tripod">Tripod</SelectItem>
+                  <SelectItem value="Lens">Lens</SelectItem>
                   <SelectItem value="Drone">Drone</SelectItem>
                   <SelectItem value="Audio">Audio</SelectItem>
+                  <SelectItem value="Laptop">Laptop</SelectItem>
+                  <SelectItem value="Monitor">Monitor</SelectItem>
+                  <SelectItem value="Cables">Cables</SelectItem>
                   <SelectItem value="Lighting">Lighting</SelectItem>
-                  <SelectItem value="Lens">Lens</SelectItem>
+                  <SelectItem value="Tripod">Tripod</SelectItem>
                   <SelectItem value="Accessory">Accessory</SelectItem>
                   <SelectItem value="Cars">Cars</SelectItem>
                   {/* Add more categories */}
@@ -273,6 +337,7 @@ export default function BrowseGearsPage() {
       {/* Gear Grid */}
       {!isLoading && (
         <motion.div
+          ref={listContainerRef}
           variants={containerVariants}
           initial="hidden"
           animate="visible"
@@ -284,9 +349,9 @@ export default function BrowseGearsPage() {
                 <Card className="overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
                   <CardHeader className="p-0">
                     <div className="w-full h-48 relative bg-muted">
-                      {gear.imageUrl ? (
+                      {gear.image_url ? (
                         <Image
-                          src={gear.imageUrl}
+                          src={gear.image_url}
                           alt={gear.name}
                           fill
                           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -313,7 +378,12 @@ export default function BrowseGearsPage() {
                         {gear.status}
                       </Badge>
                     </div>
-                    <CardDescription className="text-sm text-muted-foreground mb-1">{gear.category}</CardDescription>
+                    <CardDescription className="text-sm mb-1">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium text-xs ${getCategoryBadgeClass(gear.category || '')}`}>
+                        {getCategoryIcon(gear.category || '', 14)}
+                        {gear.category}
+                      </span>
+                    </CardDescription>
                     <p className="text-sm line-clamp-2">{gear.description}</p>
                   </CardContent>
                   <CardFooter className="p-4 bg-muted/30 flex justify-end gap-2">
