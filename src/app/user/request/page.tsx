@@ -244,7 +244,7 @@ export default function RequestGearPage() {
       <h1 className="text-3xl font-bold text-foreground">Request Gear</h1>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
 
           {/* Gear Selection Column */}
           <motion.div
@@ -253,18 +253,18 @@ export default function RequestGearPage() {
             transition={{ delay: 0.1, duration: 0.5 }}
             className="md:col-span-1"
           >
-            <Card>
-              <CardHeader>
+            <Card className="w-full max-w-full">
+              <CardHeader className="py-3 px-2 md:p-6">
                 <CardTitle>Select Gear</CardTitle>
                 <CardDescription>Choose one or more available items.</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="py-3 px-2 md:p-6">
                 <FormField
                   control={form.control}
                   name="selectedGears"
                   render={({ field }) => (
                     <FormItem>
-                      <ScrollArea className="h-[30rem] w-full rounded-md border p-4">
+                      <ScrollArea className="h-[24rem] w-full rounded-md border p-2 md:p-4">
                         {availableGears.map((gear) => (
                           <FormField
                             key={gear.id}
@@ -274,10 +274,11 @@ export default function RequestGearPage() {
                               return (
                                 <FormItem
                                   key={gear.id}
-                                  className="flex flex-row items-start space-x-3 space-y-0 mb-4"
+                                  className="flex flex-row items-center space-x-3 space-y-0 mb-3"
                                 >
                                   <FormControl>
                                     <Checkbox
+                                      className="h-6 w-6"
                                       checked={checkboxField.value?.includes(gear.id)}
                                       onCheckedChange={(checked) => {
                                         return checked
@@ -294,12 +295,12 @@ export default function RequestGearPage() {
                                     <Image
                                       src={(gear.imageUrl || gear.image_url) ? (gear.imageUrl || gear.image_url) : '/images/placeholder-gear.svg'}
                                       alt={gear.name}
-                                      width={24}
-                                      height={24}
-                                      className="rounded-sm"
+                                      width={28}
+                                      height={28}
+                                      className="rounded-sm h-7 w-7"
                                       data-ai-hint={`${gear.category} item`}
                                     />
-                                    {gear.name} <span className="text-xs text-muted-foreground">({gear.category})</span>
+                                    <span className="text-base">{gear.name}</span> <span className="text-xs text-muted-foreground">({gear.category})</span>
                                   </FormLabel>
                                 </FormItem>
                               )
@@ -320,13 +321,13 @@ export default function RequestGearPage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2, duration: 0.5 }}
-            className="md:col-span-2 space-y-4"
+            className="md:col-span-2 space-y-3 md:space-y-4"
           >
-            <Card>
-              <CardHeader>
+            <Card className="w-full max-w-full">
+              <CardHeader className="py-3 px-2 md:p-6">
                 <CardTitle>Request Details</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="py-3 px-2 md:p-6 space-y-3 md:space-y-4">
                 <FormField
                   control={form.control}
                   name="reason"
@@ -339,7 +340,7 @@ export default function RequestGearPage() {
                         <RadioGroup
                           onValueChange={field.onChange}
                           defaultValue={field.value}
-                          className="grid grid-cols-2 gap-2 mt-2"
+                          className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2"
                         >
                           {reasonOptions.map((reason) => (
                             <FormItem key={reason} className="flex items-center space-x-2 space-y-0">
@@ -365,7 +366,7 @@ export default function RequestGearPage() {
                     <FormItem>
                       <FormLabel>Destination / Location</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Studio B, Client Office, Site Alpha" {...field} />
+                        <Input className="text-base" placeholder="e.g., Studio B, Client Office, Site Alpha" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -382,13 +383,13 @@ export default function RequestGearPage() {
                       </FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="text-base">
                             <SelectValue placeholder="Select duration" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {durationOptions.map((duration) => (
-                            <SelectItem key={duration} value={duration}>
+                            <SelectItem key={duration} value={duration} className="text-base">
                               {duration}
                             </SelectItem>
                           ))}
@@ -412,7 +413,7 @@ export default function RequestGearPage() {
                         value=""
                       >
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="text-base">
                             <SelectValue placeholder="Select team members" />
                           </SelectTrigger>
                         </FormControl>
@@ -420,9 +421,8 @@ export default function RequestGearPage() {
                           <SelectGroup>
                             <SelectLabel>Team Members</SelectLabel>
                             {availableUsers
-                              .filter(user => user.id !== userId) // Don't show current user
+                              .filter(user => user.id !== userId)
                               .sort((a, b) => {
-                                // Sort by full name first, fall back to email if name not available
                                 const nameA = a.full_name || a.email || '';
                                 const nameB = b.full_name || b.email || '';
                                 return nameA.localeCompare(nameB);
@@ -431,7 +431,7 @@ export default function RequestGearPage() {
                                 <SelectItem
                                   key={user.id}
                                   value={user.id}
-                                  className="flex items-center"
+                                  className="flex items-center text-base"
                                 >
                                   <div className="flex flex-col">
                                     <span className="font-medium">{user.full_name || 'Unnamed User'}</span>
@@ -481,12 +481,12 @@ export default function RequestGearPage() {
 
             {/* Condition Confirmation */}
             {selectedGearDetails.length > 0 && (
-              <Card>
-                <CardHeader>
+              <Card className="w-full max-w-full">
+                <CardHeader className="py-3 px-2 md:p-6">
                   <CardTitle>Confirm Gear Condition</CardTitle>
                   <CardDescription>Review the current condition of the selected gear.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2">
+                <CardContent className="py-3 px-2 md:p-6 space-y-2">
                   {selectedGearDetails.map(gear => (
                     <div key={gear.id} className="text-sm p-2 border rounded-md bg-muted/50">
                       <strong>{gear.name}:</strong> <span className="text-muted-foreground">{gear.condition}</span>
@@ -496,9 +496,10 @@ export default function RequestGearPage() {
                     control={form.control}
                     name="conditionConfirmed"
                     render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-4">
+                      <FormItem className="flex flex-col gap-2 md:flex-row md:items-start md:space-x-3 md:space-y-0 pt-4">
                         <FormControl>
                           <Checkbox
+                            className="h-6 w-6"
                             checked={field.value}
                             onCheckedChange={field.onChange}
                           />

@@ -391,7 +391,7 @@ export default function UserDashboardPage() {
 
   return (
     <ErrorBoundary>
-      <div className="container mx-auto py-6 space-y-8">
+      <div className="container mx-auto px-4 py-6 space-y-8">
         {/* Header Section */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -400,22 +400,22 @@ export default function UserDashboardPage() {
           className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6"
         >
           <div>
-            <h1 className="text-3xl font-bold text-foreground">
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">
               Welcome back, {userData?.full_name || 'User'}
             </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="text-muted-foreground mt-1 text-sm md:text-base">
               {userData?.department ? `${userData.department} Department` : 'Dashboard'}
             </p>
           </div>
-          <div className="flex items-center gap-4">
-            <Link href="/user/browse">
-              <Button className="gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-4 w-full sm:w-auto">
+            <Link href="/user/browse" className="w-full sm:w-auto">
+              <Button className="gap-2 w-full min-h-[44px] min-w-[44px]">
                 <Search className="h-4 w-4" />
                 Browse Gear
               </Button>
             </Link>
-            <Link href="/user/check-in">
-              <Button variant="outline" className="gap-2">
+            <Link href="/user/check-in" className="w-full sm:w-auto">
+              <Button variant="outline" className="gap-2 w-full min-h-[44px] min-w-[44px]">
                 <ArrowUpDown className="h-4 w-4" />
                 Check-in Gear
               </Button>
@@ -448,7 +448,7 @@ export default function UserDashboardPage() {
               >
                 <Card className="h-full">
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <CardTitle className="text-base md:text-lg font-semibold flex items-center gap-2">
                       <stat.icon className={`h-6 w-6 ${stat.color}`} />
                       {stat.title}
                     </CardTitle>
@@ -465,7 +465,7 @@ export default function UserDashboardPage() {
                     </Badge>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground mb-2">{stat.description}</p>
+                    <p className="text-xs md:text-sm text-muted-foreground mb-2">{stat.description}</p>
                     {stat.value === 0 && (
                       <div className="text-xs text-muted-foreground italic">No {stat.title.toLowerCase()}.</div>
                     )}
@@ -489,16 +489,16 @@ export default function UserDashboardPage() {
           <div className="space-y-6">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-md">Activity & Announcements</CardTitle>
+                <CardTitle className="text-md md:text-lg">Activity & Announcements</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="grid grid-cols-1 divide-y">
                   <div className="p-4">
-                    <h3 className="text-sm font-medium mb-2">Recent Activity</h3>
+                    <h3 className="text-xs md:text-sm font-medium mb-2">Recent Activity</h3>
                     <RecentActivity embedded={true} />
                   </div>
                   <div className="p-4">
-                    <h3 className="text-sm font-medium mb-2">Announcements</h3>
+                    <h3 className="text-xs md:text-sm font-medium mb-2">Announcements</h3>
                     <AnnouncementsWidget embedded={true} />
                   </div>
                 </div>

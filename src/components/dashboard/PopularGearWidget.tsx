@@ -223,35 +223,38 @@ export function PopularGearWidget() {
                         ))}
                     </div>
                 ) : popularGear.length > 0 ? (
-                    <div ref={listContainerRef} className="space-y-4">
+                    <div
+                        ref={listContainerRef}
+                        className="space-y-4 w-full overflow-x-auto"
+                    >
                         {popularGear.map((gear) => (
                             <motion.div
                                 key={gear.gear_id}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.3 }}
-                                className="flex items-center gap-3 p-3 rounded-lg bg-muted/30"
+                                className="flex flex-col sm:flex-row flex-wrap items-center gap-3 gap-y-2 p-3 rounded-lg bg-muted/30 min-w-0"
                             >
                                 {gear.image_url ? (
-                                    <img src={gear.image_url} alt={gear.name} className="h-10 w-10 rounded object-cover" />
+                                    <img src={gear.image_url} alt={gear.name} className="h-10 w-10 rounded object-cover flex-shrink-0" />
                                 ) : (
-                                    <div className="h-10 w-10 rounded bg-gray-200 flex items-center justify-center text-lg font-bold text-gray-500">{gear.name[0]}</div>
+                                    <div className="h-10 w-10 rounded bg-gray-200 flex items-center justify-center text-lg font-bold text-gray-500 flex-shrink-0">{gear.name[0]}</div>
                                 )}
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="font-medium text-sm truncate">{gear.name}</h4>
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <Badge variant="outline" className={`text-xs ${getCategoryBadgeClass(gear.category)}`}>
+                                <div className="flex-1 min-w-0 w-full sm:w-auto">
+                                    <h4 className="font-medium text-sm truncate max-w-full">{gear.name}</h4>
+                                    <div className="flex flex-wrap items-center gap-2 mt-1 min-w-0">
+                                        <Badge variant="outline" className={`text-xs ${getCategoryBadgeClass(gear.category)} truncate max-w-[100px]`}>
                                             {getCategoryIcon(gear.category, 12)}
-                                            {gear.category}
+                                            <span className="truncate">{gear.category}</span>
                                         </Badge>
-                                        <span className="text-xs text-muted-foreground">{gear.request_count} {gear.request_count === 1 ? 'checkout' : 'checkouts'}</span>
+                                        <span className="text-xs text-muted-foreground truncate">{gear.request_count} {gear.request_count === 1 ? 'checkout' : 'checkouts'}</span>
                                         {trendData[gear.gear_id] === 'up' && <TrendingUp className="h-4 w-4 text-green-500" aria-label="Trending Up" />}
                                         {trendData[gear.gear_id] === 'down' && <TrendingDown className="h-4 w-4 text-red-500" aria-label="Trending Down" />}
                                     </div>
                                 </div>
-                                <Badge className={getStatusColor(gear.status || "")}>{gear.status}</Badge>
-                                <Link href={`/user/browse?gear=${gear.gear_id}`}><Button size="sm" variant="outline" aria-label="View Details">View Details</Button></Link>
-                                <Link href={`/user/request?gear=${gear.gear_id}`}><Button size="sm" aria-label="Request Again">Request Again</Button></Link>
+                                <Badge className={getStatusColor(gear.status || "") + " truncate max-w-[90px]"}>{gear.status}</Badge>
+                                <Link href={`/user/browse?gear=${gear.gear_id}`} className="w-full sm:w-auto"><Button size="sm" variant="outline" aria-label="View Details" className="w-full sm:w-auto max-w-[120px] truncate">View Details</Button></Link>
+                                <Link href={`/user/request?gear=${gear.gear_id}`} className="w-full sm:w-auto"><Button size="sm" aria-label="Request Again" className="w-full sm:w-auto max-w-[120px] truncate">Request Again</Button></Link>
                             </motion.div>
                         ))}
                     </div>

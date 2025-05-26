@@ -186,7 +186,11 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
             className="max-w-full"
           >
             {/* Render children only if user loading is complete and user exists */}
-            {!isLoadingUser && currentUser ? children : (
+            {!isLoadingUser && currentUser ? (
+              <div className="container mx-auto px-4 w-full">
+                {children}
+              </div>
+            ) : (
               <div className="flex justify-center items-center h-64">
                 {/* Optional: Show loading spinner */}
                 {isLoadingUser ? <p>Loading user data...</p> : <p>Access denied.</p>}

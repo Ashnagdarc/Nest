@@ -53,7 +53,9 @@ export default function RootLayout({
             <ReactQueryProvider>
               <SupabaseErrorBoundary>
                 <UserProfileProvider>
-                  {children}
+                  <div className="container mx-auto px-4 min-h-screen flex flex-col">
+                    {children}
+                  </div>
                 </UserProfileProvider>
               </SupabaseErrorBoundary>
               <Toaster />

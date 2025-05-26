@@ -186,7 +186,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             className="max-w-full"
           >
             {/* Render children only if user loading is complete and user is verified admin */}
-            {!isLoadingUser && adminUser ? children : (
+            {!isLoadingUser && adminUser ? (
+              <div className="container mx-auto px-4 w-full">
+                {children}
+              </div>
+            ) : (
               <div className="flex justify-center items-center h-64">
                 {/* Optional: Show a loading spinner or unauthorized message */}
                 {isLoadingUser ? <p>Loading admin data...</p> : <p>Access denied.</p>}
