@@ -113,7 +113,7 @@ export default function LandingPage() {
                   <div className="absolute -inset-1 bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg blur opacity-50"></div>
                   <Image
                     src={logoUrl}
-                    alt="GearFlow Logo"
+                    alt="Flow Tag Logo"
                     fill
                     className="relative rounded-lg object-contain"
                     unoptimized
@@ -122,7 +122,7 @@ export default function LandingPage() {
               ) : null}
               <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-2">
                 <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent leading-tight">
-                  GearFlow
+                  Flow Tag
                 </span>
                 <span className="text-xs sm:text-sm font-medium dark:text-white text-black leading-tight">
                   by Eden Oasis

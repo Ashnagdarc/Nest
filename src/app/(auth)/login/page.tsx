@@ -222,7 +222,7 @@ export default function LoginPage() {
                   />
                 </div>
                 <CardTitle className="text-2xl font-bold text-primary">Welcome Back!</CardTitle>
-                <CardDescription>Enter your credentials to access GearFlow</CardDescription>
+                <CardDescription>Enter your credentials to access Flow Tag</CardDescription>
               </CardHeader>
               <CardContent>
                 <Form {...form}>

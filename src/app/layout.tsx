@@ -20,13 +20,13 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: 'GearFlow - Equipment Management',
+  title: 'Flow Tag - Equipment Management',
   description: 'Streamline Gear Management for Eden Oasis Realty',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'GearFlow',
+    title: 'Flow Tag',
   },
 };
 

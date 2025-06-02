@@ -1,6 +1,6 @@
-# GearFlow - Equipment Rental & Management System
+# Flow Tag - Equipment Rental & Management System
 
-GearFlow is a modern web application for managing equipment rentals, inventory tracking, and reservations.
+Flow Tag is a modern web application for managing equipment rentals, inventory tracking, and reservations.
 
 ## Features
 
@@ -23,7 +23,7 @@ GearFlow is a modern web application for managing equipment rentals, inventory t
 - **Notifications**: Web Push API by Eden Oasis
 
 <div align="center">
-  <img src="public/logo.png" alt="GearFlow Logo" width="120"/>
+  <img src="public/logo.png" alt="Flow Tag Logo" width="120"/>
   <h3>Professional Equipment Management Platform</h3>
   <p>A modern, full-stack web application for managing real estate equipment and resources.</p>
 </div>
@@ -48,7 +48,7 @@ GearFlow is a modern web application for managing equipment rentals, inventory t
 
 ## Overview
 
-GearFlow is a comprehensive equipment management platform designed specifically for Eden Oasis Realty. It streamlines the process of tracking, requesting, and managing company equipment through an intuitive and modern interface.
+Flow Tag is a comprehensive equipment management platform designed specifically for Eden Oasis Realty. It streamlines the process of tracking, requesting, and managing company equipment through an intuitive and modern interface.
 
 ### Key Benefits
 - **Centralized Management**: Single source of truth for all company equipment
@@ -361,7 +361,7 @@ If you're experiencing issues with real-time updates not working, follow these s
 
 1. **Enable Realtime for Your Tables**
 
-   GearFlow uses Supabase Realtime for live updates. You need to explicitly enable this feature for the tables you want to monitor:
+   Flow Tag uses Supabase Realtime for live updates. You need to explicitly enable this feature for the tables you want to monitor:
 
    ```bash
    # Run our realtime setup helper script
@@ -388,7 +388,7 @@ If you're experiencing issues with real-time updates not working, follow these s
 
 3. **Fallback Mechanism**
 
-   GearFlow has a built-in fallback mechanism that automatically switches to polling if Realtime subscriptions fail. You'll see a notification when this happens.
+   Flow Tag has a built-in fallback mechanism that automatically switches to polling if Realtime subscriptions fail. You'll see a notification when this happens.
 
 ### Database Schema Issues
 
@@ -473,7 +473,7 @@ If Realtime is not enabled, the application will automatically fall back to poll
 
 ## Realtime Updates
 
-GearFlow uses Supabase Realtime to provide live updates to the user interface. When data changes in the database, the UI updates automatically without requiring a page refresh.
+Flow Tag uses Supabase Realtime to provide live updates to the user interface. When data changes in the database, the UI updates automatically without requiring a page refresh.
 
 ### How Realtime Works
 
