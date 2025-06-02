@@ -47,9 +47,9 @@ export default function AdminNotificationsPage() {
     audioRef.current.volume = soundVolume / 100;
 
     // Load user preferences from localStorage
-    const savedSoundEnabled = localStorage.getItem('gearflowSoundEnabled');
-    const savedSoundVolume = localStorage.getItem('gearflowSoundVolume');
-    const savedSoundType = localStorage.getItem('gearflowSoundType');
+    const savedSoundEnabled = localStorage.getItem('flowtagSoundEnabled');
+    const savedSoundVolume = localStorage.getItem('flowtagSoundVolume');
+    const savedSoundType = localStorage.getItem('flowtagSoundType');
 
     if (savedSoundEnabled !== null) setSoundEnabled(savedSoundEnabled === 'true');
     if (savedSoundVolume !== null) setSoundVolume(parseInt(savedSoundVolume));
@@ -60,9 +60,9 @@ export default function AdminNotificationsPage() {
 
   // Save preferences when they change
   useEffect(() => {
-    localStorage.setItem('gearflowSoundEnabled', soundEnabled.toString());
-    localStorage.setItem('gearflowSoundVolume', soundVolume.toString());
-    localStorage.setItem('gearflowSoundType', soundType);
+    localStorage.setItem('flowtagSoundEnabled', soundEnabled.toString());
+    localStorage.setItem('flowtagSoundVolume', soundVolume.toString());
+    localStorage.setItem('flowtagSoundType', soundType);
 
     // Update audio volume
     if (audioRef.current) {
@@ -80,9 +80,9 @@ export default function AdminNotificationsPage() {
       }
 
       // Try using the RPC function first
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_notifications', { 
-        p_limit: 100, 
-        p_offset: 0 
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_notifications', {
+        p_limit: 100,
+        p_offset: 0
       });
 
       if (!rpcError && rpcData) {
@@ -226,7 +226,7 @@ export default function AdminNotificationsPage() {
 
       if (procError) {
         console.log('Stored procedure failed, falling back to direct update:', procError);
-        
+
         // Fallback to direct update
         const { error: updateError } = await supabase
           .from('notifications')

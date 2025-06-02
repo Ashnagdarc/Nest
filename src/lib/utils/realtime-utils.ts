@@ -86,13 +86,18 @@ export async function columnExists(tableName: string, columnName: string): Promi
             .single();
 
         if (error) {
-            logger.error(error, `Failed to check if column ${columnName} in table ${tableName} exists`);
+            logger.error(JSON.stringify(error), `Failed to check if column ${columnName} in table ${tableName} exists`);
+            return false;
+        }
+
+        if (!data) {
+            logger.error(`No data returned when checking if column ${columnName} exists in table ${tableName}`, `columnExists: ${tableName}.${columnName}`);
             return false;
         }
 
         return !!data;
     } catch (error) {
-        logger.error(error, `Error checking if column ${columnName} in table ${tableName} exists`);
+        logger.error(JSON.stringify(error), `Error checking if column ${columnName} in table ${tableName} exists`);
         return false;
     }
 }
@@ -134,6 +139,9 @@ export async function getTableTimestampColumn(tableName: string): Promise<string
             .in('data_type', ['timestamp', 'timestamptz', 'date', 'datetime', 'time'])
             .limit(1);
 
+        if (error) {
+            logger.error(JSON.stringify(error), `Error fetching timestamp columns for ${tableName}`);
+        }
         if (!error && data && data.length > 0) {
             return data[0].column_name;
         }
@@ -147,6 +155,9 @@ export async function getTableTimestampColumn(tableName: string): Promise<string
             .in('data_type', ['integer', 'bigint'])
             .limit(1);
 
+        if (numericError) {
+            logger.error(JSON.stringify(numericError), `Error fetching numeric columns for ${tableName}`);
+        }
         if (!numericError && numericData && numericData.length > 0) {
             // Could be an ID or sequence column which is at least monotonically increasing
             return numericData[0].column_name;
@@ -161,11 +172,14 @@ export async function getTableTimestampColumn(tableName: string): Promise<string
             .eq('column_name', 'id')
             .limit(1);
 
+        if (idError) {
+            logger.error(JSON.stringify(idError), `Error fetching id column for ${tableName}`);
+        }
         if (!idError && idData && idData.length > 0) {
             return 'id'; // Not ideal but better than nothing
         }
     } catch (error) {
-        logger.error(error, `Error finding timestamp column for ${tableName}`);
+        logger.error(JSON.stringify(error), `Error finding timestamp column for ${tableName}`);
     }
 
     return null;
@@ -299,15 +313,15 @@ export function subscribeToTable(
     let subscription: RealtimeSubscription | null = null;
 
     const setupSubscription = () => {
-    try {
+        try {
             const channelName = `public:${tableName}:${Date.now()}`;
             logger.info(`Setting up realtime subscription for ${tableName}`, 'Realtime');
 
-        const channel = supabase
+            const channel = supabase
                 .channel(channelName)
-            .on(
-                'postgres_changes',
-                { event, schema: 'public', table: tableName },
+                .on(
+                    'postgres_changes',
+                    { event, schema: 'public', table: tableName },
                     (payload: RealtimePostgresChangesPayload<any>) => {
                         const recordId = payload.new?.id || (payload.old as any)?.id;
                         logger.debug(`Received ${event} on ${tableName}`, 'Realtime event', {
@@ -315,9 +329,9 @@ export function subscribeToTable(
                             event,
                             recordId
                         });
-                    callback(payload);
-                }
-            )
+                        callback(payload);
+                    }
+                )
                 .on('system', { event: 'error' }, (error: any) => {
                     // Only log actual errors, not info messages labeled as errors
                     if (error && error.message &&
@@ -370,9 +384,9 @@ export function subscribeToTable(
                 isActive: false // Will be updated by subscribe callback
             };
 
-        activeSubscriptions.push(subscription);
-        return subscription;
-    } catch (error) {
+            activeSubscriptions.push(subscription);
+            return subscription;
+        } catch (error) {
             logger.error(error, `Error subscribing to ${tableName}`);
 
             // Retry with exponential backoff
@@ -397,8 +411,8 @@ export function subscribeToTable(
                 return dummySubscription;
             }
 
-        return null;
-    }
+            return null;
+        }
     };
 
     return setupSubscription();
@@ -414,7 +428,7 @@ export function unsubscribeFromTable(subscription: RealtimeSubscription): void {
 
         // Unsubscribe from the channel if it exists
         if (subscription.channel) {
-        subscription.channel.unsubscribe();
+            subscription.channel.unsubscribe();
         }
 
         activeSubscriptions = activeSubscriptions.filter(
@@ -443,10 +457,10 @@ export function cleanupAllSubscriptions(): void {
 }
 
 interface DashboardCallbacks {
-  onGearUpdate?: (payload: any) => void;
-  onMaintenanceUpdate?: (payload: any) => void;
-  onRequestUpdate?: (payload: any) => void;
-  onNotificationUpdate?: (payload: any) => void;
+    onGearUpdate?: (payload: any) => void;
+    onMaintenanceUpdate?: (payload: any) => void;
+    onRequestUpdate?: (payload: any) => void;
+    onNotificationUpdate?: (payload: any) => void;
     onActivityLogUpdate?: (payload: any) => void;
 }
 
@@ -454,31 +468,31 @@ interface DashboardCallbacks {
  * Sets up all necessary real-time subscriptions for the admin dashboard
  */
 export function setupAdminDashboardSubscriptions(callbacks: DashboardCallbacks): () => void {
-  const subscriptions: RealtimeSubscription[] = [];
+    const subscriptions: RealtimeSubscription[] = [];
 
-  // Subscribe to gear changes
-  if (callbacks.onGearUpdate) {
-    const sub = subscribeToTable('gears', '*', callbacks.onGearUpdate);
-    if (sub) subscriptions.push(sub);
-  }
+    // Subscribe to gear changes
+    if (callbacks.onGearUpdate) {
+        const sub = subscribeToTable('gears', '*', callbacks.onGearUpdate);
+        if (sub) subscriptions.push(sub);
+    }
 
-  // Subscribe to maintenance records
-  if (callbacks.onMaintenanceUpdate) {
-    const sub = subscribeToTable('gear_maintenance', '*', callbacks.onMaintenanceUpdate);
-    if (sub) subscriptions.push(sub);
-  }
+    // Subscribe to maintenance records
+    if (callbacks.onMaintenanceUpdate) {
+        const sub = subscribeToTable('gear_maintenance', '*', callbacks.onMaintenanceUpdate);
+        if (sub) subscriptions.push(sub);
+    }
 
-  // Subscribe to gear requests
-  if (callbacks.onRequestUpdate) {
-    const sub = subscribeToTable('gear_requests', '*', callbacks.onRequestUpdate);
-    if (sub) subscriptions.push(sub);
-  }
+    // Subscribe to gear requests
+    if (callbacks.onRequestUpdate) {
+        const sub = subscribeToTable('gear_requests', '*', callbacks.onRequestUpdate);
+        if (sub) subscriptions.push(sub);
+    }
 
-  // Subscribe to notifications
-  if (callbacks.onNotificationUpdate) {
-    const sub = subscribeToTable('notifications', '*', callbacks.onNotificationUpdate);
-    if (sub) subscriptions.push(sub);
-  }
+    // Subscribe to notifications
+    if (callbacks.onNotificationUpdate) {
+        const sub = subscribeToTable('notifications', '*', callbacks.onNotificationUpdate);
+        if (sub) subscriptions.push(sub);
+    }
 
     // Subscribe to activity log
     if (callbacks.onActivityLogUpdate) {
@@ -486,10 +500,10 @@ export function setupAdminDashboardSubscriptions(callbacks: DashboardCallbacks):
         if (sub) subscriptions.push(sub);
     }
 
-  // Return cleanup function
-  return () => {
-    subscriptions.forEach(unsubscribeFromTable);
-  };
+    // Return cleanup function
+    return () => {
+        subscriptions.forEach(unsubscribeFromTable);
+    };
 }
 
 /**

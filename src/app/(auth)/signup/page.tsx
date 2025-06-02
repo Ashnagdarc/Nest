@@ -175,7 +175,7 @@ export default function SignupPage() {
           />
           <h3 className="mt-2 text-xl font-semibold text-primary">Account Created!</h3>
           <p className="text-center text-muted-foreground">
-            Welcome to GearFlow. Redirecting to your dashboard...
+            Welcome to Flow Tag. Redirecting to your dashboard...
           </p>
         </DialogContent>
       </Dialog>

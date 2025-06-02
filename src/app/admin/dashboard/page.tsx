@@ -452,7 +452,7 @@ function Dashboard() {
 
       <footer className="text-center text-sm text-muted-foreground">
         <p>
-          GearFlow Admin Dashboard • &copy; {new Date().getFullYear()}
+          Flow Tag Admin Dashboard • &copy; {new Date().getFullYear()}
         </p>
       </footer>
 

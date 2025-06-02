@@ -1,7 +1,7 @@
 import { Metadata, Viewport } from 'next'
 
 export const metadata: Metadata = {
-    title: 'Reports & Analytics | GearFlow',
+    title: 'Reports & Analytics | Flow Tag',
     description: 'View and analyze equipment usage, maintenance, and request data',
 }
 

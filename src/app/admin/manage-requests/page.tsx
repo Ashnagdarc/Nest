@@ -245,7 +245,7 @@ export default function ManageRequestsPage() {
     audioRef.current = new Audio(NOTIFICATION_SOUND_URL);
 
     // Check for user preference in localStorage
-    const savedSoundPreference = localStorage.getItem('gearflowSoundEnabled');
+    const savedSoundPreference = localStorage.getItem('flowtagSoundEnabled');
     if (savedSoundPreference !== null) {
       setSoundEnabled(savedSoundPreference === 'true');
     }
@@ -253,7 +253,7 @@ export default function ManageRequestsPage() {
 
   // Save sound preference when it changes
   useEffect(() => {
-    localStorage.setItem('gearflowSoundEnabled', soundEnabled.toString());
+    localStorage.setItem('flowtagSoundEnabled', soundEnabled.toString());
   }, [soundEnabled]);
 
   // Add this before the useEffect hooks

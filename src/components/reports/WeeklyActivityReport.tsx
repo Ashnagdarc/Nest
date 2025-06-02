@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Download, FileText, FileSpreadsheet } from "lucide-react";
 import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
 import { DateRange } from 'react-day-picker';
-import { WeeklyUsageReport, GearUsage, generateUsageReportForRange } from "@/services/report";
+import { WeeklyUsageReport, GearUsage, generateUsageReportForRange, UserStats, GearStats } from "@/services/report";
 import { generatePdfReport, generateCsvReport } from "@/services/reportExport";
 
 // Helper to format numbers with commas
@@ -141,78 +141,104 @@ export function WeeklyActivityReport({ dateRange }: WeeklyReportProps) {
             <span className="ml-2">Generating report...</span>
           </div>
         ) : report ? (
-          <div className="space-y-6">
-            {report.gearUsage.length > 0 ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                  <div className="bg-primary/10 p-4 rounded-lg border border-primary/20">
-                    <p className="text-xs text-primary uppercase font-semibold">Total Requests</p>
-                    <p className="text-2xl font-bold">{formatNumber(totals?.requests || 0)}</p>
-                  </div>
-                  <div className="bg-green-500/10 dark:bg-green-900/20 p-4 rounded-lg border border-green-500/20">
-                    <p className="text-xs text-green-500 dark:text-green-400 uppercase font-semibold">Total Check-outs</p>
-                    <p className="text-2xl font-bold">{formatNumber(totals?.checkouts || 0)}</p>
-                  </div>
-                  <div className="bg-purple-500/10 dark:bg-purple-900/20 p-4 rounded-lg border border-purple-500/20">
-                    <p className="text-xs text-purple-500 dark:text-purple-400 uppercase font-semibold">Total Check-ins</p>
-                    <p className="text-2xl font-bold">{formatNumber(totals?.checkins || 0)}</p>
-                  </div>
-                  <div className="bg-yellow-500/10 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-500/20">
-                    <p className="text-xs text-yellow-500 dark:text-yellow-400 uppercase font-semibold">Total Bookings</p>
-                    <p className="text-2xl font-bold">{formatNumber(totals?.bookings || 0)}</p>
-                  </div>
-                  <div className="bg-destructive/10 p-4 rounded-lg border border-destructive/20">
-                    <p className="text-xs text-destructive uppercase font-semibold">Damage Reports</p>
-                    <p className="text-2xl font-bold">{formatNumber(totals?.damages || 0)}</p>
-                  </div>
+          <div className="space-y-8">
+            {/* --- Summary Section --- */}
+            <div className="bg-muted/10 p-4 rounded-lg border">
+              <h3 className="font-semibold text-lg mb-2">Summary & Insights</h3>
+              <p className="text-muted-foreground mb-2">{report.summary}</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+                <div>
+                  <span className="block text-xs text-muted-foreground">Most Active User</span>
+                  <span className="font-bold">{report.mostActiveUser || '-'}</span>
                 </div>
-
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="w-[300px]">Gear Name</TableHead>
-                        <TableHead className="text-center">Requests</TableHead>
-                        <TableHead className="text-center">Check-Outs</TableHead>
-                        <TableHead className="text-center">Check-Ins</TableHead>
-                        <TableHead className="text-center">Bookings</TableHead>
-                        <TableHead className="text-center">Damages</TableHead>
-                        <TableHead className="text-center">Total Activity</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {report.gearUsage.map((gear, index) => (
-                        <TableRow key={gear.id || index} className={index % 2 === 0 ? "bg-card" : "bg-muted/10 hover:bg-muted/20"}>
-                          <TableCell className="font-medium">{gear.gearName}</TableCell>
-                          <TableCell className="text-center">{gear.requestCount}</TableCell>
-                          <TableCell className="text-center">{gear.checkoutCount}</TableCell>
-                          <TableCell className="text-center">{gear.checkinCount}</TableCell>
-                          <TableCell className="text-center">{gear.bookingCount}</TableCell>
-                          <TableCell className="text-center">
-                            {gear.damageCount > 0 ? (
-                              <Badge variant="destructive" className="font-bold">
-                                {gear.damageCount}
-                              </Badge>
-                            ) : (
-                              gear.damageCount
-                            )}
-                          </TableCell>
-                          <TableCell className="text-center font-bold">
-                            {calculateTotalActivity(gear)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                <div>
+                  <span className="block text-xs text-muted-foreground">Most Active Gear</span>
+                  <span className="font-bold">{report.mostActiveGear || '-'}</span>
                 </div>
-              </>
-            ) : (
-              <div className="text-center py-12 bg-muted/10 rounded-lg border">
-                <FileText className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
-                <p className="mt-2 text-muted-foreground">No activity data found for the selected period.</p>
-                <p className="text-sm text-muted-foreground/70">Try selecting a different date range.</p>
+                <div>
+                  <span className="block text-xs text-muted-foreground">Unique Users</span>
+                  <span className="font-bold">{report.uniqueUsers}</span>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground">Avg. Request Duration</span>
+                  <span className="font-bold">{report.avgRequestDuration.toFixed(1)} days</span>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground">Overdue Returns</span>
+                  <span className="font-bold">{report.overdueReturns}</span>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground">Utilization Rate</span>
+                  <span className="font-bold">{report.utilizationRate.toFixed(1)}%</span>
+                </div>
               </div>
-            )}
+            </div>
+            {/* --- User Activity Table --- */}
+            <div className="border rounded-lg overflow-x-auto">
+              <h4 className="font-semibold text-base p-4 pb-0">User Activity</h4>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>User</TableHead>
+                    <TableHead className="text-center">Requests</TableHead>
+                    <TableHead className="text-center">Check-Outs</TableHead>
+                    <TableHead className="text-center">Check-Ins</TableHead>
+                    <TableHead className="text-center">Overdue</TableHead>
+                    <TableHead className="text-center">Damages</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {report.userStats.map((user, idx) => (
+                    <TableRow key={user.id || idx}>
+                      <TableCell>{user.name}</TableCell>
+                      <TableCell className="text-center">{user.requests}</TableCell>
+                      <TableCell className="text-center">{user.checkouts}</TableCell>
+                      <TableCell className="text-center">{user.checkins}</TableCell>
+                      <TableCell className="text-center">{user.overdue}</TableCell>
+                      <TableCell className="text-center">{user.damages}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {/* --- Gear Activity Table (with status/utilization) --- */}
+            <div className="border rounded-lg overflow-x-auto">
+              <h4 className="font-semibold text-base p-4 pb-0">Gear Activity & Status</h4>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>Gear Name</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-center">Requests</TableHead>
+                    <TableHead className="text-center">Check-Outs</TableHead>
+                    <TableHead className="text-center">Check-Ins</TableHead>
+                    <TableHead className="text-center">Bookings</TableHead>
+                    <TableHead className="text-center">Damages</TableHead>
+                    <TableHead className="text-center">Utilization</TableHead>
+                    <TableHead className="text-center">Last Activity</TableHead>
+                    <TableHead className="text-center">Total Activity</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {report.gearUsage.map((gear, index) => (
+                    <TableRow key={gear.id || index}>
+                      <TableCell className="font-medium">{gear.gearName}</TableCell>
+                      <TableCell className="text-center">{gear.status || '-'}</TableCell>
+                      <TableCell className="text-center">{gear.requestCount}</TableCell>
+                      <TableCell className="text-center">{gear.checkoutCount}</TableCell>
+                      <TableCell className="text-center">{gear.checkinCount}</TableCell>
+                      <TableCell className="text-center">{gear.bookingCount}</TableCell>
+                      <TableCell className="text-center">{gear.damageCount > 0 ? (<Badge variant="destructive" className="font-bold">{gear.damageCount}</Badge>) : gear.damageCount}</TableCell>
+                      <TableCell className="text-center">{gear.utilization !== undefined ? `${gear.utilization.toFixed(1)}%` : '-'}</TableCell>
+                      <TableCell className="text-center">{gear.lastActivity ? new Date(gear.lastActivity).toLocaleDateString() : '-'}</TableCell>
+                      <TableCell className="text-center font-bold">{calculateTotalActivity(gear)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {/* --- (Legacy) Gear Activity Table --- */}
+            {/* ... keep the old table for reference or remove if not needed ... */}
           </div>
         ) : (
           <div className="text-center py-12 bg-muted/10 rounded-lg border">

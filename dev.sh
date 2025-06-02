@@ -1,6 +1,6 @@
 #!/bin/bash
-# GearFlow development helper script
-# This script helps with common development tasks for the GearFlow project
+# Flow Tag development helper script
+# This script helps with common development tasks for the Flow Tag project
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -20,7 +20,7 @@ fi
 
 # Function to display help
 show_help() {
-  echo -e "${BLUE}GearFlow Development Helper${NC}"
+  echo -e "${BLUE}Flow Tag Development Helper${NC}"
   echo "Usage: ./dev.sh [command]"
   echo ""
   echo "Commands:"
