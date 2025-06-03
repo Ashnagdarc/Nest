@@ -285,6 +285,7 @@ export default function ManageCheckinsPage() {
         `Your check-in for ${gearNames.join(', ')} has been approved.`
       );
       // Send single Google Chat notification for the group
+      const chatMessage = `[Check-in Approved]\n*User:* ${userProfile?.full_name || 'Unknown User'} (${userProfile?.email || 'Unknown Email'})\n*Items:* ${gearNames.join(', ')}\n*Condition:* ${hasDamaged ? 'Some Damaged' : 'All Good'}\n*Notes:* ${notes || 'None'}\n*Timestamp:* ${new Date().toLocaleString()}`;
       await fetch('/api/notifications/google-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -299,6 +300,7 @@ export default function ManageCheckinsPage() {
             checkinDate: new Date().toLocaleString(),
             condition: hasDamaged ? 'Some Damaged' : 'All Good',
             notes: notes,
+            text: chatMessage
           }
         })
       });
