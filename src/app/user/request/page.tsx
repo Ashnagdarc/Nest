@@ -21,6 +21,7 @@ import { createSystemNotification } from '@/lib/notifications';
 import { createClient } from '@/lib/supabase/client';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
+import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 
 // List of predefined reasons for use
 const reasonOptions = [
@@ -192,6 +193,32 @@ export default function RequestGearPage() {
         });
         throw error;
       }
+
+      // Fetch user profile for notification
+      let userProfile = null;
+      if (userId) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', userId)
+          .single();
+        if (!profileError) userProfile = profileData;
+      }
+
+      // Get gear names for notification
+      const selectedGearNames = availableGears
+        .filter(gear => data.selectedGears.includes(gear.id))
+        .map(gear => gear.name);
+
+      // Send Google Chat notification
+      await notifyGoogleChat(NotificationEventType.USER_REQUEST, {
+        userName: userProfile?.full_name || 'Unknown User',
+        userEmail: userProfile?.email || 'Unknown Email',
+        gearNames: selectedGearNames,
+        reason: data.reason,
+        destination: data.destination,
+        duration: data.duration,
+      });
 
       toast({
         title: "Request Submitted",

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createSystemNotification } from '@/lib/notifications';
 import { PostgrestError } from '@supabase/supabase-js';
+import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 
 type CheckinData = {
   id: string;
@@ -307,6 +308,31 @@ export default function ManageCheckinsPage() {
         });
       }
 
+      // Send Google Chat notification for check-in approval
+      // Fetch admin profile
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user?.id)
+        .single();
+      // Fetch user profile
+      const { data: userProfileForChat } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', selectedCheckin.userId)
+        .single();
+      await notifyGoogleChat(NotificationEventType.ADMIN_APPROVE_CHECKIN, {
+        adminName: adminProfile?.full_name || 'Unknown Admin',
+        adminEmail: adminProfile?.email || 'Unknown Email',
+        userName: userProfileForChat?.full_name || 'Unknown User',
+        userEmail: userProfileForChat?.email || 'Unknown Email',
+        gearName: selectedCheckin.gearName,
+        checkinDate: selectedCheckin.checkinDate,
+        condition: selectedCheckin.condition,
+        notes: selectedCheckin.notes,
+      });
+
       toast({
         title: "Check-in Approved",
         description: "The gear has been successfully checked in.",
@@ -385,6 +411,31 @@ export default function ManageCheckinsPage() {
           }),
         });
       }
+
+      // Send Google Chat notification for check-in rejection
+      // Fetch admin profile
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user?.id)
+        .single();
+      // Fetch user profile
+      const { data: userProfileForChat } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', selectedCheckin.userId)
+        .single();
+      await notifyGoogleChat(NotificationEventType.ADMIN_REJECT_CHECKIN, {
+        adminName: adminProfile?.full_name || 'Unknown Admin',
+        adminEmail: adminProfile?.email || 'Unknown Email',
+        userName: userProfileForChat?.full_name || 'Unknown User',
+        userEmail: userProfileForChat?.email || 'Unknown Email',
+        gearName: selectedCheckin.gearName,
+        checkinDate: selectedCheckin.checkinDate,
+        reason: rejectionReason,
+        notes: selectedCheckin.notes,
+      });
 
       toast({
         title: "Check-in Rejected",

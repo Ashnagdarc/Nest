@@ -138,19 +138,32 @@ export default function LoginPage() {
       if (error || !profile) {
         console.warn("[Redirect Check Failed] Profile not found or error during redirect check for user ID:", userId, "Error:", error?.message, " Signing out.");
         toast({ title: "Profile Missing", description: "Your user profile could not be found during redirection. Please log in again or contact support.", variant: "destructive" });
-        await supabase.auth.signOut().catch(signOutError => console.error("Error signing out:", signOutError));
-        router.push('/login');
+        try {
+          await supabase.auth.signOut();
+        } catch (signOutError) {
+          console.error("Error signing out:", signOutError);
+          toast({ title: "Sign Out Failed", description: "Could not sign you out. Please try again or clear your browser cookies.", variant: "destructive", duration: 10000 });
+        } finally {
+          if (window.location.pathname !== '/login') {
+            router.push('/login');
+          }
+        }
         return;
       }
 
       // Check status again during redirect
       if (profile.status !== 'Active') {
         console.warn("[Redirect Check Aborted] Profile inactive during redirect check for user ID:", userId, "Status:", profile.status, " Signing out.");
-        await supabase.auth.signOut().catch(signOutError => console.error("Error signing out:", signOutError));
-        toast({ title: "Account Inactive", description: `Your account status is ${profile.status}. Please contact support.`, variant: "destructive" });
-        // Prevent redirect loop by checking current path
-        if (window.location.pathname !== '/login') {
-          router.push('/login');
+        try {
+          await supabase.auth.signOut();
+          toast({ title: "Account Inactive", description: `Your account status is ${profile.status}. Please contact support.`, variant: "destructive" });
+        } catch (signOutError) {
+          console.error("Error signing out:", signOutError);
+          toast({ title: "Sign Out Failed", description: "Could not sign you out. Please try again or clear your browser cookies.", variant: "destructive", duration: 10000 });
+        } finally {
+          if (window.location.pathname !== '/login') {
+            router.push('/login');
+          }
         }
         return;
       }
@@ -166,10 +179,15 @@ export default function LoginPage() {
     } catch (e: any) {
       console.error("[Redirect Check Failed] Unexpected error during redirection:", e);
       toast({ title: "Error", description: `An unexpected error occurred during redirection: ${e.message}`, variant: "destructive" });
-      await supabase.auth.signOut().catch(signOutError => console.error("Error signing out during redirect error:", signOutError));
-      // Prevent redirect loop
-      if (window.location.pathname !== '/login') {
-        router.push('/login');
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutError) {
+        console.error("Error signing out during redirect error:", signOutError);
+        toast({ title: "Sign Out Failed", description: "Could not sign you out. Please try again or clear your browser cookies.", variant: "destructive", duration: 10000 });
+      } finally {
+        if (window.location.pathname !== '/login') {
+          router.push('/login');
+        }
       }
     }
   };

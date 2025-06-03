@@ -45,6 +45,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSearchParams } from 'next/navigation';
+import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 
 // --- Dynamically import Lottie ---
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -439,7 +440,7 @@ export default function ManageRequestsPage() {
 
       // Calculate due date based on expected_duration
       const dueDate = new Date(now);
-      dueDate.setDate(dueDate.getDate() + parseInt(request.expected_duration || '7')); // Default to 7 days if not specified
+      dueDate.setDate(dueDate.getDate() + parseInt(request.expected_duration || '7'));
       const formattedDueDate = dueDate.toISOString();
 
       // Update gear status to Checked Out
@@ -532,6 +533,35 @@ export default function ManageRequestsPage() {
           console.warn('Failed to send approval email:', emailError);
         }
       }
+
+      // Send Google Chat notification for approval
+      // Fetch admin profile
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user?.id)
+        .single();
+      // Fetch user profile
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user_id)
+        .single();
+      // Fetch gear names
+      const { data: gearData } = await supabase
+        .from('gears')
+        .select('name')
+        .in('id', gear_ids);
+      const gearNames = gearData ? gearData.map((g: any) => g.name) : [];
+      await notifyGoogleChat(NotificationEventType.ADMIN_APPROVE_REQUEST, {
+        adminName: adminProfile?.full_name || 'Unknown Admin',
+        adminEmail: adminProfile?.email || 'Unknown Email',
+        userName: userProfile?.full_name || 'Unknown User',
+        userEmail: userProfile?.email || 'Unknown Email',
+        gearNames,
+        dueDate: formattedDueDate,
+      });
 
       // Refresh the requests list
       fetchRequests();
@@ -626,7 +656,7 @@ export default function ManageRequestsPage() {
       // Get request details for notification
       const { data: requestDetails, error: detailsError } = await supabase
         .from('gear_requests')
-        .select('user_id')
+        .select('user_id, gear_ids')
         .eq('id', requestToReject)
         .single();
 
@@ -642,6 +672,34 @@ export default function ManageRequestsPage() {
           console.warn('Failed to send notification:', notificationError);
           // Don't throw as this is not critical
         }
+        // Send Google Chat notification for rejection
+        // Fetch admin profile
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const { data: adminProfile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user?.id)
+          .single();
+        // Fetch user profile
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', requestDetails.user_id)
+          .single();
+        // Fetch gear names
+        const { data: gearData } = await supabase
+          .from('gears')
+          .select('name')
+          .in('id', requestDetails.gear_ids || []);
+        const gearNames = gearData ? gearData.map((g: any) => g.name) : [];
+        await notifyGoogleChat(NotificationEventType.ADMIN_REJECT_REQUEST, {
+          adminName: adminProfile?.full_name || 'Unknown Admin',
+          adminEmail: adminProfile?.email || 'Unknown Email',
+          userName: userProfile?.full_name || 'Unknown User',
+          userEmail: userProfile?.email || 'Unknown Email',
+          gearNames,
+          reason: rejectionReason,
+        });
       }
 
       // Show success animation and toast
