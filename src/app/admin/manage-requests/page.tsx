@@ -534,7 +534,6 @@ export default function ManageRequestsPage() {
         }
       }
 
-      // Send Google Chat notification for approval
       // Fetch admin profile
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       const { data: adminProfile } = await supabase
@@ -554,13 +553,21 @@ export default function ManageRequestsPage() {
         .select('name')
         .in('id', gear_ids);
       const gearNames = gearData ? gearData.map((g: any) => g.name) : [];
-      await notifyGoogleChat(NotificationEventType.ADMIN_APPROVE_REQUEST, {
-        adminName: adminProfile?.full_name || 'Unknown Admin',
-        adminEmail: adminProfile?.email || 'Unknown Email',
-        userName: userProfile?.full_name || 'Unknown User',
-        userEmail: userProfile?.email || 'Unknown Email',
-        gearNames,
-        dueDate: formattedDueDate,
+      // Send Google Chat notification for approval
+      await fetch('/api/notifications/google-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'ADMIN_APPROVE_REQUEST',
+          payload: {
+            adminName: adminProfile?.full_name || 'Unknown Admin',
+            adminEmail: adminProfile?.email || 'Unknown Email',
+            userName: userProfile?.full_name || 'Unknown User',
+            userEmail: userProfile?.email || 'Unknown Email',
+            gearNames,
+            dueDate: formattedDueDate,
+          }
+        })
       });
 
       // Refresh the requests list
@@ -661,18 +668,6 @@ export default function ManageRequestsPage() {
         .single();
 
       if (!detailsError && requestDetails) {
-        // Create notification for the user
-        try {
-          await createSystemNotification(
-            requestDetails.user_id,
-            'Gear Request Rejected',
-            `Your gear request has been rejected. Reason: ${rejectionReason}`
-          );
-        } catch (notificationError) {
-          console.warn('Failed to send notification:', notificationError);
-          // Don't throw as this is not critical
-        }
-        // Send Google Chat notification for rejection
         // Fetch admin profile
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         const { data: adminProfile } = await supabase
@@ -692,13 +687,21 @@ export default function ManageRequestsPage() {
           .select('name')
           .in('id', requestDetails.gear_ids || []);
         const gearNames = gearData ? gearData.map((g: any) => g.name) : [];
-        await notifyGoogleChat(NotificationEventType.ADMIN_REJECT_REQUEST, {
-          adminName: adminProfile?.full_name || 'Unknown Admin',
-          adminEmail: adminProfile?.email || 'Unknown Email',
-          userName: userProfile?.full_name || 'Unknown User',
-          userEmail: userProfile?.email || 'Unknown Email',
-          gearNames,
-          reason: rejectionReason,
+        // Send Google Chat notification for rejection
+        await fetch('/api/notifications/google-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventType: 'ADMIN_REJECT_REQUEST',
+            payload: {
+              adminName: adminProfile?.full_name || 'Unknown Admin',
+              adminEmail: adminProfile?.email || 'Unknown Email',
+              userName: userProfile?.full_name || 'Unknown User',
+              userEmail: userProfile?.email || 'Unknown Email',
+              gearNames,
+              reason: rejectionReason,
+            }
+          })
         });
       }
 
