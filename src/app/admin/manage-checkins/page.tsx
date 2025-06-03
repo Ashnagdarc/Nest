@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createSystemNotification } from '@/lib/notifications';
 import { PostgrestError } from '@supabase/supabase-js';
-import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
+import { groupBy } from 'lodash';
 
 type CheckinData = {
   id: string;
@@ -182,146 +182,109 @@ export default function ManageCheckinsPage() {
     setShowRejectDialog(true);
   };
 
-  const handleApproveCheckin = async () => {
-    if (!selectedCheckin) return;
+  const handleApproveAllInGroup = async (requestId: string) => {
+    const group = groupedByRequest[requestId];
+    if (!group || group.length === 0) return;
     setIsApproving(true);
     try {
-      // Step 1: Update checkin status
-      const { error: checkinError } = await supabase
-        .from('checkins')
-        .update({
-          status: 'Completed',
-          updated_at: new Date().toISOString(),
-          approved_by: (await supabase.auth.getUser()).data.user?.id,
-          approved_at: new Date().toISOString()
-        })
-        .eq('id', selectedCheckin.id);
-
-      if (checkinError) throw checkinError;
-
-      // Step 2: Update gear status based on condition
-      const { error: gearError } = await supabase
-        .from('gears')
-        .update({
-          status: selectedCheckin.condition === 'Damaged' ? 'Needs Repair' : 'Available',
-          checked_out_to: null,
-          current_request_id: null,
-          condition: selectedCheckin.condition,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedCheckin.gearId);
-
-      if (gearError) throw gearError;
-
-      // Step 3: Update gear_checkouts record if exists
-      if (selectedCheckin.requestId) {
-        const { error: checkoutError } = await supabase
-          .from('gear_checkouts')
-          .update({
-            status: 'Returned',
-            actual_return_date: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('gear_id', selectedCheckin.gearId)
-          .eq('status', 'Checked Out');
-
-        if (checkoutError) throw checkoutError;
-
-        // Step 4: Update gear_requests status if all gear is returned
-        const { data: request } = await supabase
-          .from('gear_requests')
-          .select('gear_ids, status')
-          .eq('id', selectedCheckin.requestId)
-          .single();
-
-        if (request) {
-          const remainingGears = request.gear_ids.filter(
-            (id: string) => id !== selectedCheckin.gearId
-          );
-          const newStatus = remainingGears.length <= 1 ? 'Returned' : 'Partially Returned';
-
-          const { error: requestError } = await supabase
-            .from('gear_requests')
-            .update({
-              status: newStatus,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', selectedCheckin.requestId);
-
-          if (requestError) throw requestError;
-
-          // Add status history entry
-          await supabase
-            .from('request_status_history')
-            .insert({
-              request_id: selectedCheckin.requestId,
-              status: newStatus,
-              changed_by: (await supabase.auth.getUser()).data.user?.id,
-              note: `Check-in approved for gear ${selectedCheckin.gearName}`
-            });
-        }
-      }
-
-      // Step 5: Log the approval in gear_activity_log
-      await supabase.rpc('log_gear_activity', {
-        p_user_id: selectedCheckin.userId,
-        p_gear_id: selectedCheckin.gearId,
-        p_request_id: selectedCheckin.requestId,
-        p_activity_type: 'Check-in',
-        p_status: 'Completed',
-        p_notes: `Check-in approved by admin`,
-        p_details: JSON.stringify({
-          condition: selectedCheckin.condition,
-          damage_notes: selectedCheckin.damageNotes,
-          approved_by: (await supabase.auth.getUser()).data.user?.id
-        })
-      });
-
-      // Step 6: Create notification for user
-      await createSystemNotification(
-        selectedCheckin.userId,
-        'Check-in Approved',
-        `Your check-in for ${selectedCheckin.gearName} has been approved.`
-      );
-
-      // Step 7: Send check-in confirmation email
-      // Fetch user email and name
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('email, full_name')
-        .eq('id', selectedCheckin.userId)
-        .single();
-      if (userProfile?.email) {
-        await fetch('/api/send-gear-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: userProfile.email,
-            subject: 'Your Gear Check-in Has Been Approved',
-            html:
-              `<h2>Hi ${userProfile.full_name || 'there'},</h2>` +
-              `<p>Your check-in for <b>${selectedCheckin.gearName}</b> has been <b>approved</b> by the admin team.</p>` +
-              `<p>If you have any questions, please contact the admin team.</p>` +
-              `<br/>` +
-              `<p>Thank you,<br/>Eden Oasis Realty Team</p>`
-          }),
-        });
-      }
-
-      // Send Google Chat notification for check-in approval
-      // Fetch admin profile
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      // Get admin info
+      const { data: { user } } = await supabase.auth.getUser();
       const { data: adminProfile } = await supabase
         .from('profiles')
         .select('full_name, email')
         .eq('id', user?.id)
         .single();
-      // Fetch user profile
-      const { data: userProfileForChat } = await supabase
+      // Get user info (all check-ins in group have same user)
+      const { data: userProfile } = await supabase
         .from('profiles')
         .select('full_name, email')
-        .eq('id', selectedCheckin.userId)
+        .eq('id', group[0].userId)
         .single();
+      // Collect gear names
+      const gearNames = (group as Checkin[]).map((c: Checkin) => c.gearName);
+      // Collect checkin IDs
+      const checkinIds = (group as Checkin[]).map((c: Checkin) => c.id);
+      // Collect gear IDs
+      const gearIdList = (group as Checkin[]).map((c: Checkin) => c.gearId);
+      // Collect condition
+      const hasDamaged = (group as Checkin[]).some((c: Checkin) => c.condition === 'Damaged');
+      // Collect notes
+      const notes = (group as Checkin[]).map((c: Checkin) => c.notes).filter((note: string) => Boolean(note)).join(' | ');
+      // Batch update checkins
+      const { error: checkinError } = await supabase
+        .from('checkins')
+        .update({
+          status: 'Completed',
+          updated_at: new Date().toISOString(),
+          approved_by: user?.id,
+          approved_at: new Date().toISOString()
+        })
+        .in('id', checkinIds);
+      if (checkinError) throw checkinError;
+      // Batch update gear statuses
+      for (const c of group as Checkin[]) {
+        await supabase
+          .from('gears')
+          .update({
+            status: c.condition === 'Damaged' ? 'Needs Repair' : 'Available',
+            checked_out_to: null,
+            current_request_id: null,
+            condition: c.condition,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', c.gearId);
+        // Log activity
+        await supabase.rpc('log_gear_activity', {
+          p_user_id: c.userId,
+          p_gear_id: c.gearId,
+          p_request_id: c.requestId,
+          p_activity_type: 'Check-in',
+          p_status: 'Completed',
+          p_notes: `Check-in approved by admin`,
+          p_details: JSON.stringify({
+            condition: c.condition,
+            damage_notes: c.damageNotes,
+            approved_by: user?.id
+          })
+        });
+      }
+      // Update gear_requests status
+      if (requestId) {
+        const { data: request } = await supabase
+          .from('gear_requests')
+          .select('gear_ids, status')
+          .eq('id', requestId)
+          .single();
+        if (request) {
+          const remainingGears = request.gear_ids.filter(
+            (id: string) => !gearIdList.includes(id)
+          );
+          const newStatus = remainingGears.length === 0 ? 'Returned' : 'Partially Returned';
+          await supabase
+            .from('gear_requests')
+            .update({
+              status: newStatus,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', requestId);
+          // Add status history entry
+          await supabase
+            .from('request_status_history')
+            .insert({
+              request_id: requestId,
+              status: newStatus,
+              changed_by: user?.id,
+              note: `Check-in approved for gear: ${gearNames.join(', ')}`
+            });
+        }
+      }
+      // Notify user (system notification)
+      await createSystemNotification(
+        group[0].userId,
+        'Check-in Approved',
+        `Your check-in for ${gearNames.join(', ')} has been approved.`
+      );
+      // Send single Google Chat notification for the group
       await fetch('/api/notifications/google-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -330,32 +293,27 @@ export default function ManageCheckinsPage() {
           payload: {
             adminName: adminProfile?.full_name || 'Unknown Admin',
             adminEmail: adminProfile?.email || 'Unknown Email',
-            userName: userProfileForChat?.full_name || 'Unknown User',
-            userEmail: userProfileForChat?.email || 'Unknown Email',
-            gearName: selectedCheckin.gearName,
-            checkinDate: selectedCheckin.checkinDate,
-            condition: selectedCheckin.condition,
-            notes: selectedCheckin.notes,
+            userName: userProfile?.full_name || 'Unknown User',
+            userEmail: userProfile?.email || 'Unknown Email',
+            gearNames,
+            checkinDate: new Date().toLocaleString(),
+            condition: hasDamaged ? 'Some Damaged' : 'All Good',
+            notes: notes,
           }
         })
       });
-
       toast({
-        title: "Check-in Approved",
-        description: "The gear has been successfully checked in.",
-        variant: "default",
+        title: 'Check-ins Approved',
+        description: `All check-ins for this request have been approved.`,
+        variant: 'default',
       });
-
-      setShowApproveDialog(false);
-      // Refresh the list
       fetchCheckins();
-
     } catch (error) {
-      console.error('Error approving check-in:', error);
+      console.error('Error approving check-ins:', error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to approve check-in. Please try again.",
-        variant: "destructive"
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to approve check-ins. Please try again.',
+        variant: 'destructive',
       });
     } finally {
       setIsApproving(false);
@@ -492,6 +450,135 @@ export default function ManageCheckinsPage() {
     }
   };
 
+  // Group pending check-ins by requestId
+  const pendingCheckins = checkins.filter(c => c.status === 'Pending Admin Approval');
+  const groupedByRequest = groupBy(pendingCheckins, 'requestId');
+
+  // Restore the single check-in approval handler for the dialog
+  const handleApproveCheckin = async () => {
+    if (!selectedCheckin) return;
+    setIsApproving(true);
+    try {
+      // Step 1: Update checkin status
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error: checkinError } = await supabase
+        .from('checkins')
+        .update({
+          status: 'Completed',
+          updated_at: new Date().toISOString(),
+          approved_by: user?.id,
+          approved_at: new Date().toISOString()
+        })
+        .eq('id', selectedCheckin.id);
+      if (checkinError) throw checkinError;
+      // Step 2: Update gear status based on condition
+      await supabase
+        .from('gears')
+        .update({
+          status: selectedCheckin.condition === 'Damaged' ? 'Needs Repair' : 'Available',
+          checked_out_to: null,
+          current_request_id: null,
+          condition: selectedCheckin.condition,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedCheckin.gearId);
+      // Step 3: Update gear_requests status if all gear is returned
+      if (selectedCheckin.requestId) {
+        const { data: request } = await supabase
+          .from('gear_requests')
+          .select('gear_ids, status')
+          .eq('id', selectedCheckin.requestId)
+          .single();
+        if (request) {
+          const remainingGears = request.gear_ids.filter(
+            (id: string) => id !== selectedCheckin.gearId
+          );
+          const newStatus = remainingGears.length <= 1 ? 'Returned' : 'Partially Returned';
+          await supabase
+            .from('gear_requests')
+            .update({
+              status: newStatus,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', selectedCheckin.requestId);
+          // Add status history entry
+          await supabase
+            .from('request_status_history')
+            .insert({
+              request_id: selectedCheckin.requestId,
+              status: newStatus,
+              changed_by: user?.id,
+              note: `Check-in approved for gear ${selectedCheckin.gearName}`
+            });
+        }
+      }
+      // Step 4: Log the approval in gear_activity_log
+      await supabase.rpc('log_gear_activity', {
+        p_user_id: selectedCheckin.userId,
+        p_gear_id: selectedCheckin.gearId,
+        p_request_id: selectedCheckin.requestId,
+        p_activity_type: 'Check-in',
+        p_status: 'Completed',
+        p_notes: `Check-in approved by admin`,
+        p_details: JSON.stringify({
+          condition: selectedCheckin.condition,
+          damage_notes: selectedCheckin.damageNotes,
+          approved_by: user?.id
+        })
+      });
+      // Step 5: Create notification for user
+      await createSystemNotification(
+        selectedCheckin.userId,
+        'Check-in Approved',
+        `Your check-in for ${selectedCheckin.gearName} has been approved.`
+      );
+      // Step 6: Send Google Chat notification for check-in approval
+      const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user?.id)
+        .single();
+      const { data: userProfileForChat } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', selectedCheckin.userId)
+        .single();
+      await fetch('/api/notifications/google-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'ADMIN_APPROVE_CHECKIN',
+          payload: {
+            adminName: adminProfile?.full_name || 'Unknown Admin',
+            adminEmail: adminProfile?.email || 'Unknown Email',
+            userName: userProfileForChat?.full_name || 'Unknown User',
+            userEmail: userProfileForChat?.email || 'Unknown Email',
+            gearNames: [selectedCheckin.gearName],
+            checkinDate: selectedCheckin.checkinDate,
+            condition: selectedCheckin.condition,
+            notes: selectedCheckin.notes,
+          }
+        })
+      });
+      toast({
+        title: 'Check-in Approved',
+        description: 'The gear has been successfully checked in.',
+        variant: 'default',
+      });
+      setShowApproveDialog(false);
+      fetchCheckins();
+    } catch (error) {
+      console.error('Error approving check-in:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to approve check-in. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -574,13 +661,13 @@ export default function ManageCheckinsPage() {
               variants={containerVariants}
               initial="hidden"
               animate="visible"
-              className="space-y-4"
+              className="space-y-8"
             >
-              {checkins
-                .filter(c => c.status === 'Pending Admin Approval')
-                .map((checkin) => (
+              {Object.entries(groupedByRequest).map(([requestId, group]) => {
+                const typedGroup: Checkin[] = group as Checkin[];
+                return (
                   <motion.div
-                    key={checkin.id}
+                    key={requestId}
                     variants={itemVariants}
                     className="border rounded-lg p-4 bg-card hover:bg-accent/5 transition-colors"
                   >
@@ -588,69 +675,43 @@ export default function ManageCheckinsPage() {
                       <div className="space-y-3">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-lg">{checkin.gearName}</h3>
-                            {checkin.condition === 'Damaged' && (
-                              <Badge variant="destructive" className="font-medium">
-                                <AlertTriangle className="h-3 w-3 mr-1" />
-                                Damaged
-                              </Badge>
-                            )}
+                            <h3 className="font-semibold text-lg">Request: {requestId?.slice(0, 8)}</h3>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            Submitted by {checkin.userName}
+                            Submitted by {typedGroup[0].userName}
                           </p>
                         </div>
-
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-4 w-4" />
-                            {checkin.checkinDate?.toLocaleDateString()}
-                          </div>
-                          <Badge variant="outline">
-                            Condition: {checkin.condition}
-                          </Badge>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {typedGroup.map((c: Checkin) => (
+                            <Badge key={c.id} variant={c.condition === 'Damaged' ? 'destructive' : 'outline'}>
+                              {c.gearName} ({c.condition})
+                            </Badge>
+                          ))}
                         </div>
-
-                        {checkin.notes && (
-                          <div className="bg-muted p-3 rounded-md">
+                        {typedGroup.some((c: Checkin) => c.notes) && (
+                          <div className="bg-muted p-3 rounded-md mt-2">
                             <p className="text-sm font-medium">Notes:</p>
-                            <p className="text-sm text-muted-foreground">{checkin.notes}</p>
-                          </div>
-                        )}
-
-                        {checkin.damageNotes && (
-                          <div className="bg-destructive/10 p-3 rounded-md">
-                            <p className="text-sm font-medium text-destructive">Damage Report:</p>
-                            <p className="text-sm text-destructive/90">{checkin.damageNotes}</p>
+                            <p className="text-sm text-muted-foreground">{typedGroup.map((c: Checkin) => c.notes).filter((note: string) => Boolean(note)).join(' | ')}</p>
                           </div>
                         )}
                       </div>
-
                       <div className="flex gap-2">
                         <Button
                           variant="outline"
                           size="sm"
                           className="text-green-600 hover:text-green-800 hover:bg-green-50"
-                          onClick={() => handleApproveClick(checkin)}
+                          onClick={() => handleApproveAllInGroup(requestId)}
+                          loading={isApproving}
                         >
                           <CheckCircle className="h-4 w-4 mr-1" />
-                          Approve
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                          onClick={() => handleRejectClick(checkin)}
-                        >
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Reject
+                          Approve All
                         </Button>
                       </div>
                     </div>
                   </motion.div>
-                ))}
-
-              {checkins.filter(c => c.status === 'Pending Admin Approval').length === 0 && (
+                );
+              })}
+              {pendingCheckins.length === 0 && (
                 <div className="text-center py-12">
                   <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">All Caught Up!</h3>
