@@ -32,6 +32,7 @@ import Papa from 'papaparse';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 
 type Gear = any;
 
@@ -279,19 +280,18 @@ export default function ManageGearsPage() {
   }
 
   const handleAddGear = async (data: any) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to add gear",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setLoading(true);
-
+    setIsSubmitting(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to add gear",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Generate a unique ID for the new gear
       const gearId = crypto.randomUUID();
 
@@ -360,6 +360,21 @@ export default function ManageGearsPage() {
         description: "Gear added successfully",
       });
       setIsAddModalOpen(false);
+
+      // After successful gear creation
+      // Fetch admin profile
+      const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user?.id)
+        .single();
+      await notifyGoogleChat(NotificationEventType.ADMIN_ADD_GEAR, {
+        adminName: adminProfile?.full_name || 'Unknown Admin',
+        adminEmail: adminProfile?.email || 'Unknown Email',
+        gearName: data.name,
+        category: data.category,
+        action: 'add',
+      });
     } catch (error: any) {
       console.error("Error adding gear:", error);
       toast({
@@ -368,25 +383,25 @@ export default function ManageGearsPage() {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
   const handleUpdateGear = async (gear: Gear, updates: Partial<Gear>) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to update gear",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setLoading(true);
-    console.log("Updating gear:", gear.id, "with data:", updates);
-
+    setIsSubmitting(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to update gear",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log("Updating gear:", gear.id, "with data:", updates);
+
       // Handle image upload if there's a new file
       let imageUrl = gear.image_url; // Start with current URL
       if (updates.image && updates.image instanceof File) {
@@ -475,6 +490,21 @@ export default function ManageGearsPage() {
         title: "Success",
         description: "Gear updated successfully",
       });
+
+      // After successful gear update
+      // Fetch admin profile
+      const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user?.id)
+        .single();
+      await notifyGoogleChat(NotificationEventType.ADMIN_EDIT_GEAR, {
+        adminName: adminProfile?.full_name || 'Unknown Admin',
+        adminEmail: adminProfile?.email || 'Unknown Email',
+        gearName: updates.name || gear.name,
+        category: updates.category || gear.category,
+        action: 'edit',
+      });
     } catch (error: any) {
       console.error("Error updating gear:", error);
       toast({
@@ -483,7 +513,7 @@ export default function ManageGearsPage() {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -1212,6 +1242,21 @@ $$;
 
         // Refresh the gears data to get the updated status
         fetchGears();
+
+        // Send Google Chat notification for maintenance action
+        const { data: adminProfile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user?.id)
+          .single();
+        await notifyGoogleChat(NotificationEventType.ADMIN_MAINTENANCE, {
+          adminName: adminProfile?.full_name || 'Unknown Admin',
+          adminEmail: adminProfile?.email || 'Unknown Email',
+          gearName: selectedGear.name,
+          maintenanceStatus: values.status,
+          maintenanceDate: values.date,
+          description: values.description,
+        });
       }
     } catch (err: any) {
       console.log("Exception adding maintenance:", err.message || "Unknown error");

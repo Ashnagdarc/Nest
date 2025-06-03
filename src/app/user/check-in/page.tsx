@@ -26,6 +26,7 @@ import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { History } from 'lucide-react';
 import { Calendar } from 'lucide-react';
+import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 
 // --- Dynamically import Lottie ---
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -288,9 +289,11 @@ export default function CheckInGearPage() {
       const userId = user.id;
 
       // Step 1: Create check-in records for each gear
+      const checkedInGearNames: string[] = [];
       for (const gearId of selectedGears) {
         const gear = checkedOutGears.find(g => g.id === gearId);
         if (!gear) continue;
+        checkedInGearNames.push(gear.name);
 
         // Create a pending check-in record
         const { error: checkinError } = await supabase
@@ -364,6 +367,27 @@ export default function CheckInGearPage() {
           }
         }
       }
+
+      // Fetch user profile for notification
+      let userProfile = null;
+      if (userId) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', userId)
+          .single();
+        if (!profileError) userProfile = profileData;
+      }
+
+      // Send Google Chat notification
+      await notifyGoogleChat(NotificationEventType.USER_CHECKIN, {
+        userName: userProfile?.full_name || 'Unknown User',
+        userEmail: userProfile?.email || 'Unknown Email',
+        gearNames: checkedInGearNames,
+        checkinDate: new Date().toLocaleString(),
+        condition: isDamaged ? 'Damaged' : 'Good',
+        notes: isDamaged ? damageDescription : checkinNotes,
+      });
 
       // Show success message
       toast({

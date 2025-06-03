@@ -2,6 +2,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import rateLimit from 'next-rate-limit';
+import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 
 const limiter = rateLimit({
     interval: 60 * 1000, // 1 minute
@@ -49,6 +50,13 @@ export async function POST(request: NextRequest) {
         if (!authData.user) {
             return NextResponse.json({ success: false, error: 'Failed to create user account' }, { status: 400 });
         }
+
+        // Send Google Chat notification for new user sign up
+        await notifyGoogleChat(NotificationEventType.USER_SIGNUP, {
+            userName: fullName,
+            userEmail: email,
+            signUpDate: new Date().toISOString(),
+        });
 
         // Success: tell frontend to redirect
         return NextResponse.json({

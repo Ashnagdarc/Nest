@@ -89,7 +89,16 @@ export function PopularGearWidget() {
                 end_date: endDate.toISOString(),
             });
 
-            if (!error && Array.isArray(data) && data.length > 0) {
+            if (error) {
+                logger.error("PopularGear RPC error", {
+                    code: error?.code,
+                    message: error?.message,
+                    details: error?.details,
+                    hint: error?.hint,
+                    raw: error
+                });
+                setPopularGear([]);
+            } else if (Array.isArray(data) && data.length > 0) {
                 // Fetch extra details for each gear (category, image_url, status)
                 const gearIds = data.map((g: any) => g.gear_id);
                 const { data: gearDetails, error: gearDetailsError } = await supabase
@@ -107,14 +116,9 @@ export function PopularGearWidget() {
                     }))
                 );
             } else {
-                logger.error("PopularGear RPC error", {
-                    code: error?.code,
-                    message: error?.message,
-                    details: error?.details,
-                    hint: error?.hint,
-                    raw: error
-                });
+                // No error, just no data
                 setPopularGear([]);
+                logger.info("No popular gear found for the selected period.");
             }
         } catch (error: any) {
             logger.error("PopularGear unexpected error", { error });
