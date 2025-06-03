@@ -242,6 +242,42 @@ export default function AdminCalendarPage() {
                 description: `The booking has been ${action.toLowerCase()} successfully.`,
             });
 
+            // Fetch admin profile
+            const { data: adminProfile } = await supabase
+                .from('profiles')
+                .select('full_name, email')
+                .eq('id', user.id)
+                .single();
+            // Fetch user profile
+            const { data: userProfile } = await supabase
+                .from('profiles')
+                .select('full_name, email')
+                .eq('id', selectedEvent.user_id)
+                .single();
+            // Fetch gear name
+            const { data: gearData } = await supabase
+                .from('gears')
+                .select('name')
+                .eq('id', selectedEvent.resource.gear_id)
+                .single();
+            // Send Google Chat notification for booking action
+            await fetch('/api/notifications/google-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    eventType: action === 'Approved' ? 'ADMIN_APPROVE_BOOKING' : 'ADMIN_REJECT_BOOKING',
+                    payload: {
+                        adminName: adminProfile?.full_name || 'Unknown Admin',
+                        adminEmail: adminProfile?.email || 'Unknown Email',
+                        userName: userProfile?.full_name || 'Unknown User',
+                        userEmail: userProfile?.email || 'Unknown Email',
+                        gearName: gearData?.name || 'Unknown Gear',
+                        bookingDate: selectedEvent.resource.date,
+                        notes: adminNotes,
+                    }
+                })
+            });
+
             // Close dialog and refresh events
             setSelectedEvent(null);
             setAdminNotes("");

@@ -368,12 +368,20 @@ export default function ManageGearsPage() {
         .select('full_name, email')
         .eq('id', user?.id)
         .single();
-      await notifyGoogleChat(NotificationEventType.ADMIN_ADD_GEAR, {
-        adminName: adminProfile?.full_name || 'Unknown Admin',
-        adminEmail: adminProfile?.email || 'Unknown Email',
-        gearName: data.name,
-        category: data.category,
-        action: 'add',
+      // Send Google Chat notification for gear add
+      await fetch('/api/notifications/google-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'ADMIN_ADD_GEAR',
+          payload: {
+            adminName: adminProfile?.full_name || 'Unknown Admin',
+            adminEmail: adminProfile?.email || 'Unknown Email',
+            gearName: data.name,
+            category: data.category,
+            action: 'add',
+          }
+        })
       });
     } catch (error: any) {
       console.error("Error adding gear:", error);
@@ -498,12 +506,20 @@ export default function ManageGearsPage() {
         .select('full_name, email')
         .eq('id', user?.id)
         .single();
-      await notifyGoogleChat(NotificationEventType.ADMIN_EDIT_GEAR, {
-        adminName: adminProfile?.full_name || 'Unknown Admin',
-        adminEmail: adminProfile?.email || 'Unknown Email',
-        gearName: updates.name || gear.name,
-        category: updates.category || gear.category,
-        action: 'edit',
+      // Send Google Chat notification for gear edit
+      await fetch('/api/notifications/google-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'ADMIN_EDIT_GEAR',
+          payload: {
+            adminName: adminProfile?.full_name || 'Unknown Admin',
+            adminEmail: adminProfile?.email || 'Unknown Email',
+            gearName: updates.name || gear.name,
+            category: updates.category || gear.category,
+            action: 'edit',
+          }
+        })
       });
     } catch (error: any) {
       console.error("Error updating gear:", error);
@@ -1243,19 +1259,27 @@ $$;
         // Refresh the gears data to get the updated status
         fetchGears();
 
-        // Send Google Chat notification for maintenance action
+        // Send Google Chat notification for maintenance
         const { data: adminProfile } = await supabase
           .from('profiles')
           .select('full_name, email')
           .eq('id', user?.id)
           .single();
-        await notifyGoogleChat(NotificationEventType.ADMIN_MAINTENANCE, {
-          adminName: adminProfile?.full_name || 'Unknown Admin',
-          adminEmail: adminProfile?.email || 'Unknown Email',
-          gearName: selectedGear.name,
-          maintenanceStatus: values.status,
-          maintenanceDate: values.date,
-          description: values.description,
+        // Send Google Chat notification for maintenance
+        await fetch('/api/notifications/google-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventType: 'ADMIN_MAINTENANCE',
+            payload: {
+              adminName: adminProfile?.full_name || 'Unknown Admin',
+              adminEmail: adminProfile?.email || 'Unknown Email',
+              gearName: selectedGear.name,
+              maintenanceStatus: values.status,
+              maintenanceDate: values.date,
+              description: values.description,
+            }
+          })
         });
       }
     } catch (err: any) {

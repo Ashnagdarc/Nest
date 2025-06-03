@@ -322,15 +322,22 @@ export default function ManageCheckinsPage() {
         .select('full_name, email')
         .eq('id', selectedCheckin.userId)
         .single();
-      await notifyGoogleChat(NotificationEventType.ADMIN_APPROVE_CHECKIN, {
-        adminName: adminProfile?.full_name || 'Unknown Admin',
-        adminEmail: adminProfile?.email || 'Unknown Email',
-        userName: userProfileForChat?.full_name || 'Unknown User',
-        userEmail: userProfileForChat?.email || 'Unknown Email',
-        gearName: selectedCheckin.gearName,
-        checkinDate: selectedCheckin.checkinDate,
-        condition: selectedCheckin.condition,
-        notes: selectedCheckin.notes,
+      await fetch('/api/notifications/google-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'ADMIN_APPROVE_CHECKIN',
+          payload: {
+            adminName: adminProfile?.full_name || 'Unknown Admin',
+            adminEmail: adminProfile?.email || 'Unknown Email',
+            userName: userProfileForChat?.full_name || 'Unknown User',
+            userEmail: userProfileForChat?.email || 'Unknown Email',
+            gearName: selectedCheckin.gearName,
+            checkinDate: selectedCheckin.checkinDate,
+            condition: selectedCheckin.condition,
+            notes: selectedCheckin.notes,
+          }
+        })
       });
 
       toast({
@@ -426,15 +433,22 @@ export default function ManageCheckinsPage() {
         .select('full_name, email')
         .eq('id', selectedCheckin.userId)
         .single();
-      await notifyGoogleChat(NotificationEventType.ADMIN_REJECT_CHECKIN, {
-        adminName: adminProfile?.full_name || 'Unknown Admin',
-        adminEmail: adminProfile?.email || 'Unknown Email',
-        userName: userProfileForChat?.full_name || 'Unknown User',
-        userEmail: userProfileForChat?.email || 'Unknown Email',
-        gearName: selectedCheckin.gearName,
-        checkinDate: selectedCheckin.checkinDate,
-        reason: rejectionReason,
-        notes: selectedCheckin.notes,
+      await fetch('/api/notifications/google-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'ADMIN_REJECT_CHECKIN',
+          payload: {
+            adminName: adminProfile?.full_name || 'Unknown Admin',
+            adminEmail: adminProfile?.email || 'Unknown Email',
+            userName: userProfileForChat?.full_name || 'Unknown User',
+            userEmail: userProfileForChat?.email || 'Unknown Email',
+            gearName: selectedCheckin.gearName,
+            checkinDate: selectedCheckin.checkinDate,
+            reason: rejectionReason,
+            notes: selectedCheckin.notes,
+          }
+        })
       });
 
       toast({

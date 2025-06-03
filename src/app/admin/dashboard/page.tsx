@@ -244,6 +244,41 @@ function Dashboard() {
           'Gear Request Approved',
           'Your gear request has been approved and checked out. You can now pick up your equipment.'
         );
+
+        // Fetch admin profile
+        const { data: adminProfile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user_id)
+          .single();
+        // Fetch user profile
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user_id)
+          .single();
+        // Fetch gear names
+        const { data: gearData } = await supabase
+          .from('gears')
+          .select('name')
+          .in('id', gear_ids);
+        const gearNames = gearData ? gearData.map((g: any) => g.name) : [];
+        // Send Google Chat notification for approval
+        await fetch('/api/notifications/google-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventType: 'ADMIN_APPROVE_REQUEST',
+            payload: {
+              adminName: adminProfile?.full_name || 'Unknown Admin',
+              adminEmail: adminProfile?.email || 'Unknown Email',
+              userName: userProfile?.full_name || 'Unknown User',
+              userEmail: userProfile?.email || 'Unknown Email',
+              gearNames,
+              dueDate: formattedDueDate,
+            }
+          })
+        });
       }
       setModalSelectedRequests([]);
       toast({ title: 'Success', description: `Approved ${modalSelectedRequests.length} requests.` });
@@ -296,6 +331,41 @@ function Dashboard() {
             'Gear Request Rejected',
             `Your gear request has been rejected. Reason: ${rejectReason}`
           );
+
+        // Fetch admin profile
+        const { data: adminProfile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user.id)
+          .single();
+        // Fetch user profile
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', requestDetails.user_id)
+          .single();
+        // Fetch gear names
+        const { data: gearData } = await supabase
+          .from('gears')
+          .select('name')
+          .in('id', requestDetails.gear_ids || []);
+        const gearNames = gearData ? gearData.map((g: any) => g.name) : [];
+        // Send Google Chat notification for rejection
+        await fetch('/api/notifications/google-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventType: 'ADMIN_REJECT_REQUEST',
+            payload: {
+              adminName: adminProfile?.full_name || 'Unknown Admin',
+              adminEmail: adminProfile?.email || 'Unknown Email',
+              userName: userProfile?.full_name || 'Unknown User',
+              userEmail: userProfile?.email || 'Unknown Email',
+              gearNames,
+              reason: rejectReason,
+            }
+          })
+        });
       }
       setModalSelectedRequests([]);
       setRejectReason('');

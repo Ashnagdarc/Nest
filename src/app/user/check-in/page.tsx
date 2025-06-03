@@ -380,13 +380,20 @@ export default function CheckInGearPage() {
       }
 
       // Send Google Chat notification
-      await notifyGoogleChat(NotificationEventType.USER_CHECKIN, {
-        userName: userProfile?.full_name || 'Unknown User',
-        userEmail: userProfile?.email || 'Unknown Email',
-        gearNames: checkedInGearNames,
-        checkinDate: new Date().toLocaleString(),
-        condition: isDamaged ? 'Damaged' : 'Good',
-        notes: isDamaged ? damageDescription : checkinNotes,
+      await fetch('/api/notifications/google-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'USER_CHECKIN',
+          payload: {
+            userName: userProfile?.full_name || 'Unknown User',
+            userEmail: userProfile?.email || 'Unknown Email',
+            gearNames: checkedInGearNames,
+            checkinDate: new Date().toLocaleString(),
+            condition: isDamaged ? 'Damaged' : 'Good',
+            notes: isDamaged ? damageDescription : checkinNotes,
+          }
+        })
       });
 
       // Show success message
