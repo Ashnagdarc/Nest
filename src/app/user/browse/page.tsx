@@ -241,6 +241,30 @@ export default function BrowseGearsPage() {
       // Create notification for the user
       await createGearNotification(user.id, gear.name, 'checkout');
 
+      // Fetch user profile for notification
+      let userProfile = null;
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user.id)
+        .single();
+      if (!profileError) userProfile = profileData;
+
+      // Send Google Chat notification for direct checkout
+      await fetch('/api/notifications/google-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'USER_CHECKOUT',
+          payload: {
+            userName: userProfile?.full_name || 'Unknown User',
+            userEmail: userProfile?.email || 'Unknown Email',
+            gearName: gear.name,
+            checkoutDate: now.toLocaleString(),
+          }
+        })
+      });
+
       toast({
         title: "Success",
         description: `Successfully checked out ${gear.name}`,
