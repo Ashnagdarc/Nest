@@ -72,7 +72,7 @@ export async function notifyGoogleChat(eventType: NotificationEventType, payload
         return;
     }
     // Always add a timestamp if not present
-    const message = template({ ...payload, timestamp: payload.timestamp || new Date() });
+    const message = payload.text || template({ ...payload, timestamp: payload.timestamp || new Date() });
     try {
         // Debug log
         console.log('[GoogleChat] Sending to:', webhookUrl, 'Message:', message);
