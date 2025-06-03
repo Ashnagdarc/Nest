@@ -122,6 +122,7 @@ export async function generateUsageReportForRange(
       end_date: endDate.toISOString()
     });
 
+    console.log('[DEBUG] get_weekly_activity_report data:', data);
     if (error) {
       console.error('Error generating weekly report:', error);
       throw error;
@@ -141,27 +142,32 @@ export async function generateUsageReportForRange(
       bookingCount: item.booking_count,
       damageCount: item.damage_count
     }));
+    console.log('[DEBUG] gearUsage:', gearUsage);
 
     // 2. User stats aggregation
     const { data: userRows } = await supabase
       .from('profiles')
       .select('id, full_name');
+    console.log('[DEBUG] userRows:', userRows);
     const { data: requests } = await supabase
       .from('gear_requests')
       .select('id, user_id, created_at, due_date, checkout_date, status')
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString());
+    console.log('[DEBUG] requests:', requests);
     const { data: checkouts } = await supabase
       .from('gear_checkouts')
       .select('id, user_id, checkout_date, expected_return_date, actual_return_date, status')
       .gte('checkout_date', startDate.toISOString())
       .lte('checkout_date', endDate.toISOString());
+    console.log('[DEBUG] checkouts:', checkouts);
     const { data: damages } = await supabase
       .from('gear_maintenance')
       .select('id, user_id, created_at, maintenance_type')
       .eq('maintenance_type', 'Damage Report')
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString());
+    console.log('[DEBUG] damages:', damages);
     // Overdue: checkouts not returned by expected_return_date
     const overdueReturns = (checkouts || []).filter((c: any) => c.status !== 'Returned' && c.expected_return_date && new Date(c.expected_return_date) < new Date()).length;
     // Average request duration (in days)
@@ -189,11 +195,13 @@ export async function generateUsageReportForRange(
         damages: userDamages
       };
     });
+    console.log('[DEBUG] userStats:', userStats);
     // Most active user/gear
     const mostActiveUser = userStats.sort((a: UserStats, b: UserStats) => (b.requests + b.checkouts) - (a.requests + a.checkouts))[0]?.name || '';
     const mostActiveGear = gearUsage.sort((a: GearStats, b: GearStats) => (b.requestCount + b.checkoutCount) - (a.requestCount + a.checkoutCount))[0]?.gearName || '';
     // Utilization rate: checked out gears / total gears
     const { data: allGears } = await supabase.from('gears').select('id, status, updated_at');
+    console.log('[DEBUG] allGears:', allGears);
     const checkedOutGears = (allGears || []).filter((g: any) => g.status === 'Checked Out').length;
     const utilizationRate = allGears && allGears.length ? (checkedOutGears / allGears.length) * 100 : 0;
     // Add status/lastActivity/utilization to gearUsage
@@ -207,7 +215,7 @@ export async function generateUsageReportForRange(
     const uniqueUsers = userStats.filter(u => u.requests + u.checkouts > 0).length;
     // Summary/notes (simple version)
     const summary = `In this period, there were ${requests?.length || 0} requests, ${checkouts?.length || 0} check-outs, and ${damages?.length || 0} damage reports. ${uniqueUsers} users participated. The most active user was ${mostActiveUser}, and the most active gear was ${mostActiveGear}. Average request duration was ${avgRequestDuration.toFixed(1)} days. There were ${overdueReturns} overdue returns. Utilization rate: ${utilizationRate.toFixed(1)}%.`;
-    return {
+    const reportObj = {
       startDate: formattedStartDate,
       endDate: formattedEndDate,
       gearUsage,
@@ -220,6 +228,8 @@ export async function generateUsageReportForRange(
       overdueReturns,
       utilizationRate
     };
+    console.log('[DEBUG] Final report object:', reportObj);
+    return reportObj;
   } catch (error) {
     console.error('Failed to generate weekly usage report:', error);
 
