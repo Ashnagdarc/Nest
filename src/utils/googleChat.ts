@@ -53,6 +53,9 @@ const messageTemplates: Record<NotificationEventType, (payload: any) => string> 
 
 // Main notification function
 export async function notifyGoogleChat(eventType: NotificationEventType, payload: any) {
+    // Debug: Print environment variables
+    console.log('GOOGLE_CHAT_WEBHOOK_URL:', process.env.GOOGLE_CHAT_WEBHOOK_URL);
+    console.log('GOOGLE_CHAT_WEBHOOK_URL_DEV:', process.env.GOOGLE_CHAT_WEBHOOK_URL_DEV);
     // Only send in production (or set up separate webhooks for staging/dev)
     if (process.env.NODE_ENV !== 'production' && !process.env.GOOGLE_CHAT_WEBHOOK_URL_DEV) {
         console.log('[GoogleChat] Skipping notification in non-production environment.');

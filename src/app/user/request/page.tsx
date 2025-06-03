@@ -211,13 +211,20 @@ export default function RequestGearPage() {
         .map(gear => gear.name);
 
       // Send Google Chat notification
-      await notifyGoogleChat(NotificationEventType.USER_REQUEST, {
-        userName: userProfile?.full_name || 'Unknown User',
-        userEmail: userProfile?.email || 'Unknown Email',
-        gearNames: selectedGearNames,
-        reason: data.reason,
-        destination: data.destination,
-        duration: data.duration,
+      await fetch('/api/notifications/google-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'USER_REQUEST',
+          payload: {
+            userName: userProfile?.full_name || 'Unknown User',
+            userEmail: userProfile?.email || 'Unknown Email',
+            gearNames: selectedGearNames,
+            reason: data.reason,
+            destination: data.destination,
+            duration: data.duration,
+          }
+        })
       });
 
       toast({
