@@ -338,7 +338,8 @@ export default function UserDashboardPage() {
             callback: () => {
               fetchUserStats();
               fetchAvailableGears();
-            }
+            },
+            pollingInterval: 30000 // 30 seconds fallback polling
           });
 
           // Store the cleanup function

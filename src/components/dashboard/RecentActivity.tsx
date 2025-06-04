@@ -172,7 +172,8 @@ export function RecentActivity({ embedded = false }: RecentActivityProps) {
             },
             callback: () => {
                 fetchActivity();
-            }
+            },
+            pollingInterval: 30000 // 30 seconds fallback polling
         });
 
         const checkinsSubscription = createSupabaseSubscription({
@@ -185,7 +186,8 @@ export function RecentActivity({ embedded = false }: RecentActivityProps) {
             },
             callback: () => {
                 fetchActivity();
-            }
+            },
+            pollingInterval: 30000 // 30 seconds fallback polling
         });
 
         return () => {

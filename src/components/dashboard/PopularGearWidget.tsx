@@ -151,19 +151,22 @@ export function PopularGearWidget() {
                 supabase,
                 channel: 'popular-gear-updates-insert',
                 config: { event: 'INSERT', schema: 'public', table: 'gears' },
-                callback: fetchPopularGearWithScroll
+                callback: fetchPopularGearWithScroll,
+                pollingInterval: 30000
             }),
             createSupabaseSubscription({
                 supabase,
                 channel: 'popular-gear-updates-update',
                 config: { event: 'UPDATE', schema: 'public', table: 'gears' },
-                callback: fetchPopularGearWithScroll
+                callback: fetchPopularGearWithScroll,
+                pollingInterval: 30000
             }),
             createSupabaseSubscription({
                 supabase,
                 channel: 'popular-gear-updates-delete',
                 config: { event: 'DELETE', schema: 'public', table: 'gears' },
-                callback: fetchPopularGearWithScroll
+                callback: fetchPopularGearWithScroll,
+                pollingInterval: 30000
             })
         ];
 
