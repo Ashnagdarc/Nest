@@ -86,7 +86,16 @@ export async function columnExists(tableName: string, columnName: string): Promi
             .single();
 
         if (error) {
-            logger.error(JSON.stringify(error), `Failed to check if column ${columnName} in table ${tableName} exists`);
+            logger.error(
+                {
+                    error,
+                    message: error.message,
+                    stack: error.stack,
+                    table: tableName,
+                    column: columnName
+                },
+                `Failed to check if column ${columnName} in table ${tableName} exists`
+            );
             return false;
         }
 
@@ -97,7 +106,16 @@ export async function columnExists(tableName: string, columnName: string): Promi
 
         return !!data;
     } catch (error) {
-        logger.error(JSON.stringify(error), `Error checking if column ${columnName} in table ${tableName} exists`);
+        logger.error(
+            {
+                error,
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+                table: tableName,
+                column: columnName
+            },
+            `Error checking if column ${columnName} in table ${tableName} exists`
+        );
         return false;
     }
 }
@@ -196,12 +214,19 @@ async function pollTableChanges(
     try {
         const supabase = createClient();
 
+        // Defensive: Check if table exists first
+        const exists = await tableExists(tableName);
+        if (!exists) {
+            logger.error(`Table ${tableName} does not exist. Skipping polling.`, 'Polling fallback error');
+            return lastFetchedAt;
+        }
+
         // Find a suitable column for ordering
         let timestampColumn = await getTableTimestampColumn(tableName);
 
         if (!timestampColumn) {
             logger.error(
-                new Error(`Table ${tableName} has no suitable timestamp column for polling`),
+                `No suitable timestamp column found for table ${tableName}. Skipping polling.`,
                 'Polling fallback error'
             );
             return lastFetchedAt;

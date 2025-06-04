@@ -25,6 +25,12 @@ export interface WeeklyUsageReport {
   avgRequestDuration: number;
   overdueReturns: number;
   utilizationRate: number;
+  activityTrends?: Array<{
+    date: string;
+    requests: number;
+    checkouts: number;
+    damages: number;
+  }>;
 }
 
 /**
@@ -82,12 +88,14 @@ export interface UserStats {
   checkins: number;
   overdue: number;
   damages: number;
+  avatar_url?: string;
 }
 
 export interface GearStats extends GearUsage {
   status?: string;
   lastActivity?: string;
   utilization?: number;
+  image_url?: string;
 }
 
 /**
@@ -132,22 +140,30 @@ export async function generateUsageReportForRange(
     const formattedStartDate = format(startDate, 'yyyy-MM-dd');
     const formattedEndDate = format(endDate, 'yyyy-MM-dd');
 
-    // Transform the data into the expected format
-    const gearUsage: GearStats[] = (data as WeeklyReportResult[]).map(item => ({
-      id: item.gear_id,
-      gearName: item.gear_name,
-      requestCount: item.request_count,
-      checkoutCount: item.checkout_count,
-      checkinCount: item.checkin_count,
-      bookingCount: item.booking_count,
-      damageCount: item.damage_count
-    }));
+    // Fetch all gear image URLs
+    const { data: allGearsRaw } = await supabase.from('gears').select('id, status, updated_at, image_url');
+    const gearUsage: GearStats[] = (data as WeeklyReportResult[]).map(item => {
+      const gearRow = (allGearsRaw || []).find((g: any) => g.id === item.gear_id);
+      return {
+        id: item.gear_id,
+        gearName: item.gear_name,
+        requestCount: item.request_count,
+        checkoutCount: item.checkout_count,
+        checkinCount: item.checkin_count,
+        bookingCount: item.booking_count,
+        damageCount: item.damage_count,
+        status: gearRow?.status,
+        lastActivity: gearRow?.updated_at,
+        utilization: undefined, // set below
+        image_url: gearRow?.image_url
+      };
+    });
     console.log('[DEBUG] gearUsage:', gearUsage);
 
     // 2. User stats aggregation
     const { data: userRows } = await supabase
       .from('profiles')
-      .select('id, full_name');
+      .select('id, full_name, avatar_url');
     console.log('[DEBUG] userRows:', userRows);
     const { data: requests } = await supabase
       .from('gear_requests')
@@ -192,7 +208,8 @@ export async function generateUsageReportForRange(
         checkouts: userCheckouts.length,
         checkins: userCheckins.length,
         overdue: userOverdue,
-        damages: userDamages
+        damages: userDamages,
+        avatar_url: u.avatar_url
       };
     });
     console.log('[DEBUG] userStats:', userStats);
@@ -200,21 +217,36 @@ export async function generateUsageReportForRange(
     const mostActiveUser = userStats.sort((a: UserStats, b: UserStats) => (b.requests + b.checkouts) - (a.requests + a.checkouts))[0]?.name || '';
     const mostActiveGear = gearUsage.sort((a: GearStats, b: GearStats) => (b.requestCount + b.checkoutCount) - (a.requestCount + a.checkoutCount))[0]?.gearName || '';
     // Utilization rate: checked out gears / total gears
-    const { data: allGears } = await supabase.from('gears').select('id, status, updated_at');
+    const allGears = allGearsRaw;
     console.log('[DEBUG] allGears:', allGears);
     const checkedOutGears = (allGears || []).filter((g: any) => g.status === 'Checked Out').length;
     const utilizationRate = allGears && allGears.length ? (checkedOutGears / allGears.length) * 100 : 0;
-    // Add status/lastActivity/utilization to gearUsage
+    // Add utilization to gearUsage
     gearUsage.forEach(gear => {
-      const gearRow = (allGears || []).find((g: any) => g.id === gear.id);
-      gear.status = gearRow?.status;
-      gear.lastActivity = gearRow?.updated_at;
       gear.utilization = utilizationRate;
     });
     // Unique users
     const uniqueUsers = userStats.filter(u => u.requests + u.checkouts > 0).length;
     // Summary/notes (simple version)
     const summary = `In this period, there were ${requests?.length || 0} requests, ${checkouts?.length || 0} check-outs, and ${damages?.length || 0} damage reports. ${uniqueUsers} users participated. The most active user was ${mostActiveUser}, and the most active gear was ${mostActiveGear}. Average request duration was ${avgRequestDuration.toFixed(1)} days. There were ${overdueReturns} overdue returns. Utilization rate: ${utilizationRate.toFixed(1)}%.`;
+    // --- Activity Trends ---
+    // Group requests, checkouts, and damages by day
+    const trendMap: Record<string, { requests: number; checkouts: number; damages: number }> = {};
+    (requests || []).forEach((r: any) => {
+      const d = r.created_at ? format(new Date(r.created_at), 'yyyy-MM-dd') : null;
+      if (d) trendMap[d] = { ...(trendMap[d] || { requests: 0, checkouts: 0, damages: 0 }), requests: (trendMap[d]?.requests || 0) + 1 };
+    });
+    (checkouts || []).forEach((c: any) => {
+      const d = c.checkout_date ? format(new Date(c.checkout_date), 'yyyy-MM-dd') : null;
+      if (d) trendMap[d] = { ...(trendMap[d] || { requests: 0, checkouts: 0, damages: 0 }), checkouts: (trendMap[d]?.checkouts || 0) + 1 };
+    });
+    (damages || []).forEach((dmg: any) => {
+      const d = dmg.created_at ? format(new Date(dmg.created_at), 'yyyy-MM-dd') : null;
+      if (d) trendMap[d] = { ...(trendMap[d] || { requests: 0, checkouts: 0, damages: 0 }), damages: (trendMap[d]?.damages || 0) + 1 };
+    });
+    const activityTrends = Object.entries(trendMap)
+      .map(([date, v]) => ({ date, ...v }))
+      .sort((a, b) => a.date.localeCompare(b.date));
     const reportObj = {
       startDate: formattedStartDate,
       endDate: formattedEndDate,
@@ -226,7 +258,8 @@ export async function generateUsageReportForRange(
       uniqueUsers,
       avgRequestDuration,
       overdueReturns,
-      utilizationRate
+      utilizationRate,
+      activityTrends
     };
     console.log('[DEBUG] Final report object:', reportObj);
     return reportObj;
