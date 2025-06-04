@@ -3,67 +3,100 @@
 import { useState, useEffect } from 'react';
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, BellOff } from 'lucide-react';
-import { toggleSounds, areSoundsEnabled, loadSoundPreferences } from '@/lib/soundUtils';
+import { Bell, Mail, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/use-toast';
+import { createClient } from '@/lib/supabase/client';
+
+const EVENT_TYPES = [
+    { key: 'gear_requests', label: 'Gear Requests' },
+    { key: 'announcements', label: 'Announcements' },
+    { key: 'maintenance', label: 'Maintenance' },
+    { key: 'profile_update', label: 'Profile Updates' },
+];
+const CHANNELS = [
+    { key: 'in_app', label: 'In-App', icon: Bell },
+    { key: 'email', label: 'Email', icon: Mail },
+    { key: 'push', label: 'Push', icon: Smartphone },
+];
 
 export default function NotificationSettings() {
-    const [soundsEnabled, setSoundsEnabled] = useState(true);
+    const [preferences, setPreferences] = useState<any>({});
+    const [loading, setLoading] = useState(true);
+    const supabase = createClient();
 
-    // Load preferences on mount
     useEffect(() => {
-        loadSoundPreferences();
-        setSoundsEnabled(areSoundsEnabled());
-    }, []);
+        // Fetch current user preferences
+        async function fetchPrefs() {
+            setLoading(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase.from('profiles').select('notification_preferences').eq('id', user.id).single();
+                setPreferences(profile?.notification_preferences || {});
+            }
+            setLoading(false);
+        }
+        fetchPrefs();
+    }, [supabase]);
 
-    const handleToggleSound = (enabled: boolean) => {
-        setSoundsEnabled(enabled);
-        toggleSounds(enabled);
+    const handleToggle = (channel: string, event: string, value: boolean) => {
+        setPreferences((prev: any) => ({
+            ...prev,
+            [channel]: {
+                ...(prev[channel] || {}),
+                [event]: value,
+            },
+        }));
+    };
+
+    const handleSave = async () => {
+        setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            await supabase.from('profiles').update({ notification_preferences: preferences }).eq('id', user.id);
+            toast({ title: 'Preferences Saved', description: 'Your notification preferences have been updated.' });
+        }
+        setLoading(false);
     };
 
     return (
-        <div className="flex items-center space-x-2 mt-2">
-            <div className="flex flex-col space-y-2">
-                <div className="flex items-center gap-4">
-                    <Switch
-                        id="notification-sounds"
-                        checked={soundsEnabled}
-                        onCheckedChange={handleToggleSound}
-                    />
-                    <Label htmlFor="notification-sounds" className="flex items-center gap-2">
-                        {soundsEnabled ? (
-                            <>
-                                <Bell className="h-4 w-4" />
-                                <span>Notification Sounds Enabled</span>
-                            </>
-                        ) : (
-                            <>
-                                <BellOff className="h-4 w-4" />
-                                <span>Notification Sounds Disabled</span>
-                            </>
-                        )}
-                    </Label>
-                </div>
-
-                <div className="text-xs text-muted-foreground ml-12">
-                    {soundsEnabled
-                        ? "You'll hear a sound when new notifications arrive and when you log in with unread announcements."
-                        : "No sounds will be played for notifications. Turn this on to hear notification alerts."}
-                </div>
-
-                {/* Test sound button - only visible when sounds are enabled */}
-                {soundsEnabled && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-[180px] ml-12"
-                        onClick={() => import('@/lib/soundUtils').then(utils => utils.playNotificationSound('bell'))}
-                    >
-                        <Bell className="h-3 w-3 mr-2" />
-                        Test Sound
-                    </Button>
-                )}
+        <div className="space-y-6 mt-4">
+            <h3 className="text-lg font-semibold mb-2">Notification Preferences</h3>
+            <div className="overflow-x-auto">
+                <table className="min-w-full border rounded-lg">
+                    <thead>
+                        <tr>
+                            <th className="p-2 text-left">Event</th>
+                            {CHANNELS.map(channel => (
+                                <th key={channel.key} className="p-2 text-center">
+                                    <span className="flex items-center justify-center gap-1">
+                                        <channel.icon className="h-4 w-4" /> {channel.label}
+                                    </span>
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {EVENT_TYPES.map(event => (
+                            <tr key={event.key} className="border-t">
+                                <td className="p-2 font-medium">{event.label}</td>
+                                {CHANNELS.map(channel => (
+                                    <td key={channel.key} className="p-2 text-center">
+                                        <Switch
+                                            checked={!!preferences?.[channel.key]?.[event.key]}
+                                            onCheckedChange={val => handleToggle(channel.key, event.key, val)}
+                                            disabled={loading}
+                                        />
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
+            <Button onClick={handleSave} disabled={loading} className="mt-4">
+                Save Preferences
+            </Button>
         </div>
     );
 } 

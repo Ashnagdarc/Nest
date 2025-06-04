@@ -29,6 +29,8 @@ import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { useToast } from "@/hooks/use-toast";
 import type { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
+import { DashboardHeader } from '@/components/DashboardHeader';
+import { useFCM } from '@/hooks/useFCM';
 
 const adminNavItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: Home },
@@ -72,6 +74,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : 'A';
 
+  // Add push notification registration
+  useFCM(adminUser?.id ?? '');
+
   return (
     <SidebarProvider defaultOpen={!isMobile}>
       <Sidebar collapsible="icon">
@@ -95,7 +100,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <span className="truncate">Flow Tag Admin</span>
               </Link>
             </div>
-            <div className="group-data-[state=collapsed]:hidden">
+            <div className="flex items-center gap-2 group-data-[state=collapsed]:hidden">
               <ThemeToggle />
             </div>
           </div>
@@ -176,6 +181,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </SidebarTrigger>
           </div>
         </div>
+        <DashboardHeader />
         <div className="p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
           <motion.div
             key={pathname}

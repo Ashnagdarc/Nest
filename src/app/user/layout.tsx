@@ -27,6 +27,8 @@ import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { useIsMobile } from '@/hooks/use-mobile';
 import CustomHamburger from '@/components/CustomHamburger';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
+import { useFCM } from '@/hooks/useFCM';
+import { DashboardHeader } from '@/components/DashboardHeader';
 
 const userNavItems = [
   { href: '/user/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -69,6 +71,9 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
 
   const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
 
+  // Add push notification registration
+  useFCM(currentUser?.id ?? null);
+
   return (
     <SidebarProvider defaultOpen={!isMobile}>
       <Sidebar collapsible="icon">
@@ -94,7 +99,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
                 <span className="truncate">Flow Tag User</span>
               </Link>
             </div>
-            <div className="group-data-[state=collapsed]:hidden">
+            <div className="flex items-center gap-2 group-data-[state=collapsed]:hidden">
               <ThemeToggle />
             </div>
           </div>
@@ -176,6 +181,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
             </SidebarTrigger>
           </div>
         </div>
+        <DashboardHeader />
         <div className="p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
           <motion.div
             key={pathname}
