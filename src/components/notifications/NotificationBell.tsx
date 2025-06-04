@@ -14,11 +14,26 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { Notification as NotificationType } from '@/services/notification';
+
+type Notification = NotificationType & {
+    category?: string;
+    metadata?: Record<string, any>;
+};
+
+const CATEGORY_TABS = [
+    { key: 'all', label: 'All' },
+    { key: 'request', label: 'Requests' },
+    { key: 'announcement', label: 'Announcements' },
+    { key: 'maintenance_record', label: 'Maintenance' },
+    { key: 'system', label: 'System' },
+];
 
 export function NotificationBell() {
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
     const [isOpen, setIsOpen] = useState(false);
     const [hasPulse, setHasPulse] = useState(false);
+    const [activeTab, setActiveTab] = useState('all');
 
     // Add pulse animation when new notifications arrive
     useEffect(() => {
@@ -35,6 +50,11 @@ export function NotificationBell() {
             setHasPulse(false);
         }
     }, [isOpen]);
+
+    // Filter notifications by category
+    const filteredNotifications = activeTab === 'all'
+        ? notifications
+        : notifications.filter(n => n.category === activeTab);
 
     return (
         <DropdownMenu
@@ -94,28 +114,49 @@ export function NotificationBell() {
                         </Button>
                     )}
                 </div>
+                {/* Category Tabs */}
+                <div className="flex border-b">
+                    {CATEGORY_TABS.map(tab => (
+                        <button
+                            key={tab.key}
+                            className={`flex-1 py-2 text-xs font-medium ${activeTab === tab.key ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground'}`}
+                            onClick={() => setActiveTab(tab.key)}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
                 <ScrollArea className="h-[300px]">
-                    {notifications.length === 0 ? (
+                    {filteredNotifications.length === 0 ? (
                         <div className="p-4 text-center text-muted-foreground">
                             No notifications
                         </div>
                     ) : (
-                        notifications.map((notification) => (
+                        filteredNotifications.map((notification) => (
                             <DropdownMenuItem
                                 key={notification.id}
-                                className={`flex flex-col items-start p-4 cursor-pointer transition-colors ${!notification.read ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-accent'}`}
+                                className={`flex flex-col items-start p-4 cursor-pointer transition-colors ${!notification.is_read ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-accent'}`}
                                 onClick={() => markAsRead(notification.id)}
                             >
                                 <div className="flex items-start justify-between w-full">
                                     <div>
-                                        <p className={`font-medium ${!notification.read ? 'text-primary' : ''}`}>
+                                        <p className={`font-medium ${!notification.is_read ? 'text-primary' : ''}`}>
                                             {notification.title}
                                         </p>
                                         <p className="text-sm text-muted-foreground">
                                             {notification.message}
                                         </p>
+                                        {/* Show metadata if available */}
+                                        {notification.metadata && (
+                                            <div className="text-xs mt-1 text-muted-foreground">
+                                                {notification.metadata.gear_id && <span>Gear ID: {notification.metadata.gear_id} </span>}
+                                                {notification.metadata.request_id && <span>Request ID: {notification.metadata.request_id} </span>}
+                                                {notification.metadata.announcement_id && <span>Announcement ID: {notification.metadata.announcement_id} </span>}
+                                                {/* Add more as needed */}
+                                            </div>
+                                        )}
                                     </div>
-                                    {!notification.read && (
+                                    {!notification.is_read && (
                                         <Badge variant="secondary" className="ml-2 bg-primary text-white">
                                             New
                                         </Badge>

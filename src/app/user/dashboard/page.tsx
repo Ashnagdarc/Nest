@@ -198,7 +198,7 @@ export default function UserDashboardPage() {
         .from('notifications')
         .select('id', { count: 'exact' })
         .eq('user_id', session.user.id)
-        .eq('read', false);
+        .eq('is_read', false);
 
       if (error) {
         logError(error, 'fetchNotificationCount', {

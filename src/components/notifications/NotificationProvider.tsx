@@ -21,6 +21,8 @@ type Notification = {
     is_read: boolean;
     created_at: string;
     link?: string;
+    category?: string;
+    metadata?: Record<string, any>;
 };
 
 type NotificationContextType = {
@@ -98,25 +100,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         try {
             console.log('Fetching notifications for user:', userId);
 
-            // Try get_user_notifications first
-            let { data, error } = await supabase
-                .rpc('get_user_notifications', {
-                    p_limit: 100,
-                    p_offset: 0
-                });
-
-            if (error) {
-                console.log('Falling back to fetch_user_notifications');
-                // Try fetch_user_notifications as fallback
-                const fallbackResult = await supabase
-                    .rpc('fetch_user_notifications', {
-                        p_limit: 100,
-                        p_offset: 0
-                    });
-
-                data = fallbackResult.data;
-                error = fallbackResult.error;
-            }
+            // Use direct select to get all fields, including category and metadata
+            const { data, error } = await supabase
+                .from('notifications')
+                .select('*')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false });
 
             if (error) {
                 console.error('Error fetching notifications:', error);
