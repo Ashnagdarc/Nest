@@ -61,7 +61,8 @@ export function CategoryAvailabilityChart() {
             },
             callback: () => {
                 fetchCategoryData();
-            }
+            },
+            pollingInterval: 30000 // 30 seconds fallback polling
         });
 
         return () => {

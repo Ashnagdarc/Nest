@@ -224,7 +224,8 @@ export function UpcomingEvents() {
             },
             callback: () => {
                 fetchEvents();
-            }
+            },
+            pollingInterval: 30000 // 30 seconds fallback polling
         });
 
         // Set up real-time subscription to gear_maintenance
@@ -243,7 +244,8 @@ export function UpcomingEvents() {
                 logger.warn(`Subscription error from gear_maintenance: ${error instanceof Error ? error.message : String(error)}`, {
                     context: 'UpcomingEvents'
                 });
-            }
+            },
+            pollingInterval: 30000 // 30 seconds fallback polling
         });
 
         return () => {

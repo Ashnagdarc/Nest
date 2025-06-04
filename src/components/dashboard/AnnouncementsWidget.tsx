@@ -103,7 +103,8 @@ export function AnnouncementsWidget({ embedded = false }: AnnouncementsWidgetPro
             },
             callback: () => {
                 fetchAnnouncements();
-            }
+            },
+            pollingInterval: 30000 // 30 seconds fallback polling
         });
 
         return () => {
