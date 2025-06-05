@@ -310,6 +310,14 @@ export async function POST(req: NextRequest) {
             } catch (err: any) {
                 lastError = `Email: ${err.message}`;
                 errors.push(lastError);
+                // Add detailed logging for debugging
+                console.error('[Email Notification Error]', {
+                    error: err,
+                    targetEmail,
+                    SMTP_HOST,
+                    SMTP_PORT,
+                    SMTP_USER
+                });
             }
         }
 
