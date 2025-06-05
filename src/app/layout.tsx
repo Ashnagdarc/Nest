@@ -16,7 +16,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
-  : 'http://localhost:3000'; // Adjust port if necessary
+  : 'http://localhost:9002'; // Adjust port if necessary
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
