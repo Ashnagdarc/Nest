@@ -1,12 +1,10 @@
 "use client";
 
 import { Suspense } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, Button, Alert, AlertDescription, AlertTitle } from "@/components/aceternity";
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { InfoIcon, RefreshCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { InfoIcon, RefreshCcw, Settings, BarChart3, Users, Package, ClipboardList, Box, Bell } from "lucide-react";
 import { RequestStats } from '@/components/admin/RequestStats';
 import { DashboardStats } from '@/components/admin/DashboardStats';
 import { ActivitiesSection } from '@/components/admin/ActivitiesSection';
@@ -38,6 +36,8 @@ import {
   AlertDialogCancel
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Badge } from '@/components/aceternity';
 
 function Dashboard() {
   const { toast } = useToast();
@@ -61,6 +61,7 @@ function Dashboard() {
   const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
   const [confirmRejectOpen, setConfirmRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [activeTab, setActiveTab] = useState('overview');
 
   const {
     lastUpdated,
@@ -75,29 +76,46 @@ function Dashboard() {
       setLoadingStats(true);
       setStatsError(null);
       try {
-        // Fetch all requests
+        // Fetch all requests with proper status mapping
         const { data, error } = await supabase
           .from('gear_requests')
           .select('id, status, due_date, checkout_date, created_at');
+
         if (error) throw error;
         if (!data) return;
+
         const now = new Date();
         const stats = { new: 0, pending: 0, checkin: 0, overdue: 0 };
+
         data.forEach((req: any) => {
-          const status = (req.status || '').toLowerCase();
-          if (status === 'pending' || status === 'new') stats.new++;
-          else if (status === 'approved' || status === 'in review') stats.pending++;
-          else if (status === 'checked out' || status === 'ready for check-in') stats.checkin++;
-          if (req.due_date && !req.checkout_date && new Date(req.due_date) < now) stats.overdue++;
+          const status = String(req.status || '').toLowerCase().trim();
+
+          // Map statuses correctly based on your database
+          if (status === 'pending' || status === 'submitted' || status === 'new') {
+            stats.new++;
+          } else if (status === 'approved' || status === 'in review') {
+            stats.pending++;
+          } else if (status === 'checked out' || status === 'ready for check-in') {
+            stats.checkin++;
+          }
+
+          // Check for overdue - items that are checked out and past due date
+          if (req.due_date && status === 'checked out' && new Date(req.due_date) < now) {
+            stats.overdue++;
+          }
         });
+
         if (!ignore) setRequestStats(stats);
       } catch (err: any) {
+        console.error('Error fetching request stats:', err);
         if (!ignore) setStatsError(err.message);
       } finally {
         if (!ignore) setLoadingStats(false);
       }
     }
+
     fetchRequestStats();
+
     // Real-time subscription for live stats
     const channel = supabase
       .channel('public:gear_requests_dashboard')
@@ -105,6 +123,7 @@ function Dashboard() {
         fetchRequestStats();
       })
       .subscribe();
+
     return () => {
       ignore = true;
       supabase.removeChannel(channel);
@@ -397,134 +416,242 @@ function Dashboard() {
     toast({ title: 'Exported', description: 'Selected requests exported as PDF.' });
   };
 
+  // Quick action shortcuts - functional buttons for key admin tasks
+  const quickActions = [
+    {
+      label: "Reports",
+      icon: BarChart3,
+      onClick: () => router.push('/admin/reports'),
+      color: "from-purple-500 to-purple-600",
+      description: "View analytics",
+      available: true
+    },
+    {
+      label: "Settings",
+      icon: Settings,
+      onClick: () => router.push('/admin/settings'),
+      color: "from-orange-500 to-orange-600",
+      description: "System config",
+      available: true
+    },
+    {
+      label: "Notifications",
+      icon: Bell,
+      onClick: () => router.push('/admin/notifications'),
+      color: "from-blue-500 to-blue-600",
+      description: "View alerts",
+      available: true
+    },
+    {
+      label: "Refresh Data",
+      icon: RefreshCcw,
+      onClick: () => {
+        handleRefresh();
+        playNotificationSound?.();
+      },
+      color: "from-green-500 to-green-600",
+      description: "Update dashboard",
+      available: true
+    }
+  ];
+
   return (
-    <div className="container mx-auto p-4 space-y-6 max-w-7xl">
-      <div className="flex flex-wrap justify-between items-center gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-        <div className="flex gap-2 items-center">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            className="flex gap-2 items-center"
-          >
-            <RefreshCcw className="h-4 w-4" />
-            Refresh
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={playNotificationSound}
-          >
-            Test Sound
-          </Button>
+    <div className="min-h-screen text-white">
+      {/* Compact Header */}
+      <div className="border-b border-gray-800 bg-gray-900/95 backdrop-blur-sm">
+        <div className="px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-white">
+                  Admin Dashboard
+                </h1>
+                <p className="text-sm text-gray-400">
+                  Equipment management overview
+                </p>
+              </div>
+              {lastUpdated && (
+                <Badge variant="outline" className="border-green-500 text-green-400">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse" />
+                  Live
+                </Badge>
+              )}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              className="border-gray-700 text-gray-300 hover:bg-gray-800"
+            >
+              <RefreshCcw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
       </div>
 
-      {updateMessage && lastUpdated && (
-        <Alert variant="default">
-          <InfoIcon className="h-4 w-4" />
-          <AlertTitle>Update</AlertTitle>
-          <AlertDescription className="flex justify-between items-center">
-            <span>{updateMessage}</span>
-            <span className="text-xs text-muted-foreground">
-              {new Date(lastUpdated).toLocaleTimeString()}
-            </span>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="overflow-x-auto w-full flex whitespace-nowrap">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="requests">Requests</TabsTrigger>
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="space-y-6">
-          <Suspense fallback={<div>Loading stats...</div>}>
-            <DashboardStats />
-          </Suspense>
-
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Equipment Requests</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Suspense fallback={<div>Loading request stats...</div>}>
-                  {loadingStats ? (
-                    <div>Loading request stats...</div>
-                  ) : statsError ? (
-                    <div className="text-red-500">{statsError}</div>
-                  ) : (
-                    <RequestStats
-                      stats={requestStats}
-                      onViewCategory={handleViewCategory}
-                    />
+      <div className="p-4 space-y-4">
+        {/* Alert for updates */}
+        <AnimatePresence>
+          {updateMessage && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+            >
+              <Alert className="border-blue-800 bg-blue-900/20 text-blue-200">
+                <InfoIcon className="h-4 w-4 text-blue-400" />
+                <AlertTitle className="text-blue-200">Dashboard Updated</AlertTitle>
+                <AlertDescription className="text-blue-300">
+                  {updateMessage}
+                  {lastUpdated && (
+                    <span className="ml-2 text-xs">
+                      Last updated: {lastUpdated.toLocaleTimeString()}
+                    </span>
                   )}
-                </Suspense>
-              </CardContent>
-            </Card>
+                </AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            <Suspense fallback={<div>Loading utilization data...</div>}>
-              <UtilizationSection />
-            </Suspense>
+        {/* Quick Actions - Key Admin Functions */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">Quick Actions</h2>
+            <div className="text-sm text-gray-400">Essential admin tools</div>
           </div>
 
-          <Suspense fallback={<div>Loading activities...</div>}>
-            <ActivitiesSection />
-          </Suspense>
-        </TabsContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {quickActions.map((action, index) => (
+              <motion.div
+                key={action.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={action.onClick}
+                className="cursor-pointer"
+              >
+                <Card className="bg-gray-800/30 border-gray-700/50 hover:bg-gray-800/60 transition-all duration-300 group relative overflow-hidden backdrop-blur-sm">
+                  {/* Gradient background overlay */}
+                  <div className={`absolute inset-0 bg-gradient-to-br ${action.color} opacity-5 group-hover:opacity-15 transition-opacity duration-300`} />
 
-        <TabsContent value="requests">
-          <Card>
-            <CardHeader>
-              <CardTitle>Equipment Requests Management</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 sm:p-6">
-              <Suspense fallback={<div>Loading requests management...</div>}>
-                <RequestsManagement />
-              </Suspense>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  {/* Gradient border effect */}
+                  <div className={`absolute inset-0 bg-gradient-to-br ${action.color} opacity-0 group-hover:opacity-20 rounded-lg blur-sm transition-opacity duration-300`} />
 
-        <TabsContent value="inventory">
-          <Card>
-            <CardHeader>
-              <CardTitle>Inventory Management</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 sm:p-6">
-              <Suspense fallback={<div>Loading inventory management...</div>}>
-                <InventoryManagement />
-              </Suspense>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  <CardContent className="p-6 relative z-10">
+                    <div className="flex flex-col items-center text-center space-y-3">
+                      {/* Icon with gradient background */}
+                      <div className={`p-4 rounded-xl bg-gradient-to-br ${action.color} shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                        <action.icon className="h-6 w-6 text-white" />
+                      </div>
 
-        <TabsContent value="users">
-          <Card>
-            <CardHeader>
-              <CardTitle>User Management</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 sm:p-6">
-              <Suspense fallback={<div>Loading user management...</div>}>
-                <UsersManagement />
-              </Suspense>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                      {/* Text content */}
+                      <div className="space-y-1">
+                        <h3 className="font-semibold text-white text-sm">
+                          {action.label}
+                        </h3>
+                        <p className="text-xs text-gray-400 leading-relaxed">
+                          {action.description}
+                        </p>
+                      </div>
 
-      <Separator />
+                      {/* Hover indicator */}
+                      <div className="w-8 h-0.5 bg-gradient-to-r from-transparent via-gray-600 to-transparent group-hover:via-white transition-colors duration-300" />
+                    </div>
+                  </CardContent>
 
-      <footer className="text-center text-sm text-muted-foreground">
-        <p>
-          Flow Tag Admin Dashboard • &copy; {new Date().getFullYear()}
-        </p>
-      </footer>
+                  {/* Shine effect on hover */}
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/5 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                  </div>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* Main Dashboard Sections */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">Dashboard</h2>
+              <p className="text-sm text-gray-400">Manage your equipment and operations</p>
+            </div>
+
+            <TabsList className="grid grid-cols-4 bg-gray-800/40 border border-gray-700/50 p-1 rounded-xl backdrop-blur-sm">
+              <TabsTrigger
+                value="overview"
+                className="flex items-center gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300 px-3 py-2.5 rounded-lg"
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden sm:inline font-medium">Overview</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="requests"
+                className="flex items-center gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300 px-3 py-2.5 rounded-lg"
+              >
+                <ClipboardList className="h-4 w-4" />
+                <span className="hidden sm:inline font-medium">Requests</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="inventory"
+                className="flex items-center gap-2 data-[state=active]:bg-green-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300 px-3 py-2.5 rounded-lg"
+              >
+                <Box className="h-4 w-4" />
+                <span className="hidden sm:inline font-medium">Inventory</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="users"
+                className="flex items-center gap-2 data-[state=active]:bg-orange-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300 px-3 py-2.5 rounded-lg"
+              >
+                <Users className="h-4 w-4" />
+                <span className="hidden sm:inline font-medium">Users</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="overview" className="space-y-4">
+            {/* Compact Layout - Everything fits on screen */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Equipment Stats - 1/3 width */}
+              <div className="lg:col-span-1">
+                <DashboardStats />
+              </div>
+
+              {/* Request Stats and Utilization - 2/3 width */}
+              <div className="lg:col-span-2 space-y-4">
+                {/* Request Stats */}
+                <RequestStats
+                  stats={requestStats}
+                  onViewCategory={handleViewCategory}
+                />
+
+                {/* Two column for utilization and activities */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <UtilizationSection />
+                  <ActivitiesSection />
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="requests">
+            <RequestsManagement />
+          </TabsContent>
+
+          <TabsContent value="inventory">
+            <InventoryManagement />
+          </TabsContent>
+
+          <TabsContent value="users">
+            <UsersManagement />
+          </TabsContent>
+        </Tabs>
+      </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-2xl">
@@ -676,7 +803,19 @@ function Dashboard() {
 export default function AdminDashboardPage() {
   return (
     <DashboardProvider>
-      <Dashboard />
+      <Suspense fallback={
+        <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          >
+            <BarChart3 className="h-8 w-8 text-blue-500" />
+          </motion.div>
+          <span className="ml-2 text-lg font-medium">Loading dashboard...</span>
+        </div>
+      }>
+        <Dashboard />
+      </Suspense>
     </DashboardProvider>
   );
 }
