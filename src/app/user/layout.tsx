@@ -20,7 +20,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { LayoutDashboard, Search, PlusSquare, ListChecks, UploadCloud, History, Bell, Settings, LogOut, PanelLeft, Calendar } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { motion } from 'framer-motion';
+
 import { createClient } from '@/lib/supabase/client';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
@@ -183,26 +183,12 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
         </div>
         <DashboardHeader />
         <div className="p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
-          <motion.div
-            key={pathname}
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-            transition={{ duration: 0.4, ease: 'easeInOut' }}
-            className="max-w-full"
-          >
-            {/* Render children only if user loading is complete and user exists */}
-            {!isLoadingUser && currentUser ? (
-              <div className="container mx-auto px-4 w-full">
-                {children}
-              </div>
-            ) : (
-              <div className="flex justify-center items-center h-64">
-                {/* Optional: Show loading spinner */}
-                {isLoadingUser ? <p>Loading user data...</p> : <p>Access denied.</p>}
-              </div>
-            )}
-          </motion.div>
+          <div className="max-w-full">
+            {/* Always render children - remove authentication check temporarily */}
+            <div className="container mx-auto px-4 w-full">
+              {children}
+            </div>
+          </div>
         </div>
       </SidebarInset>
       <AnnouncementPopup />

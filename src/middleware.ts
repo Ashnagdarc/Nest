@@ -1,23 +1,71 @@
 import { type NextRequest, NextResponse } from 'next/server';
-// import { updateSession } from '@/lib/supabase/middleware'; // Removed Supabase import
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import type { Database } from '@/types/supabase';
 
 export async function middleware(request: NextRequest) {
-  // Firebase authentication state is typically managed client-side or with server-side cookies/tokens
-  // This middleware might be used for other purposes like redirecting based on path or headers,
-  // but not directly for Firebase session updates in the same way Supabase SSR helpers work.
+  const { pathname } = request.nextUrl;
 
-  // Example: Basic logging
-  console.log(`Middleware processing: ${request.nextUrl.pathname}`);
-
-  // Just pass the request through for now
-  return NextResponse.next({
+  // Create Supabase server client
+  let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   });
 
-  // Previous Supabase session update logic:
-  // return await updateSession(request);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.error('Supabase URL or Anon Key missing in middleware. Check environment variables.');
+    return response;
+  }
+
+  const supabase = createServerClient<Database>(
+    supabaseUrl,
+    supabaseKey,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          request.cookies.set({ name, value, ...options });
+          response = NextResponse.next({ request: { headers: request.headers } });
+          response.cookies.set({ name, value, ...options });
+        },
+        remove(name: string, options: CookieOptions) {
+          request.cookies.set({ name, value: '', ...options });
+          response = NextResponse.next({ request: { headers: request.headers } });
+          response.cookies.set({ name, value: '', ...options });
+        },
+      },
+    }
+  );
+
+  // Get user from Supabase
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  // Define protected routes
+  const adminRoutes = ['/admin'];
+  const userRoutes = ['/user'];
+
+  // Check if it's an admin route
+  if (adminRoutes.some(route => pathname.startsWith(route))) {
+    if (!user) {
+      console.log('Admin route accessed without user, redirecting to login');
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
+  // Check if it's a user route
+  if (userRoutes.some(route => pathname.startsWith(route))) {
+    if (!user) {
+      console.log('User route accessed without user, redirecting to login');
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
+  return response;
 }
 
 export const config = {
@@ -27,8 +75,9 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
+     * - api routes (handled separately)
+     * - public assets
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

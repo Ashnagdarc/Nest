@@ -21,7 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Home, Package, ListChecks, UserCog, Upload, BarChart2, Settings, Bell, LogOut, PanelLeft, Calendar } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { motion } from 'framer-motion';
+
 import { createClient } from '@/lib/supabase/client';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -183,14 +183,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
         <DashboardHeader />
         <div className="p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
-          <motion.div
-            key={pathname}
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-            transition={{ duration: 0.4, ease: 'easeInOut' }}
-            className="max-w-full"
-          >
+          <div className="max-w-full">
             {/* Render children only if user loading is complete and user is verified admin */}
             {!isLoadingUser && adminUser ? (
               <div className="container mx-auto px-4 w-full">
@@ -202,7 +195,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {isLoadingUser ? <p>Loading admin data...</p> : <p>Access denied.</p>}
               </div>
             )}
-          </motion.div>
+          </div>
         </div>
       </SidebarInset>
     </SidebarProvider>

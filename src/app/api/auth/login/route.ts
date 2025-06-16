@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import rateLimit from 'next-rate-limit';
 
@@ -22,40 +21,49 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Missing email or password.' }, { status: 400 });
         }
 
-        const supabase = createRouteHandlerClient({ cookies });
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        // Create Supabase client with proper server-side auth
+        const supabase = createSupabaseServerClient();
+
+        // Attempt to sign in
+        const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,
         });
 
-        if (authError) {
-            if (authError.message.includes('Invalid login credentials')) {
+        if (error) {
+            if (error.message.includes('Invalid login credentials')) {
                 return NextResponse.json({ success: false, error: 'Invalid email or password.' }, { status: 401 });
-            } else if (authError.message.includes('Email not confirmed')) {
+            } else if (error.message.includes('Email not confirmed')) {
                 return NextResponse.json({ success: false, error: 'Please verify your email before logging in.' }, { status: 403 });
             }
-            return NextResponse.json({ success: false, error: authError.message }, { status: 400 });
+            return NextResponse.json({ success: false, error: error.message }, { status: 400 });
         }
 
-        if (!authData.user) {
+        if (!data.user) {
             return NextResponse.json({ success: false, error: 'Login succeeded but user data missing.' }, { status: 500 });
         }
 
-        // Optionally, fetch profile and return it
+        // Check if user has a profile
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('*')
-            .eq('id', authData.user.id)
-            .maybeSingle();
+            .eq('id', data.user.id)
+            .single();
 
-        if (profileError || !profile) {
-            return NextResponse.json({ success: false, error: 'Could not fetch user profile.' }, { status: 500 });
+        if (profileError) {
+            console.error('Error fetching profile:', profileError);
+            return NextResponse.json({ success: false, error: 'Failed to fetch user profile.' }, { status: 500 });
         }
 
-        return NextResponse.json({ success: true, user: authData.user, profile });
-    } catch (error) {
+        return NextResponse.json({
+            success: true,
+            user: data.user,
+            profile
+        });
+    } catch (error: any) {
+        console.error('Error during login:', error);
         return NextResponse.json(
-            { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+            { success: false, error: error.message || 'Login failed' },
             { status: 500 }
         );
     }

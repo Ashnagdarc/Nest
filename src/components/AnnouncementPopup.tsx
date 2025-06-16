@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Megaphone } from 'lucide-react';
@@ -82,18 +81,18 @@ export function AnnouncementPopup() {
                 const recentAnnouncement = data[0];
 
                 // Skip if announcement is older than 7 days
-                const announcementDate = new Date(recentAnnouncement.created_at);
+                const announcementDate = new Date(recentAnnouncement.created_at || '');
                 if (announcementDate < sevenDaysAgo) {
                     return;
                 }
 
                 // Show if we haven't seen it before
-                if (!seenAnnouncements.includes(recentAnnouncement.id)) {
+                if (!seenAnnouncements.includes(recentAnnouncement.id as string)) {
                     setAnnouncement({
-                        id: recentAnnouncement.id,
-                        title: recentAnnouncement.title,
-                        content: recentAnnouncement.content,
-                        createdAt: new Date(recentAnnouncement.created_at)
+                        id: recentAnnouncement.id as string,
+                        title: recentAnnouncement.title as string,
+                        content: recentAnnouncement.content as string,
+                        createdAt: new Date(recentAnnouncement.created_at as string)
                     });
 
                     // Play notification sound when showing announcement
@@ -131,51 +130,42 @@ export function AnnouncementPopup() {
         handleDismiss();
     };
 
-    if (!announcement) return null;
+    if (!announcement || !isVisible) return null;
 
     return (
-        <AnimatePresence>
-            {isVisible && (
-                <motion.div
-                    initial={{ opacity: 0, y: 50 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 50 }}
-                    className="fixed bottom-8 right-8 max-w-md z-50"
-                >
-                    <Card className="shadow-lg border-primary/20">
-                        <CardHeader className="bg-primary/5 pb-2">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Megaphone className="h-5 w-5 text-primary" />
-                                    <CardTitle className="text-lg">{announcement.title}</CardTitle>
-                                </div>
-                                <Button variant="ghost" size="sm" onClick={handleDismiss} className="h-8 w-8 p-0 rounded-full">
-                                    <X className="h-4 w-4" />
-                                </Button>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Posted on {format(announcement.createdAt, 'PPP')}
-                            </p>
-                        </CardHeader>
-                        <CardContent className="pt-4">
-                            <p className="text-sm">
-                                {announcement.content.length > 150
-                                    ? `${announcement.content.substring(0, 150)}...`
-                                    : announcement.content
-                                }
-                            </p>
-                        </CardContent>
-                        <CardFooter className="flex justify-end gap-2 pt-0">
-                            <Button variant="outline" size="sm" onClick={handleDismiss}>
-                                Dismiss
-                            </Button>
-                            <Button variant="default" size="sm" onClick={handleViewMore}>
-                                View Details
-                            </Button>
-                        </CardFooter>
-                    </Card>
-                </motion.div>
-            )}
-        </AnimatePresence>
+        <div className="fixed bottom-8 right-8 max-w-md z-50">
+            <Card className="shadow-lg border-primary/20">
+                <CardHeader className="bg-primary/5 pb-2">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Megaphone className="h-5 w-5 text-primary" />
+                            <CardTitle className="text-lg">{announcement.title}</CardTitle>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={handleDismiss} className="h-8 w-8 p-0 rounded-full">
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                        Posted on {format(announcement.createdAt, 'PPP')}
+                    </p>
+                </CardHeader>
+                <CardContent className="pt-4">
+                    <p className="text-sm">
+                        {announcement.content.length > 150
+                            ? `${announcement.content.substring(0, 150)}...`
+                            : announcement.content
+                        }
+                    </p>
+                </CardContent>
+                <CardFooter className="flex justify-end gap-2 pt-0">
+                    <Button variant="outline" size="sm" onClick={handleDismiss}>
+                        Dismiss
+                    </Button>
+                    <Button variant="default" size="sm" onClick={handleViewMore}>
+                        View Details
+                    </Button>
+                </CardFooter>
+            </Card>
+        </div>
     );
 } 

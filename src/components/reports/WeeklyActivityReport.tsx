@@ -1,22 +1,46 @@
 import React, { useState, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Download, FileText, FileSpreadsheet } from "lucide-react";
 import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
 import { DateRange } from 'react-day-picker';
-import { WeeklyUsageReport, GearUsage, generateUsageReportForRange, UserStats, GearStats } from "@/services/report";
-import { generatePdfReport, generateCsvReport } from "@/services/reportExport";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+
+// UI Components
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { ChartContainer } from "@/components/ui/chart";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
-import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Tooltip as UITooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider
+} from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+
+// Icons
+import { Loader2, Download, FileText, FileSpreadsheet } from "lucide-react";
+
+// Services
+import { WeeklyUsageReport, GearUsage, generateUsageReportForRange, UserStats, GearStats } from "@/services/report";
+import { generatePdfReport, generateCsvReport } from "@/services/reportExport";
 
 // Helper to format numbers with commas
 const formatNumber = (num: number): string => {

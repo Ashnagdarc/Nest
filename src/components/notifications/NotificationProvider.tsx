@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from "@/hooks/use-toast";
 import { User } from '@supabase/supabase-js';
@@ -42,7 +42,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { toast } = useToast();
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
     const [userId, setUserId] = useState<string | null>(null);
     const [isFirstLogin, setIsFirstLogin] = useState(true);
     const [hasUserInteracted, setHasUserInteracted] = useState(false);

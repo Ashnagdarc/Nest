@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import rateLimit from 'next-rate-limit';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
@@ -20,35 +19,39 @@ export async function POST(request: NextRequest) {
         const { email, password, fullName, phone, department } = await request.json();
 
         if (!email || !password || !fullName) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+            return NextResponse.json({ error: 'Email, password, and full name are required' }, { status: 400 });
         }
 
-        const supabase = createRouteHandlerClient({ cookies });
+        // Create Supabase client with proper server-side auth
+        const supabase = createSupabaseServerClient();
 
-        // Create user in Supabase Auth
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        // Attempt to sign up
+        const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: {
-                data: { full_name: fullName },
-                emailRedirectTo: `${request.headers.get('origin')}/auth/callback`,
+                data: {
+                    full_name: fullName,
+                },
             }
         });
 
-        if (authError) {
-            // Specific error handling
-            if (authError.message.includes('User already registered')) {
-                return NextResponse.json({ success: false, error: 'Email is already registered.' }, { status: 409 });
-            } else if (authError.message.includes('Invalid email')) {
-                return NextResponse.json({ success: false, error: 'Invalid email address.' }, { status: 400 });
-            } else if (authError.message.includes('Password should be at least')) {
-                return NextResponse.json({ success: false, error: 'Password does not meet requirements.' }, { status: 400 });
-            }
-            return NextResponse.json({ success: false, error: authError.message }, { status: 400 });
+        if (error) {
+            return NextResponse.json({ error: error.message }, { status: 400 });
         }
 
-        if (!authData.user) {
-            return NextResponse.json({ success: false, error: 'Failed to create user account' }, { status: 400 });
+        if (!data.user) {
+            return NextResponse.json({ error: 'Signup succeeded but user data missing' }, { status: 500 });
+        }
+
+        // Create profile in profiles table
+        if (data.user && !data.user.email_confirmed_at) {
+            // User needs to verify email first
+            return NextResponse.json({
+                message: 'Please check your email to verify your account before logging in.',
+                user: data.user,
+                needsVerification: true
+            });
         }
 
         // Send Google Chat notification for new user sign up
@@ -58,13 +61,16 @@ export async function POST(request: NextRequest) {
             signUpDate: new Date().toISOString(),
         });
 
-        // Success: tell frontend to redirect
         return NextResponse.json({
-            success: true,
-            message: 'User created successfully. Please check your email to verify your account.'
+            message: 'Account created successfully!',
+            user: data.user
         });
 
-    } catch (error) {
-        return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 });
+    } catch (error: any) {
+        console.error('Error during signup:', error);
+        return NextResponse.json(
+            { error: error.message || 'Signup failed' },
+            { status: 500 }
+        );
     }
 }

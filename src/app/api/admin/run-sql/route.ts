@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import rateLimit from '@/lib/rate-limit';
@@ -8,7 +9,7 @@ const limiter = rateLimit({
     uniqueTokenPerInterval: 100 // Max 100 requests per minute
 });
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
         // Rate limit check
         try {
@@ -20,70 +21,59 @@ export async function POST(request: Request) {
             );
         }
 
-        const { sql, userId } = await request.json();
+        const { sql } = await request.json();
 
-        // Input validation
         if (!sql) {
             return NextResponse.json(
-                { error: 'Missing SQL parameter' },
+                { error: 'SQL query is required' },
                 { status: 400 }
             );
         }
 
-        if (sql.toLowerCase().includes('drop') || sql.toLowerCase().includes('truncate')) {
-            return NextResponse.json(
-                { error: 'Destructive SQL operations are not allowed' },
-                { status: 403 }
-            );
-        }
+        // Create Supabase client with proper server-side auth
+        const supabase = createSupabaseServerClient();
 
-        console.log("API - SQL execution request received");
-
-        // Get supabase client
-        const supabase = createRouteHandlerClient({ cookies });
-
-        // Verify user is authenticated and is an admin
+        // Get the user's session
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 
         if (authError || !user) {
-            console.error("API - Authentication error:", authError);
             return NextResponse.json(
-                { error: 'Unauthorized access' },
+                { error: 'Unauthorized' },
                 { status: 401 }
             );
         }
 
-        // Check if user is admin using the secure function
-        const { data: isAdmin, error: adminCheckError } = await supabase
-            .rpc('is_admin', { uid: user.id });
+        // Check if user is admin
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
 
-        if (adminCheckError || !isAdmin) {
-            console.error("API - Authorization error:", adminCheckError);
+        if (profile?.role !== 'admin') {
             return NextResponse.json(
                 { error: 'Admin access required' },
                 { status: 403 }
             );
         }
 
-        console.log("API - Admin verification successful, executing SQL");
+        // Execute the SQL query
+        const { data, error } = await supabase.rpc('execute_sql', { sql_query: sql });
 
-        // Execute the SQL with timeout
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Query timeout')), 30000)
-        );
+        if (error) {
+            throw error;
+        }
 
-        const queryPromise = supabase.rpc('execute_sql', { sql_query: sql });
-        const result = await Promise.race([queryPromise, timeoutPromise]);
+        return NextResponse.json({
+            success: true,
+            data,
+            message: 'SQL executed successfully'
+        });
 
-        return NextResponse.json({ success: true, result });
-
-    } catch (error) {
-        console.error("API - Unexpected error:", error);
+    } catch (error: any) {
+        console.error('Error executing SQL:', error);
         return NextResponse.json(
-            {
-                error: error instanceof Error ? error.message : 'Internal server error',
-                details: process.env.NODE_ENV === 'development' ? error : undefined
-            },
+            { error: error.message || 'Failed to execute SQL' },
             { status: 500 }
         );
     }

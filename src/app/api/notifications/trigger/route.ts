@@ -52,9 +52,9 @@ export async function POST(req: NextRequest) {
           <p><strong>User:</strong> ${record.requester_name || 'N/A'}</p>
           <p><strong>Gear:</strong> ${record.gear_name || 'N/A'}</p>
           <p><strong>Reason:</strong> ${record.reason || 'N/A'}</p>
-          <p>View request in <a href="https://gear-flow-nine.vercel.app/user/requests/${record.id}">GearFlow</a>.</p>
+          <p>View request in <a href="https://gear-flow-nine.vercel.app/user/requests/${record.id}">Nest</a>.</p>
           <hr>
-          <small style="color: #888;">Eden Oasis Realty GearFlow System</small>
+          <small style="color: #888;">Eden Oasis Nest System</small>
         </div>
       `;
             category = 'request';
@@ -75,9 +75,9 @@ export async function POST(req: NextRequest) {
               <p>Hi ${user.full_name || 'there'},</p>
               <p>Your request for <strong>${record.gear_name || 'equipment'}</strong> has been received and is pending approval.</p>
               <p>We will notify you as soon as it is approved.</p>
-              <p>View your request in <a href="https://gear-flow-nine.vercel.app/user/requests/${record.id}">GearFlow</a>.</p>
+              <p>View your request in <a href="https://gear-flow-nine.vercel.app/user/requests/${record.id}">Nest</a>.</p>
               <hr>
-              <small style="color: #888;">Eden Oasis Realty GearFlow System</small>
+              <small style="color: #888;">Eden Oasis Nest System</small>
             </div>
           `;
                     // Respect user preferences for confirmation
@@ -128,9 +128,9 @@ export async function POST(req: NextRequest) {
           <p>Hi ${record.requester_name || 'there'},</p>
           <p>Your request for <strong>${record.gear_name || 'equipment'}</strong> has been <b>approved</b>.</p>
           <p>Pick up your gear at the designated location.</p>
-          <p>View details in <a href="https://gear-flow-nine.vercel.app/user/requests/${record.id}">GearFlow</a>.</p>
+          <p>View details in <a href="https://gear-flow-nine.vercel.app/user/requests/${record.id}">Nest</a>.</p>
           <hr>
-          <small style="color: #888;">Eden Oasis Realty GearFlow System</small>
+          <small style="color: #888;">Eden Oasis Nest System</small>
         </div>
       `;
             userId = record.user_id;
@@ -149,9 +149,9 @@ export async function POST(req: NextRequest) {
         <img src="${BRAND_LOGO_URL}" alt="Eden Oasis Realty" style="height: 40px; margin-bottom: 16px;">
         <h2 style="color: ${BRAND_COLOR};">Gear Checked Out</h2>
         <p>You have successfully checked out your gear.</p>
-        <p>Thank you for using GearFlow!</p>
+        <p>Thank you for using Nest!</p>
         <hr>
-        <small style="color: #888;">Eden Oasis Realty GearFlow System</small>
+        <small style="color: #888;">Eden Oasis Nest System</small>
       </div>
     `;
         userId = record.user_id;
@@ -169,9 +169,9 @@ export async function POST(req: NextRequest) {
         <img src="${BRAND_LOGO_URL}" alt="Eden Oasis Realty" style="height: 40px; margin-bottom: 16px;">
         <h2 style="color: ${BRAND_COLOR};">Gear Checked In</h2>
         <p>You have successfully checked in your gear.</p>
-        <p>Thank you for using GearFlow!</p>
+        <p>Thank you for using Nest!</p>
         <hr>
-        <small style="color: #888;">Eden Oasis Realty GearFlow System</small>
+        <small style="color: #888;">Eden Oasis Nest System</small>
       </div>
     `;
         userId = record.user_id;
@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
         <h2 style="color: ${BRAND_COLOR};">New Maintenance Record</h2>
         <p>A new maintenance record has been created for your review.</p>
         <hr>
-        <small style="color: #888;">Eden Oasis Realty GearFlow System</small>
+        <small style="color: #888;">Eden Oasis Nest System</small>
       </div>
     `;
         const { data: admins } = await supabase.from('profiles').select('id,email').eq('role', 'Admin');
@@ -208,9 +208,9 @@ export async function POST(req: NextRequest) {
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
         <img src="${BRAND_LOGO_URL}" alt="Eden Oasis Realty" style="height: 40px; margin-bottom: 16px;">
         <h2 style="color: ${BRAND_COLOR};">Profile Updated</h2>
-        <p>Your profile has been updated in GearFlow.</p>
+        <p>Your profile has been updated in Nest.</p>
         <hr>
-        <small style="color: #888;">Eden Oasis Realty GearFlow System</small>
+        <small style="color: #888;">Eden Oasis Nest System</small>
       </div>
     `;
         userId = record.id;
@@ -227,9 +227,9 @@ export async function POST(req: NextRequest) {
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
         <img src="${BRAND_LOGO_URL}" alt="Eden Oasis Realty" style="height: 40px; margin-bottom: 16px;">
         <h2 style="color: ${BRAND_COLOR};">New Announcement</h2>
-        <p>${record.content || 'A new announcement has been posted in GearFlow.'}</p>
+        <p>${record.content || 'A new announcement has been posted in Nest.'}</p>
         <hr>
-        <small style="color: #888;">Eden Oasis Realty GearFlow System</small>
+        <small style="color: #888;">Eden Oasis Nest System</small>
       </div>
     `;
         const { data: users } = await supabase.from('profiles').select('id,email');

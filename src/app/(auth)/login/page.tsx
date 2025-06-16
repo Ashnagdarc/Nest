@@ -12,9 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
-import { createClient } from '@/lib/supabase/client'; // Import Supabase client creation function
+import { createClient } from '@/lib/supabase/client';
 import dynamic from 'next/dynamic';
-import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 
 // Dynamically import Lottie
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -31,7 +30,7 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
-  const supabase = createClient(); // Create Supabase client instance
+  const supabase = useMemo(() => createClient(), []);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -41,43 +40,10 @@ export default function LoginPage() {
     },
   });
 
-  // Check if user is already logged in using Supabase session
-  useEffect(() => {
-    const checkUser = async () => {
-      console.log("LoginPage: Checking for existing Supabase session...");
-      try {
-        const { data, error } = await supabase.auth.getSession();
-
-        if (error) {
-          console.error("LoginPage: Error fetching session:", error);
-          return; // Continue to show login page on session fetch error
-        }
-
-        if (data?.session?.user) {
-          console.log("LoginPage: Active Supabase session found for user:", data.session.user.id);
-          // If already logged in, redirect based on role (fetched from Supabase profiles table)
-          redirectToDashboard(data.session.user.id);
-        } else {
-          console.log("LoginPage: No active Supabase user session.");
-        }
-      } catch (e) {
-        console.error("LoginPage: Unexpected error during session check:", e);
-      }
-    };
-
-    // Using a variable to track if component is mounted
-    let isMounted = true;
-    checkUser();
-
-    return () => {
-      isMounted = false; // Prevent state updates after unmount
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Removed dependencies causing potential loops, check session only once
-
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     setShowSuccessAnimation(false);
+
     try {
       // Direct client-side login
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -88,111 +54,61 @@ export default function LoginPage() {
       if (authError) {
         throw new Error(authError.message || 'Login failed.');
       }
+
       if (!authData.user) {
         throw new Error('Login succeeded but user data missing.');
       }
 
-      // Fetch profile as the authenticated user
+      // Fetch profile to determine role
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('role, status, full_name')
         .eq('id', authData.user.id)
-        .maybeSingle();
+        .single();
 
       if (profileError || !profile) {
         throw new Error('Could not fetch user profile.');
       }
 
+      if (profile.status !== 'Active') {
+        await supabase.auth.signOut();
+        throw new Error(`Account status is ${profile.status}. Please contact support.`);
+      }
+
+      // Show success message
+      toast({
+        title: `Welcome back, ${profile.full_name || 'User'}!`,
+        description: `Redirecting to ${profile.role} Dashboard...`,
+        variant: 'default',
+      });
+
       setIsLoading(false);
       setShowSuccessAnimation(true);
-      toast({
-        title: `Login Successful, ${profile.full_name || 'User'}!`,
-        description: `Redirecting to ${profile.role} Dashboard...`,
-        variant: 'success',
-      });
-      await new Promise(resolve => setTimeout(resolve, 1800));
-      redirectToDashboard(authData.user.id);
+
+      // Direct redirect using window.location
+      setTimeout(() => {
+        const targetPath = profile.role === 'Admin' ? '/admin/dashboard' : '/user/dashboard';
+        console.log('Redirecting to:', targetPath);
+        window.location.href = targetPath;
+      }, 1500);
+
     } catch (error: unknown) {
       setIsLoading(false);
+      setShowSuccessAnimation(false);
+
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
+
       toast({
         title: "Login Failed",
         description: errorMessage,
         variant: "destructive",
       });
+
       form.reset({ email: form.getValues('email'), password: '' });
-      form.setError('password', { type: 'manual', message: ' ' });
     }
   };
 
-  // --- Helper function for redirection (using Supabase profiles) ---
-  const redirectToDashboard = async (userId: string) => {
-    console.log("[Redirect Check] redirectToDashboard called for user ID:", userId);
-    try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('role, status') // Only select necessary fields
-        .eq('id', userId)
-        .single(); // Use single() as profile should exist if user is logged in
-
-      if (error || !profile) {
-        console.warn("[Redirect Check Failed] Profile not found or error during redirect check for user ID:", userId, "Error:", error?.message, " Signing out.");
-        toast({ title: "Profile Missing", description: "Your user profile could not be found during redirection. Please log in again or contact support.", variant: "destructive" });
-        try {
-          await supabase.auth.signOut();
-        } catch (signOutError) {
-          console.error("Error signing out:", signOutError);
-          toast({ title: "Sign Out Failed", description: "Could not sign you out. Please try again or clear your browser cookies.", variant: "destructive", duration: 10000 });
-        } finally {
-          if (window.location.pathname !== '/login') {
-            router.push('/login');
-          }
-        }
-        return;
-      }
-
-      // Check status again during redirect
-      if (profile.status !== 'Active') {
-        console.warn("[Redirect Check Aborted] Profile inactive during redirect check for user ID:", userId, "Status:", profile.status, " Signing out.");
-        try {
-          await supabase.auth.signOut();
-          toast({ title: "Account Inactive", description: `Your account status is ${profile.status}. Please contact support.`, variant: "destructive" });
-        } catch (signOutError) {
-          console.error("Error signing out:", signOutError);
-          toast({ title: "Sign Out Failed", description: "Could not sign you out. Please try again or clear your browser cookies.", variant: "destructive", duration: 10000 });
-        } finally {
-          if (window.location.pathname !== '/login') {
-            router.push('/login');
-          }
-        }
-        return;
-      }
-      console.log("[Redirect Check] User status verified as Active.");
-
-      console.log("[Redirect Check] Redirecting existing session to", profile.role === 'Admin' ? '/admin/dashboard' : '/user/dashboard');
-      const targetPath = profile.role === 'Admin' ? '/admin/dashboard' : '/user/dashboard';
-
-      // Prevent unnecessary navigation if already on the target page
-      if (window.location.pathname !== targetPath) {
-        router.push(targetPath);
-      }
-    } catch (e: any) {
-      console.error("[Redirect Check Failed] Unexpected error during redirection:", e);
-      toast({ title: "Error", description: `An unexpected error occurred during redirection: ${e.message}`, variant: "destructive" });
-      try {
-        await supabase.auth.signOut();
-      } catch (signOutError) {
-        console.error("Error signing out during redirect error:", signOutError);
-        toast({ title: "Sign Out Failed", description: "Could not sign you out. Please try again or clear your browser cookies.", variant: "destructive", duration: 10000 });
-      } finally {
-        if (window.location.pathname !== '/login') {
-          router.push('/login');
-        }
-      }
-    }
-  };
-
-  // Memoize the DotLottieReact animation component
+  // Simplified success animation
   const SuccessAnimationComponent = useMemo(() => {
     return showSuccessAnimation ? (
       <motion.div
@@ -201,21 +117,16 @@ export default function LoginPage() {
         className="flex flex-col items-center justify-center p-10"
         style={{ minHeight: '300px' }}
       >
-        <video
-          src="/animations/Animation%20-%201746543995336.webm"
-          loop
-          autoPlay
-          muted
-          playsInline
-          style={{ width: 150, height: 150 }}
-        />
+        <div className="w-24 h-24 border-4 border-green-500 rounded-full flex items-center justify-center mb-4">
+          <svg className="w-12 h-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
         <p className="mt-4 text-lg font-semibold text-primary">Login Successful!</p>
         <p className="text-muted-foreground text-sm">Redirecting...</p>
       </motion.div>
     ) : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showSuccessAnimation]);
-
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -229,18 +140,8 @@ export default function LoginPage() {
           {showSuccessAnimation ? SuccessAnimationComponent : (
             <>
               <CardHeader className="space-y-1 text-center">
-                <div className="flex justify-center py-4">
-                  <video
-                    src="/animations/Animation%20-%201746543995336.webm"
-                    loop
-                    autoPlay
-                    muted
-                    playsInline
-                    style={{ width: 150, height: 150 }}
-                  />
-                </div>
                 <CardTitle className="text-2xl font-bold text-primary">Welcome Back!</CardTitle>
-                <CardDescription>Enter your credentials to access Flow Tag</CardDescription>
+                <CardDescription>Enter your credentials to access your dashboard</CardDescription>
               </CardHeader>
               <CardContent>
                 <Form {...form}>
@@ -271,16 +172,9 @@ export default function LoginPage() {
                         </FormItem>
                       )}
                     />
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: 0.2 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <Button type="submit" className="w-full" loading={isLoading} disabled={isLoading}>
-                        {isLoading ? 'Logging in...' : 'Login'}
-                      </Button>
-                    </motion.div>
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? 'Logging in...' : 'Login'}
+                    </Button>
                   </form>
                 </Form>
                 <div className="mt-4 text-center text-sm">

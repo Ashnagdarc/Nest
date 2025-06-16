@@ -1,16 +1,16 @@
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/aceternity";
-import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, TrendingUp, TrendingDown, Minus, Package, CheckCircle, Wrench } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, TrendingUp, TrendingDown, Minus, Package, CheckCircle, Wrench, Users, Clock, AlertTriangle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import ErrorDisplay from '@/components/ui/error-display';
+import { Badge } from '@/components/ui/badge';
 
 type GearData = {
     id: string;
-    status?: string;
-    created_at?: string;
-    category?: string;
+    status: string | null;
+    created_at: string | null;
+    category: string;
 };
 
 export function DashboardStats() {
@@ -30,6 +30,7 @@ export function DashboardStats() {
         booked: 0,
         damaged: 0
     });
+    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
         fetchStats();
@@ -110,15 +111,75 @@ export function DashboardStats() {
         return "text-gray-500";
     };
 
+    const getStatIcon = (title: string) => {
+        switch (title.toLowerCase()) {
+            case 'active users':
+                return Users;
+            case 'total gears':
+                return Package;
+            case 'pending requests':
+                return Clock;
+            case 'available gears':
+                return CheckCircle;
+            case 'under repair':
+                return AlertTriangle;
+            default:
+                return Package;
+        }
+    };
+
+    const getStatColor = (title: string) => {
+        switch (title.toLowerCase()) {
+            case 'active users':
+                return 'text-blue-500';
+            case 'total gears':
+                return 'text-purple-500';
+            case 'pending requests':
+                return 'text-orange-500';
+            case 'available gears':
+                return 'text-green-500';
+            case 'under repair':
+                return 'text-red-500';
+            default:
+                return 'text-gray-500';
+        }
+    };
+
+    const getStatBgColor = (title: string) => {
+        switch (title.toLowerCase()) {
+            case 'active users':
+                return 'bg-blue-500/10';
+            case 'total gears':
+                return 'bg-purple-500/10';
+            case 'pending requests':
+                return 'bg-orange-500/10';
+            case 'available gears':
+                return 'bg-green-500/10';
+            case 'under repair':
+                return 'bg-red-500/10';
+            default:
+                return 'bg-gray-500/10';
+        }
+    };
+
+    const statVariants = {
+        hidden: { opacity: 0, y: 20 },
+        visible: (index: number) => ({
+            opacity: 1,
+            y: 0,
+            transition: {
+                delay: index * 0.1,
+                duration: 0.3
+            }
+        })
+    };
+
     if (isLoading) {
         return (
             <div className="flex justify-center items-center p-4">
-                <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                >
+                <div className="animate-spin">
                     <Loader2 className="h-6 w-6 text-blue-500" />
-                </motion.div>
+                </div>
                 <span className="ml-2 text-sm font-medium text-gray-300">Loading stats...</span>
             </div>
         );
@@ -174,73 +235,40 @@ export function DashboardStats() {
         <div className="space-y-2">
             <h2 className="text-lg font-semibold text-white mb-3">Equipment Overview</h2>
             <div className="grid grid-cols-1 gap-3">
-                <AnimatePresence>
-                    {statItems.map((item, index) => (
-                        <motion.div
-                            key={item.title}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{
-                                delay: index * 0.05,
-                                type: "spring",
-                                stiffness: 100,
-                                damping: 15
-                            }}
-                            whileHover={{ scale: 1.02 }}
-                        >
-                            <Card className="bg-gray-800/50 border-gray-700 hover:bg-gray-800/70 transition-all duration-200">
-                                <CardContent className="p-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`p-2 rounded-lg ${item.bgColor}`}>
-                                                <item.icon className={`h-4 w-4 ${item.textColor}`} />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-400 font-medium">
-                                                    {item.title}
-                                                </p>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-lg font-bold text-white">
-                                                        {item.value}
-                                                    </span>
-                                                    {item.percentage !== undefined && (
-                                                        <span className={`text-xs ${item.textColor}`}>
-                                                            ({item.percentage}%)
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
+                {statItems.map((item, index) => (
+                    <div key={item.title}>
+                        <Card className={`transition-all duration-200 hover:shadow-md border-primary/20 ${item.bgColor}`}>
+                            <CardContent className="p-6">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-lg ${item.bgColor}`}>
+                                            <item.icon className={`h-4 w-4 ${item.textColor}`} />
                                         </div>
-
-                                        <div className="text-right">
-                                            <div className="flex items-center gap-1 text-xs">
-                                                {getTrendIcon(item.value, item.previous)}
-                                                <span className={getTrendColor(item.value, item.previous)}>
-                                                    {item.value - item.previous >= 0 ? '+' : ''}
-                                                    {item.value - item.previous}
+                                        <div>
+                                            <p className="text-sm font-medium text-muted-foreground">
+                                                {item.title}
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-2xl font-bold">
+                                                    {item.value}
                                                 </span>
+                                                {item.percentage !== undefined && (
+                                                    <Badge
+                                                        variant={item.value > item.previous ? "default" : "secondary"}
+                                                        className="text-xs"
+                                                    >
+                                                        {item.value > item.previous ? '+' : ''}
+                                                        {item.value - item.previous}
+                                                    </Badge>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
-
-                                    {/* Progress bar for percentages */}
-                                    {item.percentage !== undefined && (
-                                        <div className="mt-2">
-                                            <div className="w-full bg-gray-700 rounded-full h-1">
-                                                <motion.div
-                                                    className={`h-1 rounded-full bg-gradient-to-r ${item.color}`}
-                                                    initial={{ width: 0 }}
-                                                    animate={{ width: `${item.percentage}%` }}
-                                                    transition={{ duration: 0.8, delay: index * 0.1 }}
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                ))}
             </div>
         </div>
     );
