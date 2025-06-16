@@ -175,7 +175,7 @@ export default function SignupPage() {
           />
           <h3 className="mt-2 text-xl font-semibold text-primary">Account Created!</h3>
           <p className="text-center text-muted-foreground">
-            Welcome to Flow Tag. Redirecting to your dashboard...
+            Welcome to Nest by Eden Oasis. Redirecting to your dashboard...
           </p>
         </DialogContent>
       </Dialog>
