@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -37,7 +37,7 @@ type RealtimeGearRequestPayload = RealtimePostgresChangesPayload<{
   new: GearRequest;
 }>;
 
-export default function MyRequestsPage() {
+function MyRequestsContent() {
   const [requests, setRequests] = useState<any[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -888,5 +888,32 @@ export default function MyRequestsPage() {
         </DialogContent>
       </Dialog>
     </motion.div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="container mx-auto py-6 px-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>My Requests</CardTitle>
+          <CardDescription>Loading your gear requests...</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+            <span>Loading...</span>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function MyRequestsPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <MyRequestsContent />
+    </Suspense>
   );
 }
