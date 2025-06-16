@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -64,7 +64,7 @@ type RequestFormValues = z.infer<typeof requestSchema>;
 
 const REQUEST_FORM_DRAFT_KEY = "user-request-gear-form-draft";
 
-export default function RequestGearPage() {
+function RequestGearContent() {
   const searchParams = useSearchParams();
   const preselectedGearId = searchParams.get('gearId');
   const { toast } = useToast();
@@ -655,6 +655,35 @@ export default function RequestGearPage() {
         </Form>
       </div>
     </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="container mx-auto px-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Request Gear</CardTitle>
+            <CardDescription>Loading...</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center py-12">
+              <div className="mr-2 h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              <span>Loading gear request form...</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+export default function RequestGearPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <RequestGearContent />
+    </Suspense>
   );
 }
 

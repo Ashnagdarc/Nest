@@ -45,6 +45,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 
 // --- Dynamically import Lottie ---
@@ -212,7 +213,7 @@ interface StatusHistoryItem {
   };
 }
 
-export default function ManageRequestsPage() {
+function ManageRequestsContent() {
   const supabase = createClient();
   const searchParams = useSearchParams();
   const statusParam = searchParams.get('status');
@@ -1518,6 +1519,33 @@ export default function ManageRequestsPage() {
         </>
       )}
     </motion.div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="container mx-auto py-6 px-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Manage Requests</CardTitle>
+          <CardDescription>Loading gear requests...</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-12">
+            <div className="mr-2 h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <span>Loading...</span>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function ManageRequestsPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <ManageRequestsContent />
+    </Suspense>
   );
 }
 
