@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
           <p><strong>User:</strong> ${record.requester_name || 'N/A'}</p>
           <p><strong>Gear:</strong> ${record.gear_name || 'N/A'}</p>
           <p><strong>Reason:</strong> ${record.reason || 'N/A'}</p>
-          <p>View request in <a href="https://gear-flow-nine.vercel.app/user/requests/${record.id}">Nest</a>.</p>
+          <p>View request in <a href="https://nest-eden-oasis.vercel.app/user/requests/${record.id}">Nest by Eden Oasis</a>.</p>
           <hr>
           <small style="color: #888;">Eden Oasis Nest System</small>
         </div>
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
               <p>Hi ${user.full_name || 'there'},</p>
               <p>Your request for <strong>${record.gear_name || 'equipment'}</strong> has been received and is pending approval.</p>
               <p>We will notify you as soon as it is approved.</p>
-              <p>View your request in <a href="https://gear-flow-nine.vercel.app/user/requests/${record.id}">Nest</a>.</p>
+              <p>View your request in <a href="https://nest-eden-oasis.vercel.app/user/requests/${record.id}">Nest by Eden Oasis</a>.</p>
               <hr>
               <small style="color: #888;">Eden Oasis Nest System</small>
             </div>
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
           <p>Hi ${record.requester_name || 'there'},</p>
           <p>Your request for <strong>${record.gear_name || 'equipment'}</strong> has been <b>approved</b>.</p>
           <p>Pick up your gear at the designated location.</p>
-          <p>View details in <a href="https://gear-flow-nine.vercel.app/user/requests/${record.id}">Nest</a>.</p>
+          <p>View details in <a href="https://nest-eden-oasis.vercel.app/user/requests/${record.id}">Nest by Eden Oasis</a>.</p>
           <hr>
           <small style="color: #888;">Eden Oasis Nest System</small>
         </div>

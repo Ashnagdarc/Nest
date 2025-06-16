@@ -96,21 +96,6 @@ export {
     RadioGroupItem,
 } from './ui/radio-group';
 
-// Animated/Glassmorphism Components (aceternity)
-export {
-    Card as GlassCard,
-    CardContent as GlassCardContent,
-    CardDescription as GlassCardDescription,
-    CardFooter as GlassCardFooter,
-    CardHeader as GlassCardHeader,
-    CardTitle as GlassCardTitle,
-} from './aceternity/card';
-
-export { Button as GlassButton } from './aceternity/button';
-export { Badge as GlassBadge } from './aceternity/badge';
-export { Progress as GlassProgress } from './aceternity/progress';
-export { Alert as GlassAlert, AlertDescription as GlassAlertDescription, AlertTitle as GlassAlertTitle } from './aceternity/alert';
-
 // Navigation & Layout
 export { ThemeToggle } from './theme-toggle';
 export { UserNav } from './user-nav';
