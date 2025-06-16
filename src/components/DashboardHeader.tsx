@@ -22,7 +22,7 @@ export function DashboardHeader() {
         <header className="sticky top-0 z-30 w-full bg-background/95 border-b flex items-center justify-between px-4 py-2 shadow-sm">
             <Link href="/" className="flex items-center gap-2 font-bold text-lg text-primary">
                 <img src="/favicon.png" alt="Logo" className="h-7 w-7" />
-                <span className="hidden sm:inline">Flow Tag</span>
+                <span className="hidden sm:inline">Nest by Eden Oasis</span>
             </Link>
             <div className="flex items-center gap-3">
                 <NotificationBell />

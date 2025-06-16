@@ -669,7 +669,7 @@ export default function AdminSettingsPage() {
                                         <Image
                                             key={currentLogoUrl}
                                             src={currentLogoUrl}
-                                            alt="Current Flow Tag Logo"
+                                            alt="Current Nest by Eden Oasis Logo"
                                             width={40}
                                             height={40}
                                             className="rounded-md border p-1 bg-white"

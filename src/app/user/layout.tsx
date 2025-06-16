@@ -96,7 +96,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
                 </SidebarTrigger>
               </div>
               <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary truncate group-data-[collapsible=icon]:hidden">
-                <span className="truncate">Flow Tag User</span>
+                <span className="truncate">Nest User</span>
               </Link>
             </div>
             <div className="flex items-center gap-2 group-data-[state=collapsed]:hidden">
@@ -167,7 +167,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
         {/* Header for mobile view with hamburger trigger */}
         <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-background px-4 md:hidden">
           <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-primary truncate max-w-[70%]">
-            <span className="truncate">Flow Tag User</span>
+            <span className="truncate">Nest User</span>
           </Link>
           <div className="flex items-center gap-2">
             <ThemeToggle />

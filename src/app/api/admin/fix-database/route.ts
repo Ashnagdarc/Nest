@@ -1,36 +1,36 @@
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 
 export async function POST(request: Request) {
-    try {
-        const { gearId } = await request.json();
+  try {
+    const { gearId } = await request.json();
 
-        // Get supabase client
-        const supabase = createRouteHandlerClient({ cookies });
+    // Get supabase client
+    const supabase = createSupabaseServerClient();
 
-        // Verify user is authenticated and is an admin
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // Verify user is authenticated and is an admin
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-        if (authError || !user) {
-            console.error("API - Authentication error:", authError);
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (authError || !user) {
+      console.error("API - Authentication error:", authError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-        // Check if user is admin
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
+    // Check if user is admin
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
 
-        if (profileError || !profile || profile.role !== 'Admin') {
-            console.error("API - Authorization error:", profileError);
-            return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-        }
+    if (profileError || !profile || profile.role !== 'Admin') {
+      console.error("API - Authorization error:", profileError);
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
 
-        // Create RLS bypass function for gear deletion
-        const setupSQL = `
+    // Create RLS bypass function for gear deletion
+    const setupSQL = `
     -- Create a deletion function with SECURITY DEFINER to bypass RLS
     CREATE OR REPLACE FUNCTION delete_gear_by_admin(p_gear_id UUID)
     RETURNS BOOLEAN
@@ -100,13 +100,13 @@ export async function POST(request: Request) {
     $$;
     `;
 
-        // Execute the setup SQL
-        try {
-            const result = await supabase.rpc('exec_admin_sql', { sql: setupSQL });
+    // Execute the setup SQL
+    try {
+      const result = await supabase.rpc('exec_admin_sql', { sql: setupSQL });
 
-            if (result.error) {
-                // Function might not exist yet, create it first
-                const createFunctionSQL = `
+      if (result.error) {
+        // Function might not exist yet, create it first
+        const createFunctionSQL = `
         CREATE OR REPLACE FUNCTION exec_admin_sql(sql TEXT) RETURNS VOID AS $$
         BEGIN
           EXECUTE sql;
@@ -116,40 +116,40 @@ export async function POST(request: Request) {
         GRANT EXECUTE ON FUNCTION exec_admin_sql(TEXT) TO authenticated;
         `;
 
-                // Try using graphql to execute raw SQL (needs admin privileges)
-                // This may fail if the client doesn't have appropriate permissions
-                await supabase.rpc('exec_admin_sql', { sql: createFunctionSQL });
+        // Try using graphql to execute raw SQL (needs admin privileges)
+        // This may fail if the client doesn't have appropriate permissions
+        await supabase.rpc('exec_admin_sql', { sql: createFunctionSQL });
 
-                // Try executing the original SQL again
-                const retryResult = await supabase.rpc('exec_admin_sql', { sql: setupSQL });
+        // Try executing the original SQL again
+        const retryResult = await supabase.rpc('exec_admin_sql', { sql: setupSQL });
 
-                if (retryResult.error) {
-                    return NextResponse.json({
-                        success: false,
-                        error: retryResult.error,
-                        message: "Database setup failed - you may need to run the SQL manually in the Supabase dashboard"
-                    }, { status: 500 });
-                }
-            }
-
-            return NextResponse.json({
-                success: true,
-                message: "Database permissions and RLS policies have been updated",
-                setupCompleted: true
-            });
-        } catch (error) {
-            console.error("Failed to set up database:", error);
-
-            // Return the SQL for manual execution
-            return NextResponse.json({
-                success: false,
-                message: "Failed to set up database automatically. Please run this SQL in the Supabase SQL editor:",
-                sql: setupSQL,
-                error: error
-            }, { status: 500 });
+        if (retryResult.error) {
+          return NextResponse.json({
+            success: false,
+            error: retryResult.error,
+            message: "Database setup failed - you may need to run the SQL manually in the Supabase dashboard"
+          }, { status: 500 });
         }
-    } catch (error: any) {
-        console.error("Database setup error:", error);
-        return NextResponse.json({ error: error.message || "Unknown error" }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Database permissions and RLS policies have been updated",
+        setupCompleted: true
+      });
+    } catch (error) {
+      console.error("Failed to set up database:", error);
+
+      // Return the SQL for manual execution
+      return NextResponse.json({
+        success: false,
+        message: "Failed to set up database automatically. Please run this SQL in the Supabase SQL editor:",
+        sql: setupSQL,
+        error: error
+      }, { status: 500 });
     }
+  } catch (error: any) {
+    console.error("Database setup error:", error);
+    return NextResponse.json({ error: error.message || "Unknown error" }, { status: 500 });
+  }
 } 
