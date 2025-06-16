@@ -47,20 +47,30 @@ export function hasUserRead(notification: AnyNotification, userId: string): bool
 }
 
 /**
- * Mark a notification as read for a user
+ * Mark a notification as read for the current user (uses standardized function)
  */
-export async function markNotificationAsRead(notificationId: string, userId: string) {
+export async function markNotificationAsRead(notificationId: string) {
+    const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
-    return await supabase.rpc('mark_notification_read', {
-        p_notification_id: notificationId,
-        p_user_id: userId
+    return await supabase.rpc('mark_notification_as_read', {
+        notification_id: notificationId
     });
+}
+
+/**
+ * Mark all notifications as read for the current user (uses standardized function)
+ */
+export async function markAllNotificationsAsRead() {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    return await supabase.rpc('mark_all_notifications_as_read');
 }
 
 /**
  * Create a new announcement
  */
 export async function createAnnouncement(title: string, content: string, createdBy: string) {
+    const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
     return await supabase.rpc('create_announcement', {
         p_title: title,

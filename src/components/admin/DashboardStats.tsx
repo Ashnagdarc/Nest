@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { motion } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/aceternity";
+import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, TrendingUp, TrendingDown, Minus, Package, CheckCircle, Wrench } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import ErrorDisplay from '@/components/ui/error-display';
 
@@ -12,12 +12,6 @@ type GearData = {
     created_at?: string;
     category?: string;
 };
-
-type UtilizationData = {
-    category: string;
-    count: number;
-    utilization: number;
-}
 
 export function DashboardStats() {
     const supabase = createClient();
@@ -30,7 +24,12 @@ export function DashboardStats() {
         booked: 0,
         damaged: 0
     });
-    const [utilizationData, setUtilizationData] = useState<UtilizationData[]>([]);
+    const [previousStats, setPreviousStats] = useState({
+        available: 0,
+        total: 0,
+        booked: 0,
+        damaged: 0
+    });
 
     useEffect(() => {
         fetchStats();
@@ -52,7 +51,6 @@ export function DashboardStats() {
 
             if (count === null) {
                 setStats({ available: 0, total: 0, booked: 0, damaged: 0 });
-                setUtilizationData([]);
                 return;
             }
 
@@ -65,45 +63,26 @@ export function DashboardStats() {
             if (currentError) throw new Error(`Data fetch error: ${currentError.message}`);
 
             if (currentData) {
-                // Current counts
-                const available = currentData.filter((g: GearData) =>
-                    String(g.status || '').toLowerCase().trim() === 'available').length;
+                setPreviousStats(stats);
 
-                const booked = currentData.filter((g: GearData) =>
-                    ['booked', 'checked out', 'checked_out'].includes(
-                        String(g.status || '').toLowerCase().trim()
-                    )).length;
+                // Current counts with proper status mapping
+                const available = currentData.filter((g: GearData) => {
+                    const status = String(g.status || '').toLowerCase().trim();
+                    return status === 'available' || status === '';
+                }).length;
 
-                const damaged = currentData.filter((g: GearData) =>
-                    ['damaged', 'maintenance', 'repair'].includes(
-                        String(g.status || '').toLowerCase().trim()
-                    )).length;
+                const booked = currentData.filter((g: GearData) => {
+                    const status = String(g.status || '').toLowerCase().trim();
+                    return ['booked', 'checked out', 'checked_out'].includes(status);
+                }).length;
+
+                const damaged = currentData.filter((g: GearData) => {
+                    const status = String(g.status || '').toLowerCase().trim();
+                    return ['damaged', 'maintenance', 'repair', 'under repair'].includes(status);
+                }).length;
 
                 const total = currentData.length;
 
-                // Group by category for utilization data
-                const categories: Record<string, { total: number, used: number }> = {};
-                currentData.forEach((gear: any) => {
-                    const category = gear.category || 'Uncategorized';
-                    if (!categories[category]) {
-                        categories[category] = { total: 0, used: 0 };
-                    }
-                    categories[category].total++;
-                    if (['booked', 'checked out', 'checked_out'].includes(
-                        String(gear.status || '').toLowerCase().trim()
-                    )) {
-                        categories[category].used++;
-                    }
-                });
-
-                // Convert to array and calculate utilization percentage
-                const utilizationResult = Object.entries(categories).map(([category, { total, used }]) => ({
-                    category,
-                    count: total,
-                    utilization: total > 0 ? Math.round((used / total) * 100) : 0
-                }));
-
-                setUtilizationData(utilizationResult);
                 setStats({ available, total, booked, damaged });
             }
         } catch (error: any) {
@@ -119,11 +98,28 @@ export function DashboardStats() {
         }
     }
 
+    const getTrendIcon = (current: number, previous: number) => {
+        if (current > previous) return <TrendingUp className="h-3 w-3 text-green-400" />;
+        if (current < previous) return <TrendingDown className="h-3 w-3 text-red-400" />;
+        return <Minus className="h-3 w-3 text-gray-500" />;
+    };
+
+    const getTrendColor = (current: number, previous: number) => {
+        if (current > previous) return "text-green-400";
+        if (current < previous) return "text-red-400";
+        return "text-gray-500";
+    };
+
     if (isLoading) {
         return (
-            <div className="flex justify-center items-center p-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <span className="ml-2">Loading stats...</span>
+            <div className="flex justify-center items-center p-4">
+                <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                >
+                    <Loader2 className="h-6 w-6 text-blue-500" />
+                </motion.div>
+                <span className="ml-2 text-sm font-medium text-gray-300">Loading stats...</span>
             </div>
         );
     }
@@ -132,72 +128,120 @@ export function DashboardStats() {
         return <ErrorDisplay error={error} onRetry={fetchStats} />;
     }
 
+    const statItems = [
+        {
+            title: "Total Equipment",
+            value: stats.total,
+            icon: Package,
+            color: "from-blue-500 to-blue-600",
+            bgColor: "bg-blue-500/20",
+            textColor: "text-blue-400",
+            previous: previousStats.total
+        },
+        {
+            title: "Available",
+            value: stats.available,
+            icon: CheckCircle,
+            color: "from-green-500 to-green-600",
+            bgColor: "bg-green-500/20",
+            textColor: "text-green-400",
+            percentage: stats.total > 0 ? Math.round((stats.available / stats.total) * 100) : 0,
+            previous: previousStats.available
+        },
+        {
+            title: "Currently Booked",
+            value: stats.booked,
+            icon: Package,
+            color: "from-purple-500 to-purple-600",
+            bgColor: "bg-purple-500/20",
+            textColor: "text-purple-400",
+            percentage: stats.total > 0 ? Math.round((stats.booked / stats.total) * 100) : 0,
+            previous: previousStats.booked
+        },
+        {
+            title: "Under Repair",
+            value: stats.damaged,
+            icon: Wrench,
+            color: "from-orange-500 to-orange-600",
+            bgColor: "bg-orange-500/20",
+            textColor: "text-orange-400",
+            percentage: stats.total > 0 ? Math.round((stats.damaged / stats.total) * 100) : 0,
+            previous: previousStats.damaged
+        }
+    ];
+
     return (
-        <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                    title="Total Equipment"
-                    value={stats.total}
-                    index={0}
-                />
-                <StatCard
-                    title="Available"
-                    value={stats.available}
-                    index={1}
-                    color="text-green-500"
-                    percentage={stats.total > 0 ? Math.round((stats.available / stats.total) * 100) : 0}
-                />
-                <StatCard
-                    title="Currently Booked"
-                    value={stats.booked}
-                    index={2}
-                    color="text-blue-500"
-                    percentage={stats.total > 0 ? Math.round((stats.booked / stats.total) * 100) : 0}
-                />
-                <StatCard
-                    title="Under Repair"
-                    value={stats.damaged}
-                    index={3}
-                    color="text-orange-500"
-                    percentage={stats.total > 0 ? Math.round((stats.damaged / stats.total) * 100) : 0}
-                />
+        <div className="space-y-2">
+            <h2 className="text-lg font-semibold text-white mb-3">Equipment Overview</h2>
+            <div className="grid grid-cols-1 gap-3">
+                <AnimatePresence>
+                    {statItems.map((item, index) => (
+                        <motion.div
+                            key={item.title}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{
+                                delay: index * 0.05,
+                                type: "spring",
+                                stiffness: 100,
+                                damping: 15
+                            }}
+                            whileHover={{ scale: 1.02 }}
+                        >
+                            <Card className="bg-gray-800/50 border-gray-700 hover:bg-gray-800/70 transition-all duration-200">
+                                <CardContent className="p-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`p-2 rounded-lg ${item.bgColor}`}>
+                                                <item.icon className={`h-4 w-4 ${item.textColor}`} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-400 font-medium">
+                                                    {item.title}
+                                                </p>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-lg font-bold text-white">
+                                                        {item.value}
+                                                    </span>
+                                                    {item.percentage !== undefined && (
+                                                        <span className={`text-xs ${item.textColor}`}>
+                                                            ({item.percentage}%)
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="text-right">
+                                            <div className="flex items-center gap-1 text-xs">
+                                                {getTrendIcon(item.value, item.previous)}
+                                                <span className={getTrendColor(item.value, item.previous)}>
+                                                    {item.value - item.previous >= 0 ? '+' : ''}
+                                                    {item.value - item.previous}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Progress bar for percentages */}
+                                    {item.percentage !== undefined && (
+                                        <div className="mt-2">
+                                            <div className="w-full bg-gray-700 rounded-full h-1">
+                                                <motion.div
+                                                    className={`h-1 rounded-full bg-gradient-to-r ${item.color}`}
+                                                    initial={{ width: 0 }}
+                                                    animate={{ width: `${item.percentage}%` }}
+                                                    transition={{ duration: 0.8, delay: index * 0.1 }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
             </div>
         </div>
-    );
-}
-
-interface StatCardProps {
-    title: string;
-    value: number;
-    index: number;
-    color?: string;
-    percentage?: number;
-}
-
-function StatCard({ title, value, index, color = "text-primary", percentage }: StatCardProps) {
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-        >
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                        {title}
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">
-                        {value}
-                        {percentage !== undefined && (
-                            <span className={`text-sm ml-2 ${color}`}>
-                                ({percentage}%)
-                            </span>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-        </motion.div>
     );
 } 

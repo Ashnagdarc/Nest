@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
-import ThemeToggle from '@/components/ThemeToggle';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
@@ -27,7 +26,6 @@ export function DashboardHeader() {
             </Link>
             <div className="flex items-center gap-3">
                 <NotificationBell />
-                <ThemeToggle />
                 {isLoadingUser ? (
                     <Avatar className="h-9 w-9 bg-muted rounded-full animate-pulse" />
                 ) : currentUser ? (

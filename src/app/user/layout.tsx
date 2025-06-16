@@ -22,7 +22,7 @@ import { LayoutDashboard, Search, PlusSquare, ListChecks, UploadCloud, History, 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
-import ThemeToggle from '@/components/ThemeToggle';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { useIsMobile } from '@/hooks/use-mobile';
 import CustomHamburger from '@/components/CustomHamburger';
@@ -72,7 +72,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
 
   // Add push notification registration
-  useFCM(currentUser?.id ?? null);
+  useFCM(currentUser?.id ?? '');
 
   return (
     <SidebarProvider defaultOpen={!isMobile}>

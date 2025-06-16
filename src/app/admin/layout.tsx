@@ -23,7 +23,7 @@ import { Home, Package, ListChecks, UserCog, Upload, BarChart2, Settings, Bell, 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
-import ThemeToggle from '@/components/ThemeToggle';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { useToast } from "@/hooks/use-toast";
