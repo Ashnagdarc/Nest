@@ -1,6 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr';
-// Import your generated types - comment out if file doesn't exist yet
-// import type { Database } from '@/types/supabase';
+import type { Database } from '@/types/supabase';
 
 // Get environment variables with fallback values for development
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lkgxzrvcozfxydpmbtqq.supabase.co';
@@ -13,8 +12,8 @@ export class SupabaseConfigError extends Error {
     }
 }
 
-// Create a singleton instance
-let supabaseInstance: ReturnType<typeof createBrowserClient> | null = null;
+// Create a singleton instance with proper typing
+let supabaseInstance: ReturnType<typeof createBrowserClient<Database>> | null = null;
 
 /**
  * Creates or returns a Supabase client instance.
@@ -30,7 +29,7 @@ export const createClient = () => {
     }
 
     try {
-        supabaseInstance = createBrowserClient(
+        supabaseInstance = createBrowserClient<Database>(
             supabaseUrl,
             supabaseAnonKey,
             {

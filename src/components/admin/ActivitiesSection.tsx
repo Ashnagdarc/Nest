@@ -1,12 +1,14 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/aceternity";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, PackagePlus, Users, Activity, Clock, Zap, TrendingUp, ChevronDown, ArrowUp } from 'lucide-react';
+import { motion, AnimatePresence } from '@/lib/motion-fallback';
+import { Loader2, Calendar, User, ArrowRight, Activity, TrendingUp, TrendingDown, Filter, MoreHorizontal } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import ErrorDisplay from '@/components/ui/error-display';
-import { Button } from "@/components/aceternity";
+import { Badge } from '@/components/ui/badge';
+import { formatDistanceToNow } from 'date-fns';
 
 type UserActivity = {
     id: string;
@@ -195,7 +197,7 @@ export function ActivitiesSection() {
                         user: profile.full_name || profile.email || 'User',
                         action: isNewProfile ? 'account was created' : 'profile was updated',
                         time: profile.updated_at ? timeAgo(new Date(profile.updated_at)) : '',
-                        icon: isNewProfile ? Users : Activity,
+                        icon: isNewProfile ? User : Activity,
                         type: 'profile',
                         timestamp: new Date(profile.updated_at)
                     };
@@ -215,7 +217,7 @@ export function ActivitiesSection() {
                     user: 'Admin',
                     action: `added ${gear.name || 'equipment'}`,
                     time: gear.created_at ? timeAgo(new Date(gear.created_at)) : '',
-                    icon: PackagePlus,
+                    icon: ArrowRight,
                     type: 'gear' as const,
                     timestamp: new Date(gear.created_at)
                 }));
@@ -250,7 +252,7 @@ export function ActivitiesSection() {
                         user: 'Admin',
                         action: 'added new equipment category',
                         time: timeAgo(new Date(now.getTime() - 1000 * 60 * 30)), // 30 minutes ago
-                        icon: PackagePlus,
+                        icon: ArrowRight,
                         type: 'gear',
                         timestamp: new Date(now.getTime() - 1000 * 60 * 30)
                     },
@@ -370,274 +372,66 @@ export function ActivitiesSection() {
         }
     }
 
-    return (
-        <Card className="bg-gray-800/40 border-gray-700/50 backdrop-blur-sm">
-            <CardHeader className="pb-3">
-                <div className="relative">
-                    {/* Header with enhanced styling */}
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                            <div className="p-2 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 shadow-lg">
-                                <Activity className="h-5 w-5 text-white" />
-                            </div>
-                            <div className="flex-1">
-                                <CardTitle className="text-lg font-bold text-white">Recent Activities</CardTitle>
-                                {!isCollapsed ? (
-                                    <p className="text-sm text-gray-400">Live system activity</p>
-                                ) : (
-                                    <motion.div
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: "auto" }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        transition={{ duration: 0.2, delay: 0.1 }}
-                                        className="flex items-center gap-4 mt-1"
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <div className="text-sm text-gray-300">
-                                                {activities.length}
-                                            </div>
-                                            <div className="text-xs text-gray-400">activities</div>
-                                        </div>
-                                        {activities.length > 0 && (
-                                            <>
-                                                <div className="w-px h-4 bg-gray-600" />
-                                                <div className="flex items-center gap-2">
-                                                    <div className="text-xs text-gray-400">Latest:</div>
-                                                    <div className="text-sm text-gray-300 truncate max-w-32">
-                                                        {activities[0]?.user}
-                                                    </div>
-                                                </div>
-                                            </>
-                                        )}
-                                        {activities.length > 0 && (
-                                            <>
-                                                <div className="w-px h-4 bg-gray-600" />
-                                                <div className="flex gap-1">
-                                                    {activities.slice(0, 4).map((activity, index) => {
-                                                        const config = getActivityConfig(activity.type || '');
-                                                        return (
-                                                            <div
-                                                                key={`${activity.id}-${index}`}
-                                                                className={`w-2 h-2 rounded-full ${config.bgColor.replace('/10', '')} opacity-60`}
-                                                                title={`${activity.user}: ${activity.action}`}
-                                                            />
-                                                        );
-                                                    })}
-                                                    {activities.length > 4 && (
-                                                        <div className="w-2 h-2 rounded-full bg-gray-600" title="More activities..." />
-                                                    )}
-                                                </div>
-                                            </>
-                                        )}
-                                    </motion.div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                <span className="text-xs text-green-400 font-medium">LIVE</span>
-                                {!isCollapsed && isAutoScrolling && (
-                                    <>
-                                        <div className="w-px h-3 bg-gray-600 mx-1" />
-                                        <motion.div
-                                            animate={{ y: [0, -2, 0] }}
-                                            transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
-                                            className="flex items-center gap-1"
-                                        >
-                                            <ArrowUp className="h-3 w-3 text-blue-400" />
-                                            <span className="text-xs text-blue-400 font-medium">
-                                                {isPaused ? 'PAUSED' : 'AUTO'}
-                                            </span>
-                                        </motion.div>
-                                    </>
-                                )}
-                            </div>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setIsCollapsed(!isCollapsed)}
-                                className="text-gray-400 hover:text-white hover:bg-gray-700 p-2"
-                            >
-                                <motion.div
-                                    animate={{ rotate: isCollapsed ? 180 : 0 }}
-                                    transition={{ duration: 0.2 }}
-                                >
-                                    <ChevronDown className="h-4 w-4" />
-                                </motion.div>
-                            </Button>
-                        </div>
+    if (isLoading) {
+        return (
+            <Card className="bg-gray-800/50 border-gray-700">
+                <CardHeader>
+                    <CardTitle className="text-white">Recent Activities</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex justify-center p-4">
+                        <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
                     </div>
-                </div>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    return (
+        <Card className="bg-gray-800/50 border-gray-700">
+            <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Recent Activities
+                </CardTitle>
             </CardHeader>
-
-            <AnimatePresence>
-                {!isCollapsed && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
-                        style={{ overflow: "hidden" }}
-                    >
-                        <CardContent className="pt-0">
-                            {error ? (
-                                <ErrorDisplay error={error} onRetry={() => fetchActivities(true)} />
-                            ) : (
-                                <div className="space-y-4">
-                                    {/* Infinite Scroll Indicator */}
-                                    <AnimatePresence>
-                                        {isLoadingMore && (
-                                            <motion.div
-                                                initial={{ opacity: 0, y: -10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: -10 }}
-                                                className="flex justify-center items-center py-2"
-                                            >
-                                                <motion.div
-                                                    animate={{ rotate: 360 }}
-                                                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                                >
-                                                    <Loader2 className="h-4 w-4 text-purple-500" />
-                                                </motion.div>
-                                                <span className="ml-2 text-xs text-gray-400">Loading older activities...</span>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-
-                                    {/* Scroll hint */}
-                                    {hasMore && !isLoadingMore && (
-                                        <motion.div
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            className="flex justify-center items-center py-1"
-                                        >
-                                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                <ArrowUp className="h-3 w-3" />
-                                                <span>Scroll up for more</span>
-                                            </div>
-                                        </motion.div>
-                                    )}
-
-                                    {/* Activity List with Auto-Scroll */}
-                                    <ScrollArea
-                                        ref={scrollAreaRef}
-                                        className="h-[280px] pr-2"
-                                        onMouseEnter={handleMouseEnter}
-                                        onMouseLeave={handleMouseLeave}
-                                    >
-                                        {activities.length === 0 && !isLoading ? (
-                                            <motion.div
-                                                initial={{ opacity: 0, y: 20 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                className="text-center py-6"
-                                            >
-                                                <div className="p-3 rounded-full bg-gray-700/50 w-12 h-12 mx-auto mb-3 flex items-center justify-center">
-                                                    <Zap className="h-6 w-6 text-gray-400" />
-                                                </div>
-                                                <h3 className="text-sm font-medium text-white mb-1">No recent activities</h3>
-                                                <p className="text-xs text-gray-400">Activity will appear here as users interact with the system</p>
-                                            </motion.div>
-                                        ) : (
-                                            <div className="space-y-1.5">
-                                                <AnimatePresence>
-                                                    {activities.map((activity, index) => {
-                                                        const config = getActivityConfig(activity.type || '');
-                                                        return (
-                                                            <motion.div
-                                                                key={`${activity.id}-${index}`}
-                                                                initial={{ opacity: 0, x: -20, scale: 0.95 }}
-                                                                animate={{ opacity: 1, x: 0, scale: 1 }}
-                                                                exit={{ opacity: 0, x: 20, scale: 0.95 }}
-                                                                transition={{
-                                                                    delay: index * 0.02,
-                                                                    type: "spring",
-                                                                    stiffness: 100,
-                                                                    damping: 15
-                                                                }}
-                                                                whileHover={{ scale: 1.01, x: 2 }}
-                                                                className="group relative"
-                                                            >
-                                                                {/* Compact Activity Card */}
-                                                                <div className={`
-                                                                    relative p-2.5 rounded-lg
-                                                                    bg-gray-800/30 hover:bg-gray-800/50
-                                                                    border ${config.borderColor}
-                                                                    transition-all duration-200
-                                                                    backdrop-blur-sm
-                                                                `}>
-                                                                    {/* Colored accent line */}
-                                                                    <div className={`absolute left-0 top-0 bottom-0 w-0.5 ${config.bgColor.replace('/10', '')} opacity-60 rounded-l-lg`} />
-
-                                                                    <div className="relative flex items-center gap-2.5">
-                                                                        {/* Compact Icon */}
-                                                                        <div className={`
-                                                                            p-1.5 rounded-lg ${config.bgColor} border ${config.borderColor}
-                                                                            flex-shrink-0 group-hover:scale-105 transition-transform duration-200
-                                                                        `}>
-                                                                            {activity.icon && (
-                                                                                <activity.icon className={`h-3 w-3 ${config.iconColor}`} />
-                                                                            )}
-                                                                        </div>
-
-                                                                        {/* Activity Content */}
-                                                                        <div className="flex-1 min-w-0">
-                                                                            <div className="flex items-center justify-between">
-                                                                                <div className="flex-1 min-w-0 pr-2">
-                                                                                    {/* User and Action in one line */}
-                                                                                    <p className="text-sm text-white leading-tight">
-                                                                                        <span className="font-medium">{activity.user}</span>
-                                                                                        <span className="text-gray-300 ml-1">{activity.action}</span>
-                                                                                    </p>
-                                                                                </div>
-
-                                                                                {/* Compact Time Badge */}
-                                                                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-700/50 border border-gray-600/50 flex-shrink-0">
-                                                                                    <Clock className="h-2.5 w-2.5 text-gray-400" />
-                                                                                    <span className="text-xs text-gray-400 font-medium">
-                                                                                        {activity.time}
-                                                                                    </span>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-
-                                                                    {/* Subtle background on hover */}
-                                                                    <div className={`
-                                                                        absolute inset-0 ${config.bgColor} rounded-lg
-                                                                        opacity-0 group-hover:opacity-100 transition-opacity duration-200
-                                                                    `} />
-                                                                </div>
-                                                            </motion.div>
-                                                        );
-                                                    })}
-                                                </AnimatePresence>
-                                            </div>
-                                        )}
-
-                                        {/* Loading state */}
-                                        {isLoading && (
-                                            <motion.div
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                className="flex justify-center items-center p-4"
-                                            >
-                                                <motion.div
-                                                    animate={{ rotate: 360 }}
-                                                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                                >
-                                                    <Loader2 className="h-4 w-4 text-purple-500" />
-                                                </motion.div>
-                                                <span className="ml-2 text-xs font-medium text-gray-300">Loading activities...</span>
-                                            </motion.div>
-                                        )}
-                                    </ScrollArea>
+            <CardContent className="max-h-96 overflow-y-auto">
+                {activities.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400">
+                        <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No recent activities</p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {activities.map((activity, index) => (
+                            <div key={`${activity.type}-${index}`} className="p-3 rounded-lg bg-gray-700/50 border border-gray-600/50">
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2 rounded-full bg-blue-500/20">
+                                        <Activity className="h-4 w-4 text-blue-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-sm font-medium text-white truncate">
+                                                {activity.user}
+                                            </h4>
+                                            <Badge variant="outline" className="text-xs">
+                                                {activity.type}
+                                            </Badge>
+                                        </div>
+                                        <p className="text-sm text-gray-300 mt-1">
+                                            {activity.action}
+                                        </p>
+                                        <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+                                            <Calendar className="h-3 w-3" />
+                                            <span>{formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}</span>
+                                        </div>
+                                    </div>
                                 </div>
-                            )}
-                        </CardContent>
-                    </motion.div>
+                            </div>
+                        ))}
+                    </div>
                 )}
-            </AnimatePresence>
+            </CardContent>
         </Card>
     );
 } 

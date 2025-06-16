@@ -1,88 +1,64 @@
-import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
+export async function DELETE(request: NextRequest) {
     try {
-        const { gearId, userId } = await request.json();
+        const { gearId } = await request.json();
 
-        // Validation
         if (!gearId) {
-            return NextResponse.json({ error: 'Missing gearId parameter' }, { status: 400 });
+            return NextResponse.json(
+                { error: 'Gear ID is required' },
+                { status: 400 }
+            );
         }
 
-        console.log("API - Delete request received for gear ID:", gearId);
+        // Create Supabase client with proper server-side auth
+        const supabase = createSupabaseServerClient();
 
-        // Get supabase client
-        const supabase = createRouteHandlerClient({ cookies });
-
-        // Verify user is authenticated and is an admin
+        // Get the user's session
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 
         if (authError || !user) {
-            console.error("API - Authentication error:", authError);
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
         }
 
         // Check if user is admin
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile } = await supabase
             .from('profiles')
             .select('role')
             .eq('id', user.id)
             .single();
 
-        if (profileError || !profile || profile.role !== 'Admin') {
-            console.error("API - Authorization error:", profileError);
-            return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+        if (profile?.role !== 'admin') {
+            return NextResponse.json(
+                { error: 'Admin access required' },
+                { status: 403 }
+            );
         }
 
-        console.log("API - Admin verification successful, proceeding with deletion");
+        // Delete the gear
+        const { error: deleteError } = await supabase
+            .from('gears')
+            .delete()
+            .eq('id', gearId);
 
-        // Method 1: Try direct SQL deletion first (most reliable)
-        try {
-            const { error: sqlError } = await supabase.rpc('admin_delete_gear', { gear_id: gearId });
-
-            if (!sqlError) {
-                console.log("API - Deletion via RPC successful");
-                return NextResponse.json({ success: true, method: 'rpc' });
-            }
-
-            console.log("API - RPC deletion failed:", sqlError);
-            // Continue to next method if this fails
-        } catch (rpcError) {
-            console.error("API - RPC error:", rpcError);
-            // Continue to fallback methods
+        if (deleteError) {
+            throw deleteError;
         }
 
-        // Method 2: Try direct database operation with service role access (if RPC fails)
-        try {
-            // Direct database delete
-            const { error: deleteError } = await supabase
-                .from('gears')
-                .delete()
-                .eq('id', gearId);
+        return NextResponse.json(
+            { message: 'Gear deleted successfully' },
+            { status: 200 }
+        );
 
-            if (deleteError) {
-                console.error("API - Standard deletion error:", deleteError);
-                return NextResponse.json({
-                    error: `Deletion failed: ${deleteError.message}`,
-                    details: deleteError
-                }, { status: 500 });
-            }
-
-            console.log("API - Standard deletion successful");
-            return NextResponse.json({ success: true, method: 'standard' });
-        } catch (deleteError: any) {
-            console.error("API - Unhandled deletion error:", deleteError);
-            return NextResponse.json({
-                error: `Unhandled deletion error: ${deleteError.message}`,
-                details: deleteError
-            }, { status: 500 });
-        }
     } catch (error: any) {
-        console.error("API - General error:", error);
-        return NextResponse.json({
-            error: `Server error: ${error.message}`
-        }, { status: 500 });
+        console.error('Error deleting gear:', error);
+        return NextResponse.json(
+            { error: error.message || 'Failed to delete gear' },
+            { status: 500 }
+        );
     }
 } 

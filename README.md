@@ -1,184 +1,121 @@
-# Flow Tag - Equipment Rental & Management System
+# Nest by Eden Oasis
 
-Flow Tag is a modern web application for managing equipment rentals, inventory tracking, and reservations.
+**Comprehensive Asset Management System**
 
-## Features
+A modern, full-stack asset management platform designed for organizations to efficiently track, request, and manage all types of assets - from equipment and vehicles to technology devices and office supplies.
 
-- Equipment inventory management
-- Gear rental and reservation system
-- User management with admin and regular user roles
-- Responsive design for all device sizes
-- Check-in/check-out tracking
-- Calendar scheduling
-- Booking history
-- Administrative analytics
+## 🌟 Overview
 
-## Tech Stack
+Nest by Eden Oasis is a powerful web application that streamlines asset management workflows with:
+- **Universal Asset Tracking** - Manage equipment, vehicles, technology, supplies, and more
+- **Request Management** - Streamlined approval workflows for asset requests
+- **Real-time Dashboards** - Comprehensive analytics and reporting
+- **User Role Management** - Admin and user permissions with customizable access
+- **Mobile-Responsive Design** - Access from any device, anywhere
+- **Notification System** - Email, in-app, and push notifications
 
-- **Frontend**: React, Next.js 15, TailwindCSS, TypeScript
-- **Backend**: Supabase (PostgreSQL, Auth, Storage)
-- **UI Components**: Radix UI
-- **State Management**: React Context API
-- **Styling**: Tailwind CSS with shadcn/ui components
-- **Notifications**: Web Push API by Eden Oasis
+## 🚀 Features
 
-<div align="center">
-  <img src="public/logo.png" alt="Flow Tag Logo" width="120"/>
-  <h3>Professional Equipment Management Platform</h3>
-  <p>A modern, full-stack web application for managing real estate equipment and resources.</p>
-</div>
+### Asset Management
+- **Comprehensive Tracking** - Track all asset types with detailed information
+- **Status Management** - Available, checked out, under repair, maintenance
+- **QR Code Integration** - Quick asset identification and check-in/out
+- **Condition Monitoring** - Track asset condition and maintenance history
+- **Photo Documentation** - Visual asset records with image uploads
 
----
+### Request System
+- **User-Friendly Requests** - Simple asset request interface
+- **Approval Workflows** - Admin approval with notification system
+- **Request History** - Complete audit trail of all requests
+- **Priority Levels** - Urgent, high, medium, low priority handling
+- **Reason Tracking** - Document why assets are needed
 
-##Table of Contents
-- [Overview](#-overview)
-- [Features](#-features)
-- [Tech Stack](#-tech-stack)
-- [Getting Started](#-getting-started)
-- [Project Structure](#-project-structure)
-- [Development](#-development)
-- [Database](#-database)
-- [Authentication](#-authentication)
-- [Deployment](#-deployment)
-- [Contributing](#-contributing)
-- [Troubleshooting](#-troubleshooting)
-- [License](#-license)
-- [Project Maintenance](#-project-maintenance)
-- [Realtime Updates](#-realtime-updates)
-
-## Overview
-
-Flow Tag is a comprehensive equipment management platform designed specifically for Eden Oasis Realty. It streamlines the process of tracking, requesting, and managing company equipment through an intuitive and modern interface.
-
-### Key Benefits
-- **Centralized Management**: Single source of truth for all company equipment
-- **Efficient Workflows**: Streamlined request and approval processes
-- **Real-time Updates**: Instant status updates and notifications
-- **Data-Driven Insights**: Analytics and usage patterns tracking
-- **User-Friendly Interface**: Modern, responsive design optimized for all devices
-
-##  Features
-
-### Equipment Management
-- **Inventory Tracking**
-  - Real-time availability status
-  - Detailed equipment specifications
-  - Maintenance history
-  - Usage analytics
+### Dashboard & Analytics
+- **Real-time Metrics** - Live asset utilization and availability stats
+- **Visual Reports** - Charts and graphs for usage patterns
+- **Export Capabilities** - PDF and CSV report generation
+- **Activity Feeds** - Recent activity and system events
+- **Trend Analysis** - Historical usage patterns and forecasting
 
 ### User Management
-- **Role-based Access Control**
-  - Admin dashboard
-  - User permissions
-  - Team management
-  - Activity logging
+- **Role-Based Access** - Admin and User roles with granular permissions
+- **Profile Management** - User profiles with contact information
+- **Notification Preferences** - Customizable notification settings
+- **Authentication** - Secure login with Supabase Auth
 
-### Booking System
-- **Equipment Requests**
-  - Easy request submission
-  - Approval workflows
-  - Calendar integration
-  - Conflict detection
+### Technical Features
+- **Progressive Web App (PWA)** - Install on mobile devices
+- **Offline Support** - Basic functionality when offline
+- **Real-time Updates** - Live synchronization across all users
+- **Search & Filtering** - Advanced search capabilities
+- **Responsive Design** - Optimized for desktop, tablet, and mobile
 
-### Notifications
-- **Real-time Updates**
-  - Request status changes
-  - Due date reminders
-  - Maintenance alerts
-  - System announcements
-
-### Analytics & Reporting
-- **Usage Insights**
-  - Equipment utilization rates
-  - Popular items tracking
-  - User activity reports
-  - Custom report generation
-
-##  Tech Stack
+## 🛠 Tech Stack
 
 ### Frontend
-- **Framework**: Next.js 14 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Components**: Radix UI
-- **Animations**: Framer Motion
-- **State Management**: React Context + Hooks
+- **Next.js 15** - React framework with App Router
+- **TypeScript** - Type-safe development
+- **Tailwind CSS** - Utility-first styling
+- **shadcn/ui** - Modern UI component library
+- **Framer Motion** - Smooth animations
+- **React Hook Form** - Form management with validation
 
-### Backend
-- **Database**: PostgreSQL (via Supabase)
-- **Authentication**: Supabase Auth
-- **API**: Next.js API Routes
-- **File Storage**: Supabase Storage
+### Backend & Database
+- **Supabase** - Backend-as-a-Service with PostgreSQL
+- **Supabase Auth** - User authentication and authorization
+- **Supabase Storage** - File and image storage
+- **Real-time Subscriptions** - Live data synchronization
 
-### Development Tools
-- **Package Manager**: npm
-- **Version Control**: Git
-- **Code Quality**: ESLint, Prettier
-- **Testing**: Jest, React Testing Library
+### Additional Services
+- **Vercel** - Deployment and hosting
+- **Firebase Cloud Messaging** - Push notifications
+- **Nodemailer** - Email notifications
+- **React Query** - Server state management
 
-## Getting Started
+## 📦 Installation
 
 ### Prerequisites
-- Node.js (v18.17.0 or higher)
-- npm (v9.0.0 or higher)
+- Node.js 18+ 
+- npm or yarn
+- Supabase account
 - Git
 
-### Installation
+### Quick Start
 
-1. **Clone the Repository**
+1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/gear-flow.git
-   cd gear-flow
+   git clone <your-repo-url>
+   cd nest-by-eden-oasis
    ```
 
-2. **Install Dependencies**
+2. **Install dependencies**
    ```bash
    npm install
    ```
 
 3. **Environment Setup**
-   Create a `.env.local` file:
+   Copy `.env.example` to `.env.local` and configure:
    ```env
-   # Supabase Configuration
-   NEXT_PUBLIC_SUPABASE_URL=your-project-url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-   # WARNING: Never commit the service role key or share it publicly
-   SUPABASE_SERVICE_ROLE_KEY=your-service-key
-   # For Supabase CLI operations
-   SUPABASE_ACCESS_TOKEN=your-access-token
-   ```
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
    
-   For convenience, you can copy from our template:
-   ```bash
-   cp .env.local.example .env.local
-   # Then edit .env.local with your actual values
-   ```
-   # Keep this key secure and only use it for trusted server-side operations
-   SUPABASE_SERVICE_ROLE_KEY=your-service-key
-
-   # Application Configuration
-   NEXT_PUBLIC_APP_URL=http://localhost:9002
-   NEXT_PUBLIC_APP_ENV=development
+   # Email Configuration
+   SMTP_HOST=your_smtp_host
+   SMTP_PORT=587
+   SMTP_USER=your_email
+   SMTP_PASS=your_password
    
-   # Optional Features
-   NEXT_PUBLIC_ENABLE_ANALYTICS=false
-   NEXT_PUBLIC_MAINTENANCE_MODE=false
+   # Firebase (for push notifications)
+   FCM_SERVER_KEY=your_fcm_server_key
    ```
-
-   ⚠️ **IMPORTANT SECURITY NOTES:**
-   - NEVER commit `.env` or `.env.local` files to version control
-   - NEVER share service role keys or sensitive credentials publicly
-   - Add `.env*` to your `.gitignore` file
-   - Use environment variables in production deployment platforms
-   - Rotate compromised keys immediately
-   - Consider using secret management services in production
 
 4. **Database Setup**
    ```bash
-   # Apply database migrations
-   npm run db:migrate
-
-   # Seed initial data
+   # Run Supabase migrations
+   npx supabase db push
+   
+   # Seed initial data (optional)
    npm run db:seed
    ```
 
@@ -187,306 +124,133 @@ Flow Tag is a comprehensive equipment management platform designed specifically 
    npm run dev
    ```
 
-## 📁 Project Structure
-
-```
-├── src/
-│   ├── app/                 # Next.js app directory
-│   │   ├── (auth)/         # Authentication routes
-│   │   ├── api/            # API routes
-│   │   ├── user/           # User dashboard
-│   │   └── admin/          # Admin dashboard
-│   ├── components/
-│   │   ├── ui/             # Reusable UI components
-│   │   ├── forms/          # Form components
-│   │   └── layouts/        # Layout components
-│   ├── lib/
-│   │   ├── supabase/       # Supabase client & utilities
-│   │   ├── utils/          # Helper functions
-│   │   └── constants/      # Application constants
-│   ├── types/              # TypeScript definitions
-│   └── styles/             # Global styles
-├── public/                 # Static assets
-├── supabase/
-│   ├── migrations/         # Database migrations
-│   └── seed/              # Seed data
-├── scripts/               # Utility scripts
-└── tests/                # Test files
-```
-
-## 🧪 Development
-
-### Helper Scripts
-
-We've created two helper scripts to streamline development:
-
-#### Development Helper
-
-```bash
-# Start development server
-./dev.sh start
-
-# Database operations
-./dev.sh db:pull    # Pull latest schema
-./dev.sh db:push    # Push schema changes
-./dev.sh db:reset   # Reset local database
-
-# Migrations
-./dev.sh migrate        # Run migrations
-./dev.sh migrate:new    # Create new migration
-
-# Functions
-./dev.sh functions:list    # List functions
-./dev.sh functions:serve   # Serve functions locally
-./dev.sh functions:deploy  # Deploy functions
-```
-
-#### Supabase CLI Helper
-
-```bash
-# Run any Supabase CLI command securely
-./supabase-cli.sh [command]
-
-# Examples
-./supabase-cli.sh projects list
-./supabase-cli.sh db diff
-```
-
-### Available Scripts
-
-```bash
-# Development
-npm run dev          # Start development server
-npm run build        # Build production bundle
-npm run start        # Start production server
-npm run lint         # Run ESLint
-npm run test         # Run tests
-npm run type-check   # Run TypeScript checks
-
-# Database
-npm run db:migrate   # Run database migrations
-npm run db:reset     # Reset database
-npm run db:seed      # Seed database
-
-# Utilities
-npm run format       # Format code with Prettier
-npm run clean        # Clean build artifacts
-```
-
-### Code Quality
-
-We maintain high code quality standards through:
-- ESLint configuration
-- Prettier formatting
-- TypeScript strict mode
-- Git hooks (husky)
-- Conventional commits
-
-## 🗃 Database
-
-### Schema Overview
-- `users`: User accounts and profiles
-- `equipment`: Equipment inventory
-- `requests`: Equipment booking requests
-- `notifications`: System notifications
-- `settings`: Application settings
-
-### Migrations
-All database changes are version controlled in `supabase/migrations/`.
-
-##  Authentication
-
-### User Types
-1. **Admin**
-   - Full system access
-   - User management
-   - Settings configuration
-
-2. **Regular User**
-   - Equipment browsing
-   - Request submission
-   - Profile management
-
-### Security Features
-- JWT authentication
-- Role-based access control
-- Session management
-- Password policies
-- Rate limiting
-
-##  Deployment
+   Visit `http://localhost:9002` to see the application.
 
 ### Production Deployment
-1. Build the application
+
+1. **Build the application**
    ```bash
    npm run build
    ```
 
-2. Start the production server
+2. **Deploy to Vercel**
    ```bash
-   npm run start
+   npx vercel --prod
    ```
 
-### Environment Considerations
-- Set appropriate environment variables
-- Configure proper security headers
-- Enable error tracking
-- Set up monitoring
+## 📁 Project Structure
 
-##  Contributing
+```
+nest-by-eden-oasis/
+├── src/
+│   ├── app/                    # Next.js App Router pages
+│   │   ├── (auth)/            # Authentication pages
+│   │   ├── admin/             # Admin dashboard pages
+│   │   ├── api/               # API routes
+│   │   └── user/              # User dashboard pages
+│   ├── components/            # Reusable UI components
+│   │   ├── admin/            # Admin-specific components
+│   │   ├── ui/               # shadcn/ui components
+│   │   └── user/             # User-specific components
+│   ├── lib/                   # Utility libraries
+│   │   ├── api/              # API utilities and queries
+│   │   ├── supabase/         # Supabase client configuration
+│   │   └── utils/            # Helper functions
+│   ├── types/                 # TypeScript type definitions
+│   └── hooks/                 # Custom React hooks
+├── public/                    # Static assets
+├── sql/                       # Database scripts and functions
+├── supabase/                  # Supabase configuration
+└── docs/                      # Documentation
+```
 
-### Development Process
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request
+## 🔧 Configuration
 
-### Commit Guidelines
-We follow conventional commits:
-- `feat:` New features
-- `fix:` Bug fixes
-- `docs:` Documentation
-- `style:` Code style changes
-- `refactor:` Code refactoring
-- `test:` Testing changes
+### Database Schema
+The application uses several key tables:
+- `profiles` - User information and preferences
+- `gears` - Asset/equipment records
+- `gear_requests` - Request management
+- `gear_checkouts` - Check-out tracking
+- `notifications` - In-app notifications
+- `app_settings` - Application configuration
 
-##  Troubleshooting
+### User Roles
+- **Admin** - Full system access, user management, asset management
+- **User** - Request assets, view personal history, manage profile
+
+### Notification Channels
+- **Email** - SMTP-based email notifications
+- **In-App** - Real-time browser notifications
+- **Push** - Mobile push notifications via FCM
+
+## 🎯 Usage
+
+### For Administrators
+1. **Asset Management** - Add, edit, and track all organization assets
+2. **Request Approval** - Review and approve/deny user requests
+3. **User Management** - Manage user accounts and permissions
+4. **Analytics** - Monitor usage patterns and generate reports
+5. **System Configuration** - Customize settings and branding
+
+### For Users
+1. **Browse Assets** - View available equipment and resources
+2. **Make Requests** - Request assets with reason and priority
+3. **Track History** - View personal request and usage history
+4. **Receive Notifications** - Get updates on request status
+5. **Manage Profile** - Update personal information and preferences
+
+## 🚨 Support & Troubleshooting
 
 ### Common Issues
 
-#### Supabase Realtime Subscription Issues
+**Database Connection**
+- Verify Supabase URL and keys in environment variables
+- Check network connectivity to Supabase
 
-If you're experiencing issues with real-time updates not working, follow these steps:
+**Email Notifications**
+- Confirm SMTP settings are correct
+- Test email credentials separately
 
-1. **Enable Realtime for Your Tables**
+**Push Notifications**
+- Ensure FCM server key is valid
+- Check browser permissions for notifications
 
-   Flow Tag uses Supabase Realtime for live updates. You need to explicitly enable this feature for the tables you want to monitor:
+### Development Tools
+```bash
+# Type checking
+npm run typecheck
 
-   ```bash
-   # Run our realtime setup helper script
-   node scripts/enable-realtime.js
-   ```
+# Linting
+npm run lint
 
-   This script will guide you through enabling Realtime for the following required tables:
-   - gears
-   - gear_requests
-   - gear_maintenance
-   - gear_activity_log
-   - notifications
-   - profiles
+# Testing
+npm run test
 
-2. **Verify Realtime Configuration**
-
-   To check if your tables are properly configured for Realtime:
-
-   ```bash
-   npx tsx src/utils/supabase-realtime-checker.ts
-   ```
-
-   This utility will show which tables have Realtime enabled or disabled and provide guidance if needed.
-
-3. **Fallback Mechanism**
-
-   Flow Tag has a built-in fallback mechanism that automatically switches to polling if Realtime subscriptions fail. You'll see a notification when this happens.
-
-### Database Schema Issues
-
-If you encounter errors related to incorrect column names or missing tables:
+# Database utilities
+npm run realtime:check      # Check real-time connections
+npm run add-timestamps      # Add timestamp columns
+```
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is proprietary software owned by Eden Oasis.
+
+## 🤝 Contributing
+
+This is a private project for Eden Oasis. For internal development:
+
+1. Create feature branches from `main`
+2. Follow TypeScript and ESLint guidelines
+3. Test thoroughly before submitting PRs
+4. Update documentation as needed
+
+## 📞 Contact
+
+**Eden Oasis Development Team**
+- Internal Support: [Insert Internal Contact]
+- Technical Issues: [Insert Technical Contact]
 
 ---
 
-<div align="center">
-  <p>Built by Daniel Samuel </p>
-</div>
-
-## 🔒 Security
-
-### Credential Management
-- Use environment variables for all sensitive credentials
-- Store production secrets in secure credential management systems
-- Rotate keys regularly and after any potential exposure
-- Use least-privilege access principles
-
-### Key Security
-- Service role keys have full database access - keep them secure
-- Only use service role keys in trusted server environments
-- Use anon/public keys for client-side operations
-- Monitor for and revoke compromised credentials
-
-### Best Practices
-- Enable 2FA for all admin accounts
-- Regular security audits
-- Monitor application logs
-- Keep dependencies updated
-- Follow OWASP security guidelines
-
-## Project Maintenance
-
-### Code Cleanup for Production
-
-Before deploying to production or committing to GitHub, run the following scripts to clean up the codebase:
-
-```bash
-# Check for console.log statements and TODOs
-node scripts/prepare-for-production.js
-
-# Automatically replace console.log statements with proper logger calls
-node scripts/cleanup-console-logs.js
-```
-
-The `prepare-for-production.js` script will identify console.log statements and TODO/FIXME comments that should be addressed before production deployment.
-
-The `cleanup-console-logs.js` script will automatically replace console.log statements with appropriate logger calls, creating backups of modified files with a .backup extension.
-
-### Removed Features
-
-The web push notifications feature has been removed from the project due to compatibility issues with Vercel deployment. This included:
-
-- Removing web-push and @types/web-push dependencies
-- Deleting push-notifications.ts, notifications.ts utility files
-- Removing notification service worker
-- Removing notification API endpoints
-
-The application still maintains in-app notifications through the Supabase database, but no longer supports browser push notifications.
-
-## Enabling Realtime Updates
-
-For optimal dashboard functionality, you should enable Realtime in your Supabase project:
-
-1. Go to your Supabase dashboard and select your project
-2. Navigate to Database → Replication
-3. Find the "Realtime" section 
-4. Enable Realtime for all tables that need updates:
-   - gear_requests
-   - gears
-   - checkins
-   - announcements
-   - gear_maintenance
-   - gear_request_gears
-
-If Realtime is not enabled, the application will automatically fall back to polling, but real-time updates provide a better user experience.
-
-## Realtime Updates
-
-Flow Tag uses Supabase Realtime to provide live updates to the user interface. When data changes in the database, the UI updates automatically without requiring a page refresh.
-
-### How Realtime Works
-
-The application implements a robust realtime update system with fallback mechanisms:
-
-1. **Primary Method**: Supabase Realtime subscriptions for instant updates
-2. **Fallback**: Automatic polling if Realtime is unavailable (every 20 minutes)
-3. **Adaptive**: Detects available timestamp columns for efficient polling
-
-### Troubleshooting Realtime
-
-If you experience issues with realtime updates:
-
-1. Ensure Realtime is enabled in Supabase for your tables
-2. Check that tables have timestamp columns (created_at, updated_at)
-3. Run diagnostic tools: `npm run realtime:check`
+**Nest by Eden Oasis** - *Streamlining asset management for modern organizations*

@@ -219,7 +219,7 @@ export function generateCsvReport(report: WeeklyUsageReport) {
 
   // Add metadata rows at the top
   const metadataRows = [
-    ['GearFlow Weekly Activity Report'],
+    ['Nest Weekly Activity Report'],
     [`Report Period: ${report.startDate} to ${report.endDate}`],
     [`Generated: ${new Date().toLocaleString()}`],
     [''] // Empty row for spacing

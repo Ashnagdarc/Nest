@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import type { Notification as NotificationType } from '@/services/notification';
 
 type Notification = NotificationType & {
@@ -32,24 +31,7 @@ const CATEGORY_TABS = [
 export function NotificationBell() {
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
     const [isOpen, setIsOpen] = useState(false);
-    const [hasPulse, setHasPulse] = useState(false);
     const [activeTab, setActiveTab] = useState('all');
-
-    // Add pulse animation when new notifications arrive
-    useEffect(() => {
-        if (unreadCount > 0) {
-            setHasPulse(true);
-            const timer = setTimeout(() => setHasPulse(false), 3000);
-            return () => clearTimeout(timer);
-        }
-    }, [unreadCount]);
-
-    // Reset pulse when opening the dropdown
-    useEffect(() => {
-        if (isOpen) {
-            setHasPulse(false);
-        }
-    }, [isOpen]);
 
     // Filter notifications by category
     const filteredNotifications = activeTab === 'all'
@@ -68,29 +50,6 @@ export function NotificationBell() {
                     className="relative"
                     aria-label={`Notifications (${unreadCount} unread)`}
                 >
-                    <AnimatePresence mode="wait">
-                        {hasPulse && unreadCount > 0 && (
-                            <motion.span
-                                className="absolute inset-0 rounded-full"
-                                initial={{ scale: 1, opacity: 0.8 }}
-                                animate={{
-                                    scale: [1, 1.2, 1],
-                                    opacity: [0.8, 0, 0.8],
-                                }}
-                                exit={{ scale: 0, opacity: 0 }}
-                                transition={{
-                                    repeat: 3,
-                                    duration: 1,
-                                    ease: "easeInOut"
-                                }}
-                                style={{
-                                    background: 'radial-gradient(circle, rgba(127, 127, 255, 0.15) 0%, rgba(127, 127, 255, 0) 70%)',
-                                    zIndex: -1
-                                }}
-                            />
-                        )}
-                    </AnimatePresence>
-
                     <Bell className="h-5 w-5" />
 
                     {unreadCount > 0 && (
