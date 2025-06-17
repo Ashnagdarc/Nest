@@ -44,6 +44,51 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Signup succeeded but user data missing' }, { status: 500 });
         }
 
+        // Wait for profile to be created by trigger, or create it manually if needed
+        let profileCreated = false;
+        let attempts = 0;
+        const maxAttempts = 5;
+
+        while (!profileCreated && attempts < maxAttempts) {
+            attempts++;
+
+            // Check if profile exists
+            const { data: existingProfile, error: profileCheckError } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('id', data.user.id)
+                .single();
+
+            if (existingProfile) {
+                profileCreated = true;
+                break;
+            }
+
+            // If profile doesn't exist and this is the last attempt, create it manually
+            if (attempts === maxAttempts) {
+                const { error: profileCreateError } = await supabase
+                    .from('profiles')
+                    .insert({
+                        id: data.user.id,
+                        email: email,
+                        full_name: fullName,
+                        phone: phone || null,
+                        department: department || null,
+                        role: 'User', // Default role
+                        status: 'Active',
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    });
+
+                if (!profileCreateError) {
+                    profileCreated = true;
+                }
+            } else {
+                // Wait a bit before next attempt
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+        }
+
         // Create profile in profiles table
         if (data.user && !data.user.email_confirmed_at) {
             // User needs to verify email first
