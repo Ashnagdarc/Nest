@@ -1,583 +1,959 @@
 import React, { useState, useRef } from 'react';
-import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
+import { format } from 'date-fns';
 import { DateRange } from 'react-day-picker';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
+import {
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip as RechartsTooltip,
+    Legend,
+    ResponsiveContainer,
+    PieChart,
+    Pie,
+    Cell,
+    BarChart,
+    Bar
+} from "recharts";
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
 // UI Components
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+    CardDescription
 } from "@/components/ui/card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { ChartContainer } from "@/components/ui/chart";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
-  Tooltip as UITooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipProvider
+    Tooltip as UITooltip,
+    TooltipTrigger,
+    TooltipContent,
+    TooltipProvider
 } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 // Icons
-import { Loader2, Download, FileText, FileSpreadsheet } from "lucide-react";
+import {
+    Loader2,
+    FileText,
+    FileSpreadsheet,
+    TrendingUp,
+    TrendingDown,
+    AlertTriangle,
+    CheckCircle,
+    Users,
+    Package,
+    Activity,
+    BarChart3,
+    PieChart as PieChartIcon,
+    Calendar,
+    Target,
+    Award,
+    AlertCircle
+} from "lucide-react";
 
 // Services
-import { WeeklyUsageReport, GearUsage, generateUsageReportForRange, UserStats, GearStats } from "@/services/report";
-import { generatePdfReport, generateCsvReport } from "@/services/reportExport";
+import { WeeklyUsageReport, generateUsageReportForRange, UserStats, GearStats } from "@/services/report";
+import { generateCsvReport, generateReportInsights, calculatePerformanceMetrics } from "@/services/reportExport";
 
-// Helper to format numbers with commas
-const formatNumber = (num: number): string => {
-  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+// Color schemes
+const CHART_COLORS = {
+    primary: '#0D8ABC',
+    success: '#32A852',
+    warning: '#F59E0B',
+    danger: '#E03A3F',
+    info: '#6366F1'
 };
 
+const PIE_COLORS = ['#0D8ABC', '#32A852', '#F59E0B', '#E03A3F', '#6366F1', '#8B5CF6'];
+
 interface WeeklyReportProps {
-  dateRange: DateRange | undefined;
+    dateRange: DateRange | undefined;
 }
 
 export function WeeklyActivityReport({ dateRange }: WeeklyReportProps) {
-  const [report, setReport] = useState<WeeklyUsageReport | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedUser, setSelectedUser] = useState<UserStats | null>(null);
-  const [selectedGear, setSelectedGear] = useState<GearStats | null>(null);
-  const reportRef = useRef<HTMLDivElement>(null);
+    const [report, setReport] = useState<WeeklyUsageReport | null>(null);
+    const [previousReport, setPreviousReport] = useState<WeeklyUsageReport | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedUser, setSelectedUser] = useState<UserStats | null>(null);
+    const [selectedGear, setSelectedGear] = useState<GearStats | null>(null);
+    const [chartType, setChartType] = useState<'line' | 'bar' | 'pie'>('line');
+    const reportRef = useRef<HTMLDivElement>(null);
 
-  // Function to generate the report based on date range
-  const generateReport = async () => {
-    if (!dateRange?.from || !dateRange?.to) {
-      setError('Please select a date range');
-      return;
-    }
+    // Generate the report
+    const generateReport = async () => {
+        if (!dateRange?.from || !dateRange?.to) {
+            setError('Please select a date range');
+            return;
+        }
 
-    setIsLoading(true);
-    setError(null);
+        setIsLoading(true);
+        setError(null);
 
-    try {
-      const generatedReport = await generateUsageReportForRange(
-        dateRange.from,
-        dateRange.to
-      );
-      setReport(generatedReport);
-    } catch (err) {
-      console.error('Error generating report:', err);
-      setError('Failed to generate report. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        try {
+            // Generate current period report
+            const currentReport = await generateUsageReportForRange(dateRange.from, dateRange.to);
+            setReport(currentReport);
 
-  // Function to download the report as CSV
-  const downloadAsCsv = () => {
-    if (!report) return;
-    generateCsvReport(report);
-  };
+            // Generate comparison data for previous period
+            const periodLength = dateRange.to.getTime() - dateRange.from.getTime();
+            const previousStart = new Date(dateRange.from.getTime() - periodLength);
+            const previousEnd = new Date(dateRange.to.getTime() - periodLength);
 
-  // Function to download the report as PDF (WYSIWYG snapshot)
-  const downloadAsPdf = async () => {
-    if (!reportRef.current) return;
-    const element = reportRef.current;
-    // Use html2canvas to capture the report
-    const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'pt', 'a4');
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    // Calculate image dimensions to fit A4
-    const imgWidth = pageWidth;
-    const imgHeight = (canvas.height * pageWidth) / canvas.width;
+            try {
+                const prevReport = await generateUsageReportForRange(previousStart, previousEnd);
+                setPreviousReport(prevReport);
+            } catch (compError) {
+                console.warn('Could not generate comparison data:', compError);
+                setPreviousReport(null);
+            }
 
-    let position = 0;
-    let remainingHeight = imgHeight;
-    let pageNum = 0;
-    // Multi-page logic
-    while (remainingHeight > 0) {
-      const sourceY = (imgHeight - remainingHeight) * (canvas.height / imgHeight);
-      const pageCanvas = document.createElement('canvas');
-      pageCanvas.width = canvas.width;
-      // Calculate the height for this page in source pixels
-      const pageCanvasHeight = Math.min(canvas.height - sourceY, (pageHeight * canvas.width) / pageWidth);
-      pageCanvas.height = pageCanvasHeight;
-      const ctx = pageCanvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(
-          canvas,
-          0, sourceY, canvas.width, pageCanvasHeight, // source x, y, w, h
-          0, 0, canvas.width, pageCanvasHeight // dest x, y, w, h
-        );
-      }
-      const pageImgData = pageCanvas.toDataURL('image/png');
-      if (pageNum > 0) pdf.addPage();
-      pdf.addImage(pageImgData, 'PNG', 0, 0, imgWidth, pageHeight);
-      remainingHeight -= pageHeight;
-      pageNum++;
-    }
-    pdf.save(`gear-activity-report-snapshot.pdf`);
-  };
+        } catch (err) {
+            console.error('Error generating report:', err);
+            setError('Failed to generate report. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-  // Function to calculate total activity count
-  const calculateTotalActivity = (gear: GearUsage): number => {
-    return gear.requestCount + gear.checkoutCount + gear.checkinCount + gear.bookingCount + gear.damageCount;
-  };
+    // Download as CSV
+    const downloadAsCsv = () => {
+        if (!report) return;
+        generateCsvReport(report);
+    };
 
-  // Calculate activity totals if report exists
-  const totals = report?.gearUsage.reduce(
-    (acc, gear) => {
-      return {
-        requests: acc.requests + gear.requestCount,
-        checkouts: acc.checkouts + gear.checkoutCount,
-        checkins: acc.checkins + gear.checkinCount,
-        bookings: acc.bookings + gear.bookingCount,
-        damages: acc.damages + gear.damageCount
-      };
-    },
-    { requests: 0, checkouts: 0, checkins: 0, bookings: 0, damages: 0 }
-  );
+    // Download as PDF
+    const downloadAsPdf = async () => {
+        if (!report) return;
 
-  return (
-    <Card className="shadow-md" ref={reportRef}>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Weekly Activity Report</CardTitle>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={generateReport}
-              disabled={isLoading || !dateRange?.from || !dateRange?.to}
-              size="sm"
-              variant="outline"
-              className="h-9"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2">
-                    <path d="M3.5 2C3.22386 2 3 2.22386 3 2.5V12.5C3 12.7761 3.22386 13 3.5 13H11.5C11.7761 13 12 12.7761 12 12.5V6H8.5C8.22386 6 8 5.77614 8 5.5V2H3.5ZM9 2.70711L11.2929 5H9V2.70711ZM2 2.5C2 1.67157 2.67157 1 3.5 1H8.5C8.63261 1 8.75979 1.05268 8.85355 1.14645L12.8536 5.14645C12.9473 5.24021 13 5.36739 13 5.5V12.5C13 13.3284 12.3284 14 11.5 14H3.5C2.67157 14 2 13.3284 2 12.5V2.5Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path>
-                  </svg>
-                  Generate Report
-                </>
-              )}
-            </Button>
-            {report && (
-              <div className="flex gap-2">
-                <Button onClick={downloadAsCsv} size="sm" variant="outline" className="h-9">
-                  <FileSpreadsheet className="mr-2 h-4 w-4 text-green-500" />
-                  CSV
-                </Button>
-                <Button onClick={downloadAsPdf} size="sm" variant="outline" className="h-9">
-                  <FileText className="mr-2 h-4 w-4 text-blue-500" />
-                  PDF (Snapshot)
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-        <CardDescription>
-          Comprehensive summary of gear activities for the selected period
-          {report && ` (${report.startDate} to ${report.endDate})`}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {error && (
-          <div className="bg-destructive/10 p-4 rounded-lg mb-4 text-destructive border border-destructive/20">
-            <p className="font-medium">{error}</p>
-          </div>
-        )}
+        const pdf = new jsPDF('p', 'pt', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 40;
+        const contentWidth = pageWidth - (margin * 2);
+        let yPosition = margin;
 
-        {isLoading ? (
-          <div className="space-y-8">
-            <Skeleton className="h-8 w-1/2 mb-4" />
-            <Skeleton className="h-32 w-full mb-4" />
-            <Skeleton className="h-8 w-1/3 mb-4" />
-            <Skeleton className="h-48 w-full" />
-          </div>
-        ) : report ? (
-          <TooltipProvider>
-            <div className="space-y-8">
-              {/* --- Activity Trend Chart --- */}
-              {report.activityTrends && report.activityTrends.length > 0 && (
-                <div className="bg-muted/10 p-4 rounded-lg border">
-                  <h3 className="font-semibold text-lg mb-2 text-primary">Activity Trends</h3>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <LineChart data={report.activityTrends} margin={{ top: 16, right: 24, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <RechartsTooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="requests" stroke="#0D8ABC" strokeWidth={2} name="Requests" />
-                      <Line type="monotone" dataKey="checkouts" stroke="#32A852" strokeWidth={2} name="Check-Outs" />
-                      <Line type="monotone" dataKey="damages" stroke="#E03A3F" strokeWidth={2} name="Damages" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-              <Separator className="my-6" />
-              {/* --- Summary Section --- */}
-              <div className="bg-muted/10 p-4 rounded-lg border">
-                <h3 className="font-semibold text-lg mb-2 text-primary">Summary & Insights</h3>
-                <p className="text-muted-foreground mb-2">{report.summary}</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
-                  <div>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="block text-xs text-muted-foreground">Most Active User</span>
-                      </TooltipTrigger>
-                      <TooltipContent>User with the most requests and check-outs.</TooltipContent>
-                    </UITooltip>
-                    <span className="font-bold flex items-center gap-2">
-                      {report.mostActiveUser ? (
-                        <Avatar className="h-6 w-6">
-                          <AvatarImage src={report.userStats.find(u => u.name === report.mostActiveUser)?.avatar_url || undefined} alt={report.mostActiveUser} />
-                          <AvatarFallback>{report.mostActiveUser.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                      ) : null}
-                      {report.mostActiveUser ? (
-                        <button className="underline text-primary" onClick={() => setSelectedUser(report.userStats.find(u => u.name === report.mostActiveUser) || null)}>{report.mostActiveUser}</button>
-                      ) : '-'}
-                    </span>
-                  </div>
-                  <div>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="block text-xs text-muted-foreground">Most Active Gear</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Gear with the most requests and check-outs.</TooltipContent>
-                    </UITooltip>
-                    <span className="font-bold">{report.mostActiveGear || '-'}</span>
-                  </div>
-                  <div>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="block text-xs text-muted-foreground">Unique Users</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Number of unique users who participated.</TooltipContent>
-                    </UITooltip>
-                    <span className="font-bold">{report.uniqueUsers}</span>
-                  </div>
-                  <div>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="block text-xs text-muted-foreground">Avg. Request Duration</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Average duration of requests in days.</TooltipContent>
-                    </UITooltip>
-                    <span className="font-bold">{report.avgRequestDuration.toFixed(1)} days</span>
-                  </div>
-                  <div>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="block text-xs text-muted-foreground">Overdue Returns</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Number of overdue returns.</TooltipContent>
-                    </UITooltip>
-                    <Badge variant={report.overdueReturns > 0 ? "destructive" : "secondary"} className="font-bold">{report.overdueReturns}</Badge>
-                  </div>
-                  <div>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="block text-xs text-muted-foreground">Utilization Rate</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Percentage of gears currently checked out.</TooltipContent>
-                    </UITooltip>
-                    <Badge variant="secondary" className="font-bold">{report.utilizationRate.toFixed(1)}%</Badge>
-                  </div>
-                </div>
-              </div>
-              <Separator className="my-6" />
-              {/* --- User Activity Table --- */}
-              <div className="border rounded-lg overflow-x-auto">
-                <h4 className="font-semibold text-base p-4 pb-0 text-primary">User Activity</h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead>
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>User</span>
-                          </TooltipTrigger>
-                          <TooltipContent>User name and avatar.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Requests</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Number of requests made.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Check-Outs</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Number of check-outs.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Check-Ins</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Number of check-ins.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Overdue</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Number of overdue items.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Damages</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Number of damages reported.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {report.userStats.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No user activity for this period.</TableCell>
-                      </TableRow>
-                    ) : report.userStats.map((user, idx) => (
-                      <TableRow key={user.id || idx}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={user.avatar_url || undefined} alt={user.name} />
-                              <AvatarFallback>{user.name?.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            <button className="underline text-primary" onClick={() => setSelectedUser(user)}>{user.name}</button>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">{user.requests}</TableCell>
-                        <TableCell className="text-center">{user.checkouts}</TableCell>
-                        <TableCell className="text-center">{user.checkins}</TableCell>
-                        <TableCell className="text-center">{user.overdue > 0 ? <Badge variant="destructive">{user.overdue}</Badge> : user.overdue}</TableCell>
-                        <TableCell className="text-center">{user.damages > 0 ? <Badge variant="destructive">{user.damages}</Badge> : user.damages}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <Separator className="my-6" />
-              {/* --- Gear Activity & Status Table --- */}
-              <div className="border rounded-lg overflow-x-auto">
-                <h4 className="font-semibold text-base p-4 pb-0 text-primary">Gear Activity & Status</h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead>
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Gear Name</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Gear name and image.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead>
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Status</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Current status of the gear.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Requests</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Number of requests.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Check-Outs</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Number of check-outs.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Check-Ins</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Number of check-ins.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Bookings</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Number of bookings.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Damages</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Number of damages.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Utilization</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Utilization percentage.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Last Activity</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Last activity timestamp.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span>Total Activity</span>
-                          </TooltipTrigger>
-                          <TooltipContent>Total activity count.</TooltipContent>
-                        </UITooltip>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {report.gearUsage.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No gear activity for this period.</TableCell>
-                      </TableRow>
-                    ) : report.gearUsage.map((gear, idx) => (
-                      <TableRow key={gear.id || idx}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {gear.image_url ? (
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={gear.image_url} alt={gear.gearName} />
-                                <AvatarFallback>{gear.gearName?.charAt(0)}</AvatarFallback>
-                              </Avatar>
-                            ) : (
-                              <Avatar className="h-8 w-8">
-                                <AvatarFallback>{gear.gearName?.charAt(0)}</AvatarFallback>
-                              </Avatar>
+        // Helper function to check if we need a new page
+        const checkNewPage = (requiredHeight: number) => {
+            if (yPosition + requiredHeight > pageHeight - margin) {
+                pdf.addPage();
+                yPosition = margin;
+            }
+        };
+
+        // Helper function to add text with word wrapping
+        const addText = (text: string, x: number, y: number, options: any = {}) => {
+            const fontSize = options.fontSize || 12;
+            const maxWidth = options.maxWidth || contentWidth;
+            const color = options.color || [0, 0, 0];
+
+            pdf.setFontSize(fontSize);
+            pdf.setTextColor(color[0], color[1], color[2]);
+
+            if (options.bold) {
+                pdf.setFont('helvetica', 'bold');
+            } else {
+                pdf.setFont('helvetica', 'normal');
+            }
+
+            const lines = pdf.splitTextToSize(text, maxWidth);
+            pdf.text(lines, x, y);
+            return lines.length * fontSize * 1.2; // Return height used
+        };
+
+        // Title
+        yPosition += addText('Weekly Activity Report', margin, yPosition, {
+            fontSize: 20,
+            bold: true,
+            color: [51, 51, 51]
+        });
+
+        yPosition += 10;
+        yPosition += addText(`Period: ${report.startDate} to ${report.endDate}`, margin, yPosition, {
+            fontSize: 12,
+            color: [102, 102, 102]
+        });
+
+        yPosition += 30;
+
+        // Performance Metrics Section
+        if (performanceMetrics) {
+            checkNewPage(120);
+            yPosition += addText('Performance Metrics', margin, yPosition, {
+                fontSize: 16,
+                bold: true,
+                color: [51, 51, 51]
+            });
+            yPosition += 25;
+
+            const metrics = [
+                { label: 'Activity Change', value: `${performanceMetrics.activityChange >= 0 ? '+' : ''}${performanceMetrics.activityChange.toFixed(1)}%` },
+                { label: 'Utilization Change', value: `${performanceMetrics.utilizationChange >= 0 ? '+' : ''}${performanceMetrics.utilizationChange.toFixed(1)}%` },
+                { label: 'User Growth', value: `${performanceMetrics.userGrowth >= 0 ? '+' : ''}${performanceMetrics.userGrowth}` },
+                { label: 'Trend', value: performanceMetrics.trend }
+            ];
+
+            // Create a 2x2 grid for better organization
+            const colWidth = contentWidth / 2;
+            const rowHeight = 50;
+
+            metrics.forEach((metric, index) => {
+                const row = Math.floor(index / 2);
+                const col = index % 2;
+                const x = margin + (col * colWidth);
+                const y = yPosition + (row * rowHeight);
+
+                addText(metric.label, x, y, { fontSize: 11, color: [102, 102, 102] });
+                addText(metric.value, x, y + 18, { fontSize: 16, bold: true, color: [51, 51, 51] });
+            });
+            yPosition += Math.ceil(metrics.length / 2) * rowHeight + 25;
+        }
+
+        // Summary Section
+        checkNewPage(180);
+        yPosition += addText('Summary & Key Metrics', margin, yPosition, {
+            fontSize: 16,
+            bold: true,
+            color: [51, 51, 51]
+        });
+        yPosition += 25;
+
+        yPosition += addText(report.summary, margin, yPosition, {
+            fontSize: 11,
+            color: [51, 51, 51],
+            maxWidth: contentWidth
+        });
+        yPosition += 25;
+
+        // Key metrics in a well-organized grid
+        const activeUsers = report.userStats.filter(user => user.requests > 0 || user.checkouts > 0 || user.checkins > 0).length;
+        const keyMetrics = [
+            { label: 'Active Users', value: activeUsers.toString() },
+            { label: 'Utilization Rate', value: `${report.utilizationRate.toFixed(1)}%` },
+            { label: 'Avg Request Duration', value: `${report.avgRequestDuration.toFixed(1)} days` },
+            { label: 'Overdue Returns', value: report.overdueReturns.toString() },
+            { label: 'Most Active User', value: report.mostActiveUser || 'N/A' },
+            { label: 'Most Active Gear', value: report.mostActiveGear || 'N/A' }
+        ];
+
+        checkNewPage(140);
+        const metricsPerRow = 3;
+        const metricColWidth = contentWidth / metricsPerRow;
+        const metricRowHeight = 45;
+
+        keyMetrics.forEach((metric, index) => {
+            const row = Math.floor(index / metricsPerRow);
+            const col = index % metricsPerRow;
+            const x = margin + (col * metricColWidth);
+            const y = yPosition + (row * metricRowHeight);
+
+            addText(metric.label, x, y, { fontSize: 11, color: [102, 102, 102] });
+            addText(metric.value, x, y + 18, { fontSize: 14, bold: true, color: [51, 51, 51] });
+        });
+        yPosition += Math.ceil(keyMetrics.length / metricsPerRow) * metricRowHeight + 30;
+
+        // Insights Section
+        if (insights.length > 0) {
+            checkNewPage(120);
+
+            // Add a subtle separator line
+            pdf.setDrawColor(200, 200, 200);
+            pdf.setLineWidth(0.5);
+            pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+            yPosition += 15;
+
+            yPosition += addText('Key Insights', margin, yPosition, {
+                fontSize: 16,
+                bold: true,
+                color: [51, 51, 51]
+            });
+            yPosition += 25;
+
+            insights.slice(0, 3).forEach((insight, index) => {
+                checkNewPage(60);
+                yPosition += addText(`• ${insight.title}`, margin, yPosition, {
+                    fontSize: 12,
+                    bold: true,
+                    color: insight.type === 'danger' ? [220, 38, 38] : [51, 51, 51]
+                });
+                yPosition += addText(insight.description, margin + 15, yPosition + 5, {
+                    fontSize: 10,
+                    color: [102, 102, 102],
+                    maxWidth: contentWidth - 15
+                });
+                yPosition += 15;
+            });
+            yPosition += 20;
+        }
+
+        // Recommendations Section
+        if (recommendations.length > 0) {
+            checkNewPage(100);
+            yPosition += addText('Recommendations', margin, yPosition, {
+                fontSize: 16,
+                bold: true,
+                color: [51, 51, 51]
+            });
+            yPosition += 20;
+
+            recommendations.slice(0, 4).forEach((rec, index) => {
+                checkNewPage(40);
+                yPosition += addText(`• ${rec}`, margin, yPosition, {
+                    fontSize: 11,
+                    color: [51, 51, 51],
+                    maxWidth: contentWidth
+                });
+                yPosition += 10;
+            });
+            yPosition += 20;
+        }
+
+        // User Activity Table
+        const activeUserStats = report.userStats
+            .filter(user => user.requests > 0 || user.checkouts > 0 || user.checkins > 0)
+            .sort((a, b) => (b.requests + b.checkouts) - (a.requests + a.checkouts))
+            .slice(0, 5);
+
+        if (activeUserStats.length > 0) {
+            checkNewPage(150);
+            yPosition += addText('User Activity', margin, yPosition, {
+                fontSize: 16,
+                bold: true,
+                color: [51, 51, 51]
+            });
+            yPosition += 30;
+
+            // Table headers
+            const colWidths = [contentWidth * 0.5, contentWidth * 0.15, contentWidth * 0.15, contentWidth * 0.2];
+            const headers = ['User', 'Requests', 'Check-Outs', 'Overdue'];
+
+            headers.forEach((header, index) => {
+                const x = margin + colWidths.slice(0, index).reduce((sum: number, width: number) => sum + width, 0);
+                addText(header, x, yPosition, { fontSize: 11, bold: true, color: [51, 51, 51] });
+            });
+            yPosition += 20;
+
+            // Table rows
+            activeUserStats.forEach((user, index) => {
+                checkNewPage(25);
+                const rowData = [user.name, user.requests.toString(), user.checkouts.toString(), user.overdue.toString()];
+
+                rowData.forEach((data, colIndex) => {
+                    const x = margin + colWidths.slice(0, colIndex).reduce((sum, width) => sum + width, 0);
+                    addText(data, x, yPosition, {
+                        fontSize: 10,
+                        color: colIndex === 3 && user.overdue > 0 ? [220, 38, 38] : [51, 51, 51]
+                    });
+                });
+                yPosition += 20;
+            });
+            yPosition += 20;
+        }
+
+        // Gear Activity Table
+        const activeGearUsage = report.gearUsage
+            .filter(gear => gear.requestCount > 0 || gear.checkoutCount > 0 || gear.checkinCount > 0)
+            .sort((a, b) => (b.requestCount + b.checkoutCount) - (a.requestCount + a.checkoutCount))
+            .slice(0, 5);
+
+        if (activeGearUsage.length > 0) {
+            checkNewPage(150);
+            yPosition += addText('Top Gear Activity', margin, yPosition, {
+                fontSize: 16,
+                bold: true,
+                color: [51, 51, 51]
+            });
+            yPosition += 30;
+
+            // Table headers
+            const gearColWidths = [contentWidth * 0.5, contentWidth * 0.15, contentWidth * 0.15, contentWidth * 0.2];
+            const gearHeaders = ['Gear', 'Requests', 'Check-Outs', 'Status'];
+
+            gearHeaders.forEach((header, index) => {
+                const x = margin + gearColWidths.slice(0, index).reduce((sum: number, width: number) => sum + width, 0);
+                addText(header, x, yPosition, { fontSize: 11, bold: true, color: [51, 51, 51] });
+            });
+            yPosition += 20;
+
+            // Table rows
+            activeGearUsage.forEach((gear, index) => {
+                checkNewPage(25);
+                const rowData = [
+                    gear.gearName,
+                    gear.requestCount.toString(),
+                    gear.checkoutCount.toString(),
+                    gear.status || '-'
+                ];
+
+                rowData.forEach((data, colIndex) => {
+                    const x = margin + gearColWidths.slice(0, colIndex).reduce((sum: number, width: number) => sum + width, 0);
+                    addText(data, x, yPosition, { fontSize: 10, color: [51, 51, 51] });
+                });
+                yPosition += 20;
+            });
+        }
+
+        // Footer
+        const pageCount = (pdf as any).internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            pdf.setPage(i);
+            pdf.setFontSize(8);
+            pdf.setTextColor(102, 102, 102);
+            pdf.text(`Generated on ${format(new Date(), 'PPP')} - Page ${i} of ${pageCount}`, margin, pageHeight - 20);
+        }
+
+        pdf.save(`weekly-activity-report-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    };
+
+    // Get insights and metrics
+    const { insights, recommendations } = report ? generateReportInsights(report, previousReport || undefined) : { insights: [], recommendations: [] };
+    const performanceMetrics = report && previousReport ? calculatePerformanceMetrics(report, previousReport) : null;
+
+    // Prepare chart data
+    const activityDistribution = report ? [
+        { name: 'Requests', value: report.gearUsage.reduce((sum, gear) => sum + gear.requestCount, 0) },
+        { name: 'Check-outs', value: report.gearUsage.reduce((sum, gear) => sum + gear.checkoutCount, 0) },
+        { name: 'Check-ins', value: report.gearUsage.reduce((sum, gear) => sum + gear.checkinCount, 0) },
+        { name: 'Damages', value: report.gearUsage.reduce((sum, gear) => sum + gear.damageCount, 0) }
+    ].filter(item => item.value > 0) : [];
+
+    return (
+        <>
+            <style jsx global>{`
+                @media print {
+                    body {
+                        -webkit-print-color-adjust: exact !important;
+                        color-adjust: exact !important;
+                        font-size: 12px !important;
+                    }
+                    .break-inside-avoid {
+                        break-inside: avoid !important;
+                        page-break-inside: avoid !important;
+                    }
+                    .print\\:hidden {
+                        display: none !important;
+                    }
+                    .print\\:block {
+                        display: block !important;
+                    }
+                    .print\\:text-sm {
+                        font-size: 0.875rem !important;
+                        line-height: 1.25rem !important;
+                    }
+                    .print\\:text-xs {
+                        font-size: 0.75rem !important;
+                        line-height: 1rem !important;
+                    }
+                    .print\\:space-y-4 > * + * {
+                        margin-top: 1rem !important;
+                    }
+                    .print\\:mb-4 {
+                        margin-bottom: 1rem !important;
+                    }
+                    .print\\:text-xl {
+                        font-size: 1.25rem !important;
+                        line-height: 1.75rem !important;
+                    }
+                    .shadow-md {
+                        box-shadow: none !important;
+                    }
+                    .grid {
+                        gap: 0.75rem !important;
+                    }
+                    .space-y-6 > * + * {
+                        margin-top: 1rem !important;
+                    }
+                    .mb-8 {
+                        margin-bottom: 1.5rem !important;
+                    }
+                }
+            `}</style>
+            <Card className="shadow-md print:shadow-none" ref={reportRef}>
+                <CardHeader className="print:pb-2">
+                    <div className="flex items-center justify-between print:block">
+                        <div className="flex items-center gap-2 print:mb-2">
+                            <FileText className="h-5 w-5 text-primary print:h-4 print:w-4" />
+                            <CardTitle className="text-lg print:text-base">Enhanced Weekly Activity Report</CardTitle>
+                        </div>
+                        <div className="flex items-center gap-2 print:hidden">
+                            <Button
+                                onClick={generateReport}
+                                disabled={isLoading || !dateRange?.from || !dateRange?.to}
+                                size="sm"
+                                variant="outline"
+                                className="h-9"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Generating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Activity className="mr-2 h-4 w-4" />
+                                        Generate Report
+                                    </>
+                                )}
+                            </Button>
+                            {report && (
+                                <div className="flex gap-2">
+                                    <Button onClick={downloadAsCsv} size="sm" variant="outline" className="h-9">
+                                        <FileSpreadsheet className="mr-2 h-4 w-4 text-green-500" />
+                                        CSV
+                                    </Button>
+                                    <Button onClick={downloadAsPdf} size="sm" variant="outline" className="h-9">
+                                        <FileText className="mr-2 h-4 w-4 text-blue-500" />
+                                        PDF
+                                    </Button>
+                                </div>
                             )}
-                            <button className="underline text-primary" onClick={() => setSelectedGear(gear)}>{gear.gearName}</button>
-                          </div>
-                        </TableCell>
-                        <TableCell>{gear.status ? <Badge variant="secondary">{gear.status}</Badge> : '-'}</TableCell>
-                        <TableCell className="text-center">{gear.requestCount}</TableCell>
-                        <TableCell className="text-center">{gear.checkoutCount}</TableCell>
-                        <TableCell className="text-center">{gear.checkinCount}</TableCell>
-                        <TableCell className="text-center">{gear.bookingCount}</TableCell>
-                        <TableCell className="text-center">{gear.damageCount > 0 ? <Badge variant="destructive">{gear.damageCount}</Badge> : gear.damageCount}</TableCell>
-                        <TableCell className="text-center">{gear.utilization !== undefined ? `${gear.utilization.toFixed(1)}%` : '-'}</TableCell>
-                        <TableCell className="text-center">{gear.lastActivity ? new Date(gear.lastActivity).toLocaleString() : '-'}</TableCell>
-                        <TableCell className="text-center">{calculateTotalActivity(gear)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              {/* --- Drilldown Modals --- */}
-              <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>User Details</DialogTitle>
-                  </DialogHeader>
-                  {selectedUser && (
-                    <div>
-                      <div className="flex items-center gap-3 mb-4">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={selectedUser.avatar_url || undefined} alt={selectedUser.name} />
-                          <AvatarFallback>{selectedUser.name?.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <span className="font-bold text-lg">{selectedUser.name}</span>
-                      </div>
-                      <div className="space-y-1">
-                        <div>Requests: {selectedUser.requests}</div>
-                        <div>Check-Outs: {selectedUser.checkouts}</div>
-                        <div>Check-Ins: {selectedUser.checkins}</div>
-                        <div>Overdue: {selectedUser.overdue}</div>
-                        <div>Damages: {selectedUser.damages}</div>
-                      </div>
+                        </div>
                     </div>
-                  )}
-                </DialogContent>
-              </Dialog>
-              <Dialog open={!!selectedGear} onOpenChange={() => setSelectedGear(null)}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Gear Details</DialogTitle>
-                  </DialogHeader>
-                  {selectedGear && (
-                    <div>
-                      <div className="flex items-center gap-3 mb-4">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={selectedGear.image_url || undefined} alt={selectedGear.gearName} />
-                          <AvatarFallback>{selectedGear.gearName?.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <span className="font-bold text-lg">{selectedGear.gearName}</span>
-                      </div>
-                      <div className="space-y-1">
-                        <div>Status: {selectedGear.status || '-'}</div>
-                        <div>Requests: {selectedGear.requestCount}</div>
-                        <div>Check-Outs: {selectedGear.checkoutCount}</div>
-                        <div>Check-Ins: {selectedGear.checkinCount}</div>
-                        <div>Bookings: {selectedGear.bookingCount}</div>
-                        <div>Damages: {selectedGear.damageCount}</div>
-                        <div>Utilization: {selectedGear.utilization !== undefined ? `${selectedGear.utilization.toFixed(1)}%` : '-'}</div>
-                        <div>Last Activity: {selectedGear.lastActivity ? new Date(selectedGear.lastActivity).toLocaleString() : '-'}</div>
-                      </div>
-                    </div>
-                  )}
-                </DialogContent>
-              </Dialog>
-            </div>
-          </TooltipProvider>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <svg width="64" height="64" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="mb-4 text-muted"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 018 0v2m-4-4V7m0 0a4 4 0 10-8 0v4a4 4 0 008 0z" /></svg>
-            <span className="text-lg font-semibold">No activity data for this period.</span>
-            <span className="text-sm">Try selecting a different date range.</span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+                    <CardDescription className="print:text-xs">
+                        Enhanced analytics with insights, comparisons, and actionable recommendations
+                        {report && ` (${report.startDate} to ${report.endDate})`}
+                    </CardDescription>
+                </CardHeader>
+
+                <CardContent>
+                    {error && (
+                        <Alert variant="destructive" className="mb-4">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Error</AlertTitle>
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
+
+                    {isLoading ? (
+                        <div className="space-y-8">
+                            <Skeleton className="h-8 w-1/2 mb-4" />
+                            <Skeleton className="h-32 w-full mb-4" />
+                            <Skeleton className="h-8 w-1/3 mb-4" />
+                            <Skeleton className="h-48 w-full" />
+                        </div>
+                    ) : report ? (
+                        <TooltipProvider>
+                            <div className="space-y-6 print:space-y-4">
+
+                                {/* Performance Metrics Cards */}
+                                {performanceMetrics && (
+                                    <div className="mb-8">
+                                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                            <BarChart3 className="h-5 w-5" />
+                                            Performance Metrics
+                                        </h3>
+                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                            <Card className="border-l-4 border-l-blue-500">
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs text-muted-foreground truncate">Activity Change</p>
+                                                            <p className={`text-xl font-bold ${performanceMetrics.activityChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                {performanceMetrics.activityChange >= 0 ? '+' : ''}{performanceMetrics.activityChange.toFixed(1)}%
+                                                            </p>
+                                                        </div>
+                                                        {performanceMetrics.activityChange >= 0 ?
+                                                            <TrendingUp className="h-6 w-6 text-green-600 flex-shrink-0" /> :
+                                                            <TrendingDown className="h-6 w-6 text-red-600 flex-shrink-0" />
+                                                        }
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+
+                                            <Card className="border-l-4 border-l-green-500">
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs text-muted-foreground truncate">Utilization Change</p>
+                                                            <p className={`text-xl font-bold ${performanceMetrics.utilizationChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                {performanceMetrics.utilizationChange >= 0 ? '+' : ''}{performanceMetrics.utilizationChange.toFixed(1)}%
+                                                            </p>
+                                                        </div>
+                                                        <Target className="h-6 w-6 text-green-600 flex-shrink-0" />
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+
+                                            <Card className="border-l-4 border-l-orange-500">
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs text-muted-foreground truncate">User Growth</p>
+                                                            <p className={`text-xl font-bold ${performanceMetrics.userGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                {performanceMetrics.userGrowth >= 0 ? '+' : ''}{performanceMetrics.userGrowth}
+                                                            </p>
+                                                        </div>
+                                                        <Users className="h-6 w-6 text-orange-600 flex-shrink-0" />
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+
+                                            <Card className="border-l-4 border-l-purple-500">
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs text-muted-foreground truncate">Trend</p>
+                                                            <p className="text-lg font-bold capitalize">{performanceMetrics.trend}</p>
+                                                        </div>
+                                                        <BarChart3 className="h-6 w-6 text-purple-600 flex-shrink-0" />
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Insights and Recommendations */}
+                                {(insights.length > 0 || recommendations.length > 0) && (
+                                    <div className="mb-8">
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                            <Card className="h-fit">
+                                                <CardHeader className="pb-3">
+                                                    <CardTitle className="flex items-center gap-2 text-base">
+                                                        <AlertTriangle className="h-4 w-4" />
+                                                        Key Insights
+                                                    </CardTitle>
+                                                </CardHeader>
+                                                <CardContent className="space-y-3">
+                                                    {insights.length > 0 ? insights.slice(0, 3).map((insight, index) => (
+                                                        <Alert key={index} variant={insight.type === 'danger' ? 'destructive' : 'default'} className="py-2">
+                                                            <AlertCircle className="h-3 w-3" />
+                                                            <AlertTitle className="text-sm">{insight.title}</AlertTitle>
+                                                            <AlertDescription className="text-xs">{insight.description}</AlertDescription>
+                                                        </Alert>
+                                                    )) : (
+                                                        <div className="flex items-center gap-2 text-green-600">
+                                                            <CheckCircle className="h-4 w-4" />
+                                                            <span className="text-sm">All metrics look healthy!</span>
+                                                        </div>
+                                                    )}
+                                                </CardContent>
+                                            </Card>
+
+                                            <Card className="h-fit">
+                                                <CardHeader className="pb-3">
+                                                    <CardTitle className="flex items-center gap-2 text-base">
+                                                        <Target className="h-4 w-4" />
+                                                        Recommendations
+                                                    </CardTitle>
+                                                </CardHeader>
+                                                <CardContent>
+                                                    <ul className="space-y-2">
+                                                        {recommendations.length > 0 ? recommendations.slice(0, 4).map((rec, index) => (
+                                                            <li key={index} className="flex items-start gap-2">
+                                                                <CheckCircle className="h-3 w-3 text-green-600 mt-1 flex-shrink-0" />
+                                                                <span className="text-xs leading-relaxed">{rec}</span>
+                                                            </li>
+                                                        )) : (
+                                                            <li className="flex items-center gap-2 text-green-600">
+                                                                <Award className="h-4 w-4" />
+                                                                <span className="text-sm">Keep up the excellent work!</span>
+                                                            </li>
+                                                        )}
+                                                    </ul>
+                                                </CardContent>
+                                            </Card>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Enhanced Charts */}
+                                <div className="mb-8">
+                                    {(() => {
+                                        const hasActivityTrends = report.activityTrends && report.activityTrends.length > 0;
+                                        const hasActivityDistribution = activityDistribution.length > 0;
+                                        const chartCount = (hasActivityTrends ? 1 : 0) + (hasActivityDistribution ? 1 : 0);
+
+                                        return (
+                                            <div className={`grid gap-6 ${chartCount === 2 ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
+                                                {/* Activity Trends */}
+                                                {hasActivityTrends && (
+                                                    <Card className="break-inside-avoid">
+                                                        <CardHeader className="pb-3">
+                                                            <div className="flex items-center justify-between">
+                                                                <CardTitle className="flex items-center gap-2 text-base">
+                                                                    <Activity className="h-4 w-4" />
+                                                                    Activity Trends
+                                                                </CardTitle>
+                                                                <Select value={chartType} onValueChange={(value: any) => setChartType(value)}>
+                                                                    <SelectTrigger className="w-20 h-8 text-xs">
+                                                                        <SelectValue />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="line">Line</SelectItem>
+                                                                        <SelectItem value="bar">Bar</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                            <CardDescription className="text-xs">Daily activity patterns</CardDescription>
+                                                        </CardHeader>
+                                                        <CardContent className="pt-0">
+                                                            <ResponsiveContainer width="100%" height={220}>
+                                                                {chartType === 'line' ? (
+                                                                    <LineChart data={report.activityTrends} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                                                                        <CartesianGrid strokeDasharray="3 3" />
+                                                                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                                                                        <YAxis tick={{ fontSize: 10 }} />
+                                                                        <RechartsTooltip />
+                                                                        <Legend />
+                                                                        <Line type="monotone" dataKey="requests" stroke={CHART_COLORS.primary} strokeWidth={2} name="Requests" />
+                                                                        <Line type="monotone" dataKey="checkouts" stroke={CHART_COLORS.success} strokeWidth={2} name="Check-Outs" />
+                                                                        <Line type="monotone" dataKey="damages" stroke={CHART_COLORS.danger} strokeWidth={2} name="Damages" />
+                                                                    </LineChart>
+                                                                ) : (
+                                                                    <BarChart data={report.activityTrends} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                                                                        <CartesianGrid strokeDasharray="3 3" />
+                                                                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                                                                        <YAxis tick={{ fontSize: 10 }} />
+                                                                        <RechartsTooltip />
+                                                                        <Legend />
+                                                                        <Bar dataKey="requests" fill={CHART_COLORS.primary} name="Requests" />
+                                                                        <Bar dataKey="checkouts" fill={CHART_COLORS.success} name="Check-Outs" />
+                                                                        <Bar dataKey="damages" fill={CHART_COLORS.danger} name="Damages" />
+                                                                    </BarChart>
+                                                                )}
+                                                            </ResponsiveContainer>
+                                                        </CardContent>
+                                                    </Card>
+                                                )}
+
+                                                {/* Activity Distribution */}
+                                                {hasActivityDistribution && (
+                                                    <Card className="break-inside-avoid">
+                                                        <CardHeader className="pb-3">
+                                                            <CardTitle className="flex items-center gap-2 text-base">
+                                                                <PieChartIcon className="h-4 w-4" />
+                                                                Activity Distribution
+                                                            </CardTitle>
+                                                            <CardDescription className="text-xs">Breakdown of all activities</CardDescription>
+                                                        </CardHeader>
+                                                        <CardContent className="pt-0">
+                                                            <ResponsiveContainer width="100%" height={220}>
+                                                                <PieChart>
+                                                                    <Pie
+                                                                        data={activityDistribution}
+                                                                        cx="50%"
+                                                                        cy="50%"
+                                                                        outerRadius={70}
+                                                                        fill="#8884d8"
+                                                                        dataKey="value"
+                                                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                                                    >
+                                                                        {activityDistribution.map((entry, index) => (
+                                                                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                                                        ))}
+                                                                    </Pie>
+                                                                    <RechartsTooltip />
+                                                                </PieChart>
+                                                            </ResponsiveContainer>
+                                                        </CardContent>
+                                                    </Card>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+
+                                {/* Enhanced Summary */}
+                                <div className="mb-8">
+                                    <Card className="break-inside-avoid">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="flex items-center gap-2 text-base">
+                                                <BarChart3 className="h-4 w-4" />
+                                                Summary & Key Metrics
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{report.summary}</p>
+                                            <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
+                                                <div className="text-center p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                                                    <p className="text-lg font-bold text-blue-600">
+                                                        {report.userStats.filter(user => user.requests > 0 || user.checkouts > 0 || user.checkins > 0).length}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">Active Users</p>
+                                                </div>
+                                                <div className="text-center p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                                                    <p className="text-lg font-bold text-green-600">{report.utilizationRate.toFixed(1)}%</p>
+                                                    <p className="text-xs text-muted-foreground">Utilization</p>
+                                                </div>
+                                                <div className="text-center p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
+                                                    <p className="text-lg font-bold text-orange-600">{report.avgRequestDuration.toFixed(1)}</p>
+                                                    <p className="text-xs text-muted-foreground">Avg Days</p>
+                                                </div>
+                                                <div className="text-center p-3 bg-red-50 dark:bg-red-950/20 rounded-lg">
+                                                    <p className="text-lg font-bold text-red-600">{report.overdueReturns}</p>
+                                                    <p className="text-xs text-muted-foreground">Overdue</p>
+                                                </div>
+                                                <div className="text-center p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
+                                                    <p className="text-sm font-bold text-purple-600 truncate">{report.mostActiveUser || 'N/A'}</p>
+                                                    <p className="text-xs text-muted-foreground">Top User</p>
+                                                </div>
+                                                <div className="text-center p-3 bg-indigo-50 dark:bg-indigo-950/20 rounded-lg">
+                                                    <p className="text-sm font-bold text-indigo-600 truncate">{report.mostActiveGear || 'N/A'}</p>
+                                                    <p className="text-xs text-muted-foreground">Top Gear</p>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+
+                                {/* Enhanced Tables */}
+                                <div className="space-y-6">
+                                    {/* User Activity Table */}
+                                    <Card className="break-inside-avoid">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="flex items-center gap-2 text-base">
+                                                <Users className="h-4 w-4" />
+                                                User Activity
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <div className="overflow-x-auto">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow className="bg-muted/30">
+                                                            <TableHead className="text-xs font-medium">User</TableHead>
+                                                            <TableHead className="text-center text-xs font-medium w-20">Requests</TableHead>
+                                                            <TableHead className="text-center text-xs font-medium w-20">Check-Outs</TableHead>
+                                                            <TableHead className="text-center text-xs font-medium w-20">Overdue</TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {report.userStats.filter(user => user.requests > 0 || user.checkouts > 0 || user.checkins > 0).length === 0 ? (
+                                                            <TableRow>
+                                                                <TableCell colSpan={4} className="text-center py-6 text-sm text-muted-foreground">
+                                                                    No user activity for this period.
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ) : (
+                                                            report.userStats
+                                                                .filter(user => user.requests > 0 || user.checkouts > 0 || user.checkins > 0)
+                                                                .sort((a, b) => (b.requests + b.checkouts) - (a.requests + a.checkouts))
+                                                                .slice(0, 5)
+                                                                .map((user, idx) => (
+                                                                    <TableRow key={user.id || idx} className="hover:bg-muted/30">
+                                                                        <TableCell className="py-2">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Avatar className="h-6 w-6">
+                                                                                    <AvatarImage src={user.avatar_url || undefined} alt={user.name} />
+                                                                                    <AvatarFallback className="text-xs">{user.name?.charAt(0)}</AvatarFallback>
+                                                                                </Avatar>
+                                                                                <span className="text-sm font-medium truncate">{user.name}</span>
+                                                                            </div>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-center text-sm py-2">{user.requests}</TableCell>
+                                                                        <TableCell className="text-center text-sm py-2">{user.checkouts}</TableCell>
+                                                                        <TableCell className="text-center py-2">
+                                                                            {user.overdue > 0 ? (
+                                                                                <Badge variant="destructive" className="text-xs">{user.overdue}</Badge>
+                                                                            ) : (
+                                                                                <span className="text-sm">{user.overdue}</span>
+                                                                            )}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Gear Activity Table */}
+                                    <Card className="break-inside-avoid">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="flex items-center gap-2 text-base">
+                                                <Package className="h-4 w-4" />
+                                                Top Gear Activity
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <div className="overflow-x-auto">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow className="bg-muted/30">
+                                                            <TableHead className="text-xs font-medium">Gear</TableHead>
+                                                            <TableHead className="text-center text-xs font-medium w-20">Requests</TableHead>
+                                                            <TableHead className="text-center text-xs font-medium w-20">Check-Outs</TableHead>
+                                                            <TableHead className="text-center text-xs font-medium w-24">Status</TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {report.gearUsage.filter(gear => gear.requestCount > 0 || gear.checkoutCount > 0 || gear.checkinCount > 0).length === 0 ? (
+                                                            <TableRow>
+                                                                <TableCell colSpan={4} className="text-center py-6 text-sm text-muted-foreground">
+                                                                    No gear activity for this period.
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ) : (
+                                                            report.gearUsage
+                                                                .filter(gear => gear.requestCount > 0 || gear.checkoutCount > 0 || gear.checkinCount > 0)
+                                                                .sort((a, b) => (b.requestCount + b.checkoutCount) - (a.requestCount + a.checkoutCount))
+                                                                .slice(0, 5)
+                                                                .map((gear, idx) => (
+                                                                    <TableRow key={gear.id || idx} className="hover:bg-muted/30">
+                                                                        <TableCell className="py-2">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Avatar className="h-6 w-6">
+                                                                                    <AvatarImage src={gear.image_url || undefined} alt={gear.gearName} />
+                                                                                    <AvatarFallback className="text-xs">{gear.gearName?.charAt(0)}</AvatarFallback>
+                                                                                </Avatar>
+                                                                                <span className="text-sm font-medium truncate">{gear.gearName}</span>
+                                                                            </div>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-center text-sm py-2">{gear.requestCount}</TableCell>
+                                                                        <TableCell className="text-center text-sm py-2">{gear.checkoutCount}</TableCell>
+                                                                        <TableCell className="text-center py-2">
+                                                                            {gear.status ? (
+                                                                                <Badge variant="secondary" className="text-xs">{gear.status}</Badge>
+                                                                            ) : (
+                                                                                <span className="text-sm">-</span>
+                                                                            )}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            </div>
+                        </TooltipProvider>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                            <Calendar className="h-16 w-16 mb-4 text-muted-foreground/50" />
+                            <span className="text-lg font-semibold">No activity data for this period</span>
+                            <span className="text-sm">Select a date range and click "Generate Report" to get started</span>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </>
+    );
+} 
