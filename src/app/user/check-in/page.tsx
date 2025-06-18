@@ -1,3 +1,86 @@
+/**
+ * Equipment Check-In Page - Asset Return Workflow Management
+ * 
+ * A comprehensive equipment check-in interface for the Nest by Eden Oasis application
+ * that enables users to return borrowed equipment/assets with proper condition reporting
+ * and workflow completion. This page serves as the primary return processing center,
+ * providing an intuitive interface for equipment return, condition assessment, and
+ * damage reporting with integrated QR code scanning capabilities.
+ * 
+ * Core Features:
+ * - Equipment return workflow with multi-item selection
+ * - QR code scanning for quick equipment identification
+ * - Condition assessment and damage reporting system
+ * - Real-time equipment status updates and validation
+ * - Check-in history tracking and audit trails
+ * - Automated notifications and administrative alerts
+ * - Visual success feedback with Lottie animations
+ * 
+ * Return Workflow Components:
+ * - Equipment Discovery: View checked-out equipment with due dates
+ * - Multi-Selection: Select multiple items for bulk return processing
+ * - Condition Assessment: Report equipment condition and damages
+ * - QR Scanning: Quick equipment identification via QR codes
+ * - Status Updates: Real-time availability status changes
+ * - Notification System: Automated stakeholder notifications
+ * - History Tracking: Complete check-in audit trail
+ * 
+ * QR Code Integration:
+ * - HTML5 QR code scanner with camera access
+ * - Real-time scanning with instant equipment recognition
+ * - Error handling for invalid or unrecognized codes
+ * - Automatic equipment selection upon successful scan
+ * - Fallback manual selection for accessibility
+ * - Scanner state management and cleanup
+ * 
+ * Condition Reporting Features:
+ * - Damage reporting with detailed descriptions
+ * - Equipment condition documentation
+ * - Photo upload capabilities for damage evidence
+ * - Maintenance request generation for damaged items
+ * - Condition tracking for equipment lifecycle
+ * - Quality assurance and inspection workflows
+ * 
+ * User Experience Features:
+ * - Responsive design optimized for mobile scanning
+ * - Progressive enhancement with loading states
+ * - Error handling with user-friendly messages
+ * - Accessibility features with proper ARIA labels
+ * - Visual feedback with animations and transitions
+ * - Keyboard navigation support for all interfaces
+ * - Touch-friendly controls for mobile devices
+ * 
+ * Integration Points:
+ * - Supabase real-time subscriptions for equipment updates
+ * - QR code scanning library (html5-qrcode) integration
+ * - User authentication and profile management
+ * - Notification system for check-in confirmations
+ * - Google Chat integration for administrative alerts
+ * - Activity logging for audit trails and compliance
+ * - Equipment status management and tracking
+ * 
+ * Performance Optimizations:
+ * - Efficient equipment data loading and caching
+ * - Real-time updates with minimal re-renders
+ * - Scroll position preservation during updates
+ * - Dynamic QR scanner initialization
+ * - Memory-efficient component design
+ * - Optimized image loading with fallback handling
+ * 
+ * Security & Compliance:
+ * - User authentication verification for returns
+ * - Equipment ownership validation
+ * - Input validation and sanitization
+ * - Audit logging for all return activities
+ * - Data protection and privacy compliance
+ * - Secure QR code processing and validation
+ * 
+ * @fileoverview Equipment check-in and return workflow page for asset management
+ * @author Daniel Chinonso Samuel
+ * @version 1.0.0
+ * @since 2024-01-15
+ */
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
@@ -28,144 +111,343 @@ import { History } from 'lucide-react';
 import { Calendar } from 'lucide-react';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 
-// --- Dynamically import Lottie ---
+/**
+ * Dynamic Lottie Import
+ * 
+ * Dynamically imports Lottie React component to prevent SSR issues
+ * and reduce initial bundle size. Used for success animations.
+ */
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
 
-// --- Import actual Lottie animation JSON ---
+/**
+ * Success Animation Import
+ * 
+ * Imports the check-in success animation JSON for visual feedback
+ * when equipment is successfully returned to the system.
+ */
 import checkinSuccessAnimation from "@/../public/animations/checkin-success.json";
 
+// Initialize Supabase client
 const supabase = createClient();
 
-// Add these types at the top of the file
+/**
+ * Type Definitions for Equipment Check-In System
+ * 
+ * Comprehensive type definitions for equipment return workflow
+ * with proper TypeScript support and data validation.
+ */
+
+/**
+ * Gear Checkout Record Interface
+ * 
+ * Represents a checkout record with dates and status information
+ * for tracking equipment usage periods and return deadlines.
+ */
 type GearCheckoutRecord = {
+  /** Date when equipment was checked out */
   checkout_date: string;
+  /** Date when equipment is due for return */
   due_date: string;
+  /** Current checkout status */
   status: string;
 };
 
+/**
+ * Gear with Checkout Information
+ * 
+ * Equipment object extended with checkout records for
+ * comprehensive return workflow management.
+ */
 type GearWithCheckout = {
+  /** Unique equipment identifier */
   id: string;
+  /** Equipment name/title */
   name: string;
+  /** Current equipment status */
   status: string;
+  /** Equipment category */
   category: string;
+  /** Equipment image URL */
   imageUrl: string;
+  /** Associated checkout records */
   gear_checkouts: GearCheckoutRecord[];
 };
 
-// Add these types at the top of the file after existing types
+/**
+ * Gear Request Interface
+ * 
+ * Represents equipment request with checkout information
+ * for linking returns to original requests.
+ */
 type GearRequest = {
+  /** Unique request identifier */
   id: string;
+  /** Array of equipment IDs in request */
   gear_ids: string[];
+  /** Request status */
   status: string;
+  /** Checkout date */
   checkout_date: string;
+  /** Due date for return */
   due_date: string;
 };
 
+/**
+ * Basic Gear Interface
+ * 
+ * Core equipment data structure for status and
+ * ownership tracking during return process.
+ */
 type Gear = {
+  /** Unique equipment identifier */
   id: string;
+  /** Current equipment status */
   status: string;
+  /** User ID of current checkout holder */
   checked_out_to: string;
+  /** Optional due date for return */
   due_date?: string;
 };
 
-// Add this type at the top of the file with other types
+/**
+ * Processed Gear Interface
+ * 
+ * Comprehensive equipment data structure used throughout
+ * the check-in interface with all necessary fields.
+ */
 type ProcessedGear = {
+  /** Unique equipment identifier */
   id: string;
+  /** Equipment name/title */
   name: string;
+  /** Equipment category */
   category: string;
+  /** Current equipment status */
   status: string;
+  /** User ID of current checkout holder */
   checked_out_to: string | null;
+  /** Current active request ID */
   current_request_id: string | null;
+  /** Last checkout timestamp */
   last_checkout_date: string | null;
+  /** Due date for return */
   due_date: string | null;
+  /** Equipment image URL */
   image_url: string | null;
 };
 
-// Update the GearData type at the top of the file
+/**
+ * Gear Data Interface
+ * 
+ * Primary equipment data structure for check-in operations
+ * with complete metadata and status information.
+ */
 type GearData = {
+  /** Unique equipment identifier */
   id: string;
+  /** Equipment name/title */
   name: string;
+  /** Current equipment status */
   status: string;
+  /** Equipment category */
   category: string;
+  /** Equipment image URL */
   image_url: string | null;
+  /** User ID of current checkout holder */
   checked_out_to: string;
+  /** Due date for return */
   due_date: string | null;
+  /** Current active request ID */
   current_request_id: string | null;
+  /** Last checkout timestamp */
   last_checkout_date: string | null;
 };
 
+/**
+ * Postgres Change Payload Interface
+ * 
+ * Type definition for Supabase real-time change events
+ * to handle equipment status updates during check-in.
+ */
 type PostgresChangePayload = {
+  /** Database schema name */
   schema: string;
+  /** Table name */
   table: string;
+  /** Change timestamp */
   commit_timestamp: string;
+  /** Type of database event */
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  /** New record data */
   new: Record<string, any>;
+  /** Old record data */
   old: Record<string, any>;
+  /** Any errors that occurred */
   errors: null | any[];
 };
 
-// Add this helper function near the top of the file
+/**
+ * Check-In History Interface
+ * 
+ * Represents historical check-in records for audit
+ * trails and user activity tracking.
+ */
+type CheckInHistory = {
+  /** Unique check-in record identifier */
+  id: string;
+  /** Name of returned equipment */
+  gearName: string;
+  /** Date when equipment was checked in */
+  checkinDate: Date;
+  /** Return status */
+  status: string;
+  /** Equipment condition upon return */
+  condition: string;
+  /** Additional notes about the return */
+  notes: string;
+};
+
+/**
+ * Image URL Validation Helper
+ * 
+ * Type guard function to validate equipment image URLs
+ * and ensure proper image display with fallback handling.
+ * 
+ * @param {string | null | undefined} url - Image URL to validate
+ * @returns {url is string} True if URL is valid string
+ */
 const isValidImageUrl = (url: string | null | undefined): url is string => {
   return typeof url === 'string' && url.trim().length > 0;
 };
 
-// Helper function to parse date string
+/**
+ * Date Parsing Helper
+ * 
+ * Safely parses date strings with error handling to prevent
+ * invalid date objects and provide proper date validation.
+ * 
+ * @param {string | null} dateStr - Date string to parse
+ * @returns {Date | null} Parsed date object or null if invalid
+ */
 const parseDate = (dateStr: string | null): Date | null => {
   if (!dateStr) return null;
   const date = new Date(dateStr);
   return isNaN(date.getTime()) ? null : date;
 };
 
-// Add type for check-in history
-type CheckInHistory = {
-  id: string;
-  gearName: string;
-  checkinDate: Date;
-  status: string;
-  condition: string;
-  notes: string;
-};
-
+/**
+ * Check-In Gear Page Component
+ * 
+ * Main page component that renders the equipment check-in interface
+ * with QR scanning, condition reporting, and return workflow management.
+ * Provides comprehensive equipment return capabilities with real-time
+ * updates and visual feedback.
+ * 
+ * Key Features:
+ * - Real-time checked-out equipment display
+ * - QR code scanning for equipment identification
+ * - Multi-select equipment return processing
+ * - Condition reporting and damage documentation
+ * - Check-in history tracking and display
+ * - Automated notifications and status updates
+ * - Visual success feedback with animations
+ * 
+ * State Management:
+ * - Equipment data with real-time subscriptions
+ * - QR scanner state and error handling
+ * - Form state for condition reporting
+ * - Modal and dialog state management
+ * - Loading and success state tracking
+ * 
+ * @component
+ * @returns {JSX.Element} Equipment check-in page interface
+ * 
+ * @example
+ * ```typescript
+ * // Basic usage in app routing
+ * import CheckInGearPage from '@/app/user/check-in/page';
+ * 
+ * // Rendered at /user/check-in route
+ * <CheckInGearPage />
+ * ```
+ */
 export default function CheckInGearPage() {
+  // Core services and utilities
   const { toast } = useToast();
   const supabase = createClient();
+
+  // Equipment and user state
   const [checkedOutGears, setCheckedOutGears] = useState<ProcessedGear[]>([]);
   const [selectedGears, setSelectedGears] = useState<string[]>([]);
-  const [isDamaged, setIsDamaged] = useState(false);
-  const [damageDescription, setDamageDescription] = useState('');
-  const [checkinNotes, setCheckinNotes] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [scannerInitialized, setScannerInitialized] = useState(false);
-  const [qrError, setQrError] = useState<string | null>(null);
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false); // State for animation
-  const [scannedCode, setScannedCode] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [checkInHistory, setCheckInHistory] = useState<CheckInHistory[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
-  // --- UI State Preservation ---
+
+  // Condition reporting state
+  const [isDamaged, setIsDamaged] = useState(false);
+  const [damageDescription, setDamageDescription] = useState('');
+  const [checkinNotes, setCheckinNotes] = useState('');
+
+  // UI state management
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+
+  // QR scanner state
+  const [scannerInitialized, setScannerInitialized] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannedCode, setScannedCode] = useState<string | null>(null);
+
+  // UI state preservation
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const scrollPositionRef = useRef<number>(0);
 
+  /**
+   * User Authentication Effect
+   * 
+   * Retrieves current user information for equipment ownership
+   * validation and check-in authorization.
+   */
   useEffect(() => {
     const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.id) setUserId(user.id);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) {
+          setUserId(user.id);
+        }
+      } catch (error) {
+        console.error('Failed to get user:', error);
+      }
     };
     fetchUser();
-  }, []);
+  }, [supabase]);
 
+  /**
+   * Equipment Data and Real-time Updates Effect
+   * 
+   * Fetches checked-out equipment data and sets up real-time subscriptions
+   * for live updates when equipment status changes. Preserves scroll position
+   * during updates for optimal user experience.
+   */
   useEffect(() => {
     if (!userId) return;
 
+    /**
+     * Fetch Checked-Out Equipment with Scroll Preservation
+     * 
+     * Retrieves equipment data while maintaining UI state to prevent
+     * disruptive scroll position changes during real-time updates.
+     */
     const fetchCheckedOutGearsWithScroll = async () => {
-      // Preserve scroll position before fetching
+      // Preserve scroll position before data refresh
       if (listContainerRef.current) {
         scrollPositionRef.current = listContainerRef.current.scrollTop;
       }
+
       await fetchCheckedOutGear();
-      // Restore scroll position after fetching
+
+      // Restore scroll position after data refresh
       setTimeout(() => {
         if (listContainerRef.current) {
           listContainerRef.current.scrollTop = scrollPositionRef.current;
@@ -173,24 +455,47 @@ export default function CheckInGearPage() {
       }, 0);
     };
 
-    fetchCheckedOutGearsWithScroll(); // Initial fetch with scroll preservation
+    // Initial data fetch
+    fetchCheckedOutGearsWithScroll();
 
-    // Set up real-time subscription (filtered events)
+    // Set up real-time subscription for equipment changes
     const gearChannel = supabase
       .channel('gear_changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gears', filter: `checked_out_to=eq.${userId}` }, fetchCheckedOutGearsWithScroll)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gears', filter: `checked_out_to=eq.${userId}` }, fetchCheckedOutGearsWithScroll)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gears', filter: `checked_out_to=eq.${userId}` }, fetchCheckedOutGearsWithScroll)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'gears',
+        filter: `checked_out_to=eq.${userId}`
+      }, fetchCheckedOutGearsWithScroll)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'gears',
+        filter: `checked_out_to=eq.${userId}`
+      }, fetchCheckedOutGearsWithScroll)
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'gears',
+        filter: `checked_out_to=eq.${userId}`
+      }, fetchCheckedOutGearsWithScroll)
       .subscribe();
 
+    // Cleanup subscription on unmount
     return () => {
       supabase.removeChannel(gearChannel);
     };
   }, [userId, toast]);
 
+  /**
+   * QR Scanner Initialization Effect
+   * 
+   * Initializes the HTML5 QR code scanner when the scanner modal
+   * is opened and cleans up resources when closed.
+   */
   useEffect(() => {
     if (!scannerInitialized && !scannedCode && isScannerOpen) {
-      // Small delay to ensure DOM is ready
+      // Delay to ensure DOM element is ready
       const timeoutId = setTimeout(() => {
         const element = document.getElementById("qr-reader");
         if (!element) {

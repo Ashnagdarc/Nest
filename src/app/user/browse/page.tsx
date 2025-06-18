@@ -1,3 +1,82 @@
+/**
+ * Equipment Browse Page - Asset Discovery and Catalog Interface
+ * 
+ * A comprehensive equipment catalog and discovery interface for the Nest by Eden Oasis
+ * application that enables users to explore, search, and discover available equipment/assets.
+ * This page serves as the primary equipment showcase, providing detailed information about
+ * each asset and facilitating quick access to request workflows.
+ * 
+ * Core Features:
+ * - Interactive equipment catalog with visual cards
+ * - Advanced search and filtering capabilities
+ * - Real-time equipment status and availability updates
+ * - Category-based organization and navigation
+ * - Equipment details display with images and specifications
+ * - Quick request functionality with seamless workflow integration
+ * - Responsive design optimized for all devices
+ * 
+ * Catalog Components:
+ * - Equipment Cards: Visual representation with images, status, and details
+ * - Search Interface: Multi-field search across name, category, and description
+ * - Filter System: Status and category-based filtering options
+ * - Category Icons: Visual categorization with intuitive iconography
+ * - Status Indicators: Real-time availability and condition status
+ * - Action Buttons: Quick access to view details and request equipment
+ * 
+ * Search & Discovery Features:
+ * - Real-time search with instant results
+ * - Multi-field search across equipment attributes
+ * - Category-based filtering and organization
+ * - Status-based filtering (Available, Checked Out, etc.)
+ * - Visual equipment cards with detailed information
+ * - Quick equipment request workflow integration
+ * 
+ * Equipment Display Features:
+ * - High-quality equipment images with fallback handling
+ * - Equipment specifications and detailed descriptions
+ * - Real-time status indicators with color coding
+ * - Category badges with consistent visual design
+ * - Equipment condition and health indicators
+ * - Last activity and usage information
+ * 
+ * User Experience Features:
+ * - Smooth animations and transitions with Framer Motion
+ * - Responsive grid layout adapting to screen sizes
+ * - Loading states and skeleton screens
+ * - Error handling with user-friendly messages
+ * - Accessibility features with proper ARIA labels
+ * - Keyboard navigation support
+ * - Touch-friendly interface for mobile devices
+ * 
+ * Integration Points:
+ * - Supabase real-time subscriptions for live updates
+ * - Equipment request workflow integration
+ * - User authentication and authorization
+ * - Notification system for equipment interactions
+ * - Activity logging for usage tracking
+ * - Image storage and optimization
+ * 
+ * Performance Optimizations:
+ * - Efficient data loading and caching strategies
+ * - Optimized image loading with Next.js Image component
+ * - Real-time updates with minimal re-renders
+ * - Scroll position preservation during updates
+ * - Memory-efficient component design
+ * - Progressive loading for large catalogs
+ * 
+ * Security & Compliance:
+ * - User authentication verification for requests
+ * - Role-based access control for equipment visibility
+ * - Input validation and sanitization
+ * - Audit logging for equipment interactions
+ * - Data protection and privacy compliance
+ * 
+ * @fileoverview Equipment catalog and discovery interface for asset browsing
+ * @author Daniel Chinonso Samuel
+ * @version 1.0.0
+ * @since 2024-01-15
+ */
+
 "use client";
 
 import { useEffect, useState, useRef } from 'react';
@@ -14,21 +93,50 @@ import { createClient } from '@/lib/supabase/client';
 import { createGearNotification } from '@/lib/notifications';
 import { useToast } from "@/hooks/use-toast";
 
+/**
+ * Equipment Interface
+ * 
+ * TypeScript interface defining the structure of equipment/gear
+ * objects throughout the application with comprehensive field definitions.
+ * 
+ * @interface Gear
+ */
 interface Gear {
+  /** Unique equipment identifier */
   id: string;
+  /** Equipment name/title */
   name: string;
+  /** Optional detailed description */
   description?: string | null;
+  /** Equipment category for organization */
   category?: string | null;
+  /** Current availability status */
   status?: string | null;
+  /** Equipment image URL for display */
   image_url?: string | null;
+  /** User ID if currently checked out */
   checked_out_to?: string | null;
+  /** Current active request ID */
   current_request_id?: string | null;
+  /** Last checkout timestamp */
   last_checkout_date?: string | null;
+  /** Due date for return */
   due_date?: string | null;
+  /** Creation timestamp */
   created_at?: string | null;
+  /** Last update timestamp */
   updated_at?: string | null;
 }
 
+/**
+ * Category Icon Mapping
+ * 
+ * Maps equipment categories to their corresponding Lucide React icons
+ * for consistent visual representation across the application.
+ * Provides intuitive iconography for equipment categorization.
+ * 
+ * @constant {Record<string, any>} categoryIcons
+ */
 const categoryIcons: Record<string, any> = {
   camera: Camera,
   lens: Aperture,
@@ -47,6 +155,15 @@ const categoryIcons: Record<string, any> = {
   other: Box,
 };
 
+/**
+ * Category Color Mapping
+ * 
+ * Maps equipment categories to their corresponding badge colors
+ * for consistent visual design and improved user experience.
+ * Uses Tailwind CSS classes for color consistency.
+ * 
+ * @constant {Record<string, string>} categoryColors
+ */
 const categoryColors: Record<string, string> = {
   camera: 'bg-blue-100 text-blue-800',
   lens: 'bg-purple-100 text-purple-800',
@@ -65,17 +182,96 @@ const categoryColors: Record<string, string> = {
   other: 'bg-gray-200 text-gray-700',
 };
 
+/**
+ * Get Category Icon Component
+ * 
+ * Returns the appropriate icon component for a given equipment category
+ * with consistent sizing and styling. Provides fallback icon for
+ * unknown or undefined categories.
+ * 
+ * @param {string} [category] - Equipment category identifier
+ * @param {number} [size=18] - Icon size in pixels
+ * @returns {JSX.Element} Rendered icon component
+ * 
+ * @example
+ * ```typescript
+ * // Basic usage with default size
+ * const cameraIcon = getCategoryIcon('camera');
+ * 
+ * // Custom size
+ * const largeIcon = getCategoryIcon('laptop', 24);
+ * 
+ * // Handles undefined categories gracefully
+ * const unknownIcon = getCategoryIcon(undefined); // Returns Box icon
+ * ```
+ */
 const getCategoryIcon = (category?: string, size = 18) => {
   const key = (category || '').toLowerCase();
   const Icon = categoryIcons[key] || Box;
   return <Icon size={size} className="inline-block mr-1 align-text-bottom text-muted-foreground" />;
 };
 
+/**
+ * Get Category Badge Class
+ * 
+ * Returns the appropriate CSS classes for category badge styling
+ * based on the equipment category. Provides consistent visual
+ * design across all equipment cards.
+ * 
+ * @param {string} [category] - Equipment category identifier
+ * @returns {string} Tailwind CSS classes for badge styling
+ * 
+ * @example
+ * ```typescript
+ * // Get styling for camera equipment
+ * const cameraStyles = getCategoryBadgeClass('camera');
+ * // Returns: 'bg-blue-100 text-blue-800'
+ * 
+ * // Handle unknown categories
+ * const unknownStyles = getCategoryBadgeClass('unknown');
+ * // Returns: 'bg-gray-200 text-gray-700'
+ * ```
+ */
 const getCategoryBadgeClass = (category?: string) => {
   const key = (category || '').toLowerCase();
   return categoryColors[key] || 'bg-gray-200 text-gray-700';
 };
 
+/**
+ * Browse Gears Page Component
+ * 
+ * Main page component that renders the equipment catalog interface
+ * with search, filtering, and browsing capabilities. Provides a
+ * comprehensive view of all available equipment with real-time
+ * status updates and interactive features.
+ * 
+ * Key Features:
+ * - Real-time equipment data with Supabase subscriptions
+ * - Advanced search and filtering capabilities
+ * - Responsive grid layout with animated cards
+ * - Equipment status indicators and category badges
+ * - Quick equipment request workflow integration
+ * - Scroll position preservation during updates
+ * - Error handling with user feedback
+ * 
+ * State Management:
+ * - Equipment data loading and caching
+ * - Search and filter state management
+ * - Loading states and error handling
+ * - UI state preservation during updates
+ * 
+ * @component
+ * @returns {JSX.Element} Equipment browse page interface
+ * 
+ * @example
+ * ```typescript
+ * // Basic usage in app routing
+ * import BrowseGearsPage from '@/app/user/browse/page';
+ * 
+ * // Rendered at /user/browse route
+ * <BrowseGearsPage />
+ * ```
+ */
 export default function BrowseGearsPage() {
   const supabase = createClient();
   const { toast } = useToast();

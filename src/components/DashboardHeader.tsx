@@ -1,3 +1,5 @@
+"use client";
+
 import Link from 'next/link';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

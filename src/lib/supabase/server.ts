@@ -8,7 +8,6 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; // Use se
 
 // Function to create a server client for server components/actions
 export const createSupabaseServerClient = (isAdmin = false) => {
-  const cookieStore = cookies();
   const key = isAdmin ? supabaseServiceRoleKey : supabaseKey;
 
   if (!supabaseUrl || !key) {
@@ -16,7 +15,6 @@ export const createSupabaseServerClient = (isAdmin = false) => {
     // Handle the error appropriately, maybe throw or return a specific error state
     throw new Error(`Supabase ${isAdmin ? 'Service Role' : 'Anon'} Key or URL is missing.`);
   }
-
 
   return createServerClient<Database>(
     supabaseUrl,

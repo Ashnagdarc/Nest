@@ -76,7 +76,7 @@ import {
 } from "lucide-react";
 
 // Services
-import { WeeklyUsageReport, generateUsageReportForRange, UserStats, GearStats } from "@/services/report";
+import { WeeklyUsageReport, generateUsageReportForRange, UserStats, GearStats } from "@/services/report-client";
 import { generateCsvReport, generateReportInsights, calculatePerformanceMetrics } from "@/services/reportExport";
 
 // Color schemes
