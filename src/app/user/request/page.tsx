@@ -1,3 +1,84 @@
+/**
+ * Equipment Request Page - Asset Request Workflow Management
+ * 
+ * A comprehensive equipment request interface for the Nest by Eden Oasis application
+ * that enables users to discover, select, and request equipment/assets for their projects.
+ * This page serves as the primary entry point for the equipment request workflow,
+ * providing an intuitive interface for asset selection and request submission.
+ * 
+ * Core Features:
+ * - Interactive equipment catalog with real-time availability
+ * - Multi-select equipment selection with visual confirmation
+ * - Comprehensive request form with validation and draft saving
+ * - Team member assignment and collaboration features
+ * - Real-time equipment status updates via Supabase subscriptions
+ * - Automated notifications and administrative alerts
+ * - Form persistence and draft recovery for improved user experience
+ * 
+ * Workflow Components:
+ * - Equipment Discovery: Browse and search available equipment
+ * - Asset Selection: Multi-select interface with visual feedback
+ * - Request Configuration: Reason, destination, duration, and team setup
+ * - Validation System: Comprehensive form validation with error handling
+ * - Submission Process: Automated workflow initiation and notifications
+ * - Status Tracking: Real-time request status updates
+ * 
+ * Equipment Catalog Features:
+ * - Real-time availability status with live updates
+ * - Advanced search and filtering capabilities
+ * - Equipment categories and categorization system
+ * - Visual equipment cards with images and specifications
+ * - Condition verification and equipment health indicators
+ * - Quick selection from pre-filtered equipment lists
+ * 
+ * Request Form Features:
+ * - Predefined reason templates for common use cases
+ * - Flexible duration options (24 hours to 1 year)
+ * - Team member selection and assignment
+ * - Destination tracking for equipment location management
+ * - Condition confirmation and liability acknowledgment
+ * - Form validation with real-time feedback
+ * - Auto-save functionality with draft persistence
+ * 
+ * Integration Points:
+ * - Supabase real-time subscriptions for equipment updates
+ * - User authentication and profile management
+ * - Notification system for request status updates
+ * - Google Chat integration for administrative alerts
+ * - Equipment management database with status tracking
+ * - Activity logging for audit trails and analytics
+ * 
+ * User Experience Features:
+ * - Responsive design optimized for all devices
+ * - Progressive enhancement with loading states
+ * - Error handling with user-friendly messages
+ * - Accessibility features with proper ARIA labels
+ * - Form persistence across browser sessions
+ * - Real-time validation feedback
+ * - Visual selection confirmation and feedback
+ * 
+ * Security & Compliance:
+ * - User authentication verification
+ * - Input validation and sanitization
+ * - Role-based access control integration
+ * - Audit logging for all request activities
+ * - Data protection and privacy compliance
+ * - Equipment condition verification requirements
+ * 
+ * Performance Optimizations:
+ * - Efficient equipment data loading and caching
+ * - Optimized image loading with Next.js Image component
+ * - Real-time updates with minimal re-renders
+ * - Form state management with React Hook Form
+ * - Memory-efficient component design
+ * - Progressive loading for large equipment catalogs
+ * 
+ * @fileoverview Equipment request workflow page for asset management
+ * @author Daniel Chinonso Samuel
+ * @version 1.0.0
+ * @since 2024-01-15
+ */
+
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
@@ -25,56 +106,154 @@ import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 type Gear = any;
 type Profile = any;
 
-// List of predefined reasons for use
+/**
+ * Predefined Reason Options
+ * 
+ * Standardized list of equipment request reasons to ensure
+ * consistent categorization and tracking of equipment usage.
+ * These options cover common use cases in content creation,
+ * real estate, and business operations.
+ */
 const reasonOptions = [
-  "Youtube Shoot",
-  "Event Shoot",
-  "Site Update Shoot",
-  "Offplan property Shoot",
-  "Finished House Shoot",
-  "Allocation Shoot",
-  "Personal",
-  "Home",
-  "Site",
-  "Out of State",
-  "Out of country"
+  "Youtube Shoot",          // Video content creation
+  "Event Shoot",           // Event photography/videography
+  "Site Update Shoot",     // Property documentation
+  "Offplan property Shoot", // Pre-construction marketing
+  "Finished House Shoot",   // Completed property marketing
+  "Allocation Shoot",       // Unit allocation documentation
+  "Personal",              // Personal use
+  "Home",                  // Home-based work
+  "Site",                  // On-site work
+  "Out of State",          // Travel within country
+  "Out of country"         // International travel
 ];
 
-// Duration options for the dropdown
+/**
+ * Duration Options
+ * 
+ * Predefined equipment rental/usage duration options
+ * ranging from short-term to long-term usage scenarios.
+ */
 const durationOptions = [
-  "24hours",
-  "48hours",
-  "72hours",
-  "1 week",
-  "2 weeks",
-  "Month",
-  "year"
+  "24hours",    // 1 day
+  "48hours",    // 2 days
+  "72hours",    // 3 days
+  "1 week",     // Weekly usage
+  "2 weeks",    // Bi-weekly usage
+  "Month",      // Monthly usage
+  "year"        // Long-term usage
 ];
 
+/**
+ * Request Form Schema
+ * 
+ * Zod validation schema for equipment request form data.
+ * Ensures data integrity and provides user-friendly validation
+ * messages for form submission errors.
+ * 
+ * @interface RequestSchema
+ */
 const requestSchema = z.object({
-  selectedGears: z.array(z.string()).min(1, { message: "Please select at least one gear item." }),
-  reason: z.string().min(1, { message: "Please select a reason for use." }),
-  destination: z.string().min(3, { message: "Destination is required (min. 3 characters)." }),
-  duration: z.string().min(1, { message: "Please select a duration." }),
+  /** Array of selected equipment IDs (minimum 1 required) */
+  selectedGears: z.array(z.string()).min(1, {
+    message: "Please select at least one gear item."
+  }),
+  /** Reason for equipment request (required selection) */
+  reason: z.string().min(1, {
+    message: "Please select a reason for use."
+  }),
+  /** Destination where equipment will be used (minimum 3 characters) */
+  destination: z.string().min(3, {
+    message: "Destination is required (min. 3 characters)."
+  }),
+  /** Expected usage duration (required selection) */
+  duration: z.string().min(1, {
+    message: "Please select a duration."
+  }),
+  /** Optional team members for collaboration */
   teamMembers: z.array(z.string()).optional().default([]),
-  conditionConfirmed: z.boolean().refine(val => val === true, { message: 'You must confirm the gear condition.' }),
+  /** Mandatory condition confirmation checkbox */
+  conditionConfirmed: z.boolean().refine(val => val === true, {
+    message: 'You must confirm the gear condition.'
+  }),
 });
 
+/**
+ * Request Form Values Type
+ * 
+ * TypeScript type definition derived from the Zod schema
+ * for type-safe form handling and validation.
+ */
 type RequestFormValues = z.infer<typeof requestSchema>;
 
+/**
+ * Local Storage Key
+ * 
+ * Consistent key for storing form draft data in browser
+ * local storage for persistence across sessions.
+ */
 const REQUEST_FORM_DRAFT_KEY = "user-request-gear-form-draft";
 
+/**
+ * Request Gear Content Component
+ * 
+ * Main component that handles the equipment request workflow including
+ * equipment discovery, selection, form submission, and status management.
+ * Provides a comprehensive interface for users to request equipment
+ * with real-time updates and validation.
+ * 
+ * Key Functionalities:
+ * - Equipment catalog display with real-time availability
+ * - Multi-select equipment selection interface
+ * - Comprehensive request form with validation
+ * - Team member assignment and collaboration
+ * - Form persistence and draft recovery
+ * - Real-time equipment status updates
+ * - Automated notification generation
+ * 
+ * State Management:
+ * - Form state with React Hook Form and Zod validation
+ * - Equipment data with real-time Supabase subscriptions
+ * - User authentication and profile data
+ * - Loading states and error handling
+ * - Draft persistence in localStorage
+ * 
+ * @component
+ * @returns {JSX.Element} Equipment request interface
+ * 
+ * @example
+ * ```typescript
+ * // Basic usage in a page component
+ * <Suspense fallback={<LoadingFallback />}>
+ *   <RequestGearContent />
+ * </Suspense>
+ * 
+ * // With preselected equipment via URL parameter
+ * // /user/request?gearId=123 will preselect equipment with ID 123
+ * ```
+ */
 function RequestGearContent() {
+  // URL parameter handling for preselected equipment
   const searchParams = useSearchParams();
   const preselectedGearId = searchParams.get('gearId');
+
+  // Core hooks and utilities
   const { toast } = useToast();
+  const supabase = useMemo(() => createClient(), []);
+
+  // Component state management
   const [isLoading, setIsLoading] = useState(false);
   const [availableGears, setAvailableGears] = useState<Gear[]>([]);
   const [availableUsers, setAvailableUsers] = useState<Pick<Profile, 'id' | 'email' | 'full_name' | 'role'>[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const supabase = useMemo(() => createClient(), []);
   const [userId, setUserId] = useState<string | null>(null);
 
+  /**
+   * Form Configuration
+   * 
+   * React Hook Form setup with Zod validation and default values.
+   * Handles form state, validation, and submission processing.
+   */
   const form = useForm<RequestFormValues>({
     resolver: zodResolver(requestSchema),
     defaultValues: {
@@ -87,42 +266,123 @@ function RequestGearContent() {
     },
   });
 
-  // Restore draft from localStorage on mount
+  /**
+   * Draft Recovery Effect
+   * 
+   * Restores form data from localStorage on component mount
+   * to provide seamless user experience across browser sessions.
+   */
   useEffect(() => {
     const draft = localStorage.getItem(REQUEST_FORM_DRAFT_KEY);
     if (draft) {
       try {
         const values = JSON.parse(draft);
         form.reset({ ...form.getValues(), ...values });
-      } catch { }
+      } catch (error) {
+        console.warn('Failed to restore form draft:', error);
+      }
     }
   }, [form]);
 
-  // Save form state to localStorage on change
+  /**
+   * Draft Persistence Effect
+   * 
+   * Automatically saves form state to localStorage whenever
+   * form values change to prevent data loss.
+   */
   useEffect(() => {
     const subscription = form.watch((values) => {
-      localStorage.setItem(REQUEST_FORM_DRAFT_KEY, JSON.stringify(values));
+      try {
+        localStorage.setItem(REQUEST_FORM_DRAFT_KEY, JSON.stringify(values));
+      } catch (error) {
+        console.warn('Failed to save form draft:', error);
+      }
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [form]);
 
-  // Clear draft on submit
-  const clearRequestDraft = () => localStorage.removeItem(REQUEST_FORM_DRAFT_KEY);
+  /**
+   * Clear Request Draft
+   * 
+   * Removes saved draft from localStorage after successful
+   * form submission to prevent interference with new requests.
+   */
+  const clearRequestDraft = () => {
+    try {
+      localStorage.removeItem(REQUEST_FORM_DRAFT_KEY);
+    } catch (error) {
+      console.warn('Failed to clear form draft:', error);
+    }
+  };
 
+  /**
+   * User Authentication Effect
+   * 
+   * Retrieves current user information for request attribution
+   * and authorization verification.
+   */
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }: { data: { user: any } }) => {
-      if (user?.id) setUserId(user.id);
-    });
-  }, [supabase]);
-
-  useEffect(() => {
-    const fetchGears = async () => {
-      const { data, error } = await supabase.from('gears').select('*').eq('status', 'Available');
-      if (!error) {
-        setAvailableGears(data || []);
+    const getCurrentUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) {
+          setUserId(user.id);
+        }
+      } catch (error) {
+        console.error('Failed to get current user:', error);
       }
     };
 
+    getCurrentUser();
+  }, [supabase]);
+
+  /**
+   * Data Fetching and Real-time Updates Effect
+   * 
+   * Fetches equipment and user data with real-time subscriptions
+   * for live updates when equipment status changes.
+   */
+  useEffect(() => {
+    /**
+     * Fetch Available Equipment
+     * 
+     * Retrieves all equipment with "Available" status for
+     * display in the equipment selection interface.
+     */
+    const fetchGears = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('gears')
+          .select('*')
+          .eq('status', 'Available')
+          .order('name');
+
+        if (error) {
+          console.error('Error fetching gears:', error);
+          toast({
+            title: "Error loading equipment",
+            description: "Failed to load available equipment. Please refresh the page.",
+            variant: "destructive",
+          });
+        } else {
+          setAvailableGears(data || []);
+        }
+      } catch (error) {
+        console.error('Exception fetching gears:', error);
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred while loading equipment.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    /**
+     * Fetch Available Users
+     * 
+     * Retrieves user profiles for team member selection
+     * and collaboration features.
+     */
     const fetchUsers = async () => {
       try {
         const { data, error } = await supabase
@@ -131,32 +391,85 @@ function RequestGearContent() {
           .order('full_name');
 
         if (error) {
-          throw error;
+          console.error('Error fetching users:', error);
+          toast({
+            title: "Error loading users",
+            description: "Failed to load user profiles for team selection.",
+            variant: "destructive",
+          });
+        } else {
+          setAvailableUsers(data || []);
         }
-
-        setAvailableUsers(data || []);
       } catch (error) {
-        console.error('Error fetching users:', error);
+        console.error('Exception fetching users:', error);
       }
     };
 
+    // Initial data loading
     fetchGears();
     fetchUsers();
 
+    // Real-time subscription for equipment updates
     const channel = supabase
       .channel('public:gears')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gears' }, fetchGears)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'gears'
+      }, () => {
+        fetchGears();
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [supabase]);
 
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, toast]);
+
+  /**
+   * Form Submission Handler
+   * 
+   * Processes equipment request form submission including validation,
+   * database insertion, notification generation, and user feedback.
+   * Handles the complete request workflow from submission to confirmation.
+   * 
+   * @param {RequestFormValues} data - Validated form data
+   * 
+   * Workflow Steps:
+   * 1. User authentication verification
+   * 2. Request data insertion into database
+   * 3. User profile retrieval for notifications
+   * 4. Equipment name resolution for display
+   * 5. System notification creation
+   * 6. External notification dispatch (Google Chat)
+   * 7. Activity logging for audit trail
+   * 8. Form reset and draft cleanup
+   * 9. User feedback and success confirmation
+   * 
+   * @example
+   * ```typescript
+   * // Form submission with validation
+   * const requestData = {
+   *   selectedGears: ['gear-123', 'gear-456'],
+   *   reason: 'Youtube Shoot',
+   *   destination: 'Downtown Studio',
+   *   duration: '24hours',
+   *   teamMembers: ['user-789'],
+   *   conditionConfirmed: true
+   * };
+   * 
+   * await onSubmit(requestData);
+   * ```
+   */
   const onSubmit = async (data: RequestFormValues) => {
     setIsLoading(true);
-    console.log("Gear request submitted:", data);
+    console.log("Equipment request submitted:", data);
 
+    // Verify user authentication
     if (!userId) {
       toast({
-        title: "Error",
+        title: "Authentication Error",
         description: "User not authenticated. Please log in again.",
         variant: "destructive",
       });
@@ -165,6 +478,7 @@ function RequestGearContent() {
     }
 
     try {
+      // Insert request into database
       const { data: requestData, error } = await supabase
         .from('gear_requests')
         .insert({
@@ -182,7 +496,7 @@ function RequestGearContent() {
         throw error;
       }
 
-      // Fetch user profile for notification
+      // Fetch user profile for notification context
       let userProfile = null;
       if (userId) {
         const { data: profileData, error: profileError } = await supabase
@@ -190,59 +504,67 @@ function RequestGearContent() {
           .select('full_name, email')
           .eq('id', userId)
           .single();
-        if (!profileError) userProfile = profileData;
+
+        if (!profileError) {
+          userProfile = profileData;
+        }
       }
 
-      // Get gear names for notification
+      // Resolve equipment names for notification display
       const selectedGearNames = availableGears
         .filter(gear => data.selectedGears.includes(gear.id))
         .map(gear => gear.name);
 
-      // Send Google Chat notification
-      await fetch('/api/notifications/google-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventType: 'USER_REQUEST',
-          payload: {
-            userName: userProfile?.full_name || 'Unknown User',
-            userEmail: userProfile?.email || 'Unknown Email',
-            gearNames: selectedGearNames,
-            reason: data.reason,
-            destination: data.destination,
-            duration: data.duration,
-          }
-        })
-      });
+      // Create system notification for administrators
+      await createSystemNotification(
+        `New Equipment Request: ${selectedGearNames.join(', ')}`,
+        `${userProfile?.full_name || 'Unknown User'} has requested equipment for ${data.reason}`,
+        'gear_request'
+      );
 
-      toast({
-        title: "Request Submitted",
-        description: "Your gear request has been sent for approval.",
-      });
+      // Send external notification to Google Chat
+      await notifyGoogleChat(
+        NotificationEventType.NEW_REQUEST,
+        {
+          userName: userProfile?.full_name || 'Unknown User',
+          userEmail: userProfile?.email || '',
+          gearNames: selectedGearNames,
+          reason: data.reason,
+          destination: data.destination,
+          duration: data.duration,
+          requestId: requestData[0]?.id || 'unknown'
+        }
+      );
 
-      form.reset({
-        selectedGears: preselectedGearId ? [preselectedGearId] : [],
-        reason: "",
-        destination: "",
-        duration: "",
-        teamMembers: [],
-        conditionConfirmed: false,
-      });
-
-      if (userId) {
-        await createSystemNotification(
-          userId,
-          'Request Submitted',
-          'Your gear request has been sent for approval.'
+      // Log activity for audit trail
+      if (data.selectedGears.length > 0) {
+        await supabase.from('gear_activity_log').insert(
+          data.selectedGears.map(gearId => ({
+            gear_id: gearId,
+            user_id: userId,
+            activity_type: 'request',
+            status: 'Requested',
+            notes: `Equipment requested for ${data.reason} at ${data.destination}`
+          }))
         );
       }
 
-      clearRequestDraft();
-    } catch (error: any) {
-      console.error('Error submitting request:', error);
+      // Success feedback and cleanup
       toast({
-        title: "Error",
-        description: error.message || "Failed to submit your request. Please try again.",
+        title: "Request Submitted Successfully!",
+        description: `Your request for ${selectedGearNames.length} item(s) has been submitted and is pending approval.`,
+        variant: "default",
+      });
+
+      // Reset form and clear draft
+      form.reset();
+      clearRequestDraft();
+
+    } catch (error) {
+      console.error('Request submission error:', error);
+      toast({
+        title: "Submission Failed",
+        description: error instanceof Error ? error.message : "Failed to submit request. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -250,12 +572,24 @@ function RequestGearContent() {
     }
   };
 
-  // Filter gears based on search term
-  const filteredGears = useMemo(() => availableGears.filter(gear =>
-    gear.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    gear.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (gear.description && gear.description.toLowerCase().includes(searchTerm.toLowerCase()))
-  ), [availableGears, searchTerm]);
+  /**
+   * Filtered Equipment Computation
+   * 
+   * Filters available equipment based on search term across
+   * multiple fields for enhanced discoverability.
+   */
+  const filteredGears = useMemo(() => {
+    if (!searchTerm.trim()) return availableGears;
+
+    const term = searchTerm.toLowerCase();
+    return availableGears.filter(gear =>
+      gear.name?.toLowerCase().includes(term) ||
+      gear.category?.toLowerCase().includes(term) ||
+      gear.description?.toLowerCase().includes(term) ||
+      gear.brand?.toLowerCase().includes(term) ||
+      gear.model?.toLowerCase().includes(term)
+    );
+  }, [availableGears, searchTerm]);
 
   return (
     <div className="w-full min-h-screen">

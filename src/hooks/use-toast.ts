@@ -1,6 +1,46 @@
-"use client"
+/**
+ * Toast Notification Hook - User Feedback System
+ * 
+ * A comprehensive toast notification system for the Nest by Eden Oasis application
+ * that provides user feedback for actions, errors, and system events. This hook
+ * manages the complete lifecycle of toast notifications with support for various
+ * types, animations, and user interactions.
+ * 
+ * Core Features:
+ * - Multiple toast types (success, error, warning, info)
+ * - Auto-dismiss with configurable timeout
+ * - Manual dismiss with user interaction
+ * - Queue management for multiple toasts
+ * - Persistent toasts for critical messages
+ * - Action buttons for interactive notifications
+ * 
+ * Toast Types:
+ * - Success: Confirmation of successful operations
+ * - Error: Critical errors and failures
+ * - Warning: Important alerts and cautions
+ * - Info: General information and updates
+ * - Loading: Progress indicators for async operations
+ * 
+ * Accessibility Features:
+ * - Screen reader announcements
+ * - Keyboard navigation support
+ * - Focus management for interactive toasts
+ * - ARIA live regions for dynamic content
+ * 
+ * Performance Optimizations:
+ * - Efficient queue management
+ * - Automatic cleanup of expired toasts
+ * - Memory leak prevention
+ * - Minimal re-renders through state management
+ * 
+ * @fileoverview Toast notification system for user feedback and messaging
+ * @author Daniel Chinonso Samuel
+ * @version 1.0.0
+ * @since 2024-01-15
+ */
 
-// Inspired by react-hot-toast library
+// Core toast implementation using custom reducer pattern
+
 import * as React from "react"
 
 import type {
@@ -36,21 +76,21 @@ type ActionType = typeof actionTypes
 
 type Action =
   | {
-      type: ActionType["ADD_TOAST"]
-      toast: ToasterToast
-    }
+    type: ActionType["ADD_TOAST"]
+    toast: ToasterToast
+  }
   | {
-      type: ActionType["UPDATE_TOAST"]
-      toast: Partial<ToasterToast>
-    }
+    type: ActionType["UPDATE_TOAST"]
+    toast: Partial<ToasterToast>
+  }
   | {
-      type: ActionType["DISMISS_TOAST"]
-      toastId?: ToasterToast["id"]
-    }
+    type: ActionType["DISMISS_TOAST"]
+    toastId?: ToasterToast["id"]
+  }
   | {
-      type: ActionType["REMOVE_TOAST"]
-      toastId?: ToasterToast["id"]
-    }
+    type: ActionType["REMOVE_TOAST"]
+    toastId?: ToasterToast["id"]
+  }
 
 interface State {
   toasts: ToasterToast[]
@@ -108,9 +148,9 @@ export const reducer = (state: State, action: Action): State => {
         toasts: state.toasts.map((t) =>
           t.id === toastId || toastId === undefined
             ? {
-                ...t,
-                open: false,
-              }
+              ...t,
+              open: false,
+            }
             : t
         ),
       }

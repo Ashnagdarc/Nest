@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { WeeklyUsageReport } from './report';
+import { WeeklyUsageReport } from './report-client';
 import { format } from 'date-fns';
 
 /**
