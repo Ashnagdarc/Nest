@@ -1,29 +1,5 @@
 /**
  * Admin Command Center - Enhanced Real-Time Dashboard
- * 
- * A comprehensive, modern administrative interface for the Nest by Eden Oasis
- * asset management system. This enhanced dashboard provides real-time insights,
- * advanced analytics, and comprehensive control over all system operations.
- * 
- * Key Features v2.0:
- * - Real-time data synchronization with live updates
- * - Modern, responsive card-based layout
- * - Interactive data visualizations and charts
- * - Advanced performance monitoring
- * - Comprehensive system health tracking
- * - Enhanced user experience with smooth animations
- * - Mobile-first responsive design
- * 
- * Data Sources:
- * - Enhanced DashboardProvider v2.0 for real-time data
- * - Live WebSocket connections for instant updates
- * - Smart caching for optimal performance
- * - Error boundaries for robust error handling
- * 
- * @fileoverview Enhanced admin command center with real-time capabilities
- * @author Daniel Chinonso Samuel
- * @version 2.0.0 - Enhanced Real-Time Edition
- * @since 2024-01-15
  */
 
 "use client"
@@ -54,391 +30,24 @@ import {
 import { DashboardProvider, useDashboard } from '@/components/admin/DashboardProvider'
 import { useToast } from "@/hooks/use-toast"
 
-/**
- * Real-Time Status Indicator Component
- * 
- * Displays the current connection status with animated indicators
- * and connection health metrics.
- */
-const RealTimeStatus = () => {
-    const { realTimeState, realTimeEnabled, toggleRealTime } = useDashboard()
+// Dashboard Components
+import {
+    RealTimeStatus,
+    StatCard,
+    SystemHealthMonitor,
+    RecentActivityFeed,
+    QuickActionsPanel
+} from '@/components/admin/dashboard'
 
-    const getStatusColor = () => {
-        if (!realTimeEnabled) return 'bg-gray-500'
-        if (realTimeState.connected) return 'bg-green-500 animate-pulse'
-        if (realTimeState.connectionAttempts > 3) return 'bg-red-500'
-        return 'bg-yellow-500'
-    }
 
-    const getStatusText = () => {
-        if (!realTimeEnabled) return 'Real-time Disabled'
-        if (realTimeState.connected) return 'Live Updates Active'
-        if (realTimeState.connectionAttempts > 3) return 'Connection Failed'
-        return 'Connecting...'
-    }
 
-    return (
-        <div className="flex items-center space-x-2">
-            <div className={`w-3 h-3 rounded-full ${getStatusColor()}`} />
-            <span className="text-sm font-medium text-gray-300">
-                {getStatusText()}
-            </span>
-            <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => toggleRealTime(!realTimeEnabled)}
-                className="text-xs"
-            >
-                {realTimeEnabled ? <WifiOff className="h-3 w-3" /> : <Wifi className="h-3 w-3" />}
-            </Button>
-        </div>
-    )
-}
 
-/**
- * Enhanced Statistics Card Component
- * 
- * Modern statistics display with trend indicators, animations,
- * and interactive hover effects.
- */
-interface StatCardProps {
-    title: string
-    value: number
-    change?: number
-    icon: React.ComponentType<any>
-    color: string
-    subtitle?: string
-    trend?: 'up' | 'down' | 'stable'
-    loading?: boolean
-}
 
-const StatCard: React.FC<StatCardProps> = ({
-    title,
-    value,
-    change,
-    icon: Icon,
-    color,
-    subtitle,
-    trend,
-    loading = false
-}) => {
-    const getTrendIcon = () => {
-        switch (trend) {
-            case 'up': return <TrendingUp className="h-4 w-4 text-green-500" />
-            case 'down': return <TrendingDown className="h-4 w-4 text-red-500" />
-            default: return <Activity className="h-4 w-4 text-gray-500" />
-        }
-    }
 
-    if (loading) {
-        return (
-            <Card className="bg-gray-800/50 border-gray-700 hover:bg-gray-800/70 transition-all duration-300">
-                <CardHeader className="pb-2">
-                    <div className="animate-pulse">
-                        <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
-                        <div className="h-8 bg-gray-700 rounded w-1/2"></div>
-                    </div>
-                </CardHeader>
-            </Card>
-        )
-    }
 
-    return (
-        <Card className="bg-gray-800/50 border-gray-700 hover:bg-gray-800/70 transition-all duration-300 hover:scale-105">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-300 flex items-center justify-between">
-                    {title}
-                    <Icon className={`h-5 w-5 ${color}`} />
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="text-2xl font-bold text-white mb-1">
-                    {value.toLocaleString()}
-                </div>
-                {subtitle && (
-                    <p className="text-xs text-gray-400 mb-2">{subtitle}</p>
-                )}
-                {change !== undefined && (
-                    <div className="flex items-center space-x-1">
-                        {getTrendIcon()}
-                        <span className={`text-xs ${trend === 'up' ? 'text-green-500' :
-                            trend === 'down' ? 'text-red-500' :
-                                'text-gray-500'
-                            }`}>
-                            {change > 0 ? '+' : ''}{change}%
-                        </span>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    )
-}
 
-/**
- * System Health Monitor Component
- * 
- * Real-time system health monitoring with visual indicators
- * and performance metrics.
- */
-const SystemHealthMonitor = () => {
-    const { stats, performance, realTimeState, error } = useDashboard()
 
-    const getHealthColor = (health: string) => {
-        switch (health) {
-            case 'excellent': return 'text-green-500'
-            case 'good': return 'text-blue-500'
-            case 'warning': return 'text-yellow-500'
-            case 'critical': return 'text-red-500'
-            default: return 'text-gray-500'
-        }
-    }
 
-    const getHealthIcon = (health: string) => {
-        switch (health) {
-            case 'excellent': return <Heart className="h-5 w-5 text-green-500" />
-            case 'good': return <CheckCircle className="h-5 w-5 text-blue-500" />
-            case 'warning': return <AlertTriangle className="h-5 w-5 text-yellow-500" />
-            case 'critical': return <AlertCircle className="h-5 w-5 text-red-500" />
-            default: return <Activity className="h-5 w-5 text-gray-500" />
-        }
-    }
-
-    return (
-        <Card className="bg-gray-800/50 border-gray-700">
-            <CardHeader>
-                <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-                    <Gauge className="h-5 w-5 text-purple-400" />
-                    System Health Monitor
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {/* Overall Health */}
-                <div className="flex items-center justify-between">
-                    <span className="text-gray-300">Overall Health</span>
-                    <div className="flex items-center space-x-2">
-                        {getHealthIcon(stats.systemHealth)}
-                        <span className={`font-semibold ${getHealthColor(stats.systemHealth)}`}>
-                            {stats.systemHealth.charAt(0).toUpperCase() + stats.systemHealth.slice(1)}
-                        </span>
-                    </div>
-                </div>
-
-                {/* Performance Metrics */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <div className="text-sm text-gray-400">Query Performance</div>
-                        <div className="text-lg font-semibold text-white">
-                            {performance.averageQueryTime}ms
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <div className="text-sm text-gray-400">Cache Hit Rate</div>
-                        <div className="text-lg font-semibold text-white">
-                            {performance.cacheHitRate}%
-                        </div>
-                    </div>
-                </div>
-
-                {/* Real-time Status */}
-                <div className="flex items-center justify-between">
-                    <span className="text-gray-300">Real-time Connection</span>
-                    <div className="flex items-center space-x-2">
-                        {realTimeState.connected ? (
-                            <Wifi className="h-4 w-4 text-green-500" />
-                        ) : (
-                            <WifiOff className="h-4 w-4 text-red-500" />
-                        )}
-                        <span className={`text-sm ${realTimeState.connected ? 'text-green-500' : 'text-red-500'}`}>
-                            {realTimeState.connected ? 'Connected' : 'Disconnected'}
-                        </span>
-                    </div>
-                </div>
-
-                {/* Error Status */}
-                {error && (
-                    <Alert className="border-red-600 bg-red-900/20">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription className="text-red-400">
-                            {error}
-                        </AlertDescription>
-                    </Alert>
-                )}
-            </CardContent>
-        </Card>
-    )
-}
-
-/**
- * Recent Activity Feed Component
- * 
- * Live activity feed with real-time updates and smooth animations.
- */
-const RecentActivityFeed = () => {
-    const { activities, loading } = useDashboard()
-
-    const getActivityIcon = (type: string) => {
-        switch (type.toLowerCase()) {
-            case 'checkout': return <Package className="h-4 w-4 text-blue-400" />
-            case 'checkin': return <CheckCircle className="h-4 w-4 text-green-400" />
-            case 'maintenance': return <Wrench className="h-4 w-4 text-orange-400" />
-            case 'request': return <ClipboardList className="h-4 w-4 text-purple-400" />
-            default: return <Activity className="h-4 w-4 text-gray-400" />
-        }
-    }
-
-    const formatTimeAgo = (dateString: string) => {
-        const date = new Date(dateString)
-        const now = new Date()
-        const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
-
-        if (diffInMinutes < 1) return 'Just now'
-        if (diffInMinutes < 60) return `${diffInMinutes}m ago`
-        if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`
-        return `${Math.floor(diffInMinutes / 1440)}d ago`
-    }
-
-    return (
-        <Card className="bg-gray-800/50 border-gray-700">
-            <CardHeader>
-                <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-green-400" />
-                    Live Activity Feed
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <ScrollArea className="h-64">
-                    {loading ? (
-                        <div className="space-y-3">
-                            {[...Array(5)].map((_, i) => (
-                                <div key={i} className="animate-pulse flex items-center space-x-3">
-                                    <div className="w-8 h-8 bg-gray-700 rounded-full"></div>
-                                    <div className="flex-1">
-                                        <div className="h-4 bg-gray-700 rounded w-3/4 mb-1"></div>
-                                        <div className="h-3 bg-gray-700 rounded w-1/2"></div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : activities.length > 0 ? (
-                        <div className="space-y-3">
-                            {activities.slice(0, 10).map((activity) => (
-                                <div key={activity.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-700/50 transition-colors">
-                                    <div className="p-2 rounded-full bg-gray-700">
-                                        {getActivityIcon(activity.activity_type)}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm text-white font-medium truncate">
-                                            {activity.activity_type.charAt(0).toUpperCase() + activity.activity_type.slice(1)} Activity
-                                        </div>
-                                        <div className="text-xs text-gray-400">
-                                            {activity.notes || 'No additional details'}
-                                        </div>
-                                        <div className="text-xs text-gray-500 mt-1">
-                                            {formatTimeAgo(activity.created_at)}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="text-center py-8">
-                            <Activity className="h-12 w-12 text-gray-600 mx-auto mb-4" />
-                            <p className="text-gray-500">No recent activities</p>
-                        </div>
-                    )}
-                </ScrollArea>
-            </CardContent>
-        </Card>
-    )
-}
-
-/**
- * Quick Actions Panel Component
- * 
- * Streamlined access to common administrative functions.
- */
-const QuickActions = () => {
-    const { refreshData } = useDashboard()
-    const { toast } = useToast()
-    const router = useRouter()
-
-    const quickActions = [
-        {
-            title: 'Add Equipment',
-            icon: Plus,
-            color: 'text-green-400',
-            action: () => router.push('/admin/manage-gears'),
-            description: 'Add new equipment to inventory'
-        },
-        {
-            title: 'Manage Requests',
-            icon: ClipboardList,
-            color: 'text-blue-400',
-            action: () => router.push('/admin/manage-requests'),
-            description: 'Review pending requests'
-        },
-        {
-            title: 'View Reports',
-            icon: BarChart3,
-            color: 'text-purple-400',
-            action: () => router.push('/admin/reports'),
-            description: 'Generate system reports'
-        },
-        {
-            title: 'User Management',
-            icon: Users,
-            color: 'text-orange-400',
-            action: () => router.push('/admin/manage-users'),
-            description: 'Manage user accounts'
-        }
-    ]
-
-    const handleRefresh = () => {
-        refreshData()
-        toast({
-            title: "Dashboard Refreshed",
-            description: "All data has been updated from the server",
-        })
-    }
-
-    return (
-        <Card className="bg-gray-800/50 border-gray-700">
-            <CardHeader>
-                <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-                    <Zap className="h-5 w-5 text-yellow-400" />
-                    Quick Actions
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                    {quickActions.map((action, index) => (
-                        <Button
-                            key={index}
-                            onClick={action.action}
-                            variant="ghost"
-                            className="h-auto p-4 flex flex-col items-center space-y-2 hover:bg-gray-700/50 border border-gray-700"
-                        >
-                            <action.icon className={`h-6 w-6 ${action.color}`} />
-                            <div className="text-center">
-                                <div className="text-sm font-medium text-white">{action.title}</div>
-                                <div className="text-xs text-gray-400">{action.description}</div>
-                            </div>
-                        </Button>
-                    ))}
-                </div>
-
-                <Button
-                    onClick={handleRefresh}
-                    variant="outline"
-                    className="w-full border-gray-700 hover:bg-gray-700/50"
-                >
-                    <RefreshCcw className="h-4 w-4 mr-2" />
-                    Refresh All Data
-                </Button>
-            </CardContent>
-        </Card>
-    )
-}
 
 /**
  * Main Admin Dashboard Component
@@ -492,7 +101,7 @@ function AdminDashboard() {
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
                     <div>
                         <h1 className="text-4xl font-bold bg-gradient-to-r from-[#ff6300] via-[#ff8533] to-[#ffaa66] bg-clip-text text-transparent">
-                            Admin Command Center v2.0
+                            Admin Center v1.0
                         </h1>
                         <p className="text-gray-300 mt-2 text-lg">
                             Enhanced real-time dashboard with live analytics
@@ -592,7 +201,7 @@ function AdminDashboard() {
                     <TabsContent value="overview" className="space-y-6">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <RecentActivityFeed />
-                            <QuickActions />
+                            <QuickActionsPanel />
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

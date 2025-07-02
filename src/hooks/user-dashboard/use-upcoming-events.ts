@@ -1,0 +1,238 @@
+/**
+ * Upcoming Events Data Hook
+ * 
+ * Manages data fetching, processing, and real-time subscriptions for upcoming events.
+ * Handles gear requests, maintenance events, and pending requests separately.
+ */
+
+import { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { logger } from '@/utils/logger';
+import { createSupabaseSubscription } from '@/utils/supabase-subscription';
+
+export interface Event {
+    id: string;
+    title: string;
+    date: string;
+    type: "return" | "pickup" | "maintenance";
+    status: "upcoming" | "overdue" | "today";
+    gear_id?: string;
+    user_id?: string;
+}
+
+interface MaintenanceEvent {
+    id: string;
+    gear_id: string;
+    performed_at: string;
+    maintenance_type: string;
+    performed_by: string;
+    status: string;
+}
+
+export function useUpcomingEvents() {
+    const supabase = createClient();
+    const [events, setEvents] = useState<Event[]>([]);
+    const [pendingEvents, setPendingEvents] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchEvents = async () => {
+        try {
+            setLoading(true);
+
+            // Get current user
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) {
+                setLoading(false);
+                return;
+            }
+
+            // Fetch checkout requests for the user
+            const { data: checkoutRequests, error: checkoutError } = await supabase
+                .from('gear_requests')
+                .select('id, gear_ids, created_at, status, due_date, approved_at')
+                .eq('user_id', session.user.id)
+                .in('status', ['Approved', 'Pending', 'CheckedOut']);
+
+            if (checkoutError) {
+                throw checkoutError;
+            }
+
+            // Fetch gear maintenance events
+            let maintenanceEvents: MaintenanceEvent[] = [];
+            try {
+                const { data, error } = await supabase
+                    .from('gear_maintenance')
+                    .select('id, gear_id, performed_at, maintenance_type, performed_by, status')
+                    .eq('performed_by', session.user.id);
+
+                if (error) {
+                    logger.warn(`Could not fetch maintenance with performed_by: ${error.message}`, {
+                        context: 'UpcomingEvents'
+                    });
+                } else {
+                    maintenanceEvents = data || [];
+                }
+            } catch (maintenanceError) {
+                logger.warn(`Error fetching maintenance events: ${maintenanceError instanceof Error ? maintenanceError.message : String(maintenanceError)}`, {
+                    context: 'UpcomingEvents'
+                });
+            }
+
+            // Get gear details
+            const gearIds = [
+                ...(checkoutRequests?.flatMap((req: any) => Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids]).filter(Boolean) || []),
+                ...(maintenanceEvents?.map((event: MaintenanceEvent) => event.gear_id) || [])
+            ].filter(Boolean);
+
+            let gearDetails: Record<string, { name: string }> = {};
+
+            if (gearIds.length > 0) {
+                const { data: gears, error: gearError } = await supabase
+                    .from('gears')
+                    .select('id, name')
+                    .in('id', gearIds);
+
+                if (gearError) {
+                    throw gearError;
+                }
+
+                gearDetails = (gears || []).reduce((acc: Record<string, { name: string }>, gear: any) => {
+                    acc[gear.id] = { name: gear.name };
+                    return acc;
+                }, {} as Record<string, { name: string }>);
+            }
+
+            // Process events
+            const now = new Date();
+            const today = new Date(now);
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            // Separate pending requests
+            const pendingRequests = (checkoutRequests || []).filter((r: any) => r.status === 'Pending');
+
+            // Process checkout events
+            const checkoutEvents = (checkoutRequests || []).flatMap((request: any) => {
+                if (request.status === 'CheckedOut') {
+                    const gearIdList = Array.isArray(request.gear_ids) ? request.gear_ids : [request.gear_ids];
+                    return gearIdList.filter(Boolean).map((gearId: string) => {
+                        const eventDate = new Date(request.due_date);
+                        let status: Event["status"] = "upcoming";
+                        if (eventDate < now) status = "overdue";
+                        else if (eventDate >= today && eventDate < tomorrow) status = "today";
+                        return {
+                            id: `${request.id}-${gearId}`,
+                            title: `${gearDetails[gearId]?.name || 'Equipment'} Return`,
+                            date: request.due_date,
+                            type: "return",
+                            status,
+                            gear_id: gearId,
+                            user_id: session.user.id
+                        };
+                    });
+                } else if (request.status === 'Approved') {
+                    const pickupDate = request.approved_at || request.created_at;
+                    const gearIdList = Array.isArray(request.gear_ids) ? request.gear_ids : [request.gear_ids];
+                    return gearIdList.filter(Boolean).map((gearId: string) => {
+                        const eventDate = new Date(pickupDate);
+                        let status: Event["status"] = "upcoming";
+                        if (eventDate >= today && eventDate < tomorrow) status = "today";
+                        return {
+                            id: `${request.id}-${gearId}`,
+                            title: `${gearDetails[gearId]?.name || 'Equipment'} Pickup`,
+                            date: pickupDate,
+                            type: "pickup",
+                            status,
+                            gear_id: gearId,
+                            user_id: session.user.id
+                        };
+                    });
+                }
+                return [];
+            });
+
+            // Process maintenance events
+            const maintenanceEventsFormatted = maintenanceEvents.map((event: MaintenanceEvent) => {
+                const eventDate = new Date(event.performed_at);
+                let status: Event["status"] = "upcoming";
+
+                if (eventDate < now) {
+                    status = "overdue";
+                } else if (eventDate >= today && eventDate < tomorrow) {
+                    status = "today";
+                }
+
+                return {
+                    id: event.id,
+                    title: `${gearDetails[event.gear_id]?.name || 'Equipment'} ${event.maintenance_type || 'Maintenance'}`,
+                    date: event.performed_at,
+                    type: "maintenance" as const,
+                    status,
+                    gear_id: event.gear_id,
+                    user_id: session.user.id
+                };
+            });
+
+            // Combine and sort events by date
+            const allEvents = [...checkoutEvents, ...maintenanceEventsFormatted]
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+            setEvents(allEvents);
+            setPendingEvents(pendingRequests);
+        } catch (error) {
+            if (error instanceof Error) {
+                logger.error(`Error fetching events: ${error.message}`, {
+                    context: 'UpcomingEvents',
+                    stack: error.stack
+                });
+            } else {
+                logger.error("Error fetching events: Unknown error", {
+                    context: 'UpcomingEvents'
+                });
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchEvents();
+
+        // Set up real-time subscriptions
+        const subscriptions = [
+            createSupabaseSubscription({
+                supabase,
+                channel: 'events-gear-requests',
+                config: { event: '*', schema: 'public', table: 'gear_requests' },
+                callback: fetchEvents,
+                pollingInterval: 30000
+            }),
+            createSupabaseSubscription({
+                supabase,
+                channel: 'events-maintenance',
+                config: { event: '*', schema: 'public', table: 'gear_maintenance' },
+                callback: fetchEvents,
+                pollingInterval: 30000
+            }),
+            createSupabaseSubscription({
+                supabase,
+                channel: 'events-gears',
+                config: { event: '*', schema: 'public', table: 'gears' },
+                callback: fetchEvents,
+                pollingInterval: 30000
+            })
+        ];
+
+        return () => {
+            subscriptions.forEach(sub => sub.unsubscribe());
+        };
+    }, []);
+
+    return {
+        events,
+        pendingEvents,
+        loading,
+        refetch: fetchEvents
+    };
+} 

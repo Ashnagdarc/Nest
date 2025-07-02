@@ -1,49 +1,10 @@
 /**
- * Notification Service - Multi-Channel Communication System
+ * Notification Service - Multi-channel user communication system
  * 
- * A comprehensive notification service for the Nest by Eden Oasis application
- * that handles multi-channel user communications including push notifications,
- * email alerts, real-time messaging, and in-app notifications. This service
- * ensures users stay informed about equipment requests, approvals, due dates,
- * and system updates through their preferred communication channels.
+ * Handles push notifications, email alerts, in-app notifications, and real-time messaging
+ * for the Nest by Eden Oasis application. Supports user preferences, delivery confirmation,
+ * and GDPR-compliant opt-in/opt-out controls.
  * 
- * Core Features:
- * - Multi-channel notification delivery (push, email, in-app)
- * - Real-time notification management with WebSocket support
- * - Template-based notification content generation
- * - User preference management and opt-in/opt-out controls
- * - Notification scheduling and batching for optimal delivery
- * - Delivery confirmation and retry mechanisms
- * - Analytics and tracking for notification effectiveness
- * 
- * Notification Types:
- * - Equipment Request Updates: Status changes, approvals, rejections
- * - Due Date Reminders: Automated reminders for equipment returns
- * - System Announcements: General updates and maintenance notices
- * - Security Alerts: Login attempts, password changes, account updates
- * - Administrative Notifications: Bulk updates, policy changes
- * 
- * Delivery Channels:
- * - Push Notifications: Browser and mobile push via Firebase Cloud Messaging
- * - Email Notifications: Transactional emails via configured SMTP
- * - In-App Notifications: Real-time UI notifications with persistence
- * - SMS (Future): Text message alerts for critical notifications
- * 
- * Privacy & Compliance:
- * - GDPR-compliant user consent management
- * - Granular notification preferences per channel
- * - Opt-out mechanisms for all notification types
- * - Data retention policies for notification history
- * - Secure handling of personal information
- * 
- * Performance Features:
- * - Notification batching to prevent spam
- * - Rate limiting per user and notification type
- * - Intelligent delivery timing based on user activity
- * - Fallback mechanisms for failed deliveries
- * - Asynchronous processing for high-volume notifications
- * 
- * @fileoverview Multi-channel notification service for user communications
  * @author Daniel Chinonso Samuel
  * @version 1.0.0
  * @since 2024-01-15

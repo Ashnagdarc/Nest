@@ -1,84 +1,9 @@
 /**
- * Equipment Check-In Page - Asset Return Workflow Management
+ * Equipment Check-In Page - Asset return workflow with QR scanning, condition reporting,
+ * and multi-item selection for comprehensive equipment return management.
  * 
- * A comprehensive equipment check-in interface for the Nest by Eden Oasis application
- * that enables users to return borrowed equipment/assets with proper condition reporting
- * and workflow completion. This page serves as the primary return processing center,
- * providing an intuitive interface for equipment return, condition assessment, and
- * damage reporting with integrated QR code scanning capabilities.
- * 
- * Core Features:
- * - Equipment return workflow with multi-item selection
- * - QR code scanning for quick equipment identification
- * - Condition assessment and damage reporting system
- * - Real-time equipment status updates and validation
- * - Check-in history tracking and audit trails
- * - Automated notifications and administrative alerts
- * - Visual success feedback with Lottie animations
- * 
- * Return Workflow Components:
- * - Equipment Discovery: View checked-out equipment with due dates
- * - Multi-Selection: Select multiple items for bulk return processing
- * - Condition Assessment: Report equipment condition and damages
- * - QR Scanning: Quick equipment identification via QR codes
- * - Status Updates: Real-time availability status changes
- * - Notification System: Automated stakeholder notifications
- * - History Tracking: Complete check-in audit trail
- * 
- * QR Code Integration:
- * - HTML5 QR code scanner with camera access
- * - Real-time scanning with instant equipment recognition
- * - Error handling for invalid or unrecognized codes
- * - Automatic equipment selection upon successful scan
- * - Fallback manual selection for accessibility
- * - Scanner state management and cleanup
- * 
- * Condition Reporting Features:
- * - Damage reporting with detailed descriptions
- * - Equipment condition documentation
- * - Photo upload capabilities for damage evidence
- * - Maintenance request generation for damaged items
- * - Condition tracking for equipment lifecycle
- * - Quality assurance and inspection workflows
- * 
- * User Experience Features:
- * - Responsive design optimized for mobile scanning
- * - Progressive enhancement with loading states
- * - Error handling with user-friendly messages
- * - Accessibility features with proper ARIA labels
- * - Visual feedback with animations and transitions
- * - Keyboard navigation support for all interfaces
- * - Touch-friendly controls for mobile devices
- * 
- * Integration Points:
- * - Supabase real-time subscriptions for equipment updates
- * - QR code scanning library (html5-qrcode) integration
- * - User authentication and profile management
- * - Notification system for check-in confirmations
- * - Google Chat integration for administrative alerts
- * - Activity logging for audit trails and compliance
- * - Equipment status management and tracking
- * 
- * Performance Optimizations:
- * - Efficient equipment data loading and caching
- * - Real-time updates with minimal re-renders
- * - Scroll position preservation during updates
- * - Dynamic QR scanner initialization
- * - Memory-efficient component design
- * - Optimized image loading with fallback handling
- * 
- * Security & Compliance:
- * - User authentication verification for returns
- * - Equipment ownership validation
- * - Input validation and sanitization
- * - Audit logging for all return activities
- * - Data protection and privacy compliance
- * - Secure QR code processing and validation
- * 
- * @fileoverview Equipment check-in and return workflow page for asset management
  * @author Daniel Chinonso Samuel
  * @version 1.0.0
- * @since 2024-01-15
  */
 
 "use client";
@@ -112,18 +37,12 @@ import { Calendar } from 'lucide-react';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 
 /**
- * Dynamic Lottie Import
- * 
- * Dynamically imports Lottie React component to prevent SSR issues
- * and reduce initial bundle size. Used for success animations.
+ * Dynamic Lottie Import - prevents SSR issues and reduces bundle size
  */
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
 
 /**
- * Success Animation Import
- * 
- * Imports the check-in success animation JSON for visual feedback
- * when equipment is successfully returned to the system.
+ * Success Animation Import - check-in success animation for visual feedback
  */
 import checkinSuccessAnimation from "@/../public/animations/checkin-success.json";
 
