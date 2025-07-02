@@ -1,66 +1,12 @@
 /**
- * Report Service - Business Intelligence and Analytics Engine
+ * Report Service - Business intelligence and analytics engine
  * 
- * A comprehensive reporting and analytics service for the Nest by Eden Oasis
- * application that generates detailed insights, performance metrics, and
- * data visualizations for equipment management operations. This service
- * transforms raw operational data into actionable business intelligence
- * for administrators and stakeholders.
+ * Generates comprehensive reports and analytics for equipment management operations,
+ * including utilization metrics, user behavior analysis, and performance insights.
+ * Supports automated report generation, data visualization, and export capabilities.
  * 
- * Core Features:
- * - Automated report generation with customizable timeframes
- * - Advanced data analysis and trend identification
- * - Interactive dashboard metrics and KPI calculations
- * - Equipment utilization and performance analytics
- * - User behavior analysis and engagement metrics
- * - Financial impact assessment and cost analysis
- * - Predictive analytics for equipment needs and maintenance
- * - Compliance reporting and audit trail generation
- * 
- * Report Types:
- * - Weekly Activity Reports: Comprehensive operational summaries
- * - Equipment Utilization Reports: Asset performance and usage patterns
- * - User Engagement Reports: User activity and behavior analysis
- * - Financial Reports: Cost analysis and budget impact assessment
- * - Maintenance Reports: Equipment health and service requirements
- * - Compliance Reports: Regulatory compliance and audit documentation
- * - Custom Reports: Configurable reports for specific business needs
- * 
- * Data Sources:
- * - Equipment/Gear Database: Asset inventory and status tracking
- * - Request Management: Equipment request and approval workflows
- * - Activity Logging: User interactions and system events
- * - User Profiles: User demographics and role assignments
- * - System Metrics: Performance and usage statistics
- * - External APIs: Third-party data integration when applicable
- * 
- * Analytics Capabilities:
- * - Trend Analysis: Historical data patterns and forecasting
- * - Comparative Analysis: Period-over-period performance comparison
- * - Segmentation Analysis: User and equipment grouping insights
- * - Correlation Analysis: Relationship identification between metrics
- * - Anomaly Detection: Unusual pattern and outlier identification
- * - Predictive Modeling: Future demand and maintenance predictions
- * 
- * Export Formats:
- * - PDF Reports: Professional formatted documents for sharing
- * - Excel Spreadsheets: Detailed data tables for further analysis
- * - CSV Files: Raw data exports for third-party tools
- * - JSON Data: Structured data for API integration
- * - Interactive Dashboards: Real-time web-based visualizations
- * 
- * Performance Features:
- * - Efficient data aggregation and calculation algorithms
- * - Caching strategies for frequently accessed reports
- * - Batch processing for large dataset analysis
- * - Asynchronous report generation for complex queries
- * - Memory optimization for large report processing
- * - Progressive data loading for interactive reports
- * 
- * @fileoverview Business intelligence and analytics engine for equipment management
  * @author Daniel Chinonso Samuel
  * @version 1.0.0
- * @since 2024-01-15
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'

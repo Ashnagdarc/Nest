@@ -1,51 +1,9 @@
 /**
- * Database Query Utilities - Centralized Data Access Layer
+ * Database Query Utilities - Centralized data access layer with optimized Supabase queries,
+ * consistent error handling, and type-safe operations for equipment management.
  * 
- * A comprehensive data access layer for the Nest by Eden Oasis application that
- * provides optimized, reusable database queries with consistent error handling,
- * caching strategies, and performance optimizations. This module serves as the
- * single source of truth for all database interactions.
- * 
- * Core Features:
- * - Optimized Supabase queries with minimal data transfer
- * - Consistent error handling and response formatting
- * - Built-in caching and performance optimizations
- * - Type-safe database operations with TypeScript
- * - Standardized query patterns and conventions
- * - Real-time subscription management
- * 
- * Query Categories:
- * - Equipment/Gear Operations: CRUD operations for asset management
- * - User Management: Profile and authentication queries
- * - Request Processing: Equipment request workflow queries
- * - Activity Logging: System activity and audit trail queries
- * - Dashboard Analytics: Statistics and reporting queries
- * - Notification Management: User notification queries
- * 
- * Performance Optimizations:
- * - Selective field querying to minimize data transfer
- * - Indexed filtering and sorting operations
- * - Batch operations for bulk data processing
- * - Query result caching with TTL strategies
- * - Connection pooling and query optimization
- * 
- * Security Features:
- * - Row Level Security (RLS) enforcement
- * - User permission validation
- * - SQL injection prevention
- * - Data sanitization and validation
- * - Audit logging for sensitive operations
- * 
- * Error Handling:
- * - Standardized error response format
- * - Automatic retry mechanisms for transient failures
- * - Graceful degradation for non-critical queries
- * - Comprehensive error logging and monitoring
- * 
- * @fileoverview Centralized database query utilities and data access layer
  * @author Daniel Chinonso Samuel
  * @version 1.0.0
- * @since 2024-01-15
  */
 
 import { createClient } from '@/lib/supabase/client';
@@ -64,102 +22,45 @@ const getClient = () => createClient();
 const getServerClient = () => createSupabaseServerClient();
 
 /**
- * Query Result Interface
- * 
- * Standardized response format for all database queries to ensure
- * consistent error handling and data processing throughout the application.
- * 
- * @interface QueryResult<T>
- * @template T - The type of data returned by the query
+ * Standardized response format for all database queries
  */
 export interface QueryResult<T> {
-    /** The data returned by the query, null if error occurred */
     data: T | null
-    /** Error information if the query failed */
     error: string | null
-    /** Total count for paginated queries */
     count?: number
-    /** Query execution metadata */
     meta?: {
-        /** Time taken to execute the query in milliseconds */
         executionTime?: number
-        /** Whether the result was served from cache */
         fromCache?: boolean
-        /** Number of rows affected (for mutations) */
         affectedRows?: number
     }
 }
 
 /**
- * Pagination Parameters Interface
- * 
- * Defines standard pagination parameters for query operations
- * to ensure consistent pagination behavior across the application.
- * 
- * @interface PaginationParams
+ * Standard pagination parameters for query operations
  */
 export interface PaginationParams {
-    /** Page number starting from 0 */
     page?: number
-    /** Number of items per page (default: 10, max: 100) */
     limit?: number
-    /** Field to sort by */
     sortBy?: string
-    /** Sort direction: 'asc' or 'desc' */
     sortOrder?: 'asc' | 'desc'
 }
 
 /**
- * Filter Parameters Interface
- * 
- * Defines common filtering options for database queries
- * with type-safe field references and operation types.
- * 
- * @interface FilterParams
+ * Common filtering options for database queries
  */
 export interface FilterParams {
-    /** Search term for text-based filtering */
     search?: string
-    /** Status filters for equipment and requests */
     status?: string[]
-    /** Category filters for equipment classification */
     category?: string[]
-    /** Date range filtering */
     dateRange?: {
         start: string
         end: string
     }
-    /** User-specific filtering */
     userId?: string
 }
 
 /**
- * Execute Query with Error Handling
- * 
- * Wrapper function that executes Supabase queries with standardized
- * error handling, logging, and response formatting. This function
- * ensures consistent behavior across all database operations.
- * 
- * @template T - The expected return type of the query
- * @param {Function} queryFn - The Supabase query function to execute
- * @param {string} operation - Description of the operation for logging
- * @returns {Promise<QueryResult<T>>} Standardized query result
- * 
- * @example
- * ```typescript
- * // Execute a simple query
- * const result = await executeQuery(
- *   () => supabase.from('gears').select('*'),
- *   'fetch-all-gears'
- * )
- * 
- * // Handle the result
- * if (result.error) {
- *   console.error('Query failed:', result.error)
- * } else {
- *   console.log('Data:', result.data)
- * }
- * ```
+ * Execute query with standardized error handling and response formatting
  */
 async function executeQuery<T>(
     queryFn: () => Promise<any>,

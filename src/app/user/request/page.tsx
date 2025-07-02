@@ -1,82 +1,9 @@
 /**
- * Equipment Request Page - Asset Request Workflow Management
+ * Equipment Request Page - Asset request workflow with multi-select equipment selection,
+ * comprehensive form validation, and real-time availability updates.
  * 
- * A comprehensive equipment request interface for the Nest by Eden Oasis application
- * that enables users to discover, select, and request equipment/assets for their projects.
- * This page serves as the primary entry point for the equipment request workflow,
- * providing an intuitive interface for asset selection and request submission.
- * 
- * Core Features:
- * - Interactive equipment catalog with real-time availability
- * - Multi-select equipment selection with visual confirmation
- * - Comprehensive request form with validation and draft saving
- * - Team member assignment and collaboration features
- * - Real-time equipment status updates via Supabase subscriptions
- * - Automated notifications and administrative alerts
- * - Form persistence and draft recovery for improved user experience
- * 
- * Workflow Components:
- * - Equipment Discovery: Browse and search available equipment
- * - Asset Selection: Multi-select interface with visual feedback
- * - Request Configuration: Reason, destination, duration, and team setup
- * - Validation System: Comprehensive form validation with error handling
- * - Submission Process: Automated workflow initiation and notifications
- * - Status Tracking: Real-time request status updates
- * 
- * Equipment Catalog Features:
- * - Real-time availability status with live updates
- * - Advanced search and filtering capabilities
- * - Equipment categories and categorization system
- * - Visual equipment cards with images and specifications
- * - Condition verification and equipment health indicators
- * - Quick selection from pre-filtered equipment lists
- * 
- * Request Form Features:
- * - Predefined reason templates for common use cases
- * - Flexible duration options (24 hours to 1 year)
- * - Team member selection and assignment
- * - Destination tracking for equipment location management
- * - Condition confirmation and liability acknowledgment
- * - Form validation with real-time feedback
- * - Auto-save functionality with draft persistence
- * 
- * Integration Points:
- * - Supabase real-time subscriptions for equipment updates
- * - User authentication and profile management
- * - Notification system for request status updates
- * - Google Chat integration for administrative alerts
- * - Equipment management database with status tracking
- * - Activity logging for audit trails and analytics
- * 
- * User Experience Features:
- * - Responsive design optimized for all devices
- * - Progressive enhancement with loading states
- * - Error handling with user-friendly messages
- * - Accessibility features with proper ARIA labels
- * - Form persistence across browser sessions
- * - Real-time validation feedback
- * - Visual selection confirmation and feedback
- * 
- * Security & Compliance:
- * - User authentication verification
- * - Input validation and sanitization
- * - Role-based access control integration
- * - Audit logging for all request activities
- * - Data protection and privacy compliance
- * - Equipment condition verification requirements
- * 
- * Performance Optimizations:
- * - Efficient equipment data loading and caching
- * - Optimized image loading with Next.js Image component
- * - Real-time updates with minimal re-renders
- * - Form state management with React Hook Form
- * - Memory-efficient component design
- * - Progressive loading for large equipment catalogs
- * 
- * @fileoverview Equipment request workflow page for asset management
  * @author Daniel Chinonso Samuel
  * @version 1.0.0
- * @since 2024-01-15
  */
 
 "use client";
