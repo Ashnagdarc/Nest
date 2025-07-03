@@ -1,18 +1,15 @@
 /**
  * Recent Activity Widget Component
  * 
- * Clean, focused component that displays recent user activity using extracted hooks and components.
- * Reduced from 344 lines to ~100 lines through proper separation of concerns.
+ * Clean, focused component that displays recent user activity.
+ * Simplified to prevent React rendering errors.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity } from "lucide-react";
-import { motion } from "framer-motion";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "./EmptyState";
 import { useRecentActivity } from '@/hooks/user-dashboard/use-recent-activity';
-import { ActivityIcon, ActivityTimestamp } from './recent-activity';
 
 interface RecentActivityProps {
     embedded?: boolean;
@@ -58,40 +55,32 @@ export function RecentActivity({ embedded = false }: RecentActivityProps) {
             <CardContent>
                 {activities.length === 0 ? (
                     <EmptyState
-                        icon={Activity}
+                        icon={<Activity className="h-12 w-12 text-muted-foreground" />}
                         title="No recent activity"
                         description="Your activity will appear here as you use equipment."
                     />
                 ) : (
-                    <ScrollArea className="h-64">
-                        <div className="space-y-3">
-                            {activities.map((activity, index) => (
-                                <motion.div
-                                    key={activity.id}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.05 }}
-                                    className="flex items-center space-x-3 p-2 rounded border hover:bg-muted/50 transition-colors"
-                                >
-                                    <ActivityIcon
-                                        type={activity.type}
-                                        className="h-5 w-5 flex-shrink-0"
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">
-                                            {activity.item}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {activity.status}
-                                        </p>
-                                        <ActivityTimestamp
-                                            timestamp={activity.timestamp}
-                                        />
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                    </ScrollArea>
+                    <div className="space-y-3">
+                        {activities.map((activity, index) => (
+                            <div
+                                key={activity.id}
+                                className="flex items-center space-x-3 p-2 rounded border hover:bg-muted/50 transition-colors"
+                            >
+                                <Activity className="h-5 w-5 flex-shrink-0 text-blue-500" />
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">
+                                        {activity.item}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {activity.status}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {new Date(activity.timestamp).toLocaleDateString()}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 )}
             </CardContent>
         </Card>

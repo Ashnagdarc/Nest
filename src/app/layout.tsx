@@ -27,15 +27,37 @@
 import type { Metadata, Viewport } from "next";
 import { Lato } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from 'next-themes';
+
+// Essential Providers and Components
+import { ThemeProvider } from "next-themes";
+import { NotificationProvider } from "@/components/notifications/NotificationProvider";
+import { UserProfileProvider } from "@/components/providers/user-profile-provider";
+import { SupabaseErrorBoundary } from "@/components/supabase-error-boundary";
 import { Toaster } from "@/components/ui/toaster";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import { NotificationProvider } from "@/components/notifications/NotificationProvider";
-import { SupabaseErrorBoundary } from "@/components/supabase-error-boundary";
-import { UserProfileProvider } from '@/components/providers/user-profile-provider';
-// Import the console error interceptor to filter Supabase Realtime noise
-import '@/utils/intercept-console-error';
+
+// IMMEDIATE FIX: Patch console.error for CHANNEL_ERROR before anything else loads
+if (typeof window !== 'undefined') {
+  const originalError = console.error;
+  console.error = function (...args) {
+    const isChannelError = args.some(arg => {
+      const str = typeof arg === 'string' ? arg :
+        (arg instanceof Error ? arg.message : String(arg));
+      return str.includes('CHANNEL_ERROR') ||
+        str.includes('gear_maintenance') ||
+        str.includes('_onConnClose') ||
+        str.includes('RealtimeClient');
+    });
+
+    if (isChannelError) {
+      console.warn('🟡 Supabase real-time using polling fallback (normal in development)');
+      return;
+    }
+
+    originalError.apply(console, args);
+  };
+}
 
 /**
  * Lato Font Configuration

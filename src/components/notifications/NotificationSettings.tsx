@@ -7,6 +7,7 @@ import { Bell, Mail, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
+import React from 'react';
 
 const EVENT_TYPES = [
     { key: 'gear_requests', label: 'Gear Requests' },
@@ -70,7 +71,7 @@ export default function NotificationSettings() {
                             {CHANNELS.map(channel => (
                                 <th key={channel.key} className="p-2 text-center">
                                     <span className="flex items-center justify-center gap-1">
-                                        <channel.icon className="h-4 w-4" /> {channel.label}
+                                        {React.createElement(channel.icon, { className: "h-4 w-4" })} {channel.label}
                                     </span>
                                 </th>
                             ))}

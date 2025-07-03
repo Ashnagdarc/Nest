@@ -24,7 +24,17 @@ const realtimeIgnorePatterns = [
     /connection established/i,
     // WebSocket related messages that aren't fatal
     /WebSocket connection to/i,
-    /WebSocket is closed before the connection/i
+    /WebSocket is closed before the connection/i,
+    // Specific CHANNEL_ERROR patterns
+    /CHANNEL_ERROR/i,
+    /Subscription error for gear_maintenance: CHANNEL_ERROR/i,
+    /_onConnClose/i,
+    /RealtimeClient\._triggerChanError/i,
+    /RealtimeChannel\._trigger/i,
+    // Additional WebSocket connection patterns
+    /conn\.onclose/i,
+    /WebSocket connection closed/i,
+    /Failed to load resource.*403/i
 ];
 
 // Replace the console.error function with our filtered version
@@ -48,6 +58,18 @@ console.error = function (...args) {
 
         return false;
     });
+
+    // Special handling for CHANNEL_ERROR - convert to warning
+    const hasChannelError = args.some(arg => {
+        const str = typeof arg === 'string' ? arg : (arg instanceof Error ? arg.message : JSON.stringify(arg));
+        return str && str.includes('CHANNEL_ERROR');
+    });
+
+    if (hasChannelError) {
+        // Log as warning instead of error for CHANNEL_ERROR
+        console.warn('🟡 Supabase realtime channel error (falling back to polling):', ...args);
+        return;
+    }
 
     // If it's not a Supabase Realtime message, pass it to the original console.error
     if (!isSupabaseRealtimeMessage) {

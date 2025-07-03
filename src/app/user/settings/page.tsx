@@ -22,6 +22,7 @@ import { useIsMobile } from '@/hooks/use-mobile'; // Add mobile detection
 import { Session as SupabaseSession, User as SupabaseUser } from '@supabase/supabase-js';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
+import { useSuccessFeedback } from '@/hooks/use-success-feedback';
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -80,6 +81,7 @@ export default function UserSettingsPage() {
     const supabase = createClient();
     const isMobile = useIsMobile();
     const { refreshProfile } = useUserProfile();
+    const { showSuccessFeedback, showErrorFeedback, loading, setLoading } = useSuccessFeedback();
 
     // --- State ---
     const [currentUserData, setCurrentUserData] = useState<Profile | null>(null);
@@ -204,7 +206,7 @@ export default function UserSettingsPage() {
 
     // --- Handlers ---
     const onProfileSubmit = async (data: ProfileFormValues) => {
-        setIsProfileLoading(true);
+        setLoading(true);
         console.log("UserSettings: Attempting profile update...");
 
         try {
@@ -235,7 +237,7 @@ export default function UserSettingsPage() {
 
                 if (uploadError) {
                     console.error("Error uploading avatar to Storage:", uploadError);
-                    toast({ title: "Upload Failed", description: "Could not upload profile picture.", variant: "destructive" });
+                    throw new Error("Could not upload profile picture.");
                 } else {
                     console.log("New avatar uploaded, getting public URL...");
                     const { data: urlData } = supabase.storage
@@ -256,6 +258,7 @@ export default function UserSettingsPage() {
 
             if (updateAuthError) {
                 console.error("Error updating Supabase Auth user metadata:", updateAuthError);
+                throw new Error("Could not update Supabase Auth user metadata.");
             }
 
             // Update Supabase Profile Table
@@ -282,25 +285,30 @@ export default function UserSettingsPage() {
             // Create notification for the user
             await createProfileNotification(user.id, 'update');
 
-            toast({ title: "Profile Updated", description: "Your profile has been updated successfully." });
-            profileForm.reset({ ...data, profilePicture: undefined }); // Reset form with new values
-            clearProfileDraft();
-            await refreshProfile(); // Ensure sidebar and all consumers get the latest profile
+            showSuccessFeedback({
+                toast: { title: "Profile Updated", description: "Your profile has been updated successfully." },
+                onSuccess: () => {
+                    profileForm.reset({ ...data, profilePicture: undefined });
+                    clearProfileDraft();
+                },
+            });
+            await refreshProfile();
 
         } catch (error: any) {
             console.error("Profile update error:", error);
-            toast({
-                title: "Update Failed",
-                description: error.message || "Could not update profile.",
-                variant: "destructive"
+            showErrorFeedback({
+                toast: {
+                    title: "Update Failed",
+                    description: error.message || "Could not update profile.",
+                },
             });
         } finally {
-            setIsProfileLoading(false);
+            setLoading(false);
         }
     };
 
     const onPasswordSubmit = async (data: PasswordFormValues) => {
-        setIsPasswordLoading(true);
+        setLoading(true);
         console.log("UserSettings: Attempting password change...");
 
         const { error } = await supabase.auth.updateUser({
@@ -311,18 +319,18 @@ export default function UserSettingsPage() {
             console.error("Supabase password update error:", error);
             if (error.message.includes("Password should be stronger")) {
                 passwordForm.setError("newPassword", { message: "Password is too weak." });
-                toast({ title: "Password Change Failed", description: "New password is too weak.", variant: "destructive" });
+                throw new Error("New password is too weak.");
             } else if (error.message.includes("requires recent login")) {
-                toast({ title: "Re-authentication Required", description: "Please log out and log back in to change password.", variant: "destructive", duration: 7000 });
+                throw new Error("Please log out and log back in to change password.");
             } else {
-                toast({ title: "Password Change Failed", description: error.message || "An error occurred.", variant: "destructive" });
+                throw new Error(error.message || "An error occurred.");
             }
-        } else {
-            toast({ title: "Password Changed", description: "Password updated successfully." });
-            passwordForm.reset();
         }
 
-        setIsPasswordLoading(false);
+        showSuccessFeedback({
+            toast: { title: "Password Changed", description: "Password updated successfully." },
+            onSuccess: () => passwordForm.reset(),
+        });
     };
 
     const handleNotificationChange = (key: keyof typeof notificationSettings, value: boolean) => {
@@ -462,7 +470,7 @@ export default function UserSettingsPage() {
                                     )} />
                                 </div>
                                 <div className="flex justify-end">
-                                    <Button type="submit" loading={isProfileLoading}>
+                                    <Button type="submit" loading={loading}>
                                         <Save className="mr-2 h-4 w-4 flex-shrink-0" />
                                         <span className="truncate">Save Profile</span>
                                     </Button>
@@ -510,7 +518,7 @@ export default function UserSettingsPage() {
                                     )} />
                                 </div>
                                 <div className="flex justify-end">
-                                    <Button type="submit" loading={isPasswordLoading}>
+                                    <Button type="submit" loading={loading}>
                                         <Save className="mr-2 h-4 w-4 flex-shrink-0" />
                                         <span className="truncate">Update Password</span>
                                     </Button>

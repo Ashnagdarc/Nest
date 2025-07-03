@@ -94,3 +94,25 @@ supabase/.temp/
 
 # Project-specific
 Gearflow logo.png
+
+# Next.js
+.next/
+
+# Env files
+.env.local
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# Build
+out/
+dist/
+
+# Misc
+*.bak
+*.tmp

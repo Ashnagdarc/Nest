@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { logInfo, logError, validateTableContext } from '@/utils/logger';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { useSuccessFeedback } from '@/hooks/use-success-feedback';
 
 type Announcement = {
   id: string;
@@ -49,6 +50,7 @@ export default function UserNotificationsPage() {
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [localNotifications, setLocalNotifications] = useState<Notification[]>([]);
   const { toast } = useToast();
+  const { showSuccessFeedback, showErrorFeedback, loading, setLoading } = useSuccessFeedback();
 
   useEffect(() => {
     const fetchNotificationsAndReadStatus = async () => {
@@ -187,6 +189,7 @@ export default function UserNotificationsPage() {
   }, []);
 
   const markAnnouncementAsRead = async (id: string) => {
+    setLoading(true);
     try {
       logInfo('Marking announcement as read', 'markAnnouncementAsRead', { announcementId: id });
 
@@ -244,11 +247,8 @@ export default function UserNotificationsPage() {
 
       setReadAnnouncements(prev => [...prev, id]);
 
-      // Show success toast
-      toast({
-        title: "Success",
-        description: "Announcement marked as read.",
-        variant: "default"
+      showSuccessFeedback({
+        toast: { title: "Announcement marked as read" },
       });
 
     } catch (error) {
@@ -258,12 +258,11 @@ export default function UserNotificationsPage() {
       });
       console.error("Error marking announcement as read:", error);
 
-      // Show error toast
-      toast({
-        title: "Error",
-        description: "Failed to mark announcement as read. Please try again.",
-        variant: "destructive"
+      showErrorFeedback({
+        toast: { title: "Error", description: error instanceof Error ? error.message : JSON.stringify(error) },
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -353,6 +352,7 @@ export default function UserNotificationsPage() {
   };
 
   const markAllNotificationsAsRead = async () => {
+    setLoading(true);
     try {
       logInfo('Marking all notifications as read', 'markAllNotificationsAsRead');
 
@@ -392,11 +392,8 @@ export default function UserNotificationsPage() {
       // Update local state
       setReadNotificationIds(prev => [...prev, ...unreadNotifications.map(n => n.id)]);
 
-      // Show success toast
-      toast({
-        title: "Success",
-        description: `Marked ${unreadNotifications.length} notifications as read.`,
-        variant: "default"
+      showSuccessFeedback({
+        toast: { title: "All notifications marked as read" },
       });
 
     } catch (error) {
@@ -405,12 +402,11 @@ export default function UserNotificationsPage() {
       });
       console.error('Error marking all notifications as read:', error);
 
-      // Show error toast
-      toast({
-        title: "Error",
-        description: "Failed to mark all notifications as read. Please try again.",
-        variant: "destructive"
+      showErrorFeedback({
+        toast: { title: "Error", description: error instanceof Error ? error.message : JSON.stringify(error) },
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -436,8 +432,20 @@ export default function UserNotificationsPage() {
     return filter === 'all' || (filter === 'unread' && !isRead);
   });
 
-  const deleteNotification = (id: string) => {
-    // TODO: Call API to delete notification
+  const deleteNotification = async (id: string) => {
+    setLoading(true);
+    try {
+      // TODO: Call API to delete notification
+      showSuccessFeedback({
+        toast: { title: "Notification deleted" },
+      });
+    } catch (error) {
+      showErrorFeedback({
+        toast: { title: "Error", description: error instanceof Error ? error.message : JSON.stringify(error) },
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getIconForType = (type: string) => {
@@ -679,8 +687,8 @@ export default function UserNotificationsPage() {
                               key={notification.id}
                               variants={itemVariants}
                               className={`flex items-center justify-between p-3 rounded-md border ${notification.is_read || readNotificationIds.includes(notification.id)
-                                  ? 'bg-background'
-                                  : 'bg-primary/5 font-medium border-primary/20'
+                                ? 'bg-background'
+                                : 'bg-primary/5 font-medium border-primary/20'
                                 }`}
                             >
                               <div className="flex items-center gap-3">
@@ -772,8 +780,8 @@ export default function UserNotificationsPage() {
                         key={notification.id}
                         variants={itemVariants}
                         className={`flex items-center justify-between p-3 rounded-md border ${notification.is_read || readNotificationIds.includes(notification.id)
-                            ? 'bg-background'
-                            : 'bg-primary/5 font-medium border-primary/20'
+                          ? 'bg-background'
+                          : 'bg-primary/5 font-medium border-primary/20'
                           }`}
                       >
                         <div className="flex items-center gap-3">

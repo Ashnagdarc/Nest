@@ -202,28 +202,36 @@ To eliminate asset management inefficiencies through intelligent automation, rea
 ## 📁 Project Structure
 
 ```
-nest-by-eden-oasis/
-├── 📁 src/
-│   ├── 📁 app/                     # Next.js App Router
-│   │   ├── 📁 (auth)/             # Authentication pages
-│   │   ├── 📁 admin/              # Admin dashboard
-│   │   ├── 📁 api/                # API routes
-│   │   └── 📁 user/               # User pages
-│   ├── 📁 components/             # React components
-│   │   ├── 📁 ui/                 # Base UI components
-│   │   ├── 📁 admin/              # Admin-specific components
-│   │   └── 📁 user/               # User-specific components
-│   ├── 📁 hooks/                  # Custom React hooks
-│   ├── 📁 lib/                    # Utility libraries
-│   │   ├── 📁 api/                # API utilities
-│   │   └── 📁 supabase/           # Database client
-│   ├── 📁 services/               # Business logic services
-│   ├── 📁 types/                  # TypeScript definitions
-│   └── 📁 utils/                  # Helper utilities
-├── 📁 public/                     # Static assets
-├── 📁 supabase/                   # Database schema and migrations
-├── 📁 sql/                        # Custom SQL functions
-└── 📄 Configuration files
+/public
+/src
+  /app
+    /admin
+    /user
+    layout.tsx
+    page.tsx
+    globals.css
+  /components
+    /ui
+    /admin
+    /user
+    /providers
+    index.ts
+  /hooks
+  /lib
+  /services
+  /types
+  /utils
+/sql
+/scripts
+.gitignore
+.env.example
+README.md
+package.json
+tsconfig.json
+next.config.mjs
+tailwind.config.ts
+postcss.config.mjs
+vercel.json
 ```
 
 ### **Key Directories Explained**
@@ -834,3 +842,30 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 [Website](https://edenoasis.com) • [📧 Contact](mailto:contact@edenoasis.com) • [🐛 Report Bug](https://github.com/your-org/nest-by-eden-oasis/issues) • [💡 Request Feature](https://github.com/your-org/nest-by-eden-oasis/issues)
 
 </div>
+
+## Onboarding
+
+- Copy `.env.example` to `.env.local` and fill in your secrets (never commit `.env.local`).
+- Run `npm install` to install dependencies.
+- Use `npm run dev` to start the development server.
+
+## Security
+
+- **Never commit secrets**: `.env.local` is gitignored and must not be pushed.
+- **Purge secrets from git history** if previously committed (see CONTRIBUTING.md for instructions).
+
+## Best Practices
+
+- Modularize code by feature and responsibility.
+- Use `/src/components/ui` for reusable UI primitives.
+- Place business logic in `/src/services` and utilities in `/src/lib` or `/src/utils`.
+- Keep all static assets in `/public`.
+- Use `/sql` for all database scripts.
+
+## Scripts
+
+- Place all dev and maintenance scripts in `/scripts`.
+
+## More
+
+- See Next.js docs for [project structure strategies](https://nextjs.org/docs/app/building-your-application/routing/colocation).

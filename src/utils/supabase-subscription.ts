@@ -55,7 +55,44 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
             return;
         }
 
+        // Special handling for CHANNEL_ERROR - treat as warning, not error
+        if (typeof error === 'string' && error.includes('CHANNEL_ERROR')) {
+            const warning = `Channel error for ${config.table}: ${error} - falling back to polling`;
+            logger.warn(warning, {
+                context: 'supabaseSubscription',
+                location: context,
+                table: config.table,
+                channelName,
+                fallbackMethod: 'polling'
+            });
+
+            // Immediately setup polling for CHANNEL_ERROR
+            if (!isUsingPolling) {
+                setupPolling();
+            }
+            return;
+        }
+
         if (error instanceof Error) {
+            // Filter out connection close errors - these are expected
+            if (error.message && (
+                error.message.includes('WebSocket connection') ||
+                error.message.includes('_onConnClose') ||
+                error.message.includes('CHANNEL_ERROR')
+            )) {
+                logger.warn(`Connection issue for ${config.table}: ${error.message} - using polling fallback`, {
+                    context: 'supabaseSubscription',
+                    location: context,
+                    table: config.table,
+                    channelName
+                });
+
+                if (!isUsingPolling) {
+                    setupPolling();
+                }
+                return;
+            }
+
             logger.error(error, {
                 context: 'supabaseSubscription',
                 location: context,
@@ -66,6 +103,22 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
             // Handle object-type errors
             try {
                 const errorJson = JSON.stringify(error);
+
+                // Special handling for channel errors
+                if (errorJson.includes('CHANNEL_ERROR')) {
+                    logger.warn(`Channel error for ${config.table}: ${errorJson} - falling back to polling`, {
+                        context: 'supabaseSubscription',
+                        location: context,
+                        table: config.table,
+                        channelName
+                    });
+
+                    if (!isUsingPolling) {
+                        setupPolling();
+                    }
+                    return;
+                }
+
                 const objError = new Error(`${context}: ${errorJson}`);
                 logger.error(objError, {
                     context: 'supabaseSubscription',
@@ -293,6 +346,28 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
                 }
             )
             .on('system', { event: 'error' }, (error: any) => {
+                // Handle CHANNEL_ERROR specifically - treat as warning, not error
+                if (error && (
+                    (typeof error === 'string' && error.includes('CHANNEL_ERROR')) ||
+                    (typeof error === 'object' && JSON.stringify(error).includes('CHANNEL_ERROR'))
+                )) {
+                    const message = `Channel error for ${config.table} - falling back to polling`;
+                    const context = 'supabaseSubscription';
+                    const data = {
+                        table: config.table,
+                        channelName,
+                        fallbackMethod: 'polling',
+                        errorType: 'CHANNEL_ERROR'
+                    };
+                    logWarning(message, context, data);
+
+                    // Immediately setup polling for CHANNEL_ERROR
+                    if (!isUsingPolling) {
+                        setupPolling();
+                    }
+                    return;
+                }
+
                 // Handle error that might be a plain object rather than an Error instance
                 if (!error) {
                     handleError(new Error('Unknown channel error'), 'channel error event');
@@ -373,17 +448,39 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
                     if (!isUsingPolling) {
                         setupPolling();
                     }
+                } else if (status === 'TIMED_OUT') {
+                    // Handle timeout as warning, not error - this is expected in dev environments
+                    const message = `Real-time subscription timed out for ${config.table}, falling back to polling`;
+                    const context = 'supabaseSubscription';
+                    const data = {
+                        table: config.table,
+                        channelName,
+                        fallbackMethod: 'polling'
+                    };
+                    logWarning(message, context, data);
+
+                    // Immediately fall back to polling on timeout
+                    if (!isUsingPolling) {
+                        setupPolling();
+                    }
                 } else if (
                     status === 'CHANNEL_ERROR' ||
-                    status === 'TIMED_OUT' ||
                     // Handle additional error states with type assertion
                     status === ('SUBSCRIBED_ERROR' as any) ||
                     status === ('SUBSCRIBE_ERROR' as any)
                 ) {
-                    const error = new Error(`Subscription error for ${config.table}: ${status}`);
-                    handleError(error, 'channel status error');
+                    // Treat CHANNEL_ERROR as warning, not error - this is expected in dev environments
+                    const message = `Channel error for ${config.table}: ${status} - falling back to polling`;
+                    const context = 'supabaseSubscription';
+                    const data = {
+                        table: config.table,
+                        channelName,
+                        status,
+                        fallbackMethod: 'polling'
+                    };
+                    logWarning(message, context, data);
 
-                    // On error, maybe realtime is not working, try polling
+                    // Immediately fall back to polling on channel error
                     if (!isUsingPolling) {
                         setupPolling();
                     }

@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useRouter } from 'next/navigation'
@@ -73,7 +74,7 @@ export function QuickActionsPanel() {
                             variant="ghost"
                             className="h-auto p-4 flex flex-col items-center space-y-2 hover:bg-gray-700/50 border border-gray-700"
                         >
-                            <action.icon className={`h-6 w-6 ${action.color}`} />
+                            {React.createElement(action.icon, { className: `h-6 w-6 ${action.color}` })}
                             <div className="text-center">
                                 <div className="text-sm font-medium text-white">{action.title}</div>
                                 <div className="text-xs text-gray-400">{action.description}</div>

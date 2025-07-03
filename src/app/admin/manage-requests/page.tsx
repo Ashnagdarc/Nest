@@ -47,6 +47,7 @@ import {
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
+import { useSuccessFeedback } from '@/hooks/use-success-feedback';
 
 // --- Dynamically import Lottie ---
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -241,6 +242,7 @@ function ManageRequestsContent() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true); // Default sound on
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedRequests, setSelectedRequests] = useState<string[]>([]);
+  const { showSuccessFeedback } = useSuccessFeedback();
 
   // Initialize audio element
   useEffect(() => {
@@ -504,14 +506,21 @@ function ManageRequestsContent() {
         `Your gear request has been approved and checked out. You can now pick up your equipment.`
       );
 
-      // Show success animation
-      setShowAnimation({ type: 'approve', id: requestId });
-      setTimeout(() => setShowAnimation({ type: 'approve', id: null }), 2000);
-
-      // Show success toast
-      toast({
-        title: "Request Approved",
-        description: "The gear request has been approved and checked out successfully.",
+      // Show unified feedback
+      showSuccessFeedback({
+        toast: {
+          title: "Request Approved",
+          description: "The gear request has been approved and checked out successfully.",
+          variant: "default",
+        },
+        delay: 2000,
+        showAnimation: () => {
+          setShowAnimation({ type: 'approve', id: requestId });
+          setTimeout(() => setShowAnimation({ type: 'approve', id: null }), 2000);
+        },
+        onSuccess: () => {
+          // Any additional state resets if needed
+        },
       });
 
       // Send approval email to the user (if email is available)
@@ -576,10 +585,12 @@ function ManageRequestsContent() {
 
     } catch (error: any) {
       console.error('Error approving request:', error);
-      toast({
-        title: "Error",
-        description: "Failed to approve the request. Please try again.",
-        variant: "destructive"
+      showSuccessFeedback({
+        toast: {
+          title: "Error",
+          description: "Failed to approve the request. Please try again.",
+          variant: "destructive",
+        },
       });
     } finally {
       setIsProcessing(false);
@@ -589,10 +600,12 @@ function ManageRequestsContent() {
   // Update the handleReject function
   const handleReject = async () => {
     if (!requestToReject || !rejectionReason.trim()) {
-      toast({
-        title: "Error",
-        description: "Request ID and rejection reason are required.",
-        variant: "destructive"
+      showSuccessFeedback({
+        toast: {
+          title: "Error",
+          description: "Request ID and rejection reason are required.",
+          variant: "destructive",
+        },
       });
       return;
     }
@@ -706,29 +719,34 @@ function ManageRequestsContent() {
         });
       }
 
-      // Show success animation and toast
-      setShowAnimation({ type: 'reject', id: requestToReject });
-      toast({
-        title: "Request Rejected",
-        description: "The request has been rejected successfully.",
+      // Show unified feedback
+      showSuccessFeedback({
+        toast: {
+          title: "Request Rejected",
+          description: "The gear request has been rejected.",
+          variant: "default",
+        },
+        delay: 2000,
+        showAnimation: () => {
+          setShowAnimation({ type: 'reject', id: requestToReject });
+          setTimeout(() => setShowAnimation({ type: 'reject', id: null }), 2000);
+        },
+        onSuccess: () => {
+          // Any additional state resets if needed
+        },
       });
 
       // Refresh requests
       await fetchRequests();
 
     } catch (error: any) {
-      console.error('Error rejecting request:', {
-        error,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
-
-      toast({
-        title: "Error",
-        description: error.message || "Failed to reject the request. Please try again.",
-        variant: "destructive"
+      console.error('Error rejecting request:', error);
+      showSuccessFeedback({
+        toast: {
+          title: "Error",
+          description: error.message || "Failed to reject the request. Please try again.",
+          variant: "destructive",
+        },
       });
     } finally {
       setIsProcessing(false);

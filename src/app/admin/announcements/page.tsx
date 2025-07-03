@@ -14,6 +14,7 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose, DialogTrigger
 } from '@/components/ui/dialog';
 import { createClient } from '@/lib/supabase/client';
+import { useSuccessFeedback } from '@/hooks/use-success-feedback';
 // import { Database } from '@/types/supabase';
 
 // Initialize Supabase client
@@ -54,7 +55,7 @@ export default function AnnouncementsPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newContent, setNewContent] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { showSuccessFeedback, showErrorFeedback, loading, setLoading } = useSuccessFeedback();
 
     useEffect(() => {
         fetchAnnouncements();
@@ -122,11 +123,10 @@ export default function AnnouncementsPage() {
     const handleAddAnnouncement = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newTitle || !newContent) {
-            toast({ title: "Error", description: "Title and content cannot be empty.", variant: "destructive" });
+            showErrorFeedback({ toast: { title: "Error", description: "Title and content cannot be empty." } });
             return;
         }
-        setIsSubmitting(true);
-
+        setLoading(true);
         try {
             // Step 1: Check user auth status (for debugging)
             const { data: { user } } = await supabase.auth.getUser();
@@ -134,7 +134,7 @@ export default function AnnouncementsPage() {
 
             if (!user) {
                 toast({ title: "Error", description: "You must be logged in to post announcements.", variant: "destructive" });
-                setIsSubmitting(false);
+                setLoading(false);
                 return;
             }
 
@@ -167,23 +167,11 @@ export default function AnnouncementsPage() {
                     code: error.code,
                     fullError: JSON.stringify(error, null, 2)
                 });
-                toast({
-                    title: "Error",
-                    description: `Failed to post announcement: ${error.message || 'Unknown error'}`,
-                    variant: "destructive"
-                });
-                setIsSubmitting(false);
-                return;
+                throw new Error(error.message || 'Unknown error');
             } else if (!data) {
                 // Handle the case where there's no error but also no data
                 console.error("No data returned from insert operation");
-                toast({
-                    title: "Error",
-                    description: "Failed to post announcement: No data returned",
-                    variant: "destructive"
-                });
-                setIsSubmitting(false);
-                return;
+                throw new Error('No data returned');
             }
 
             console.log("Announcement posted successfully:", data);
@@ -191,38 +179,35 @@ export default function AnnouncementsPage() {
             // Reset form and update UI on success
             setNewTitle('');
             setNewContent('');
-            setIsSubmitting(false);
             setIsModalOpen(false);
-            toast({ title: "Success", description: "Announcement posted successfully." });
-
-            // Force fetch with slight delay to ensure database consistency
-            setTimeout(() => {
-                fetchAnnouncements();
-            }, 500);
-        } catch (e) {
-            console.error("Unexpected error in handleAddAnnouncement:", e);
-            toast({
-                title: "Error",
-                description: "An unexpected error occurred. Please try again.",
-                variant: "destructive"
-            });
-            setIsSubmitting(false);
+            showSuccessFeedback({ toast: { title: "Success", description: "Announcement posted successfully." }, onSuccess: () => setTimeout(() => { fetchAnnouncements(); }, 500) });
+        } catch (e: any) {
+            showErrorFeedback({ toast: { title: "Error", description: e.message || "Failed to post announcement." } });
+        } finally {
+            setLoading(false);
         }
     };
 
+    // Correct single declaration for handleDeleteAnnouncement
     const handleDeleteAnnouncement = async (announcementId: string) => {
-        const { error } = await supabase
-            .from('announcements')
-            .delete()
-            .eq('id', announcementId);
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('announcements')
+                .delete()
+                .eq('id', announcementId);
 
-        if (error) {
-            toast({ title: "Error", description: "Failed to delete announcement.", variant: "destructive" });
-            return;
+            if (error) {
+                showErrorFeedback({ toast: { title: "Error", description: "Failed to delete announcement." } });
+                return;
+            }
+
+            showSuccessFeedback({ toast: { title: "Success", description: "Announcement deleted successfully." }, onSuccess: () => fetchAnnouncements() });
+        } catch (e: any) {
+            showErrorFeedback({ toast: { title: "Error", description: e.message || "Failed to delete announcement." } });
+        } finally {
+            setLoading(false);
         }
-
-        toast({ title: "Success", description: "Announcement deleted." });
-        fetchAnnouncements();
     };
 
     const containerVariants = {
@@ -289,8 +274,8 @@ export default function AnnouncementsPage() {
                                 <DialogClose asChild>
                                     <Button type="button" variant="outline">Cancel</Button>
                                 </DialogClose>
-                                <Button type="submit" disabled={isSubmitting}>
-                                    {isSubmitting ? 'Posting...' : 'Post Announcement'}
+                                <Button type="submit" disabled={loading}>
+                                    {loading ? 'Posting...' : 'Post Announcement'}
                                 </Button>
                             </DialogFooter>
                         </form>
