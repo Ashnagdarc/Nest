@@ -41,15 +41,20 @@ export async function createGearNotification(
             break;
     }
 
-    const { error } = await supabase.rpc('create_notification', {
-        p_user_id: userId,
-        p_type: 'gear',
-        p_title: title,
-        p_message: message
-    });
+    const { error } = await supabase
+        .from('notifications')
+        .insert({
+            user_id: userId,
+            title,
+            message,
+            type: 'gear',
+            is_read: false,
+            created_at: new Date().toISOString(),
+            category: 'equipment'
+        });
 
     if (error) {
-        console.error('Error creating notification:', error);
+        console.error('Error creating gear notification:', error);
     }
 }
 
@@ -77,33 +82,75 @@ export async function createProfileNotification(
             break;
     }
 
-    const { error } = await supabase.rpc('create_notification', {
-        p_user_id: userId,
-        p_type: 'profile',
-        p_title: title,
-        p_message: message
-    });
+    const { error } = await supabase
+        .from('notifications')
+        .insert({
+            user_id: userId,
+            title,
+            message,
+            type: 'profile',
+            is_read: false,
+            created_at: new Date().toISOString(),
+            category: 'system'
+        });
 
     if (error) {
-        console.error('Error creating notification:', error);
+        console.error('Error creating profile notification:', error);
     }
 }
 
 export async function createSystemNotification(
-    userId: string,
     title: string,
-    message: string
+    message: string,
+    type: string = 'system',
+    userIds?: string[]
 ) {
     const supabase = createClient();
 
-    const { error } = await supabase.rpc('create_notification', {
-        p_user_id: userId,
-        p_type: 'system',
-        p_title: title,
-        p_message: message
-    });
+    try {
+        // If no specific userIds provided, get all admin users
+        let targetUserIds = userIds;
+        if (!targetUserIds || targetUserIds.length === 0) {
+            const { data: adminUsers, error: adminError } = await supabase
+                .from('profiles')
+                .select('id')
+                .in('role', ['Admin', 'SuperAdmin'])
+                .eq('status', 'active');
 
-    if (error) {
-        console.error('Error creating notification:', error);
+            if (adminError) {
+                console.error('Error fetching admin users:', adminError);
+                return;
+            }
+
+            targetUserIds = adminUsers?.map(user => user.id) || [];
+        }
+
+        if (targetUserIds.length === 0) {
+            console.warn('No target users found for system notification');
+            return;
+        }
+
+        // Create notifications for all target users
+        const notifications = targetUserIds.map(userId => ({
+            user_id: userId,
+            title,
+            message,
+            type,
+            is_read: false,
+            created_at: new Date().toISOString(),
+            category: 'system'
+        }));
+
+        const { error } = await supabase
+            .from('notifications')
+            .insert(notifications);
+
+        if (error) {
+            console.error('Error creating notifications:', error);
+        } else {
+            console.log(`Created ${notifications.length} system notifications`);
+        }
+    } catch (error) {
+        console.error('Error in createSystemNotification:', error);
     }
 } 

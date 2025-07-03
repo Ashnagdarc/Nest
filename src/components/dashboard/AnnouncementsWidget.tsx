@@ -146,8 +146,10 @@ export function AnnouncementsWidget({ embedded = false }: AnnouncementsWidgetPro
                         </Link>
                     </div>
                 ) : (
-                    <div className="py-2 text-center">
-                        <p className="text-xs text-muted-foreground">No announcements</p>
+                    <div className="flex flex-col items-center justify-center p-6 text-center">
+                        <div className="text-4xl mb-3">📢</div>
+                        <h3 className="text-lg font-medium mb-2">No announcements</h3>
+                        <p className="text-sm text-muted-foreground mb-4 max-w-xs">Check back later for important announcements</p>
                     </div>
                 )}
             </div>
@@ -195,11 +197,11 @@ export function AnnouncementsWidget({ embedded = false }: AnnouncementsWidgetPro
                         </Link>
                     </div>
                 ) :
-                    <EmptyState
-                        icon="📢"
-                        title="No announcements"
-                        description="Check back later for important announcements"
-                    />
+                    <div className="flex flex-col items-center justify-center p-6 text-center">
+                        <div className="text-4xl mb-3">📢</div>
+                        <h3 className="text-lg font-medium mb-2">No announcements</h3>
+                        <p className="text-sm text-muted-foreground mb-4 max-w-xs">Check back later for important announcements</p>
+                    </div>
                 }
             </CardContent>
         </Card>

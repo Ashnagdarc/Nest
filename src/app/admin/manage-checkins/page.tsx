@@ -280,9 +280,10 @@ export default function ManageCheckinsPage() {
       }
       // Notify user (system notification)
       await createSystemNotification(
-        group[0].userId,
         'Check-in Approved',
-        `Your check-in for ${gearNames.join(', ')} has been approved.`
+        `Your check-in for ${gearNames.join(', ')} has been approved.`,
+        'checkin',
+        [group[0].userId]
       );
       // Send single Google Chat notification for the group
       const chatMessage = `[Check-in Approved]\n*User:* ${userProfile?.full_name || 'Unknown User'} (${userProfile?.email || 'Unknown Email'})\n*Items:* ${gearNames.join(', ')}\n*Condition:* ${hasDamaged ? 'Some Damaged' : 'All Good'}\n*Notes:* ${notes || 'None'}\n*Timestamp:* ${new Date().toLocaleString()}`;

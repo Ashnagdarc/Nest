@@ -35,6 +35,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { History } from 'lucide-react';
 import { Calendar } from 'lucide-react';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
+import { useRouter } from 'next/navigation';
+import { useSuccessFeedback } from '@/hooks/use-success-feedback';
 
 /**
  * Dynamic Lottie Import - prevents SSR issues and reduces bundle size
@@ -294,6 +296,8 @@ export default function CheckInGearPage() {
   // Core services and utilities
   const { toast } = useToast();
   const supabase = createClient();
+  const router = useRouter();
+  const { showSuccessFeedback } = useSuccessFeedback();
 
   // Equipment and user state
   const [checkedOutGears, setCheckedOutGears] = useState<ProcessedGear[]>([]);
@@ -620,24 +624,25 @@ export default function CheckInGearPage() {
         })
       });
 
-      // Show success message
-      toast({
-        title: "Check-in Submitted",
-        description: "Your check-in has been submitted and is pending admin approval.",
-        variant: "default",
+      showSuccessFeedback({
+        toast: {
+          title: "Check-in Submitted",
+          description: "Your check-in has been submitted and is pending admin approval.",
+          variant: "default",
+        },
+        redirectPath: '/user/history',
+        delay: 1500,
+        onSuccess: () => {
+          setSelectedGears([]);
+          setIsDamaged(false);
+          setDamageDescription('');
+          setCheckinNotes('');
+        },
+        showAnimation: () => {
+          setShowSuccessAnimation(true);
+          setTimeout(() => setShowSuccessAnimation(false), 1500);
+        },
       });
-
-      // Show success animation
-      setShowSuccessAnimation(true);
-      setTimeout(() => {
-        setShowSuccessAnimation(false);
-      }, 3000);
-
-      // Reset form
-      setSelectedGears([]);
-      setIsDamaged(false);
-      setDamageDescription('');
-      setCheckinNotes('');
 
       // Refresh the list of checked out gear
       await fetchCheckedOutGear();

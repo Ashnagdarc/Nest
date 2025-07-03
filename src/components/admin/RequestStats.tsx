@@ -99,7 +99,7 @@ export function RequestStats({ stats, onViewCategory, isLoading, error, requestD
                                             <p className="text-2xl font-bold text-white">{item.value}</p>
                                             <p className="text-xs text-gray-400">{item.description}</p>
                                         </div>
-                                        <item.icon className={`h-8 w-8 ${item.iconColor}`} />
+                                        {React.createElement(item.icon, { className: `h-8 w-8 ${item.iconColor}` })}
                                     </div>
                                 </CardContent>
                             </Card>

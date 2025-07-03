@@ -117,7 +117,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     asChild
                   >
                     <Link href={item.href} className="flex items-center gap-2">
-                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      {React.createElement(item.icon, { className: "h-5 w-5 flex-shrink-0" })}
                       <span className="truncate">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>

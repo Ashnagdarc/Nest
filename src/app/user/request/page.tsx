@@ -9,7 +9,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -165,6 +165,7 @@ function RequestGearContent() {
   const preselectedGearId = searchParams.get('gearId');
 
   // Core hooks and utilities
+  const router = useRouter();
   const { toast } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
@@ -482,10 +483,11 @@ function RequestGearContent() {
         description: `Your request for ${selectedGearNames.length} item(s) has been submitted and is pending approval.`,
         variant: "default",
       });
-
-      // Reset form and clear draft
       form.reset();
       clearRequestDraft();
+      setTimeout(() => {
+        router.push('/user/my-requests');
+      }, 1500);
 
     } catch (error) {
       console.error('Request submission error:', error);

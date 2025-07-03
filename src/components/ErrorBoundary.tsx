@@ -1,89 +1,167 @@
 'use client';
 
-import { Component, ErrorInfo, ReactNode } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
-interface Props {
-    children: ReactNode;
-    fallback?: ReactNode;
+/**
+ * Error Boundary Props Interface
+ */
+interface ErrorBoundaryProps {
+    /** Child components to protect */
+    children: React.ReactNode;
+    /** Optional fallback component */
+    fallback?: React.ComponentType<{ error: Error; resetError: () => void }>;
+    /** Optional error handler */
+    onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
 }
 
-interface State {
+/**
+ * Error Boundary State Interface
+ */
+interface ErrorBoundaryState {
+    /** Whether an error has occurred */
     hasError: boolean;
+    /** The error that occurred */
     error: Error | null;
-    errorInfo: ErrorInfo | null;
+    /** Additional error information */
+    errorInfo: React.ErrorInfo | null;
 }
 
-class ErrorBoundary extends Component<Props, State> {
-    public state: State = {
-        hasError: false,
-        error: null,
-        errorInfo: null,
-    };
-
-    public static getDerivedStateFromError(error: Error): State {
-        return { hasError: true, error, errorInfo: null };
+/**
+ * Enhanced Error Boundary Component
+ * 
+ * Catches JavaScript errors anywhere in the child component tree and displays
+ * a fallback UI. Includes special handling for Supabase real-time errors.
+ * 
+ * @component
+ */
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+    constructor(props: ErrorBoundaryProps) {
+        super(props);
+        this.state = {
+            hasError: false,
+            error: null,
+            errorInfo: null
+        };
     }
 
-    public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        console.error('Error caught by boundary:', error, errorInfo);
-        this.setState({
+    /**
+     * Static method to update state when an error occurs
+     */
+    static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+        // Check if this is a Supabase real-time error that should be handled gracefully
+        if (error.message && (
+            error.message.includes('CHANNEL_ERROR') ||
+            error.message.includes('Subscription error') ||
+            error.message.includes('_onConnClose') ||
+            error.message.includes('RealtimeClient')
+        )) {
+            // For Supabase real-time errors, log as warning and don't show error boundary
+            console.warn('🟡 Supabase real-time error caught by boundary (will continue normally):', error.message);
+            return { hasError: false, error: null, errorInfo: null };
+        }
+
+        return {
+            hasError: true,
             error,
-            errorInfo,
-        });
-
-        // Here you could send to your error tracking service
-        // sendToErrorTracking(error, errorInfo);
+            errorInfo: null
+        };
     }
 
-    private handleRetry = () => {
+    /**
+     * Lifecycle method called when an error occurs
+     */
+    componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+        // Filter out Supabase real-time errors
+        if (error.message && (
+            error.message.includes('CHANNEL_ERROR') ||
+            error.message.includes('Subscription error') ||
+            error.message.includes('_onConnClose') ||
+            error.message.includes('RealtimeClient') ||
+            error.message.includes('gear_maintenance')
+        )) {
+            console.warn('🟡 Supabase real-time error handled gracefully:', error.message);
+            // Reset the error boundary state for these errors
+            this.setState({ hasError: false, error: null, errorInfo: null });
+            return;
+        }
+
+        // For other errors, update state and call error handler
+        this.setState({ errorInfo });
+
+        // Call the error handler if provided
+        if (this.props.onError) {
+            this.props.onError(error, errorInfo);
+        }
+
+        // Log the error for debugging
+        console.error('Error caught by boundary:', error);
+        console.error('Error info:', errorInfo);
+    }
+
+    /**
+     * Reset the error boundary state
+     */
+    resetError = (): void => {
         this.setState({
             hasError: false,
             error: null,
-            errorInfo: null,
+            errorInfo: null
         });
     };
 
-    public render() {
-        if (this.state.hasError) {
+    render() {
+        if (this.state.hasError && this.state.error) {
+            // Use custom fallback if provided
             if (this.props.fallback) {
-                return this.props.fallback;
+                const FallbackComponent = this.props.fallback;
+                return <FallbackComponent error={this.state.error} resetError={this.resetError} />;
             }
 
+            // Default fallback UI
             return (
-                <Card className="w-full max-w-md mx-auto mt-8 border-red-200 dark:border-red-800">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                            <AlertTriangle className="h-5 w-5" />
-                            Something went wrong
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <p className="text-sm text-muted-foreground">
-                            {this.state.error?.message || 'An unexpected error occurred'}
-                        </p>
-                        {process.env.NODE_ENV === 'development' && this.state.errorInfo && (
-                            <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto max-h-[200px]">
-                                {this.state.errorInfo.componentStack}
-                            </pre>
-                        )}
-                        <Button
-                            onClick={this.handleRetry}
-                            className="w-full"
-                            variant="outline"
-                        >
-                            <RefreshCw className="mr-2 h-4 w-4" />
-                            Try Again
-                        </Button>
-                    </CardContent>
-                </Card>
+                <div className="min-h-screen flex items-center justify-center bg-background">
+                    <div className="max-w-md w-full mx-auto p-6">
+                        <div className="text-center space-y-4">
+                            <div className="flex justify-center">
+                                <AlertTriangle className="h-12 w-12 text-destructive" />
+                            </div>
+                            <h1 className="text-2xl font-bold text-foreground">Something went wrong</h1>
+                            <p className="text-muted-foreground">
+                                An unexpected error occurred. Please try refreshing the page.
+                            </p>
+                            <div className="space-y-2">
+                                <Button onClick={this.resetError} className="w-full">
+                                    <RefreshCw className="h-4 w-4 mr-2" />
+                                    Try Again
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => window.location.reload()}
+                                    className="w-full"
+                                >
+                                    Refresh Page
+                                </Button>
+                            </div>
+
+                            {/* Show error details in development */}
+                            {process.env.NODE_ENV === 'development' && (
+                                <details className="mt-4 text-left">
+                                    <summary className="cursor-pointer text-sm font-medium">
+                                        Error Details (Development)
+                                    </summary>
+                                    <pre className="mt-2 text-xs bg-muted p-3 rounded overflow-auto">
+                                        {this.state.error?.stack}
+                                    </pre>
+                                </details>
+                            )}
+                        </div>
+                    </div>
+                </div>
             );
         }
 
         return this.props.children;
     }
-}
-
-export default ErrorBoundary; 
+} 

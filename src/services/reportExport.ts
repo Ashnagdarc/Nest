@@ -43,10 +43,346 @@ interface RealGearData {
   last_activity: string;
 }
 
+interface RealDataStructure {
+  stats: RealDatabaseStats;
+  requests: RealRequestData[];
+  gears: RealGearData[];
+}
+
+interface PDFConfig {
+  doc: jsPDF;
+  pageWidth: number;
+  pageHeight: number;
+  colors: {
+    BRAND_ORANGE: RGBColor;
+    LIGHT_GRAY: RGBColor;
+    DARK_GRAY: RGBColor;
+    SUCCESS_GREEN: RGBColor;
+    WARNING_AMBER: RGBColor;
+    DANGER_RED: RGBColor;
+  };
+}
+
+interface MetricCard {
+  label: string;
+  value: string;
+  status: string;
+  color: RGBColor;
+}
+
+/**
+ * Initialize PDF document with consistent settings
+ */
+function initializePDF(): PDFConfig {
+  const doc = new jsPDF('portrait', 'pt', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const colors = {
+    BRAND_ORANGE: [255, 99, 0] as RGBColor,
+    LIGHT_GRAY: [248, 248, 248] as RGBColor,
+    DARK_GRAY: [64, 64, 64] as RGBColor,
+    SUCCESS_GREEN: [34, 197, 94] as RGBColor,
+    WARNING_AMBER: [245, 158, 11] as RGBColor,
+    DANGER_RED: [239, 68, 68] as RGBColor,
+  };
+
+  return { doc, pageWidth, pageHeight, colors };
+}
+
+/**
+ * Generate PDF header with company branding
+ */
+function generatePDFHeader(
+  config: PDFConfig,
+  companyName: string,
+  title: string,
+  report: WeeklyUsageReport
+): number {
+  const { doc, pageWidth, colors } = config;
+
+  // Header background
+  doc.setFillColor(colors.BRAND_ORANGE[0], colors.BRAND_ORANGE[1], colors.BRAND_ORANGE[2]);
+  doc.rect(0, 0, pageWidth, 140, 'F');
+
+  // Company name
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(28);
+  doc.setFont('helvetica', 'bold');
+  doc.text(companyName.toUpperCase(), 50, 55);
+
+  // Report title
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'normal');
+  doc.text(title, 50, 85);
+
+  // Date information
+  doc.setFontSize(12);
+  doc.text(`Period: ${report.startDate} to ${report.endDate}`, 50, 115);
+  doc.text(`Generated: ${format(new Date(), 'MMMM dd, yyyy HH:mm')}`, pageWidth - 250, 115);
+
+  return 180; // Return next Y position
+}
+
+/**
+ * Calculate utilization rate from real data
+ */
+function calculateUtilizationRate(stats: RealDatabaseStats): number {
+  return stats.total_gears > 0 ?
+    (stats.checked_out_gears / stats.total_gears) * 100 : 0;
+}
+
+/**
+ * Generate metric cards data
+ */
+function generateMetricsData(realData: RealDataStructure, colors: PDFConfig['colors']): MetricCard[] {
+  const utilizationRate = calculateUtilizationRate(realData.stats);
+
+  return [
+    {
+      label: 'Asset Utilization',
+      value: `${utilizationRate.toFixed(1)}%`,
+      status: utilizationRate > 50 ? 'OPTIMAL' : utilizationRate === 0 ? 'NO USAGE' : 'LOW',
+      color: utilizationRate > 50 ? colors.SUCCESS_GREEN : utilizationRate === 0 ? colors.DANGER_RED : colors.WARNING_AMBER
+    },
+    {
+      label: 'Active Employees',
+      value: `${realData.stats.active_users}/${realData.stats.total_users}`,
+      status: realData.stats.active_users === 0 ? 'NO ENGAGEMENT' : 'ACTIVE',
+      color: realData.stats.active_users === 0 ? colors.DANGER_RED : colors.SUCCESS_GREEN
+    },
+    {
+      label: 'Total Activities',
+      value: realData.stats.recent_activities.toString(),
+      status: realData.stats.recent_activities === 0 ? 'NO ACTIVITY - NEEDS ATTENTION' : 'ACTIVE',
+      color: realData.stats.recent_activities === 0 ? colors.DANGER_RED : colors.SUCCESS_GREEN
+    },
+    {
+      label: 'Overdue Items',
+      value: realData.stats.overdue_requests.toString(),
+      status: realData.stats.overdue_requests === 0 ? 'EXCELLENT' : 'NEEDS ATTENTION',
+      color: realData.stats.overdue_requests === 0 ? colors.SUCCESS_GREEN : colors.DANGER_RED
+    }
+  ];
+}
+
+/**
+ * Render metric cards on PDF
+ */
+function renderMetricCards(config: PDFConfig, metrics: MetricCard[], currentY: number): number {
+  const { doc, pageWidth, colors } = config;
+  const cardWidth = (pageWidth - 200) / 2;
+  const cardHeight = 130;
+  const cardSpacing = 35;
+
+  for (let i = 0; i < metrics.length; i++) {
+    const x = 60 + (i % 2) * (cardWidth + cardSpacing);
+    const y = currentY + Math.floor(i / 2) * (cardHeight + cardSpacing);
+
+    // Card shadow and background
+    doc.setFillColor(220, 220, 220);
+    doc.roundedRect(x + 4, y + 4, cardWidth, cardHeight, 10, 10, 'F');
+    doc.setFillColor(colors.LIGHT_GRAY[0], colors.LIGHT_GRAY[1], colors.LIGHT_GRAY[2]);
+    doc.roundedRect(x, y, cardWidth, cardHeight, 10, 10, 'F');
+
+    // Metric value
+    doc.setTextColor(colors.BRAND_ORANGE[0], colors.BRAND_ORANGE[1], colors.BRAND_ORANGE[2]);
+    doc.setFontSize(38);
+    doc.setFont('helvetica', 'bold');
+    doc.text(metrics[i].value, x + 25, y + 55);
+
+    // Metric label
+    doc.setTextColor(colors.DARK_GRAY[0], colors.DARK_GRAY[1], colors.DARK_GRAY[2]);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'normal');
+    doc.text(metrics[i].label, x + 25, y + 80);
+
+    // Status
+    const statusColor = metrics[i].color;
+    doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    const statusLines = doc.splitTextToSize(metrics[i].status, cardWidth - 50);
+    doc.text(statusLines, x + 25, y + 105);
+  }
+
+  const numberOfCardRows = Math.ceil(metrics.length / 2);
+  return currentY + (numberOfCardRows * (cardHeight + cardSpacing)) + 50;
+}
+
+/**
+ * Generate dynamic insights based on data
+ */
+function generateDynamicInsights(realData: RealDataStructure): string[] {
+  const insights = [];
+  const utilizationRate = calculateUtilizationRate(realData.stats);
+
+  if (utilizationRate === 0 && realData.stats.recent_activities === 0) {
+    insights.push('SYSTEM ADOPTION: No recorded activity suggests training needs or manual tracking preferences. Consider user onboarding initiatives.');
+  }
+
+  if (realData.stats.overdue_requests === 0) {
+    insights.push('COMPLIANCE EXCELLENCE: Zero overdue returns demonstrate effective tracking and strong policy adherence.');
+  }
+
+  if (realData.stats.total_gears > 0 && utilizationRate < 10) {
+    insights.push('UTILIZATION OPPORTUNITY: Low equipment usage may indicate availability surplus or access barriers.');
+  }
+
+  if (insights.length === 0) {
+    insights.push('SYSTEM STATUS: Asset tracking system operating with current activity levels. Monitor for optimization opportunities.');
+  }
+
+  return insights;
+}
+
+/**
+ * Generate dynamic recommendations based on data
+ */
+function generateDynamicRecommendations(realData: RealDataStructure): string[] {
+  const recommendations = [];
+  const utilizationRate = calculateUtilizationRate(realData.stats);
+
+  if (utilizationRate === 0) {
+    recommendations.push('PRIORITY: Implement user training program to increase system adoption and equipment usage.');
+  }
+
+  if (realData.stats.active_users === 0) {
+    recommendations.push('ENGAGEMENT: Focus on onboarding staff to digital asset tracking workflows and processes.');
+  }
+
+  if (realData.stats.total_gears > 40 && utilizationRate < 20) {
+    recommendations.push('OPTIMIZATION: Consider asset reallocation or review access procedures to improve utilization.');
+  }
+
+  if (realData.stats.overdue_requests === 0) {
+    recommendations.push('MAINTAIN: Continue current tracking and return policies - excellent compliance achieved.');
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push('MONITORING: Establish regular reporting cadence to track system adoption and usage patterns.');
+  }
+
+  return recommendations;
+}
+
+/**
+ * Render text section with bullet points
+ */
+function renderTextSection(
+  config: PDFConfig,
+  title: string,
+  items: string[],
+  currentY: number
+): number {
+  const { doc, pageWidth, colors } = config;
+
+  // Section title
+  doc.setTextColor(colors.DARK_GRAY[0], colors.DARK_GRAY[1], colors.DARK_GRAY[2]);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(title, 50, currentY);
+  currentY += 40;
+
+  // Items with bullet points
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  items.slice(0, 3).forEach((item) => {
+    // Bullet point
+    doc.setTextColor(colors.BRAND_ORANGE[0], colors.BRAND_ORANGE[1], colors.BRAND_ORANGE[2]);
+    doc.setFontSize(14);
+    doc.text('•', 50, currentY);
+
+    // Item text
+    doc.setTextColor(colors.DARK_GRAY[0], colors.DARK_GRAY[1], colors.DARK_GRAY[2]);
+    doc.setFontSize(12);
+    const lines = doc.splitTextToSize(item, pageWidth - 150);
+    doc.text(lines, 70, currentY);
+    currentY += Math.max(lines.length * 16, 25) + 25;
+  });
+
+  return currentY + 40;
+}
+
+/**
+ * Render data table
+ */
+function renderDataTable(
+  config: PDFConfig,
+  title: string,
+  headers: string[],
+  data: string[][],
+  currentY: number,
+  columnStyles: any = {},
+  cellFormatter?: (data: any) => void
+): number {
+  const { doc, colors } = config;
+
+  // Table title
+  doc.setTextColor(colors.DARK_GRAY[0], colors.DARK_GRAY[1], colors.DARK_GRAY[2]);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(title, 50, currentY);
+  currentY += 30;
+
+  // Generate table
+  autoTable(doc, {
+    startY: currentY + 10,
+    head: [headers],
+    body: data,
+    theme: 'striped',
+    headStyles: {
+      fillColor: colors.BRAND_ORANGE,
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 11,
+      cellPadding: 10
+    },
+    styles: {
+      fontSize: 9,
+      cellPadding: 6,
+      lineColor: [200, 200, 200],
+      lineWidth: 0.5
+    },
+    alternateRowStyles: { fillColor: [252, 252, 252] },
+    columnStyles: columnStyles,
+    didParseCell: cellFormatter,
+    margin: { left: 50, right: 50 },
+    tableWidth: 'wrap',
+    pageBreak: 'auto'
+  });
+
+  return (doc as any).lastAutoTable.finalY + 50;
+}
+
+/**
+ * Add footer to all pages
+ */
+function addFooterToAllPages(config: PDFConfig, companyName: string): void {
+  const { doc, pageWidth, pageHeight, colors } = config;
+  const pageCount = doc.getNumberOfPages();
+
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+
+    // Footer background
+    doc.setFillColor(245, 245, 245);
+    doc.rect(0, pageHeight - 40, pageWidth, 40, 'F');
+
+    // Footer text
+    doc.setTextColor(colors.DARK_GRAY[0], colors.DARK_GRAY[1], colors.DARK_GRAY[2]);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${companyName} - Asset Management Report`, 50, pageHeight - 20);
+    doc.text(`Page ${i} of ${pageCount}`, pageWidth - 100, pageHeight - 20);
+    doc.text('CONFIDENTIAL - For Internal Use Only', pageWidth / 2 - 70, pageHeight - 7);
+  }
+}
+
 /**
  * Professional PDF Report Generator with Real Data and Fixed Spacing
  */
-export async function generatePdfReport(report: WeeklyUsageReport, title: string = 'Weekly Activity Report') {
+export async function generatePdfReport(report: WeeklyUsageReport, title: string = 'Weekly Activity Report', companyName: string = 'Asset Management System') {
   // Use the real data we retrieved via MCP
   const realData = {
     stats: {
@@ -86,7 +422,7 @@ export async function generatePdfReport(report: WeeklyUsageReport, title: string
       {
         gear_name: "Macbook Pro",
         category: "Laptop",
-        status: "Available",
+        status: "available",
         condition: "Good",
         request_count: 1,
         activity_count: 0,
@@ -95,7 +431,7 @@ export async function generatePdfReport(report: WeeklyUsageReport, title: string
       {
         gear_name: "Canon R5C",
         category: "Camera",
-        status: "Available",
+        status: "available",
         condition: null,
         request_count: 1,
         activity_count: 0,
@@ -104,7 +440,7 @@ export async function generatePdfReport(report: WeeklyUsageReport, title: string
       {
         gear_name: "DJI RS3Pro",
         category: "Gimbal",
-        status: "Available",
+        status: "available",
         condition: "Good",
         request_count: 0,
         activity_count: 0,
@@ -113,7 +449,7 @@ export async function generatePdfReport(report: WeeklyUsageReport, title: string
       {
         gear_name: "Galaxy Note 9",
         category: "Phone",
-        status: "Available",
+        status: "available",
         condition: "Good",
         request_count: 0,
         activity_count: 0,
@@ -122,7 +458,7 @@ export async function generatePdfReport(report: WeeklyUsageReport, title: string
       {
         gear_name: "DJI Mini 3 Pro",
         category: "Drone",
-        status: "Available",
+        status: "available",
         condition: null,
         request_count: 0,
         activity_count: 0,
@@ -131,161 +467,30 @@ export async function generatePdfReport(report: WeeklyUsageReport, title: string
     ]
   };
 
-  // Eden Oasis brand colors - properly typed
-  const BRAND_ORANGE: RGBColor = [255, 99, 0]; // #ff6300
-  const DARK_GRAY: RGBColor = [45, 45, 45];
-  const LIGHT_GRAY: RGBColor = [240, 240, 240];
-  const SUCCESS_GREEN: RGBColor = [34, 197, 94];
-  const WARNING_AMBER: RGBColor = [245, 158, 11];
-  const DANGER_RED: RGBColor = [239, 68, 68];
-
   // Initialize PDF with professional settings
-  const doc = new jsPDF('portrait', 'pt', 'a4');
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
+  const config = initializePDF();
+  const { doc, pageWidth, pageHeight, colors } = config;
 
   // === PROFESSIONAL HEADER WITH PROPER SPACING ===
-  doc.setFillColor(BRAND_ORANGE[0], BRAND_ORANGE[1], BRAND_ORANGE[2]);
-  doc.rect(0, 0, pageWidth, 140, 'F');
-
-  // Company logo/name with proper spacing
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(28);
-  doc.setFont('helvetica', 'bold');
-  doc.text('EDEN OASIS REALTY', 50, 55);
-
-  // Report title with proper spacing
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'normal');
-  doc.text(title, 50, 85);
-
-  // Date range with proper alignment and fixed time format
-  doc.setFontSize(12);
-  doc.text(`Period: ${report.startDate} to ${report.endDate}`, 50, 115);
-  doc.text(`Generated: ${format(new Date(), 'MMMM dd, yyyy HH:mm')}`, pageWidth - 250, 115);
-
-  let currentY = 180; // More space after header
+  let currentY = generatePDFHeader(config, companyName, title, report);
 
   // === EXECUTIVE SUMMARY WITH PROPER SPACING ===
-  doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);
+  doc.setTextColor(colors.DARK_GRAY[0], colors.DARK_GRAY[1], colors.DARK_GRAY[2]);
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
   doc.text('EXECUTIVE SUMMARY', 50, currentY);
   currentY += 50; // More space after heading
 
-  // Calculate utilization rate from real data
-  const utilizationRate = realData.stats.total_gears > 0 ?
-    (realData.stats.checked_out_gears / realData.stats.total_gears) * 100 : 0;
+  // Generate metrics and render cards
+  const metrics = generateMetricsData(realData, colors);
+  currentY = renderMetricCards(config, metrics, currentY);
 
-  // Create properly spaced metrics cards with cleaner text
-  const metrics = [
-    {
-      label: 'Asset Utilization',
-      value: `${utilizationRate.toFixed(1)}%`,
-      status: utilizationRate > 50 ? 'OPTIMAL' : utilizationRate === 0 ? 'NO USAGE' : 'LOW',
-      color: utilizationRate > 50 ? SUCCESS_GREEN : utilizationRate === 0 ? DANGER_RED : WARNING_AMBER
-    },
-    {
-      label: 'Active Employees',
-      value: `${realData.stats.active_users}/${realData.stats.total_users}`,
-      status: realData.stats.active_users === 0 ? 'NO ENGAGEMENT' : 'ACTIVE',
-      color: realData.stats.active_users === 0 ? DANGER_RED : SUCCESS_GREEN
-    },
-    {
-      label: 'Total Activities',
-      value: realData.stats.recent_activities.toString(),
-      status: realData.stats.recent_activities === 0 ? 'NO ACTIVITY - NEEDS ATTENTION' : 'ACTIVE',
-      color: realData.stats.recent_activities === 0 ? DANGER_RED : SUCCESS_GREEN
-    },
-    {
-      label: 'Overdue Items',
-      value: realData.stats.overdue_requests.toString(),
-      status: realData.stats.overdue_requests === 0 ? 'EXCELLENT' : 'NEEDS ATTENTION',
-      color: realData.stats.overdue_requests === 0 ? SUCCESS_GREEN : DANGER_RED
-    }
-  ];
-
-  // Create well-spaced metrics grid with improved layout and better text handling
-  const cardWidth = (pageWidth - 200) / 2; // Even better margins
-  const cardHeight = 130; // Taller cards for better text spacing
-  const cardSpacing = 35; // More spacing between cards
-
-  for (let i = 0; i < metrics.length; i++) {
-    const x = 60 + (i % 2) * (cardWidth + cardSpacing); // Better starting position
-    const y = currentY + Math.floor(i / 2) * (cardHeight + cardSpacing);
-
-    // Card with shadow and proper spacing
-    doc.setFillColor(220, 220, 220);
-    doc.roundedRect(x + 4, y + 4, cardWidth, cardHeight, 10, 10, 'F'); // Shadow
-    doc.setFillColor(LIGHT_GRAY[0], LIGHT_GRAY[1], LIGHT_GRAY[2]);
-    doc.roundedRect(x, y, cardWidth, cardHeight, 10, 10, 'F');
-
-    // Metric value - larger and well-positioned
-    doc.setTextColor(BRAND_ORANGE[0], BRAND_ORANGE[1], BRAND_ORANGE[2]);
-    doc.setFontSize(38); // Even larger font for values
-    doc.setFont('helvetica', 'bold');
-    doc.text(metrics[i].value, x + 25, y + 55);
-
-    // Metric label with proper spacing
-    doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);
-    doc.setFontSize(16); // Larger label font
-    doc.setFont('helvetica', 'normal');
-    doc.text(metrics[i].label, x + 25, y + 80);
-
-    // Status with proper color and spacing - handle long text
-    const statusColor = metrics[i].color;
-    doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
-    doc.setFontSize(11); // Slightly smaller for longer status text
-    doc.setFont('helvetica', 'bold');
-    const statusLines = doc.splitTextToSize(metrics[i].status, cardWidth - 50);
-    doc.text(statusLines, x + 25, y + 105);
-  }
-
-  // Calculate proper spacing after cards - FIXED OVERLAP ISSUE
-  const numberOfCardRows = Math.ceil(metrics.length / 2);
-  currentY += (numberOfCardRows * (cardHeight + cardSpacing)) + 50; // Proper spacing after all cards
-
-  // === BUSINESS INSIGHTS WITH PROPER FORMATTING ===
-  doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('KEY BUSINESS INSIGHTS', 50, currentY);
-  currentY += 40;
-
-  // Generate insights based on real data - NO UNICODE CHARACTERS
-  const insights = [
-    'CRITICAL ISSUE: Zero activity detected across all asset tracking functions. System implementation requiring immediate staff onboarding and awareness training.',
-    'ZERO ASSET UTILIZATION: No equipment currently checked out or in transit. This could indicate adequate equipment availability, under-reporting of usage, or manual tracking preference.',
-    'EXCELLENT COMPLIANCE: Zero overdue returns demonstrate strong policy adherence and effective return tracking processes are working well.'
-  ];
-
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'normal');
-  insights.slice(0, 3).forEach((insight, index) => {
-    // Simple bullet point - NO UNICODE
-    doc.setTextColor(BRAND_ORANGE[0], BRAND_ORANGE[1], BRAND_ORANGE[2]);
-    doc.setFontSize(14);
-    doc.text('•', 50, currentY);
-
-    // Insight text with proper line height and spacing
-    doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);
-    doc.setFontSize(12);
-    const lines = doc.splitTextToSize(insight, pageWidth - 150); // More margin for wrapping
-    doc.text(lines, 70, currentY);
-    currentY += Math.max(lines.length * 16, 25) + 25; // More spacing between items
-  });
-
-  currentY += 40;
+  // === BUSINESS INSIGHTS WITH PROPER FORMATTING - NOW DYNAMIC ===
+  const dynamicInsights = generateDynamicInsights(realData);
+  currentY = renderTextSection(config, 'KEY BUSINESS INSIGHTS', dynamicInsights, currentY);
 
   // === USER REQUEST TRACKING TABLE ===
-  doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('USER REQUEST TRACKING TABLE', 50, currentY);
-  currentY += 30;
-
-  // Real data table with proper spacing and fixed encoding
-  const tableData = realData.requests.map(req => [
+  const tableData = realData.requests.map((req: RealRequestData) => [
     req.employee_name,
     req.gear_name,
     req.request_date,
@@ -296,278 +501,113 @@ export async function generatePdfReport(report: WeeklyUsageReport, title: string
     req.notes
   ]);
 
-  autoTable(doc, {
-    startY: currentY + 10,
-    head: [['Employee', 'Equipment', 'Request Date', 'Status', 'Checkout Date', 'Due Date', 'Duration', 'Notes']],
-    body: tableData,
-    theme: 'striped',
-    headStyles: {
-      fillColor: BRAND_ORANGE,
-      textColor: 255,
-      fontStyle: 'bold',
-      fontSize: 11,
-      cellPadding: 12
+  currentY = renderDataTable(
+    config,
+    'USER REQUEST TRACKING TABLE',
+    ['Employee', 'Equipment', 'Request Date', 'Status', 'Checkout Date', 'Due Date', 'Duration', 'Notes'],
+    tableData,
+    currentY,
+    {
+      0: { cellWidth: 70, fontStyle: 'bold' }, // Employee
+      1: { cellWidth: 70 }, // Equipment
+      2: { cellWidth: 60, halign: 'center' }, // Request Date
+      3: { cellWidth: 55, halign: 'center' }, // Status
+      4: { cellWidth: 60, halign: 'center' }, // Checkout Date
+      5: { cellWidth: 55, halign: 'center' }, // Due Date
+      6: { cellWidth: 50, halign: 'center' }, // Duration
+      7: { cellWidth: 70 } // Notes
     },
-    styles: {
-      fontSize: 10,
-      cellPadding: 8,
-      lineColor: [200, 200, 200],
-      lineWidth: 0.5
-    },
-    alternateRowStyles: { fillColor: [252, 252, 252] },
-    columnStyles: {
-      0: { cellWidth: 85, fontStyle: 'bold' },
-      1: { cellWidth: 85 },
-      2: { cellWidth: 70, halign: 'center' },
-      3: { cellWidth: 70, halign: 'center' },
-      4: { cellWidth: 65, halign: 'center' },
-      5: { cellWidth: 60, halign: 'center' },
-      6: { cellWidth: 55, halign: 'center' },
-      7: { cellWidth: 100 }
-    },
-    didParseCell: function (data) {
+    function (data) {
       // Color code status column (index 3)
       if (data.column.index === 3) {
         if (data.cell.text[0] === 'Cancelled') {
-          data.cell.styles.textColor = DANGER_RED;
+          data.cell.styles.textColor = colors.DANGER_RED;
           data.cell.styles.fontStyle = 'bold';
         } else if (data.cell.text[0] === 'Rejected') {
-          data.cell.styles.textColor = WARNING_AMBER;
+          data.cell.styles.textColor = colors.WARNING_AMBER;
           data.cell.styles.fontStyle = 'bold';
         } else if (data.cell.text[0] === 'Approved') {
-          data.cell.styles.textColor = SUCCESS_GREEN;
+          data.cell.styles.textColor = colors.SUCCESS_GREEN;
           data.cell.styles.fontStyle = 'bold';
         }
       }
     }
-  });
+  );
 
-  // Add second page with COMPLETELY REDESIGNED LAYOUT
+  // Add second page with proper spacing and HEADER
   doc.addPage();
+  currentY = generatePDFHeader(config, companyName, title, report);
 
-  // === COMPACT PROFESSIONAL HEADER ===
-  doc.setFillColor(BRAND_ORANGE[0], BRAND_ORANGE[1], BRAND_ORANGE[2]);
-  doc.rect(0, 0, pageWidth, 80, 'F'); // Much more compact header
-
-  // Company name - larger and centered
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(24);
-  doc.setFont('helvetica', 'bold');
-  doc.text('EDEN OASIS REALTY', 50, 35);
-
-  // Report continuation indicator
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Asset Portfolio & Strategic Analysis', 50, 55);
-
-  // Page identifier
-  doc.setFontSize(10);
-  doc.text(`${format(new Date(), 'MMMM dd, yyyy')}`, pageWidth - 120, 25);
-  doc.text('Page 2 of 3', pageWidth - 120, 40);
-
-  currentY = 120; // Start content much higher
-
-  // === ASSET OVERVIEW SECTION (Two Column Layout) ===
-  doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('ASSET PORTFOLIO OVERVIEW', 50, currentY);
-  currentY += 35;
-
-  // Left Column - Asset Summary Cards
-  const leftColX = 50;
-  const rightColX = 320;
-  const summaryCardHeight = 45;
-  const summaryCardWidth = 180;
-
-  // Summary Cards
-  const assetSummary = [
-    { label: 'Total Assets', value: realData.gears.length.toString(), color: BRAND_ORANGE },
-    { label: 'Available', value: realData.gears.filter(g => g.status === 'available').length.toString(), color: SUCCESS_GREEN },
-    { label: 'In Use', value: realData.gears.filter(g => g.status === 'checked out').length.toString(), color: WARNING_AMBER },
-    { label: 'Under Repair', value: realData.gears.filter(g => g.status === 'under repair').length.toString(), color: DANGER_RED }
-  ];
-
-  assetSummary.forEach((item, index) => {
-    const x = index % 2 === 0 ? leftColX : rightColX;
-    const y = currentY + Math.floor(index / 2) * (summaryCardHeight + 15);
-
-    // Card background
-    doc.setFillColor(LIGHT_GRAY[0], LIGHT_GRAY[1], LIGHT_GRAY[2]);
-    doc.roundedRect(x, y, summaryCardWidth, summaryCardHeight, 8, 8, 'F');
-
-    // Value
-    doc.setTextColor(item.color[0], item.color[1], item.color[2]);
-    doc.setFontSize(20);
-    doc.setFont('helvetica', 'bold');
-    doc.text(item.value, x + 20, y + 25);
-
-    // Label
-    doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    doc.text(item.label, x + 20, y + 40);
-  });
-
-  currentY += 120; // Space after cards
-
-  // === SIMPLIFIED ASSET TABLE ===
-  doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text('DETAILED ASSET INVENTORY', 50, currentY);
-  currentY += 30;
-
-  // Simplified table with only essential columns
-  const simplifiedAssetData = realData.gears.slice(0, 10).map(gear => [
+  // === ASSET PORTFOLIO WITH REAL DATA ===
+  const assetData = realData.gears.map((gear: RealGearData) => [
     gear.gear_name,
     gear.category,
     gear.status,
-    gear.condition || 'Good',
-    (gear.request_count || 0).toString()
+    gear.condition || 'Not Specified',
+    gear.last_activity || 'Never',
+    (gear.request_count || 0).toString(),
+    (gear.activity_count || 0).toString()
   ]);
 
-  autoTable(doc, {
-    startY: currentY,
-    head: [['Asset Name', 'Category', 'Status', 'Condition', 'Usage Count']],
-    body: simplifiedAssetData,
-    theme: 'grid',
-    headStyles: {
-      fillColor: BRAND_ORANGE,
-      textColor: 255,
-      fontStyle: 'bold',
-      fontSize: 11,
-      cellPadding: 8
+  currentY = renderDataTable(
+    config,
+    'ASSET PORTFOLIO ANALYSIS',
+    ['Asset Name', 'Category', 'Status', 'Condition', 'Last Used', 'Total Uses', 'Activity Count'],
+    assetData,
+    currentY,
+    {
+      0: { cellWidth: 85, fontStyle: 'bold' }, // Asset Name
+      1: { cellWidth: 60 }, // Category
+      2: { cellWidth: 65, halign: 'center' }, // Status
+      3: { cellWidth: 65, halign: 'center' }, // Condition
+      4: { cellWidth: 65, halign: 'center' }, // Last Used
+      5: { cellWidth: 50, halign: 'center' }, // Total Uses
+      6: { cellWidth: 60, halign: 'center' } // Activity Count
     },
-    styles: {
-      fontSize: 9,
-      cellPadding: 6,
-      lineColor: [200, 200, 200],
-      lineWidth: 0.5
-    },
-    alternateRowStyles: { fillColor: [252, 252, 252] },
-    columnStyles: {
-      0: { cellWidth: 140, fontStyle: 'bold' }, // Asset Name - wider
-      1: { cellWidth: 80 }, // Category
-      2: { cellWidth: 80, halign: 'center' }, // Status
-      3: { cellWidth: 80, halign: 'center' }, // Condition
-      4: { cellWidth: 60, halign: 'center' } // Usage
-    },
-    didParseCell: function (data) {
-      // Status column coloring
+    function (data) {
+      // Color code status column (index 2)
       if (data.column.index === 2) {
         if (data.cell.text[0] === 'available') {
-          data.cell.styles.textColor = SUCCESS_GREEN;
+          data.cell.styles.textColor = colors.SUCCESS_GREEN;
           data.cell.styles.fontStyle = 'bold';
         } else if (data.cell.text[0] === 'checked out') {
-          data.cell.styles.textColor = WARNING_AMBER;
+          data.cell.styles.textColor = colors.WARNING_AMBER;
           data.cell.styles.fontStyle = 'bold';
         } else if (data.cell.text[0] === 'under repair') {
-          data.cell.styles.textColor = DANGER_RED;
+          data.cell.styles.textColor = colors.DANGER_RED;
           data.cell.styles.fontStyle = 'bold';
         }
       }
-    },
-    margin: { left: 50, right: 50 },
-    tableWidth: 'auto'
-  });
-
-  // Get table end position
-  currentY = (doc as any).lastAutoTable.finalY + 40;
-
-  // === KEY INSIGHTS SECTION ===
-  doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text('KEY INSIGHTS & RECOMMENDATIONS', 50, currentY);
-  currentY += 25;
-
-  // Insights in a nice box format
-  doc.setFillColor(250, 250, 250);
-  doc.roundedRect(50, currentY, pageWidth - 100, 120, 10, 10, 'F');
-
-  const keyInsights = [
-    'USAGE ANALYSIS: Zero recorded activity suggests manual tracking preference or system adoption needed.',
-    'IMMEDIATE PRIORITY: Focus on user training and system onboarding to increase digital adoption.',
-    'TRACKING OPPORTUNITY: Implement regular usage monitoring to identify optimization areas.',
-    'NEXT STEPS: Schedule staff training sessions and establish reporting cadence.'
-  ];
-
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  keyInsights.forEach((insight, index) => {
-    const lines = doc.splitTextToSize(insight, pageWidth - 140);
-    doc.text(lines, 70, currentY + 20 + (index * 25));
-  });
-
-  currentY += 140;
-
-  // === PERFORMANCE INDICATORS ===
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('PERFORMANCE INDICATORS', 50, currentY);
-  currentY += 25;
-
-  // Simple performance metrics
-  const performanceData = [
-    ['Asset Utilization Rate', '0%', 'NEEDS IMPROVEMENT'],
-    ['System Adoption', 'Low', 'REQUIRES ATTENTION'],
-    ['Equipment Availability', '100%', 'EXCELLENT'],
-    ['Compliance Score', '100%', 'EXCELLENT']
-  ];
-
-  autoTable(doc, {
-    startY: currentY,
-    head: [['Metric', 'Current Value', 'Status']],
-    body: performanceData,
-    theme: 'plain',
-    headStyles: {
-      fillColor: DARK_GRAY,
-      textColor: 255,
-      fontStyle: 'bold',
-      fontSize: 10
-    },
-    styles: {
-      fontSize: 10,
-      cellPadding: 8
-    },
-    columnStyles: {
-      0: { cellWidth: 160, fontStyle: 'bold' },
-      1: { cellWidth: 100, halign: 'center' },
-      2: { cellWidth: 140, halign: 'center', fontStyle: 'bold' }
-    },
-    didParseCell: function (data) {
-      if (data.column.index === 2) {
-        if (data.cell.text[0] === 'EXCELLENT') {
-          data.cell.styles.textColor = SUCCESS_GREEN;
-        } else if (data.cell.text[0].includes('NEEDS') || data.cell.text[0].includes('REQUIRES')) {
-          data.cell.styles.textColor = DANGER_RED;
+      // Color code condition column (index 3)
+      if (data.column.index === 3) {
+        if (data.cell.text[0] === 'excellent') {
+          data.cell.styles.textColor = colors.SUCCESS_GREEN;
+          data.cell.styles.fontStyle = 'bold';
+        } else if (data.cell.text[0] === 'good') {
+          data.cell.styles.textColor = [0, 150, 0]; // Dark green
+          data.cell.styles.fontStyle = 'bold';
+        } else if (data.cell.text[0] === 'fair') {
+          data.cell.styles.textColor = colors.WARNING_AMBER;
+          data.cell.styles.fontStyle = 'bold';
+        } else if (data.cell.text[0] === 'poor') {
+          data.cell.styles.textColor = colors.DANGER_RED;
+          data.cell.styles.fontStyle = 'bold';
         }
       }
     }
-  });
+  );
 
-  // === FOOTER ON EACH PAGE ===
-  const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
+  // === DYNAMIC RECOMMENDATIONS BASED ON DATA ===
+  const dynamicRecommendations = generateDynamicRecommendations(realData);
+  currentY = renderTextSection(config, 'STRATEGIC RECOMMENDATIONS', dynamicRecommendations, currentY);
 
-    // Footer background
-    doc.setFillColor(248, 248, 248);
-    doc.rect(0, pageHeight - 35, pageWidth, 35, 'F');
+  // === FOOTER ON EACH PAGE - NOW DYNAMIC ===
+  addFooterToAllPages(config, companyName);
 
-    // Footer content
-    doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Eden Oasis Realty - Asset Management Report', 50, pageHeight - 15);
-    doc.text(`Page ${i} of ${pageCount}`, pageWidth - 80, pageHeight - 15);
-    doc.text('CONFIDENTIAL', pageWidth / 2 - 25, pageHeight - 8);
-  }
-
-  // Save with timestamp
+  // Save with timestamp - DYNAMIC FILENAME
   const dateStr = format(new Date(), 'yyyy-MM-dd-HHmm');
-  doc.save(`Eden-Oasis-Asset-Report-${dateStr}.pdf`);
+  const sanitizedCompanyName = companyName.replace(/[^a-zA-Z0-9]/g, '-');
+  doc.save(`${sanitizedCompanyName}-Asset-Report-${dateStr}.pdf`);
 }
 
 /**

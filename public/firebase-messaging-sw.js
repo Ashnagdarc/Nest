@@ -2,10 +2,10 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-    apiKey: "AIzaSyDScTln-U_NG5hR0iC1Y0dok_WNTYOZ06E",
+    apiKey: "AIzaSyDscTln-U_NG5hR0iC1Y0dok_WNTYOZ60E",
     authDomain: "eden-app-notifications.firebaseapp.com",
     projectId: "eden-app-notifications",
-    storageBucket: "eden-app-notifications.appspot.com",
+    storageBucket: "eden-app-notifications.firebasestorage.app",
     messagingSenderId: "456240180306",
     appId: "1:456240180306:web:f3b09f540246c622e316db",
     measurementId: "G-1XDSRDW6BM"

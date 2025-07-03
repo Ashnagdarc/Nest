@@ -9,7 +9,7 @@ import Link from "next/link";
 import { logger } from "@/utils/logger";
 import { createSupabaseSubscription } from "@/utils/supabase-subscription";
 import { motion } from "framer-motion";
-import { EmptyState } from "./EmptyState";
+// Removed EmptyState import to prevent React rendering errors
 import { TrendingUp, TrendingDown, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box } from 'lucide-react';
 
 interface PopularGear {
@@ -266,16 +266,14 @@ export function PopularGearWidget() {
                         ))}
                     </div>
                 ) : (
-                    <>
-                        <EmptyState
-                            icon="📊"
-                            title="No popular gear"
-                            description="No equipment requests have been made yet. Popularity data will appear here once users start making requests."
-                        />
+                    <div className="flex flex-col items-center justify-center p-6 text-center">
+                        <div className="text-4xl mb-3">📊</div>
+                        <h3 className="text-lg font-medium mb-2">No popular gear</h3>
+                        <p className="text-sm text-muted-foreground mb-4 max-w-xs">No equipment requests have been made yet. Popularity data will appear here once users start making requests.</p>
                         <div className="flex justify-center mt-4">
                             <Link href="/user/browse"><Button>Browse Equipment</Button></Link>
                         </div>
-                    </>
+                    </div>
                 )}
             </CardContent>
         </Card>

@@ -380,19 +380,6 @@ export default function ReportsPage() {
         weeklyData[weekKey].damages++;
       });
 
-      // If we have no data and this is dev mode, create sample data
-      if (Object.keys(weeklyData).length === 0 && process.env.NODE_ENV !== 'production') {
-        console.log('Creating sample weekly trends data for development');
-        const today = new Date();
-        const lastWeek = subDays(today, 7);
-
-        const weekKey1 = `${format(lastWeek, 'yyyy')}-${getISOWeek(lastWeek)}`;
-        const weekKey2 = `${format(today, 'yyyy')}-${getISOWeek(today)}`;
-
-        weeklyData[weekKey1] = { requests: 3, damages: 0 };
-        weeklyData[weekKey2] = { requests: 5, damages: 1 };
-      }
-
       return Object.entries(weeklyData)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([week, data]) => ({
@@ -639,18 +626,6 @@ export default function ReportsPage() {
 
       // Get weekly trends
       const weeklyTrends = await fetchWeeklyTrends();
-
-      // If we have no popular gears and this is dev mode, create sample data
-      if (popularGears.length === 0 && process.env.NODE_ENV !== 'production') {
-        console.log('Creating sample popular gears data for development');
-        popularGears = [
-          { name: 'Sony A7 III', fullName: 'Sony A7 III (Camera)', count: 12 },
-          { name: 'Canon EOS R5', fullName: 'Canon EOS R5 (Camera)', count: 8 },
-          { name: 'Dell XPS 15', fullName: 'Dell XPS 15 (Laptop)', count: 6 },
-          { name: 'Godox SL60W', fullName: 'Godox SL60W (Lighting)', count: 4 },
-          { name: 'Samsung 4K Monitor', fullName: 'Samsung 4K Monitor (Monitor)', count: 3 }
-        ];
-      }
 
       // Update analytics state
       setAnalytics({

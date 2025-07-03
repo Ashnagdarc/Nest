@@ -1,40 +1,9 @@
 /**
  * User Dashboard - Personal Asset Management Interface
- * 
- * This component serves as the main hub for users to interact with the Nest by Eden Oasis
- * asset management system. It provides a comprehensive overview of their asset activity,
- * current checkouts, available equipment, and quick access to core functionality.
- * 
- * Key Features:
- * - Real-time statistics of user's current asset status
- * - Interactive dashboard cards with quick navigation
- * - Live notifications and alerts system
- * - Recent activity feed and upcoming events
- * - Popular equipment recommendations
- * - Overdue item tracking and reminders
- * 
- * Data Sources:
- * - gears: User's checked out equipment and available items
- * - gear_requests: Request history and status tracking
- * - notifications: In-app notification system
- * - profiles: User profile and preference data
- * 
- * Real-time Features:
- * - Live updates via Supabase subscriptions
- * - Automatic refresh of statistics and notifications
- * - Instant feedback on user actions
- * - Push notification support for mobile devices
- * 
- * Architecture:
- * - Client-side component with optimized data fetching
- * - Error boundary integration for graceful error handling
- * - Performance monitoring and analytics integration
- * - Responsive design for all device types
- * 
- * @fileoverview User dashboard with real-time asset management interface
+ * Main hub for users to interact with the Nest by Eden Oasis asset management system.
+ * Provides real-time statistics, notifications, and quick access to core functionality.
  * @author Daniel Chinonso Samuel
  * @version 1.0.0
- * @since 2024-01-15
  */
 
 "use client";
@@ -53,85 +22,39 @@ import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { PopularGearWidget } from "@/components/dashboard/PopularGearWidget";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { LoadingState } from "@/components/ui/loading-state";
-import ErrorBoundary from "@/components/ErrorBoundary";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { logError, logInfo } from '@/lib/logger';
 import { logger } from '@/utils/logger';
 import { useToast } from "@/hooks/use-toast";
 import { createSupabaseSubscription } from "@/utils/supabase-subscription";
+import React from 'react';
 
-/**
- * User Profile Interface
- * 
- * Defines the structure for user profile data retrieved from the database.
- * This interface ensures type safety when working with user information.
- * 
- * @interface Profile
- */
+// User profile data structure
 interface Profile {
-  /** Unique user identifier matching Supabase Auth */
   id: string;
-  /** User's display name */
   full_name: string | null;
-  /** URL to user's avatar image */
   avatar_url: string | null;
-  /** User's department or organizational unit */
   department: string | null;
-  /** User's email address */
   email: string | null;
 }
 
-/**
- * Asset/Gear Interface
- * 
- * Simplified interface for asset data used in dashboard statistics.
- * Focuses on essential fields needed for user dashboard functionality.
- * 
- * @interface Gear
- */
+// Simplified gear interface for dashboard statistics
 interface Gear {
-  /** Unique asset identifier */
   id: string;
-  /** Asset name for display */
   name?: string;
-  /** Return due date (if checked out) */
   due_date: string | null;
-  /** Current asset status */
   status?: string;
 }
 
 /**
- * UserDashboardPage Component
- * 
- * The main user dashboard component that provides a comprehensive interface
- * for asset management activities. This component manages multiple data sources,
- * real-time subscriptions, and user interaction state.
- * 
- * State Management:
- * - User statistics (checked out, overdue, available items)
- * - Notification counts and unread status
- * - Loading states for better user experience
- * - User profile data and preferences
- * - Real-time subscription management
- * 
- * Performance Optimizations:
- * - Efficient data fetching with error handling
- * - Memoized calculations for statistics
- * - Lazy loading of non-critical components
- * - Optimistic UI updates for better perceived performance
- * 
- * @component
- * @returns {JSX.Element} Complete user dashboard interface
+ * Main user dashboard component with real-time asset management interface.
+ * Manages user statistics, notifications, and real-time subscriptions.
  */
 export default function UserDashboardPage() {
   const { toast } = useToast();
   const supabase = createClient();
 
-  /**
-   * User Statistics State
-   * 
-   * Manages the statistical data displayed in dashboard cards.
-   * Each statistic includes count, metadata, and navigation information.
-   */
+  // Dashboard statistics state
   const [userStats, setUserStats] = useState([
     {
       title: 'Checked Out Gears',
@@ -166,28 +89,7 @@ export default function UserDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [userData, setUserData] = useState<Profile | null>(null);
 
-  /**
-   * User Statistics Fetching
-   * 
-   * Retrieves and calculates user-specific statistics including checked out
-   * equipment, overdue items, and personal request history. This function
-   * implements robust error handling and logging for monitoring purposes.
-   * 
-   * Statistics Calculated:
-   * - Checked out gear count (items currently with user)
-   * - Overdue gear count (items past return date)
-   * - User-specific activity metrics
-   * 
-   * Error Handling:
-   * - Graceful handling of database connection issues
-   * - Fallback to cached data when possible
-   * - User-friendly error messages via toast notifications
-   * - Comprehensive logging for debugging
-   * 
-   * @async
-   * @function fetchUserStats
-   * @returns {Promise<void>} Updates component state with calculated statistics
-   */
+  // Fetch user-specific statistics (checked out, overdue items)
   const fetchUserStats = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -196,12 +98,7 @@ export default function UserDashboardPage() {
         return;
       }
 
-      /**
-       * Checked Out Equipment Query
-       * 
-       * Retrieves all equipment currently checked out to the authenticated user.
-       * Filters by user ID and "Checked Out" status for accurate counting.
-       */
+      // Get checked out equipment for current user
       const { data: checkouts, error: checkoutsError } = await supabase
         .from('gears')
         .select('id, name, due_date, status, checked_out_to')
@@ -219,26 +116,20 @@ export default function UserDashboardPage() {
       const now = new Date();
       const checkedOutGears = checkouts || [];
 
-      /**
-       * Overdue Items Calculation
-       * 
-       * Filters checked out items to identify those past their due date.
-       * Uses current timestamp comparison for accurate overdue detection.
-       */
+      // Calculate overdue items
       const overdueGears = checkedOutGears.filter((gear: Gear) =>
         gear.due_date && new Date(gear.due_date) < now
       );
 
       console.log('Overdue gears:', overdueGears);
 
-      // Update statistics state with calculated values
+      // Update statistics
       setUserStats(prev => [
         { ...prev[0], value: checkedOutGears.length },
         { ...prev[1], value: overdueGears.length },
         prev[2] // Available gears updated separately
       ]);
 
-      // Log statistics for monitoring and analytics
       logger.info("Dashboard stats updated", {
         context: 'fetchUserStats',
         checkedOut: checkedOutGears.length,
@@ -253,17 +144,7 @@ export default function UserDashboardPage() {
     }
   };
 
-  /**
-   * Available Equipment Fetching
-   * 
-   * Retrieves count of all equipment available for checkout.
-   * This provides users with an overview of equipment availability
-   * for planning their requests.
-   * 
-   * @async
-   * @function fetchAvailableGears
-   * @returns {Promise<void>} Updates available gear count in state
-   */
+  // Fetch count of available equipment
   const fetchAvailableGears = async () => {
     try {
       const { data, error } = await supabase
@@ -273,7 +154,6 @@ export default function UserDashboardPage() {
 
       if (error) throw error;
 
-      // Update only the available gears statistic
       setUserStats(prev => [
         prev[0],
         prev[1],
@@ -284,23 +164,7 @@ export default function UserDashboardPage() {
     }
   };
 
-  /**
-   * Notification Count Fetching
-   * 
-   * Retrieves the count of unread notifications for the current user.
-   * This function implements comprehensive error handling and logging
-   * to ensure reliable notification functionality.
-   * 
-   * Features:
-   * - Session validation and user verification
-   * - Profile access verification for security
-   * - Detailed error logging for debugging
-   * - Fallback handling for missing data
-   * 
-   * @async
-   * @function fetchNotificationCount
-   * @returns {Promise<void>} Updates notification count state
-   */
+  // Fetch unread notification count
   const fetchNotificationCount = async () => {
     try {
       logInfo('Starting notification count fetch', 'fetchNotificationCount');
@@ -328,12 +192,7 @@ export default function UserDashboardPage() {
         timestamp: new Date().toISOString()
       });
 
-      /**
-       * User Profile Verification
-       * 
-       * Verifies user access by checking their profile before retrieving notifications.
-       * This additional security step ensures proper access control.
-       */
+      // Verify user access
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('id, role, status')
@@ -362,12 +221,7 @@ export default function UserDashboardPage() {
         throw noProfileError;
       }
 
-      /**
-       * Notification Count Query
-       * 
-       * Retrieves count of unread notifications for the verified user.
-       * Uses exact count for accurate notification badge display.
-       */
+      // Get unread notification count
       const { data, error } = await supabase
         .from('notifications')
         .select('id', { count: 'exact' })
@@ -416,10 +270,8 @@ export default function UserDashboardPage() {
         timestamp: new Date().toISOString()
       });
 
-      // Set count to 0 on error to prevent UI issues
       setNotificationCount(0);
 
-      // Show error toast to user
       toast({
         title: "Error",
         description: "Failed to fetch notifications. Please try refreshing the page.",
@@ -431,6 +283,8 @@ export default function UserDashboardPage() {
   useEffect(() => {
     let mounted = true;
     let cleanup: (() => void) | undefined;
+    let dataCache = new Map();
+    let refreshTimeoutId: NodeJS.Timeout | null = null;
 
     const setupDashboard = async () => {
       try {
@@ -471,54 +325,87 @@ export default function UserDashboardPage() {
           setUserData(profile);
         }
 
-        // Initial data fetch with error handling
+        // Parallel data fetching with error handling and caching
         if (mounted) {
           logInfo('Starting parallel data fetches', 'setupDashboard');
-          await Promise.all([
-            fetchUserStats().catch(error => {
-              logError(error, 'setupDashboard', {
-                stage: 'fetchUserStats',
-                userId: session.user.id
-              });
-              return null;
-            }),
-            fetchAvailableGears().catch(error => {
-              logError(error, 'setupDashboard', {
-                stage: 'fetchAvailableGears',
-                userId: session.user.id
-              });
-              return null;
-            }),
-            fetchNotificationCount().catch(error => {
-              logError(error, 'setupDashboard', {
-                stage: 'fetchNotificationCount',
-                userId: session.user.id,
-                error: JSON.stringify(error, Object.getOwnPropertyNames(error))
-              });
-              return null;
-            })
-          ]);
+
+          // Check cache first
+          const cacheKey = `dashboard-${session.user.id}`;
+          const cached = dataCache.get(cacheKey);
+          const cacheAge = cached ? Date.now() - cached.timestamp : Infinity;
+
+          if (cached && cacheAge < 30000) { // 30 second cache
+            setUserStats(prev => [
+              { ...prev[0], value: cached.checkedOut },
+              { ...prev[1], value: cached.overdue },
+              { ...prev[2], value: cached.available }
+            ]);
+            setNotificationCount(cached.notifications);
+          } else {
+            await Promise.all([
+              fetchUserStats().catch(error => {
+                logError(error, 'setupDashboard', {
+                  stage: 'fetchUserStats',
+                  userId: session.user.id
+                });
+                return null;
+              }),
+              fetchAvailableGears().catch(error => {
+                logError(error, 'setupDashboard', {
+                  stage: 'fetchAvailableGears',
+                  userId: session.user.id
+                });
+                return null;
+              }),
+              fetchNotificationCount().catch(error => {
+                logError(error, 'setupDashboard', {
+                  stage: 'fetchNotificationCount',
+                  userId: session.user.id,
+                  error: JSON.stringify(error, Object.getOwnPropertyNames(error))
+                });
+                return null;
+              })
+            ]);
+          }
           logInfo('Parallel data fetches completed', 'setupDashboard');
 
-          // Setup real-time subscriptions
-          const gearsSubscription = createSupabaseSubscription({
+          // Consolidated real-time subscription for better performance
+          const dashboardSubscription = createSupabaseSubscription({
             supabase,
-            channel: 'dashboard-gears-changes',
+            channel: 'user-dashboard-all-changes',
             config: {
               event: '*',
               schema: 'public',
               table: 'gears'
             },
             callback: () => {
-              fetchUserStats();
-              fetchAvailableGears();
+              // Debounced refresh to prevent excessive updates
+              if (refreshTimeoutId) {
+                clearTimeout(refreshTimeoutId);
+              }
+              refreshTimeoutId = setTimeout(() => {
+                fetchUserStats();
+                fetchAvailableGears();
+
+                // Update cache
+                dataCache.set(cacheKey, {
+                  timestamp: Date.now(),
+                  checkedOut: userStats[0].value,
+                  overdue: userStats[1].value,
+                  available: userStats[2].value,
+                  notifications: notificationCount
+                });
+              }, 1000);
             },
             pollingInterval: 30000 // 30 seconds fallback polling
           });
 
-          // Store the cleanup function
           cleanup = () => {
-            gearsSubscription.unsubscribe();
+            dashboardSubscription.unsubscribe();
+            if (refreshTimeoutId) {
+              clearTimeout(refreshTimeoutId);
+            }
+            dataCache.clear();
           };
         }
       } catch (error) {
@@ -624,7 +511,7 @@ export default function UserDashboardPage() {
                 <Card className="h-full">
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <CardTitle className="text-base md:text-lg font-semibold flex items-center gap-2">
-                      <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                      {React.createElement(stat.icon, { className: `h-6 w-6 ${stat.color}` })}
                       {stat.title}
                     </CardTitle>
                     <Badge
