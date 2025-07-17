@@ -5,10 +5,11 @@
  * Handles gear requests, maintenance events, and pending requests separately.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { logger } from '@/utils/logger';
 import { createSupabaseSubscription } from '@/utils/supabase-subscription';
+import { apiGet } from '@/lib/apiClient';
 
 export interface Event {
     id: string;
@@ -32,10 +33,11 @@ interface MaintenanceEvent {
 export function useUpcomingEvents() {
     const supabase = createClient();
     const [events, setEvents] = useState<Event[]>([]);
-    const [pendingEvents, setPendingEvents] = useState<any[]>([]);
+    const [pendingEvents, setPendingEvents] = useState<unknown[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchEvents = async () => {
+    // Memoize fetchEvents to prevent effect from re-running on every render
+    const fetchEvents = useCallback(async () => {
         try {
             setLoading(true);
 
@@ -80,24 +82,20 @@ export function useUpcomingEvents() {
 
             // Get gear details
             const gearIds = [
-                ...(checkoutRequests?.flatMap((req: any) => Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids]).filter(Boolean) || []),
+                ...(checkoutRequests?.flatMap((req: unknown) => Array.isArray((req as { gear_ids?: unknown }).gear_ids) ? (req as { gear_ids: unknown[] }).gear_ids : [(req as { gear_ids?: unknown }).gear_ids]).filter(Boolean) || []),
                 ...(maintenanceEvents?.map((event: MaintenanceEvent) => event.gear_id) || [])
             ].filter(Boolean);
 
             let gearDetails: Record<string, { name: string }> = {};
 
             if (gearIds.length > 0) {
-                const { data: gears, error: gearError } = await supabase
-                    .from('gears')
-                    .select('id, name')
-                    .in('id', gearIds);
-
+                const { data: gears, error: gearError } = await apiGet<{ data: unknown[]; error: string | null }>(`/api/gears?ids=${gearIds.join(',')}`);
                 if (gearError) {
-                    throw gearError;
+                    throw new Error(gearError);
                 }
-
-                gearDetails = (gears || []).reduce((acc: Record<string, { name: string }>, gear: any) => {
-                    acc[gear.id] = { name: gear.name };
+                gearDetails = (gears || []).reduce((acc: Record<string, { name: string }>, gear: unknown) => {
+                    const g = gear as { id: string; name: string };
+                    acc[g.id] = { name: g.name };
                     return acc;
                 }, {} as Record<string, { name: string }>);
             }
@@ -110,43 +108,46 @@ export function useUpcomingEvents() {
             tomorrow.setDate(tomorrow.getDate() + 1);
 
             // Separate pending requests
-            const pendingRequests = (checkoutRequests || []).filter((r: any) => r.status === 'Pending');
+            const pendingRequests = (checkoutRequests || []).filter((r: unknown) => (r as { status?: string }).status === 'Pending');
 
             // Process checkout events
-            const checkoutEvents = (checkoutRequests || []).flatMap((request: any) => {
-                if (request.status === 'CheckedOut') {
-                    const gearIdList = Array.isArray(request.gear_ids) ? request.gear_ids : [request.gear_ids];
-                    return gearIdList.filter(Boolean).map((gearId: string) => {
-                        const eventDate = new Date(request.due_date);
+            const checkoutEvents = (checkoutRequests || []).flatMap((request: unknown) => {
+                const req = request as { id: string; gear_ids: unknown[]; user_id: string; created_at: string; status: string; due_date: string; approved_at?: string };
+                if (req.status === 'CheckedOut') {
+                    const gearIdList = Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids];
+                    return gearIdList.filter(Boolean).map((gearId) => {
+                        const gearIdStr = String(gearId);
+                        const eventDate = new Date(req.due_date);
                         let status: Event["status"] = "upcoming";
                         if (eventDate < now) status = "overdue";
                         else if (eventDate >= today && eventDate < tomorrow) status = "today";
                         return {
-                            id: `${request.id}-${gearId}`,
-                            title: `${gearDetails[gearId]?.name || 'Equipment'} Return`,
-                            date: request.due_date,
-                            type: "return",
+                            id: `${req.id}-${gearIdStr}`,
+                            title: `${gearDetails[gearIdStr]?.name || 'Equipment'} Return`,
+                            date: req.due_date,
+                            type: "return" as const,
                             status,
-                            gear_id: gearId,
+                            gear_id: gearIdStr,
                             user_id: session.user.id
-                        };
+                        } as Event;
                     });
-                } else if (request.status === 'Approved') {
-                    const pickupDate = request.approved_at || request.created_at;
-                    const gearIdList = Array.isArray(request.gear_ids) ? request.gear_ids : [request.gear_ids];
-                    return gearIdList.filter(Boolean).map((gearId: string) => {
+                } else if (req.status === 'Approved') {
+                    const pickupDate = req.approved_at || req.created_at;
+                    const gearIdList = Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids];
+                    return gearIdList.filter(Boolean).map((gearId) => {
+                        const gearIdStr = String(gearId);
                         const eventDate = new Date(pickupDate);
                         let status: Event["status"] = "upcoming";
                         if (eventDate >= today && eventDate < tomorrow) status = "today";
                         return {
-                            id: `${request.id}-${gearId}`,
-                            title: `${gearDetails[gearId]?.name || 'Equipment'} Pickup`,
+                            id: `${req.id}-${gearIdStr}`,
+                            title: `${gearDetails[gearIdStr]?.name || 'Equipment'} Pickup`,
                             date: pickupDate,
-                            type: "pickup",
+                            type: "pickup" as const,
                             status,
-                            gear_id: gearId,
+                            gear_id: gearIdStr,
                             user_id: session.user.id
-                        };
+                        } as Event;
                     });
                 }
                 return [];
@@ -194,11 +195,10 @@ export function useUpcomingEvents() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [supabase]);
 
     useEffect(() => {
         fetchEvents();
-
         // Set up real-time subscriptions
         const subscriptions = [
             createSupabaseSubscription({
@@ -223,11 +223,10 @@ export function useUpcomingEvents() {
                 pollingInterval: 30000
             })
         ];
-
         return () => {
             subscriptions.forEach(sub => sub.unsubscribe());
         };
-    }, []);
+    }, [fetchEvents]);
 
     return {
         events,

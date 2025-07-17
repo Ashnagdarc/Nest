@@ -1,3 +1,5 @@
+'use server';
+
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from '@/types/supabase'; // Import your generated types
@@ -7,7 +9,7 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // Use anon key 
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; // Use service role key for admin actions
 
 // Function to create a server client for server components/actions
-export const createSupabaseServerClient = (isAdmin = false) => {
+export async function createSupabaseServerClient(isAdmin = false) {
   const key = isAdmin ? supabaseServiceRoleKey : supabaseKey;
 
   if (!supabaseUrl || !key) {
@@ -51,6 +53,6 @@ export const createSupabaseServerClient = (isAdmin = false) => {
 }
 
 // Function specifically for creating a client with admin privileges (service role key)
-export const createSupabaseAdminClient = () => {
+export async function createSupabaseAdminClient() {
   return createSupabaseServerClient(true);
 }

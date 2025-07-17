@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast'
 
 // Types
 import type { EnhancedDashboardContextType } from '@/types/dashboard'
+import type { Activity, Notification } from '@/types/api'
 
 // Custom Hooks
 import { useDashboardData } from '@/hooks/dashboard/use-dashboard-data'
@@ -48,7 +49,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         fetchActivities,
         fetchNotifications,
         refreshData
-    } = useDashboardData()
+    } = useDashboardData() // useDashboardData now uses API client for activities
 
     const {
         realTimeEnabled,
@@ -146,7 +147,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         return () => {
             mounted = false
         }
-    }, []) // Empty dependency array - only run once
+    }, [fetchGears, fetchUsers, fetchRequests, fetchActivities, fetchNotifications])
 
     // Real-time setup effect
     useEffect(() => {

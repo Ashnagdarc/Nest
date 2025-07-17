@@ -22,6 +22,7 @@ import { logError as loggerError, logInfo as loggerInfo } from '@/lib/logger';
 import { Checkbox } from "@/components/ui/checkbox";
 import ReactSelect, { MultiValue } from "react-select";
 import { useIsMobile } from '@/hooks/use-mobile';
+import { apiGet } from '@/lib/apiClient';
 
 const localizer = momentLocalizer(moment);
 
@@ -63,7 +64,7 @@ const eventStyleGetter = (event: any) => {
     const status = event.resource?.status?.toLowerCase() || '';
     const isOwnBooking = event.resource?.isOwnBooking;
 
-    let style: React.CSSProperties = {
+    const style: React.CSSProperties = {
         borderRadius: '8px',
         opacity: 1,
         color: 'white',
@@ -207,18 +208,11 @@ export default function UserCalendarPage() {
             }
 
             // Fetch available gear first
-            const { data: gearData, error: gearError } = await supabase
-                .from('gears')
-                .select('id, name, category, status')
-                .eq('status', 'Available')
-                .order('name');
-
+            const { data: gearData, error: gearError } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Available`);
             if (gearError) {
-                console.error("Error fetching gear:", gearError.message);
-                throw new Error(`Failed to fetch gear: ${gearError.message}`);
+                console.error("Error fetching gear:", gearError);
+                throw new Error(`Failed to fetch gear: ${gearError}`);
             }
-
-            console.log("Fetched available gear:", gearData);
             setAvailableGear(gearData || []);
 
             // Then fetch calendar bookings

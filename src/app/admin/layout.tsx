@@ -1,6 +1,7 @@
+// Admin layout for Nest by Eden Oasis. Provides sidebar navigation and user context for admin pages.
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -21,16 +22,11 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Home, Package, ListChecks, UserCog, Upload, BarChart2, Settings, Bell, LogOut, PanelLeft, Calendar } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-
 import { createClient } from '@/lib/supabase/client';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { AuthChangeEvent, Session } from '@supabase/supabase-js';
-import { useToast } from "@/hooks/use-toast";
-import type { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { DashboardHeader } from '@/components/DashboardHeader';
-import { useFCM } from '@/hooks/useFCM';
 
 const adminNavItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: Home },
@@ -41,21 +37,18 @@ const adminNavItems = [
   { href: '/admin/calendar', label: 'Book Calendar', icon: Calendar },
   { href: '/admin/announcements', label: 'Announcements', icon: Bell },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart2 },
-  { href: '/admin/notifications', label: 'Notifications', icon: Bell }, // Assuming notifications exist
+  { href: '/admin/notifications', label: 'Notifications', icon: Bell },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
-
-type Profile = any;
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
-  const { profile: adminUser, isLoading: isLoadingUser, refreshProfile } = useUserProfile();
+  const { profile: adminUser, isLoading: isLoadingUser } = useUserProfile();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
-  const { toast } = useToast();
 
   // Improved toggle function for hamburger and sidebar sync
   const toggleSidebar = () => {
@@ -73,9 +66,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : 'A';
-
-  // Add push notification registration
-  useFCM(adminUser?.id ?? '');
 
   return (
     <SidebarProvider defaultOpen={!isMobile}>

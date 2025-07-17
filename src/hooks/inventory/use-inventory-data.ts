@@ -10,6 +10,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from "@/hooks/use-toast";
+import { apiGet } from '@/lib/apiClient';
 
 interface InventoryItem {
     id: string;
@@ -24,7 +25,6 @@ interface InventoryItem {
 }
 
 export function useInventoryData() {
-    const supabase = createClient();
     const { toast } = useToast();
 
     // State management
@@ -46,41 +46,20 @@ export function useInventoryData() {
             setIsLoading(true);
             setError(null);
 
-            // Check if gears table exists
-            const { data: tableCheck, error: tableError } = await supabase
-                .from('gears')
-                .select('count')
-                .limit(1);
+            // Build query params
+            const params = new URLSearchParams();
+            if (filter !== 'all') params.append('status', filter);
+            if (categoryFilter !== 'all') params.append('category', categoryFilter);
 
-            if (tableError) {
-                throw new Error(`Database table not accessible: ${tableError.message}`);
-            }
-
-            // Build query with filters
-            let query = supabase.from('gears').select('*');
-
-            // Apply status filter
-            if (filter !== 'all') {
-                query = query.eq('status', filter);
-            }
-
-            // Apply category filter
-            if (categoryFilter !== 'all') {
-                query = query.eq('category', categoryFilter);
-            }
-
-            // Execute query
-            const { data, error: fetchError } = await query.order('name');
-
-            if (fetchError) {
-                throw fetchError;
-            }
+            // Fetch inventory from API
+            const { data, error } = await apiGet<{ data: InventoryItem[]; error: string | null }>(`/api/gears?${params.toString()}`);
+            if (error) throw new Error(error);
 
             setInventory(data || []);
 
             // Extract unique categories for filter
             const uniqueCategories = Array.from(
-                new Set((data || []).map(item => item.category).filter(Boolean))
+                new Set((data || []).map(item => item.category).filter((c): c is string => Boolean(c)))
             ).sort();
             setCategories(uniqueCategories);
 

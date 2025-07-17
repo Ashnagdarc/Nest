@@ -4,37 +4,53 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BellRing, Trash2, CheckCheck, Filter, Bell, ExternalLink, Settings, CheckCircle, Clock, XCircle, Package, RotateCcw, AlertCircle } from 'lucide-react';
+import { BellRing, Trash2, CheckCheck, ExternalLink, Settings, CheckCircle, Clock, XCircle, Package, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { useRouter } from 'next/navigation';
-import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { List } from "lucide-react";
+import { apiGet, apiPost, apiPut } from '@/lib/apiClient';
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+type ApiNotification = {
+  id: string;
+  type: string;
+  message?: string;
+  title?: string;
+  content?: string;
+  created_at: string;
+  is_read: boolean;
+  link?: string;
+  metadata?: Record<string, unknown>;
+};
 
 type Notification = {
   id: string;
   type: string;
+  title?: string;
   content: string;
   timestamp: Date;
   read: boolean;
   link?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 };
+
+function isRequestMetadata(meta: unknown): meta is { requestId: string } {
+  return (
+    typeof meta === 'object' &&
+    meta !== null &&
+    'requestId' in (meta as Record<string, unknown>) &&
+    typeof (meta as Record<string, unknown>).requestId === 'string'
+  );
+}
 
 export default function AdminNotificationsPage() {
   const supabase = createClient();
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
-  const [activeTab, setActiveTab] = useState('all');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [soundVolume, setSoundVolume] = useState(80);
   const [soundType, setSoundType] = useState('bell');
@@ -72,73 +88,22 @@ export default function AdminNotificationsPage() {
 
   async function fetchNotifications() {
     try {
-      // Get current user
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('No user found');
+      const userId = user?.id || '';
+      // Use centralized API client and RESTful endpoint
+      const { data, error } = await apiGet<{ data: ApiNotification[]; error: string | null }>(`/api/notifications${userId ? `?userId=${userId}` : ''}`);
+      if (error) {
+        console.error('Error fetching notifications:', error);
         return;
       }
-
-      // Try using the RPC function first
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_notifications', {
-        p_limit: 100,
-        p_offset: 0
-      });
-
-      if (!rpcError && rpcData) {
-        setNotifications(rpcData.map((n: any) => ({
-          id: n.id,
-          type: n.type,
-          content: n.message || n.content,
-          timestamp: new Date(n.created_at),
-          read: n.is_read,
-          link: n.link,
-          metadata: n.metadata
-        })));
-        return;
-      }
-
-      console.log('RPC failed, falling back to direct fetch:', rpcError);
-
-      // Fallback: Fetch notifications and read status directly
-      const [notificationsResult, readNotificationsResult] = await Promise.all([
-        supabase
-          .from('notifications')
-          .select('*')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('read_notifications')
-          .select('notification_id')
-          .eq('user_id', user.id)
-      ]);
-
-      if (notificationsResult.error) {
-        console.error('Error fetching notifications:', notificationsResult.error);
-        return;
-      }
-
-      // Create a Set of read notification IDs for faster lookup
-      const readNotifications = readNotificationsResult.data as Array<{ notification_id: string }> || [];
-      const readNotificationIds = new Set(readNotifications.map(rn => rn.notification_id));
-
-      // Map notifications with read status from both tables
-      setNotifications(notificationsResult.data.map((n: {
-        id: string;
-        type: string;
-        message?: string;
-        content?: string;
-        created_at: string;
-        read: boolean;
-        link?: string;
-        metadata?: any;
-      }) => ({
+      setNotifications((data || []).map((n) => ({
         id: n.id,
         type: n.type,
-        content: n.message || n.content,
+        content: n.message || n.title || "",
         timestamp: new Date(n.created_at),
-        read: n.read || readNotificationIds.has(n.id),
+        read: n.is_read,
         link: n.link,
-        metadata: n.metadata
+        metadata: n.metadata ?? {},
       })));
     } catch (error) {
       console.error('Error in fetchNotifications:', error);
@@ -151,18 +116,7 @@ export default function AdminNotificationsPage() {
       .channel('admin-notifications')
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications' },
-        (payload: {
-          new: {
-            id: string;
-            type: string;
-            message?: string;
-            content?: string;
-            created_at: string;
-            read: boolean;
-            link?: string;
-            metadata?: any;
-          }
-        }) => {
+        (payload: { new: ApiNotification }) => {
           console.log('New notification:', payload);
           fetchNotifications();
 
@@ -179,166 +133,33 @@ export default function AdminNotificationsPage() {
   }, [supabase, soundEnabled]);
 
   const filteredNotifications = notifications.filter(n => {
-    const matchesFilter = filter === 'all' || (filter === 'unread' && !n.read);
-    const matchesTab = activeTab === 'all' ||
-      (activeTab === 'gear_requests' && n.type === 'new_request') ||
-      (activeTab === 'system' && (n.type === 'system' || n.type === 'info' || n.type === 'warning'));
-    return matchesFilter && matchesTab;
+    return filter === 'all' || (filter === 'unread' && !n.read);
   });
 
   const markAsRead = async (id: string) => {
     try {
-      // Stop any ongoing sound for this notification
-      if (soundRef.current) {
-        soundRef.current.pause();
-        soundRef.current.currentTime = 0;
+      setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
+      const { error } = await apiPut<{ data: Notification; error: string | null }>(`/api/notifications/${id}`, { is_read: true });
+      if (error) {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: false } : n));
+        console.error('Error updating notification status:', error);
       }
-
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('No user found');
-        return;
-      }
-
-      // Update UI immediately for better UX
-      setNotifications(prev =>
-        prev.map(n => (n.id === id ? { ...n, read: true } : n))
-      );
-
-      // Also insert into read_notifications first to ensure the relationship is recorded
-      const { error: readError } = await supabase
-        .from('read_notifications')
-        .upsert(
-          { user_id: user.id, notification_id: id },
-          { onConflict: 'user_id,notification_id' }
-        );
-
-      if (readError) {
-        console.error('Error updating read_notifications:', readError);
-      }
-
-      // Update notification as read using direct update
-      // Try using the stored procedure first
-      const { error: procError } = await supabase.rpc('mark_notification_as_read', {
-        notification_id: id
-      });
-
-      if (procError) {
-        console.log('Stored procedure failed, falling back to direct update:', procError);
-
-        // Fallback to direct update
-        const { error: updateError } = await supabase
-          .from('notifications')
-          .update({
-            is_read: true,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', id);
-
-        if (updateError) {
-          console.error('Error updating notification status:', {
-            error: updateError,
-            code: updateError.code,
-            details: updateError.details,
-            message: updateError.message
-          });
-
-          // Revert UI state if the update failed
-          setNotifications(prev =>
-            prev.map(n => n.id === id ? { ...n, read: false } : n)
-          );
-          return;
-        }
-      }
-
-      // Log activity
-      await supabase.from('admin_activity_log').insert({
-        admin_id: user.id,
-        activity_type: 'mark_notification_read',
-        details: { notification_id: id }
-      });
-
     } catch (error) {
-      console.error('Error in markAsRead:', error);
-      // Revert UI state
-      setNotifications(prev =>
-        prev.map(n => n.id === id ? { ...n, read: false } : n)
-      );
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: false } : n));
+      console.error('Unexpected error in markAsRead:', error);
     }
   };
 
   const markAllAsRead = async () => {
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('No user found');
+      const { error } = await apiPost<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
+      if (error) {
+        console.error('Error marking all as read:', error);
         return;
       }
-
-      // Update UI immediately
-      setNotifications(prev =>
-        prev.map(n => ({ ...n, read: true }))
-      );
-
-      // Try using the stored procedure first
-      const { error: procError } = await supabase.rpc('mark_all_notifications_as_read');
-
-      if (procError) {
-        console.log('Stored procedure failed, falling back to direct update:', procError);
-
-        // Fallback to direct update
-        const { error: updateError } = await supabase
-          .from('notifications')
-          .update({
-            is_read: true,
-            updated_at: new Date().toISOString()
-          })
-          .eq('is_read', false);
-
-        if (updateError) {
-          console.error('Error marking all as read:', {
-            error: updateError,
-            code: updateError.code,
-            details: updateError.details,
-            message: updateError.message
-          });
-          // Refresh notifications to get current state
-          fetchNotifications();
-          return;
-        }
-      }
-
-      // Also update the read_notifications table
-      const unreadNotifications = notifications.filter(n => !n.read);
-      if (unreadNotifications.length > 0) {
-        const { error: readError } = await supabase
-          .from('read_notifications')
-          .upsert(
-            unreadNotifications.map(n => ({
-              user_id: user.id,
-              notification_id: n.id
-            })),
-            { onConflict: 'user_id,notification_id' }
-          );
-
-        if (readError) {
-          console.error('Error updating read_notifications:', readError);
-        }
-      }
-
-      // Log activity
-      await supabase.from('admin_activity_log').insert({
-        admin_id: user.id,
-        activity_type: 'mark_all_notifications_read',
-        details: { count: notifications.filter(n => !n.read).length }
-      });
-
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (error) {
-      console.error('Error in markAllAsRead:', error);
-      // Refresh notifications to get current state
-      fetchNotifications();
+      console.error('Unexpected error in markAllAsRead:', error);
     }
   };
 
@@ -354,14 +175,10 @@ export default function AdminNotificationsPage() {
   };
 
   const handleViewRequest = (notification: Notification) => {
-    // If it's a gear request notification with metadata containing requestId
-    if (notification.type === 'new_request' && notification.metadata?.requestId) {
-      // Navigate to the manage requests page
+    if (notification.type === 'new_request' && isRequestMetadata(notification.metadata)) {
       router.push(`/admin/manage-requests?request=${notification.metadata.requestId}`);
-      // Mark as read when navigating
       markAsRead(notification.id);
     } else if (notification.link) {
-      // For other notifications with links
       window.open(notification.link, '_blank');
       markAsRead(notification.id);
     }
@@ -379,20 +196,6 @@ export default function AdminNotificationsPage() {
       case 'info': return <BellRing className="h-4 w-4 text-blue-500" />;
       case 'warning': return <AlertCircle className="h-4 w-4 text-yellow-500" />;
       default: return <BellRing className="h-4 w-4 text-muted-foreground" />;
-    }
-  };
-
-  const getStatusBadge = (type: string) => {
-    switch (type) {
-      case 'new_request': return <Badge variant="outline" className="bg-primary/10"><Clock className="mr-1 h-3 w-3" /> New Request</Badge>;
-      case 'request_approved': return <Badge variant="default" className="bg-green-500"><CheckCircle className="mr-1 h-3 w-3" /> Approved</Badge>;
-      case 'request_rejected': return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" /> Rejected</Badge>;
-      case 'gear_checkin': return <Badge variant="outline" className="bg-green-500/10 text-green-500"><Package className="mr-1 h-3 w-3" /> Checked In</Badge>;
-      case 'gear_checkout': return <Badge variant="outline" className="bg-blue-500/10 text-blue-500"><Package className="mr-1 h-3 w-3" /> Checked Out</Badge>;
-      case 'overdue': return <Badge variant="destructive"><AlertCircle className="mr-1 h-3 w-3" /> Overdue</Badge>;
-      case 'warning': return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500"><AlertCircle className="mr-1 h-3 w-3" /> Warning</Badge>;
-      case 'info': return <Badge variant="outline" className="bg-blue-500/10 text-blue-500"><BellRing className="mr-1 h-3 w-3" /> Info</Badge>;
-      default: return <Badge variant="outline"><BellRing className="mr-1 h-3 w-3" /> {type}</Badge>;
     }
   };
 
@@ -414,17 +217,6 @@ export default function AdminNotificationsPage() {
     }
   };
 
-  // Test notification sound
-  const playTestSound = () => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(e => console.error("Error playing test sound:", e));
-    }
-  };
-
-  // Filter counts for badges
-  const gearRequestCount = notifications.filter(n => n.type === 'new_request' && !n.read).length;
-  const systemCount = notifications.filter(n => (n.type === 'system' || n.type === 'info' || n.type === 'warning') && !n.read).length;
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
@@ -476,63 +268,6 @@ export default function AdminNotificationsPage() {
         </div>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">System Alerts</p>
-                <h3 className="text-2xl font-bold mt-1">
-                  {systemCount}
-                </h3>
-              </div>
-              <div className="p-3 bg-blue-100 rounded-full">
-                <Settings className="h-5 w-5 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Gear Alerts</p>
-                <h3 className="text-2xl font-bold mt-1">
-                  {notifications.filter(n =>
-                    (n.type === 'gear_checkin' || n.type === 'gear_checkout' || n.type === 'overdue') &&
-                    !n.read
-                  ).length}
-                </h3>
-              </div>
-              <div className="p-3 bg-green-100 rounded-full">
-                <Package className="h-5 w-5 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Request Alerts</p>
-                <h3 className="text-2xl font-bold mt-1">
-                  {notifications.filter(n =>
-                    n.type === 'new_request' &&
-                    !n.read
-                  ).length}
-                </h3>
-              </div>
-              <div className="p-3 bg-orange-100 rounded-full">
-                <Clock className="h-5 w-5 text-orange-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Main Content */}
       <Card>
         <CardHeader>
@@ -567,12 +302,16 @@ export default function AdminNotificationsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className={cn(
-                              "font-medium line-clamp-2",
-                              !notification.read && "text-primary"
-                            )}>
-                              {notification.content}
-                            </p>
+                            {notification.title && (
+                              <div className="font-semibold text-base mb-1 truncate">
+                                {notification.title}
+                              </div>
+                            )}
+                            {notification.content && (
+                              <div className="text-sm text-muted-foreground whitespace-pre-line">
+                                {notification.content}
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             {!notification.read && (

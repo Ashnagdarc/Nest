@@ -378,7 +378,7 @@ export async function generatePdfReport(report: WeeklyUsageReport, title: string
         }
     });
 
-    currentY = (doc as any).lastAutoTable?.finalY + 50 || currentY + 300;
+    currentY = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY + 50 || currentY + 300;
 
     // === STRATEGIC RECOMMENDATIONS ===
     doc.setTextColor(DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2]);

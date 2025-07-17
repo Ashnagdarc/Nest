@@ -19,7 +19,7 @@ export function useDashboardRealtime() {
     })
 
     // Refs for cleanup
-    const subscriptionsRef = useRef<any[]>([])
+    const subscriptionsRef = useRef<unknown[]>([])
     const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
     // Setup real-time subscriptions

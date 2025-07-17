@@ -21,6 +21,7 @@ import { useRouter } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-mobile'; // Add this import for responsive handling
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
+import { apiGet } from '@/lib/apiClient';
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -174,16 +175,11 @@ export default function AdminSettingsPage() {
             setAvatarUrl(avatarUrlFromMetadata);
             console.log("AdminSettings: Avatar URL from metadata:", avatarUrlFromMetadata);
 
-            console.log("AdminSettings: Fetching profile for ID:", user.id);
-            // Fetch admin profile from Supabase
-            const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .single();
+            // Fetch admin profile from API
+            const { data: profileData, error: profileError } = await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/profile`);
 
             if (profileError) {
-                console.error("AdminSettings: Error fetching admin profile:", profileError.message);
+                console.error("AdminSettings: Error fetching admin profile:", profileError);
                 toast({ title: "Error", description: "Could not load admin profile data.", variant: "destructive" });
                 setAdminUser(null); // Indicate profile fetch failed
             } else if (profileData) {
@@ -206,11 +202,10 @@ export default function AdminSettingsPage() {
                     return; // Stop further execution for non-admins
                 }
             } else {
-                console.error("AdminSettings: Admin profile document not found for UID:", user.id);
+                console.error("AdminSettings: Admin profile document not found");
                 toast({ title: "Error", description: "Admin profile not found.", variant: "destructive" });
                 setAdminUser(null);
             }
-
 
             // Fetch app settings from Supabase 'app_settings' table
             try {
@@ -248,18 +243,11 @@ export default function AdminSettingsPage() {
                 }
             } catch (settingsError) {
                 console.error("AdminSettings: Error processing app settings:", settingsError);
-                toast({ title: "Warning", description: "Could not load all app settings.", variant: "default" });
-                setCurrentLogoUrl(undefined);
             }
-
-            brandingForm.reset({ logo: undefined }); // Clear file input
             setIsLoadingUser(false);
-            console.log("AdminSettings: Initial data fetch complete.");
         };
-
         fetchData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Rerun only on mount
+    }, []);
 
     // --- Handlers ---
 

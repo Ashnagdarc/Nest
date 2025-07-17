@@ -4,7 +4,7 @@
  * Handles consistent date formatting for events with relative time display.
  */
 
-import { format, isToday, isThisWeek, isAfter, addDays } from 'date-fns';
+import { format, isToday, isThisWeek } from 'date-fns';
 import { Event } from "@/hooks/user-dashboard/use-upcoming-events";
 
 interface EventDateFormatterProps {
@@ -17,7 +17,6 @@ export function EventDateFormatter({ date, status, className = "" }: EventDateFo
     const formatDate = (dateStr: string) => {
         try {
             const eventDate = new Date(dateStr);
-            const now = new Date();
 
             if (isToday(eventDate)) {
                 return `Today at ${format(eventDate, 'h:mm a')}`;

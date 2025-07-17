@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
@@ -100,6 +101,12 @@ const nextConfig = {
         hostname: 'lkgxzrvcozfxydpmbtqq.supabase.co',
         port: '',
         pathname: '/storage/v1/object/public/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'ui-avatars.com',
+        port: '',
+        pathname: '/api/**',
       },
     ],
   },

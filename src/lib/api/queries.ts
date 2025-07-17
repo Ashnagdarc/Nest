@@ -7,19 +7,19 @@
  */
 
 import { createClient } from '@/lib/supabase/client';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createClientServerClient } from '@/lib/supabase/client-server';
 import type { Database } from '@/types/supabase';
+import { apiGet } from '@/lib/apiClient';
 
 type Tables = Database['public']['Tables'];
 type Gear = Tables['gears']['Row'];
 type Profile = Tables['profiles']['Row'];
-type GearRequest = Tables['gear_requests']['Row'];
 
 // Client for browser/client-side queries
 const getClient = () => createClient();
 
-// Server client for server-side queries
-const getServerClient = () => createSupabaseServerClient();
+// Server client for server-side queries (client-safe version)
+const getServerClient = () => createClientServerClient();
 
 /**
  * Standardized response format for all database queries
@@ -108,89 +108,38 @@ async function executeQuery<T>(
  */
 export const gearQueries = {
     // Get available gears with minimal required fields
-    getAvailableGears: async (isServer = false) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        return await supabase
-            .from('gears')
-            .select(`
-        id,
-        name,
-        description,
-        category,
-        status,
-        condition,
-        image_url,
-        serial,
-        updated_at
-      `)
-            .eq('status', 'Available')
-            .order('name');
+    getAvailableGears: async () => {
+        return await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Available`);
     },
 
     // Get gear with full details (for editing/viewing)
-    getGearById: async (id: string, isServer = false) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        return await supabase
-            .from('gears')
-            .select('*')
-            .eq('id', id)
-            .single();
+    getGearById: async (id: string) => {
+        return await apiGet<{ data: Gear | null; error: string | null }>(`/api/gears/${id}`);
     },
 
     // Get gears with pagination for admin management
     getGearsWithPagination: async (
         page = 1,
         pageSize = 50,
-        filters?: { status?: string; category?: string; search?: string },
-        isServer = false
-    ) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        let query = supabase
-            .from('gears')
-            .select(`
-        id,
-        name,
-        description,
-        category,
-        status,
-        condition,
-        serial,
-        image_url,
-        created_at,
-        updated_at
-      `, { count: 'exact' });
-
-        // Apply filters
-        if (filters?.status && filters.status !== 'all') {
-            query = query.eq('status', filters.status);
-        }
-        if (filters?.category && filters.category !== 'all') {
-            query = query.eq('category', filters.category);
-        }
-        if (filters?.search) {
-            query = query.or(`name.ilike.%${filters.search}%,serial.ilike.%${filters.search}%`);
-        }
-
-        // Apply pagination
-        const from = (page - 1) * pageSize;
-        const to = from + pageSize - 1;
-
-        return await query
-            .range(from, to)
-            .order('created_at', { ascending: false });
+        filters?: { status?: string; category?: string; search?: string }
+    ): Promise<{ data: Gear[]; total: number; error: string | null }> => {
+        const params = new URLSearchParams();
+        if (filters?.status && filters.status !== 'all') params.append('status', filters.status);
+        if (filters?.category && filters.category !== 'all') params.append('category', filters.category);
+        if (filters?.search) params.append('search', filters.search);
+        params.append('page', String(page));
+        params.append('pageSize', String(pageSize));
+        const response = await apiGet<{ data: Gear[]; total?: number; error: string | null }>(`/api/gears?${params.toString()}`);
+        return {
+            data: response.data || [],
+            total: typeof response.total === 'number' ? response.total : 0,
+            error: response.error || null
+        };
     },
 
     // Get gear utilization stats (optimized for dashboard)
-    getGearUtilizationStats: async (isServer = false) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        return await supabase
-            .from('gears')
-            .select('category, status')
-            .not('status', 'is', null);
+    getGearUtilizationStats: async () => {
+        return await apiGet<{ data: { category: string; status: string }[]; error: string | null }>(`/api/gears?fields=category,status`);
     }
 };
 
@@ -200,21 +149,7 @@ export const gearQueries = {
 export const profileQueries = {
     // Get user profile with minimal fields
     getUserProfile: async (userId: string, isServer = false) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        return await supabase
-            .from('profiles')
-            .select(`
-        id,
-        email,
-        full_name,
-        role,
-        department,
-        avatar_url,
-        notification_preferences
-      `)
-            .eq('id', userId)
-            .single();
+        return await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/${userId}`);
     },
 
     // Get all users for admin management (paginated)
@@ -224,45 +159,16 @@ export const profileQueries = {
         search?: string,
         isServer = false
     ) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        let query = supabase
-            .from('profiles')
-            .select(`
-        id,
-        email,
-        full_name,
-        role,
-        department,
-        created_at,
-        last_sign_in_at
-      `, { count: 'exact' });
-
-        if (search) {
-            query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
-        }
-
-        const from = (page - 1) * pageSize;
-        const to = from + pageSize - 1;
-
-        return await query
-            .range(from, to)
-            .order('created_at', { ascending: false });
+        const params = new URLSearchParams();
+        params.append('page', String(page));
+        params.append('pageSize', String(pageSize));
+        if (search) params.append('search', search);
+        return await apiGet<{ data: Profile[]; error: string | null }>(`/api/users?${params.toString()}`);
     },
 
     // Get admin users for notifications
     getAdminUsers: async (isServer = false) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        return await supabase
-            .from('profiles')
-            .select(`
-        id,
-        email,
-        full_name,
-        notification_preferences
-      `)
-            .eq('role', 'admin');
+        return await apiGet<{ data: Profile[]; error: string | null }>(`/api/users?role=admin`);
     }
 };
 
@@ -276,77 +182,36 @@ export const requestQueries = {
             status?: string;
             userId?: string;
             dateRange?: { from: Date; to: Date };
-        },
-        isServer = false
+        }
     ) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        let query = supabase
-            .from('gear_requests')
-            .select(`
-        id,
-        status,
-        reason,
-        destination,
-        expected_duration,
-        gear_ids,
-        created_at,
-        updated_at,
-        due_date,
-        checkout_date,
-        profiles:user_id (
-          id,
-          full_name,
-          email
-        )
-      `);
+        const params = new URLSearchParams();
 
         // Apply filters
         if (filters?.status && filters.status !== 'all') {
-            query = query.eq('status', filters.status);
+            params.append('status', filters.status);
         }
         if (filters?.userId) {
-            query = query.eq('user_id', filters.userId);
+            params.append('userId', filters.userId);
         }
         if (filters?.dateRange) {
-            query = query
-                .gte('created_at', filters.dateRange.from.toISOString())
-                .lte('created_at', filters.dateRange.to.toISOString());
+            params.append('from', filters.dateRange.from.toISOString());
+            params.append('to', filters.dateRange.to.toISOString());
         }
 
-        return await query.order('created_at', { ascending: false });
+        // Use centralized API client and RESTful endpoint
+        return await apiGet<{ data: unknown[]; error: string | null }>(`/api/requests?${params.toString()}`);
     },
 
     // Get request statistics for dashboard
     getRequestStats: async (isServer = false) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        return await supabase
-            .from('gear_requests')
-            .select('id, status, due_date, checkout_date, created_at');
+        // Use centralized API client and RESTful endpoint
+        return await apiGet<{ data: unknown[]; error: string | null }>(`/api/requests?fields=id,status,due_date,checkout_date,created_at`);
     },
 
     // Get user's own requests
     getUserRequests: async (userId: string, isServer = false) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        return await supabase
-            .from('gear_requests')
-            .select(`
-        id,
-        status,
-        reason,
-        destination,
-        expected_duration,
-        gear_ids,
-        created_at,
-        updated_at,
-        due_date,
-        checkout_date,
-        admin_notes
-      `)
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
+        // Use centralized API client and RESTful endpoint
+        return await apiGet<{ data: unknown[]; error: string | null }>(`/api/requests?userId=${userId}`);
     }
 };
 
@@ -361,37 +226,21 @@ export const notificationQueries = {
         pageSize = 20,
         isServer = false
     ) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        const from = (page - 1) * pageSize;
-        const to = from + pageSize - 1;
-
-        return await supabase
-            .from('notifications')
-            .select(`
-        id,
-        title,
-        content,
-        type,
-        is_read,
-        created_at
-      `)
-            .eq('user_id', userId)
-            .range(from, to)
-            .order('created_at', { ascending: false });
+        const params = new URLSearchParams();
+        params.append('userId', userId);
+        params.append('page', String(page));
+        params.append('pageSize', String(pageSize));
+        return await apiGet<{ data: unknown[]; error: string | null }>(`/api/notifications?${params.toString()}`);
     },
 
     // Get unread notification count
     getUnreadCount: async (userId: string, isServer = false) => {
-        const supabase = isServer ? getServerClient() : getClient();
-
-        const { count } = await supabase
-            .from('notifications')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', userId)
-            .eq('is_read', false);
-
-        return count || 0;
+        const params = new URLSearchParams();
+        params.append('userId', userId);
+        params.append('unreadOnly', 'true');
+        const { data, error } = await apiGet<{ data: unknown[]; error: string | null }>(`/api/notifications?${params.toString()}`);
+        if (error) return 0;
+        return data ? data.length : 0;
     }
 };
 
@@ -406,7 +255,7 @@ export const batchQueries = {
                 profileQueries.getUserProfile(userId, isServer),
                 notificationQueries.getUserNotifications(userId, 1, 5, isServer),
                 notificationQueries.getUnreadCount(userId, isServer),
-                gearQueries.getGearUtilizationStats(isServer),
+                gearQueries.getGearUtilizationStats(),
                 requestQueries.getRequestStats(isServer)
             ]);
 
@@ -434,6 +283,296 @@ export const batchQueries = {
         }
     }
 };
+
+// Announcement API functions
+export async function fetchAnnouncements({
+    limit = 10,
+    page = 1,
+    userId = null
+}: {
+    limit?: number;
+    page?: number;
+    userId?: string | null;
+} = {}) {
+    try {
+        const params = new URLSearchParams();
+        params.append('limit', String(limit));
+        params.append('page', String(page));
+        if (userId) params.append('userId', userId);
+
+        const response = await apiGet<{
+            announcements: unknown[];
+            count: number;
+            error: string | null;
+        }>(`/api/announcements?${params.toString()}`);
+
+        return response;
+    } catch (error) {
+        console.error('Error fetching announcements:', error);
+        return {
+            announcements: [],
+            count: 0,
+            error: error instanceof Error ? error.message : 'Unknown error fetching announcements'
+        };
+    }
+}
+
+export async function createAnnouncement({
+    title,
+    content,
+    author_id
+}: {
+    title: string;
+    content: string;
+    author_id: string;
+}) {
+    try {
+        const response = await fetch('/api/announcements', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ title, content, author_id }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error creating announcement: ${response.statusText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to create announcement:', error);
+        throw error;
+    }
+}
+
+// Check-in API functions
+export async function fetchCheckins({
+    limit = 10,
+    page = 1,
+    userId = null,
+    status = null
+}: {
+    limit?: number;
+    page?: number;
+    userId?: string | null;
+    status?: string | null;
+} = {}) {
+    try {
+        const params = new URLSearchParams();
+        params.append('limit', limit.toString());
+        params.append('page', page.toString());
+        if (userId) params.append('userId', userId);
+        if (status) params.append('status', status);
+
+        const response = await fetch(`/api/checkins?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error fetching check-ins: ${response.statusText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to fetch check-ins:', error);
+        throw error;
+    }
+}
+
+export async function createCheckin({
+    user_id,
+    gear_id,
+    condition,
+    notes
+}: {
+    user_id: string;
+    gear_id: string;
+    condition?: string;
+    notes?: string;
+}) {
+    try {
+        const response = await fetch('/api/checkins', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ user_id, gear_id, condition, notes }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error creating check-in: ${response.statusText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to create check-in:', error);
+        throw error;
+    }
+}
+
+// Gear Utilization API function
+export async function fetchGearUtilization(days = 30) {
+    try {
+        const params = new URLSearchParams();
+        params.append('days', days.toString());
+
+        const response = await fetch(`/api/gear/utilization?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error fetching gear utilization: ${response.statusText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to fetch gear utilization:', error);
+        throw error;
+    }
+}
+
+// Reports API functions
+export async function fetchWeeklyReport(days = 7) {
+    try {
+        const params = new URLSearchParams();
+        params.append('days', days.toString());
+
+        const response = await fetch(`/api/reports/weekly?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error fetching weekly report: ${response.statusText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to fetch weekly report:', error);
+        throw error;
+    }
+}
+
+// Calendar Bookings API functions
+export async function fetchCalendarBookings({
+    startDate,
+    endDate,
+    userId = null,
+    gearId = null
+}: {
+    startDate: string;
+    endDate: string;
+    userId?: string | null;
+    gearId?: string | null;
+}) {
+    try {
+        const params = new URLSearchParams();
+        params.append('startDate', startDate);
+        params.append('endDate', endDate);
+        if (userId) params.append('userId', userId);
+        if (gearId) params.append('gearId', gearId);
+
+        const response = await fetch(`/api/calendar/bookings?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error fetching calendar bookings: ${response.statusText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to fetch calendar bookings:', error);
+        throw error;
+    }
+}
+
+export async function createCalendarBooking({
+    user_id,
+    gear_id,
+    title,
+    start_date,
+    end_date,
+    notes
+}: {
+    user_id: string;
+    gear_id: string;
+    title: string;
+    start_date: string;
+    end_date: string;
+    notes?: string;
+}) {
+    try {
+        const response = await fetch('/api/calendar/bookings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ user_id, gear_id, title, start_date, end_date, notes }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error creating calendar booking: ${response.statusText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to create calendar booking:', error);
+        throw error;
+    }
+}
+
+// Activities API functions
+export async function fetchActivities({
+    limit = 10,
+    page = 1,
+    userId = null,
+    type = null,
+    days = 30
+}: {
+    limit?: number;
+    page?: number;
+    userId?: string | null;
+    type?: string | null;
+    days?: number;
+} = {}) {
+    try {
+        const params = new URLSearchParams();
+        params.append('limit', limit.toString());
+        params.append('page', page.toString());
+        params.append('days', days.toString());
+        if (userId) params.append('userId', userId);
+        if (type) params.append('type', type);
+
+        const response = await fetch(`/api/activities?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error fetching activities: ${response.statusText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to fetch activities:', error);
+        throw error;
+    }
+}
 
 export default {
     gear: gearQueries,

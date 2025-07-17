@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PlusCircle, Filter, Edit, Trash2, Download, Upload, CheckSquare, Square, Wrench, Camera, Video, Mic, Speaker, Smartphone, MonitorSmartphone, Monitor, Laptop, Box, LucideIcon, Lightbulb, CheckCircle, AlertTriangle, Aperture, AirVent, Cable, Puzzle, Car, RotateCcw } from 'lucide-react';
+import { PlusCircle, Filter, Edit, Trash2, Download, Upload, CheckSquare, Wrench, Camera, Video, Mic, Speaker, Monitor, Laptop, Box, LucideIcon, Lightbulb, CheckCircle, AlertTriangle, Aperture, AirVent, Cable, Puzzle, Car, RotateCcw, X } from 'lucide-react';
 // Import Dialog components if using for Add/Edit form
 import {
   Dialog,
@@ -17,24 +17,25 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
-  DialogClose,
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 // Placeholder Add Gear Form component - Consider extracting to a separate file
 import AddGearForm from '@/components/admin/add-gear-form';
 import EditGearForm from '@/components/admin/edit-gear-form';
-import { createClient, refreshSupabaseClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { useToast } from "@/hooks/use-toast";
 import { createGearNotification } from '@/lib/notifications';
-import { QRCodeCanvas } from 'qrcode.react';
 import Papa from 'papaparse';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
-
-type Gear = any;
+import { apiGet } from '@/lib/apiClient';
+import { handleDatabaseError, openDatabaseSetupPage } from '@/lib/utils/database-setup';
+import { Gear } from '@/types/supabase';
+import { Pagination } from '@/components/ui/Pagination';
+import { gearQueries } from '@/lib/api/queries';
+import { useDebounce } from '@/hooks/useDebounce';
 
 // Category icon and color mapping
 const categoryIcons: Record<string, LucideIcon> = {
@@ -84,6 +85,8 @@ const getCategoryBadgeClass = (category?: string) => {
   return categoryColors[key] || 'bg-gray-200 text-gray-700';
 };
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
 export default function ManageGearsPage() {
   const supabase = createClient();
   const { toast } = useToast();
@@ -92,17 +95,11 @@ export default function ManageGearsPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 300);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingGear, setEditingGear] = useState<Gear | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [newGear, setNewGear] = useState<Partial<Gear>>({
-    name: '',
-    description: '',
-    category: '',
-    status: 'Available',
-    serial: '',
-  });
   const [selectedGearIds, setSelectedGearIds] = useState<string[]>([]);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -115,6 +112,16 @@ export default function ManageGearsPage() {
   const [showSqlDialog, setShowSqlDialog] = useState(false);
   const [sqlToRun, setSqlToRun] = useState('');
   const [isDatabaseFixed, setIsDatabaseFixed] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('manageGearsPageSize');
+      return saved ? parseInt(saved, 10) : 10;
+    }
+    return 10;
+  });
+  const [total, setTotal] = useState(0);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // --- UI State Preservation ---
   const listContainerRef = useRef<HTMLDivElement | null>(null);
@@ -135,6 +142,16 @@ export default function ManageGearsPage() {
       })
     )
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, filterStatus, filterCategory, pageSize]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('manageGearsPageSize', String(pageSize));
+    }
+  }, [pageSize]);
 
   useEffect(() => {
     // Check Supabase connection and authentication
@@ -163,7 +180,7 @@ export default function ManageGearsPage() {
     };
 
     checkSupabaseConnection();
-    fetchGears();
+    fetchGears(page, pageSize);
     // Set up real-time subscription
     const channel = supabase
       .channel('public:gears')
@@ -174,7 +191,7 @@ export default function ManageGearsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [page, pageSize, filterStatus, filterCategory, debouncedSearch]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -191,86 +208,37 @@ export default function ManageGearsPage() {
     fetchProfile();
   }, []);
 
-  async function fetchGears() {
-    // Preserve scroll position before fetching
+  async function fetchGears(p = page, ps = pageSize) {
     if (listContainerRef.current) {
       scrollPositionRef.current = listContainerRef.current.scrollTop;
     }
     setLoading(true);
-    console.log("Fetching gears with real-time updates...");
-
+    setApiError(null);
     try {
-      // Use the absolute minimum fields to avoid schema issues
-      const { data, error } = await supabase
-        .from('gears')
-        .select('id, name, category, status, image_url, checked_out_to, current_request_id, last_checkout_date, due_date')
-        .neq('status', 'Deleted'); // Filter out soft-deleted items
-
+      const result = await gearQueries.getGearsWithPagination(
+        p,
+        ps,
+        { status: filterStatus, category: filterCategory, search: debouncedSearch }
+      );
+      const { data, total: newTotal, error } = result as { data: Gear[]; total?: number; error: string | null };
       if (error) {
-        console.error("Error fetching gears:", error);
-        console.error("Error details:", JSON.stringify(error, null, 2));
-
-        // Create a fresh client and try again
-        console.log("Retrying with fresh client...");
-        const freshClient = refreshSupabaseClient();
-
-        const { data: retryData, error: retryError } = await freshClient
-          .from('gears')
-          .select('id, name, category, status, image_url, checked_out_to, current_request_id, last_checkout_date, due_date')
-          .neq('status', 'Deleted'); // Filter out soft-deleted items
-
-        if (retryError) {
-          console.error("Retry also failed:", retryError);
-          throw retryError;
-        }
-
-        console.log("Retry successful, fetched", retryData?.length || 0, "gears");
-        console.log("Gear statuses:", retryData?.map((g: { name: string, status: string }) => `${g.name}: ${g.status}`));
-        setGears(retryData || []);
+        setApiError(error);
+        setGears([]);
+        setTotal(0);
       } else {
-        console.log("Successfully fetched", data?.length || 0, "gears");
-        console.log("Gear statuses:", data?.map((g: { name: string, status: string }) => `${g.name}: ${g.status}`));
-
-        // Log gear check-out details
-        const checkedOutGears = data?.filter((g: { status: string }) => g.status === 'Checked Out') || [];
-        if (checkedOutGears.length > 0) {
-          console.log("Checked out gears:", checkedOutGears.map((g: {
-            name: string,
-            status: string,
-            checked_out_to: string,
-            current_request_id: string,
-            last_checkout_date: string,
-            due_date: string
-          }) => ({
-            name: g.name,
-            status: g.status,
-            checked_out_to: g.checked_out_to,
-            current_request_id: g.current_request_id,
-            last_checkout_date: g.last_checkout_date,
-            due_date: g.due_date
-          })));
-        }
-
         setGears(data || []);
+        setTotal(newTotal || 0);
       }
-    } catch (err) {
-      console.error("Full error object:", err);
-      const errorMessage =
-        typeof err === 'object' && err !== null && 'message' in err
-          ? (err as any).message
-          : "Unknown database error";
-
+    } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: `Failed to load gears: ${errorMessage}`,
-        variant: "destructive",
+        title: 'Error',
+        description: 'An unexpected error occurred',
+        variant: 'destructive',
       });
-
-      // Set empty gears array to prevent UI errors
       setGears([]);
+      setTotal(0);
     } finally {
       setLoading(false);
-      // Restore scroll position after fetching
       setTimeout(() => {
         if (listContainerRef.current) {
           listContainerRef.current.scrollTop = scrollPositionRef.current;
@@ -279,7 +247,7 @@ export default function ManageGearsPage() {
     }
   }
 
-  const handleAddGear = async (data: any) => {
+  const handleAddGear = async (data: Gear) => {
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -297,15 +265,15 @@ export default function ManageGearsPage() {
 
       // Handle image upload if there is one
       let imageUrl = null;
-      if (data.image && data.image instanceof File) {
-        const fileExt = data.image.name.split('.').pop();
+      if (data.image_url && data.image_url instanceof File) {
+        const fileExt = data.image_url.name.split('.').pop();
         const filePath = `gears/${gearId}/${Date.now()}.${fileExt}`;
 
         console.log("Uploading gear image to", filePath);
 
         const { error: uploadError, data: uploadData } = await supabase.storage
           .from('gears') // Make sure this bucket exists in your Supabase
-          .upload(filePath, data.image, { upsert: true });
+          .upload(filePath, data.image_url, { upsert: true });
 
         if (uploadError) {
           console.error("Error uploading gear image:", uploadError);
@@ -395,7 +363,7 @@ export default function ManageGearsPage() {
     }
   };
 
-  const handleUpdateGear = async (gear: Gear, updates: Partial<Gear>) => {
+  const handleUpdateGear = async (gear: Gear, updates: Gear) => {
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -412,7 +380,7 @@ export default function ManageGearsPage() {
 
       // Handle image upload if there's a new file
       let imageUrl = gear.image_url; // Start with current URL
-      if (updates.image && updates.image instanceof File) {
+      if (updates.image_url && updates.image_url instanceof File) {
         // Remove old image if it exists
         if (gear.image_url) {
           try {
@@ -436,14 +404,14 @@ export default function ManageGearsPage() {
         }
 
         // Upload new image
-        const fileExt = updates.image.name.split('.').pop();
+        const fileExt = updates.image_url.name.split('.').pop();
         const filePath = `gears/${gear.id}/${Date.now()}.${fileExt}`;
 
         console.log("Uploading new gear image to", filePath);
 
         const { error: uploadError, data: uploadData } = await supabase.storage
           .from('gears')
-          .upload(filePath, updates.image, { upsert: true });
+          .upload(filePath, updates.image_url, { upsert: true });
 
         if (uploadError) {
           console.error("Error uploading gear image:", uploadError);
@@ -472,13 +440,13 @@ export default function ManageGearsPage() {
 
       // Remove the image File object from the update data
       // as we've already processed it and stored the URL
-      if ('image' in updateData) {
-        delete updateData.image;
+      if ('image_url' in updateData) {
+        delete updateData.image_url;
       }
 
       // Remove any serial field if it was accidentally included
-      if ('serial' in updateData) {
-        delete updateData.serial;
+      if ('serial_number' in updateData) {
+        delete updateData.serial_number;
       }
 
       const { error } = await supabase
@@ -757,9 +725,31 @@ export default function ManageGearsPage() {
     const statusMatch = filterStatus === 'all' || gear.status === filterStatus;
     const categoryMatch = filterCategory === 'all' || gear.category === filterCategory;
     const searchMatch = gear.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (gear.serial || '').toLowerCase().includes(searchTerm.toLowerCase());
+      (gear.serial_number || '').toLowerCase().includes(searchTerm.toLowerCase());
     return statusMatch && categoryMatch && searchMatch;
   });
+
+  // Helper for filter chips
+  const hasActiveFilters = searchTerm || filterStatus !== 'all' || filterCategory !== 'all';
+  const filterChips = [
+    searchTerm && {
+      label: `Search: "${searchTerm}"`,
+      onRemove: () => setSearchTerm(''),
+    },
+    filterStatus !== 'all' && {
+      label: `Status: ${filterStatus}`,
+      onRemove: () => setFilterStatus('all'),
+    },
+    filterCategory !== 'all' && {
+      label: `Category: ${filterCategory}`,
+      onRemove: () => setFilterCategory('all'),
+    },
+  ].filter(Boolean);
+  const handleClearAllFilters = () => {
+    setSearchTerm('');
+    setFilterStatus('all');
+    setFilterCategory('all');
+  };
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -768,14 +758,6 @@ export default function ManageGearsPage() {
       transition: {
         staggerChildren: 0.1
       }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1
     }
   };
 
@@ -1056,172 +1038,46 @@ export default function ManageGearsPage() {
 
   // Maintenance form logic
   const handleAddMaintenance = async (values: any) => {
-    if (!selectedGear) return;
     setLoadingMaintenance(true);
-
     try {
-      console.log("Adding maintenance record:", JSON.stringify(values, null, 2));
-
-      // Get current user for attribution
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Create maintenance object
-      const maintenanceData = {
-        gear_id: selectedGear.id,
-        status: values.status,
-        description: values.description,
-        date: values.date,
-        performed_by: user?.id || null
-      };
-
-      console.log("Maintenance data being sent:", JSON.stringify(maintenanceData, null, 2));
-
-      // Map maintenance status to gear status
-      let gearStatus;
-      switch (values.status) {
-        case 'In Progress':
-          gearStatus = 'Under Repair';
-          break;
-        case 'Scheduled':
-          gearStatus = 'Scheduled Maintenance';
-          break;
-        case 'Needs Repair':
-          gearStatus = 'Under Repair';
-          break;
-        case 'Damaged':
-          gearStatus = 'Damaged';
-          break;
-        case 'Completed':
-          gearStatus = 'Available'; // Only if completed maintenance should reset status
-          break;
-        default:
-          gearStatus = selectedGear.status; // Don't change if not matched
-      }
-
-      // First update the gear status in the gears table
-      if (gearStatus !== selectedGear.status) {
-        const { error: updateError } = await supabase
-          .from('gears')
-          .update({ status: gearStatus, updated_at: new Date().toISOString() })
-          .eq('id', selectedGear.id);
-
-        if (updateError) {
-          console.log("Error updating gear status:", updateError.message);
-          // Continue with maintenance record even if status update fails
-        } else {
-          console.log(`Updated gear status to: ${gearStatus}`);
-          // Update local state to show the status change immediately
-          setSelectedGear({ ...selectedGear, status: gearStatus });
-
-          // Also update in the main gears list
-          setGears(prev => prev.map(g =>
-            g.id === selectedGear.id ? { ...g, status: gearStatus } : g
-          ));
-
-          // Show a status update toast
-          toast({
-            title: 'Status Updated',
-            description: `${selectedGear.name} is now ${gearStatus}`,
-            variant: 'default'
-          });
-        }
-      }
-
-      // Now add the maintenance record
-      const { error } = await supabase
+      // Add the maintenance record
+      const { data, error } = await supabase
         .from('gear_maintenance')
-        .insert(maintenanceData)
-        .select();
+        .insert([
+          {
+            gear_id: selectedGear?.id,
+            status: values.status,
+            description: values.description,
+            date: values.date,
+            performed_by: user?.id || null
+          }
+        ]);
 
       if (error) {
         console.log("Error adding maintenance:", error.message);
         console.log("Full error:", JSON.stringify(error, null, 2));
 
-        // Check if the error is because the table doesn't exist
-        if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
-          // Show SQL instructions for table creation
-          const setupSql = `
--- Run this SQL in your Supabase SQL Editor:
+        // Use our utility to handle database errors
+        const result = handleDatabaseError(error, 'gear_maintenance');
 
-CREATE TABLE IF NOT EXISTS public.gear_maintenance (
-  id SERIAL PRIMARY KEY,
-  gear_id UUID NOT NULL REFERENCES public.gears(id) ON DELETE CASCADE,
-  status TEXT NOT NULL,
-  description TEXT NOT NULL,
-  date TIMESTAMP WITH TIME ZONE NOT NULL,
-  performed_by UUID REFERENCES auth.users(id),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Add permissions
-ALTER TABLE public.gear_maintenance ENABLE ROW LEVEL SECURITY;
-
--- Create policies
-CREATE POLICY "Admins can do anything" ON public.gear_maintenance
-  FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'Admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'Admin'));
-
--- Create function to check if table exists
-CREATE OR REPLACE FUNCTION check_table_exists(table_name text)
-RETURNS boolean
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT FROM information_schema.tables 
-    WHERE table_schema = 'public'
-    AND table_name = $1
-  );
-END;
-$$;
-        `;
-
-          // Show a modal with setup instructions
+        if (result.isMissingTable) {
+          // Show a button to navigate to the database setup page
           toast({
             title: 'Database Setup Required',
-            description: "Maintenance records table needs to be created by a database administrator.",
+            description: "The maintenance records table needs to be created. Go to Database Setup to fix this issue.",
             variant: 'destructive',
+            action: (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openDatabaseSetupPage}
+              >
+                Go to Setup
+              </Button>
+            )
           });
-
-          // Show a dialog with the exact SQL needed
-          setTimeout(() => {
-            const setupModal = document.createElement('div');
-            setupModal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10000;display:flex;justify-content:center;align-items:center;';
-
-            const modalContent = document.createElement('div');
-            modalContent.style.cssText = 'background:#fff;border-radius:8px;max-width:800px;width:90%;max-height:90vh;overflow-y:auto;padding:20px;color:#000;';
-
-            modalContent.innerHTML = `
-              <h2 style="margin-top:0;font-size:1.5rem;border-bottom:1px solid #eee;padding-bottom:10px;margin-bottom:15px;">SQL Setup Required</h2>
-              <p>To enable maintenance tracking, ask your database administrator to run this SQL in the Supabase SQL Editor:</p>
-              <pre style="background:#f1f1f1;padding:15px;border-radius:4px;overflow-x:auto;white-space:pre-wrap;margin:10px 0;font-family:monospace;">${setupSql}</pre>
-              <div style="text-align:right;margin-top:20px;">
-                <button id="copy-sql-btn" style="margin-right:10px;padding:8px 16px;background:#4f46e5;color:white;border:none;border-radius:4px;cursor:pointer;">Copy SQL</button>
-                <button id="close-modal-btn" style="padding:8px 16px;background:#e5e7eb;color:#111;border:none;border-radius:4px;cursor:pointer;">Close</button>
-              </div>
-            `;
-
-            setupModal.appendChild(modalContent);
-            document.body.appendChild(setupModal);
-
-            // Copy button functionality
-            document.getElementById('copy-sql-btn')?.addEventListener('click', () => {
-              navigator.clipboard.writeText(setupSql);
-              const copyBtn = document.getElementById('copy-sql-btn');
-              if (copyBtn) {
-                copyBtn.textContent = 'Copied!';
-                setTimeout(() => {
-                  copyBtn.textContent = 'Copy SQL';
-                }, 2000);
-              }
-            });
-
-            // Close button functionality
-            document.getElementById('close-modal-btn')?.addEventListener('click', () => {
-              document.body.removeChild(setupModal);
-            });
-          }, 100);
 
           return; // Exit early since we can't add the maintenance record
         }
@@ -1236,7 +1092,7 @@ $$;
         setMaintenanceRecords(prev => [
           {
             id: Date.now(), // Temporary ID
-            gear_id: selectedGear.id,
+            gear_id: selectedGear?.id,
             status: values.status,
             description: values.description,
             date: values.date,
@@ -1254,7 +1110,7 @@ $$;
         });
 
         // Force fetch maintenance records again
-        await fetchMaintenanceRecords(selectedGear.id);
+        await fetchMaintenanceRecords(selectedGear?.id || '');
 
         // Refresh the gears data to get the updated status
         fetchGears();
@@ -1274,7 +1130,7 @@ $$;
             payload: {
               adminName: adminProfile?.full_name || 'Unknown Admin',
               adminEmail: adminProfile?.email || 'Unknown Email',
-              gearName: selectedGear.name,
+              gearName: selectedGear?.name,
               maintenanceStatus: values.status,
               maintenanceDate: values.date,
               description: values.description,
@@ -1327,7 +1183,7 @@ $$;
   };
 
   // Handle submit edits using a minimal approach
-  const handleSubmitEdits = async (data: any) => {
+  const handleSubmitEdits = async (data: Gear) => {
     if (!editingGear) return;
 
     setIsSubmitting(true);
@@ -1347,12 +1203,12 @@ $$;
 
       // Handle image upload if there's a new file
       let imageUrl = editingGear.image_url;
-      if (data.image) {
+      if (data.image_url) {
         try {
           // Handle both FileList and File types
-          const imageFile = data.image instanceof FileList
-            ? data.image[0]
-            : (data.image instanceof File ? data.image : null);
+          const imageFile = data.image_url instanceof FileList
+            ? data.image_url[0]
+            : (data.image_url instanceof File ? data.image_url : null);
 
           if (imageFile) {
             // Upload image first
@@ -1438,31 +1294,36 @@ $$;
   };
 
   // Handle gear details dialog open
-  const handleOpenGearDetails = (gear: Gear) => {
+  const handleOpenGearDetails = async (gear: Gear) => {
     // If we only have basic fields, fetch the full gear details
     if (!gear.description || !gear.purchase_date || !gear.condition) {
       setLoading(true);
-      supabase
-        .from('gears')
-        .select('*')
-        .eq('id', gear.id)
-        .single()
-        .then(({ data, error }: { data: Gear | null; error: any }) => {
-          setLoading(false);
-          if (error) {
-            console.error("Error fetching gear details:", error);
-            toast({
-              title: "Error",
-              description: "Could not load gear details.",
-              variant: "destructive",
-            });
-            // Use what we have
-            setSelectedGear(gear);
-          } else {
-            setSelectedGear(data);
-          }
-          setIsGearDetailsOpen(true);
+      try {
+        const { data, error } = await apiGet<{ data: Gear | null; error: string | null }>(`/api/gears/${gear.id}`);
+        if (error) {
+          console.error("Error fetching gear details:", error);
+          toast({
+            title: "Error",
+            description: "Could not load gear details.",
+            variant: "destructive",
+          });
+          // Use what we have
+          setSelectedGear(gear);
+        } else {
+          setSelectedGear(data);
+        }
+      } catch (err) {
+        console.error("Exception when fetching gear details:", err);
+        toast({
+          title: "Error",
+          description: "Could not load gear details.",
+          variant: "destructive",
         });
+        setSelectedGear(gear);
+      } finally {
+        setLoading(false);
+        setIsGearDetailsOpen(true);
+      }
     } else {
       setSelectedGear(gear);
       setIsGearDetailsOpen(true);
@@ -1565,7 +1426,7 @@ $$;
             <div className="relative flex-1 max-w-full sm:max-w-sm">
               <Filter className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name or serial..."
+                placeholder="Search by name, serial, brand, or model..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 bg-background"
@@ -1608,6 +1469,36 @@ $$;
           </div>
         </CardHeader>
         <CardContent className="px-2 pt-4 md:px-6">
+          {/* Filter chips and clear button */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              {filterChips.map((chip, idx) => (
+                <span key={idx} className="inline-flex items-center bg-muted px-3 py-1 rounded-full text-sm text-foreground border">
+                  {chip.label}
+                  <button
+                    className="ml-2 text-muted-foreground hover:text-red-500 focus:outline-none"
+                    onClick={chip.onRemove}
+                    aria-label={`Remove ${chip.label}`}
+                    type="button"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </span>
+              ))}
+              <button
+                className="ml-2 px-3 py-1 rounded-full bg-orange-600 text-white text-sm hover:bg-orange-700 focus:outline-none"
+                onClick={handleClearAllFilters}
+                type="button"
+              >
+                Clear All Filters
+              </button>
+            </div>
+          )}
+          {apiError && (
+            <div className="mb-4 text-center text-sm text-red-500 font-medium">
+              {apiError}
+            </div>
+          )}
           {loading ? (
             <div className="flex justify-center py-16">
               <div className="flex flex-col items-center gap-2">
@@ -1776,6 +1667,28 @@ $$;
                   ))}
                 </TableBody>
               </Table>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                <div />
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Rows per page:</span>
+                  <select
+                    className="border rounded px-2 py-1 bg-background text-foreground"
+                    value={pageSize}
+                    onChange={e => setPageSize(Number(e.target.value))}
+                  >
+                    {PAGE_SIZE_OPTIONS.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-center mt-6">
+                <Pagination
+                  currentPage={page}
+                  totalPages={Math.ceil(total / pageSize)}
+                  onPageChange={setPage}
+                />
+              </div>
             </motion.div>
           )}
         </CardContent>
@@ -1829,7 +1742,7 @@ $$;
 
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground">Serial Number</h4>
-                  <p className="mt-1 font-mono text-sm">{selectedGear.serial || 'N/A'}</p>
+                  <p className="mt-1 font-mono text-sm">{selectedGear.serial_number || 'N/A'}</p>
                 </div>
 
                 {selectedGear.description && (

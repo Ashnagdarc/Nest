@@ -7,29 +7,17 @@ import { Button } from '@/components/ui/button';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart, Line } from 'recharts';
 import type { DateRange } from 'react-day-picker';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { subDays, format, getISOWeek, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
-import { Skeleton } from "@/components/ui/skeleton";
 import { WeeklyActivityReport } from "@/components/reports/WeeklyActivityReport";
 import { subscribeToTable, unsubscribeFromTable, RealtimeSubscription } from '@/lib/utils/realtime-utils';
 import logger from '@/lib/logger';
 import {
   HelpCircle,
-  TrendingUp,
-  Users,
-  Package,
-  AlertTriangle,
-  Download,
-  RefreshCw,
-  Calendar,
   BarChart3,
-  Activity,
   Info,
-  ChevronDown,
-  ChevronUp
+  RefreshCw,
 } from 'lucide-react';
 import {
   Tooltip as UITooltip,
@@ -39,6 +27,9 @@ import {
 } from "@/components/ui/tooltip";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { apiGet } from '@/lib/apiClient';
+import Image from 'next/image';
+import { subDays, format, getISOWeek, formatDistanceToNow } from 'date-fns';
 
 interface Gear {
   id: string;
@@ -59,13 +50,6 @@ interface PopularGear {
   fullName: string;
 }
 
-interface PopularGearResult {
-  gear_id: string;
-  name: string;
-  full_name: string;
-  request_count: number;
-}
-
 interface WeeklyTrend {
   week: string;
   weekLabel: string;
@@ -84,7 +68,7 @@ interface ActivityLogEntry {
   userName: string;
   userAvatar?: string;
   notes?: string;
-  details?: any;
+  details?: Record<string, unknown>;
 }
 
 interface AnalyticsData {
@@ -120,7 +104,7 @@ interface ActivityData {
   activity_type: string;
   status?: string;
   notes?: string;
-  details?: any;
+  details?: Record<string, unknown>;
   created_at: string;
   updated_at?: string;
 }
@@ -140,12 +124,6 @@ export default function ReportsPage() {
     recentActivity: []
   });
   const [showHelp, setShowHelp] = useState(false);
-  const [expandedSections, setExpandedSections] = useState({
-    overview: true,
-    trends: true,
-    popular: true,
-    activity: true
-  });
   const { toast } = useToast();
   const supabase = createClient();
 
@@ -164,7 +142,8 @@ export default function ReportsPage() {
       const { data: rpcData, error: rpcError } = await supabase
         .rpc('get_popular_gears', {
           start_date: dateRange.from.toISOString(),
-          end_date: dateRange.to.toISOString()
+          end_date: dateRange.to.toISOString(),
+          limit_count: 10
         });
 
       if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
@@ -246,7 +225,11 @@ export default function ReportsPage() {
 
       if (hasGearIds) {
         // Process gear_ids array approach
-        const gearIds = requestData.flatMap(request => request.gear_ids || []);
+        const gearIds = requestData.flatMap(request => {
+          // Use type assertion to handle the gear_ids property
+          const gearRequest = request as { gear_ids?: string[] };
+          return gearRequest.gear_ids || [];
+        });
 
         if (gearIds.length > 0) {
           // Fetch gear details for all the unique IDs
@@ -328,7 +311,7 @@ export default function ReportsPage() {
 
     } catch (error) {
       console.error('Error fetching popular gears:', error);
-      throw error;
+      return [];
     }
   }
 
@@ -340,28 +323,23 @@ export default function ReportsPage() {
         to: dateRange?.to?.toISOString() || ''
       });
 
-      // Try to get weekly trends data
-      const [requestsResult, damagesResult] = await Promise.all([
-        supabase
-          .from('gear_requests')
-          .select('created_at')
-          .gte('created_at', dateRange?.from?.toISOString() || '')
-          .lte('created_at', dateRange?.to?.toISOString() || ''),
-        supabase
-          .from('gear_maintenance')
-          .select('created_at')
-          .eq('maintenance_type', 'Damage Report')
-          .gte('created_at', dateRange?.from?.toISOString() || '')
-          .lte('created_at', dateRange?.to?.toISOString() || '')
-      ]);
+      // Use centralized API client for requests
+      const { data: requestsData, error: requestsError } = await apiGet<{ data: RequestData[]; error: string | null }>(`/api/requests?from=${dateRange?.from?.toISOString() || ''}&to=${dateRange?.to?.toISOString() || ''}`);
+      if (requestsError) throw new Error(requestsError);
 
-      if (requestsResult.error) throw requestsResult.error;
+      // Use existing Supabase for damages (not migrated here)
+      const damagesResult = await supabase
+        .from('gear_maintenance')
+        .select('created_at')
+        .eq('maintenance_type', 'Damage Report')
+        .gte('created_at', dateRange?.from?.toISOString() || '')
+        .lte('created_at', dateRange?.to?.toISOString() || '');
       if (damagesResult.error) throw damagesResult.error;
 
       const weeklyData: Record<string, { requests: number; damages: number }> = {};
 
       // Process request data
-      requestsResult.data?.forEach((request: RequestData) => {
+      (requestsData || []).forEach((request: RequestData) => {
         const date = new Date(request.created_at);
         const weekKey = `${format(date, 'yyyy')}-${getISOWeek(date)}`;
         if (!weeklyData[weekKey]) {
@@ -401,10 +379,10 @@ export default function ReportsPage() {
     try {
       console.log('Fetching analytics data...');
 
-      // Get total requests count
+      // Get total requests count using API client
       const { data: requestsData, error: requestsError } = await supabase
         .from('gear_requests')
-        .select('id', { count: 'exact' })
+        .select('*')
         .gte('created_at', dateRange?.from?.toISOString() || '')
         .lte('created_at', dateRange?.to?.toISOString() || '');
 
@@ -417,82 +395,19 @@ export default function ReportsPage() {
         .eq('maintenance_type', 'Damage Report')
         .gte('created_at', dateRange?.from?.toISOString() || '')
         .lte('created_at', dateRange?.to?.toISOString() || '');
-
       if (damageError) throw damageError;
 
-      // Try to get popular gears using the RPC function first
+      // Get popular gears
       let popularGears: PopularGear[] = [];
       try {
-        const { data: rpcData, error: rpcError } = await supabase
-          .rpc('get_popular_gears', {
-            start_date: dateRange?.from?.toISOString() || '',
-            end_date: dateRange?.to?.toISOString() || ''
-          });
-
-        if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
-          console.log('Successfully fetched popular gears via RPC', rpcData);
-          popularGears = rpcData.map(item => ({
-            name: item.name || 'Unknown Gear',
-            fullName: item.full_name || item.name || 'Unknown Gear',
-            count: Number(item.request_count) || 0
-          }));
-        } else {
-          // Fall back to direct query if RPC fails
-          console.warn('RPC method did not return data, trying direct query:', rpcError);
-
-          // Extract all gear IDs from requests
-          const { data: gearRequestsData, error: gearError } = await supabase
-            .from('gear_requests')
-            .select('gear_ids')
-            .gte('created_at', dateRange?.from?.toISOString() || '')
-            .lte('created_at', dateRange?.to?.toISOString() || '');
-
-          if (gearError) throw gearError;
-
-          // Extract all gear IDs
-          const allGearIds = gearRequestsData
-            ?.filter((req: { gear_ids?: string[] | null }) => req.gear_ids && Array.isArray(req.gear_ids))
-            .flatMap((req: { gear_ids?: string[] | null }) => req.gear_ids || []);
-
-          if (allGearIds && allGearIds.length > 0) {
-            // Count occurrences of each gear ID
-            const gearCounts: Record<string, number> = {};
-            allGearIds.forEach((gearId: string) => {
-              if (!gearId) return;
-              gearCounts[gearId] = (gearCounts[gearId] || 0) + 1;
-            });
-
-            // Get top 5 gear IDs
-            const topGearIds = Object.entries(gearCounts)
-              .sort(([, countA], [, countB]) => countB - countA)
-              .slice(0, 5)
-              .map(([id]) => id);
-
-            if (topGearIds.length > 0) {
-              // Fetch gear details
-              const { data: gearsData, error: gearsError } = await supabase
-                .from('gears')
-                .select('id, name, category')
-                .in('id', topGearIds);
-
-              if (gearsError) throw gearsError;
-
-              // Create popular gears result
-              popularGears = topGearIds.map(id => {
-                const gear = gearsData?.find((g: { id: string }) => g.id === id);
-                return {
-                  name: gear?.name || 'Unknown Gear',
-                  fullName: gear?.category ? `${gear.name} (${gear.category})` : gear?.name || 'Unknown Gear',
-                  count: gearCounts[id]
-                };
-              });
-            }
-          }
-        }
+        popularGears = await fetchPopularGears();
       } catch (gearError) {
         console.error('Error fetching popular gears:', gearError);
         // Continue without popular gears data
       }
+
+      // Get weekly trends
+      const weeklyTrends = await fetchWeeklyTrends();
 
       // Get recent activity log data
       let recentActivity: ActivityLogEntry[] = [];
@@ -541,15 +456,14 @@ export default function ReportsPage() {
             .map((activity: ActivityData) => activity.user_id)
             .filter((id: string | undefined): id is string => id !== null && id !== undefined);
 
-          // Fetch gear details separately  
+          // Fetch gear details for activity log
           const { data: gearsData, error: gearsError } = await supabase
             .from('gears')
             .select('id, name, category, image_url')
             .in('id', gearIds);
 
           if (gearsError) {
-            console.error('Error fetching gear details:', gearsError);
-            // Continue with what we have - don't throw
+            throw new Error(`Failed to fetch gear details: ${gearsError.message}`);
           }
 
           // Fetch user details separately
@@ -623,9 +537,6 @@ export default function ReportsPage() {
         console.error('Error in activity log processing:', activityError);
         // Continue without activity log data
       }
-
-      // Get weekly trends
-      const weeklyTrends = await fetchWeeklyTrends();
 
       // Update analytics state
       setAnalytics({
@@ -1007,7 +918,7 @@ export default function ReportsPage() {
                   <div key={activity.id} className="py-4 flex items-start gap-3 hover:bg-muted/10 transition-colors">
                     {activity.userAvatar ? (
                       <div className="w-10 h-10 rounded-full overflow-hidden border border-border flex-shrink-0">
-                        <img src={activity.userAvatar} alt={activity.userName} className="w-full h-full object-cover" />
+                        <Image src={activity.userAvatar} alt={activity.userName} width={40} height={40} className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">

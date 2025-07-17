@@ -5,12 +5,13 @@ import { Megaphone } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from 'date-fns';
-import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from './EmptyState';
 import { logger } from '@/utils/logger';
 import { createSupabaseSubscription } from '@/utils/supabase-subscription';
+import { fetchAnnouncements } from '@/lib/api/queries';
+import { createClient } from '@/lib/supabase/client';
 
 type Announcement = {
     id: string;
@@ -38,44 +39,14 @@ export function AnnouncementsWidget({ embedded = false }: AnnouncementsWidgetPro
             .trim();
     };
 
-    const fetchAnnouncements = async () => {
+    const fetchAnnouncementsData = async () => {
         setLoading(true);
         try {
-            // Try the RPC function first with a limit of 3
-            const { data, error } = await supabase.rpc('get_recent_announcements', {
-                max_count: 3
-            });
+            // Use the new API client
+            const response = await fetchAnnouncements({ limit: 3 });
 
-            // Fall back to direct query if RPC fails
-            if (error) {
-                logger.error("Error using RPC to fetch recent announcements:", error);
-
-                const { data: directData, error: directError } = await supabase
-                    .from('announcements')
-                    .select('*')
-                    .order('created_at', { ascending: false })
-                    .limit(3);
-
-                if (directError) {
-                    logger.error("Error fetching recent announcements:", directError);
-                    setLoading(false);
-                    return;
-                }
-
-                if (directData) {
-                    setAnnouncements(directData.map((a: any) => ({
-                        id: a.id,
-                        title: a.title,
-                        content: sanitizeContent(a.content),
-                        createdAt: new Date(a.created_at)
-                    })));
-                }
-                setLoading(false);
-                return;
-            }
-
-            if (data) {
-                setAnnouncements(data.map((a: any) => ({
+            if (response.announcements) {
+                setAnnouncements(response.announcements.map((a: any) => ({
                     id: a.id,
                     title: a.title,
                     content: sanitizeContent(a.content),
@@ -84,13 +55,13 @@ export function AnnouncementsWidget({ embedded = false }: AnnouncementsWidgetPro
             }
             setLoading(false);
         } catch (e) {
-            logger.error("Unexpected error in fetchRecentAnnouncements:", e);
+            logger.error("Unexpected error in fetchAnnouncementsData:", e);
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchAnnouncements();
+        fetchAnnouncementsData();
 
         // Set up real-time subscription to announcements
         const announcementsSubscription = createSupabaseSubscription({
@@ -102,7 +73,7 @@ export function AnnouncementsWidget({ embedded = false }: AnnouncementsWidgetPro
                 table: 'announcements'
             },
             callback: () => {
-                fetchAnnouncements();
+                fetchAnnouncementsData();
             },
             pollingInterval: 30000 // 30 seconds fallback polling
         });
@@ -110,7 +81,7 @@ export function AnnouncementsWidget({ embedded = false }: AnnouncementsWidgetPro
         return () => {
             announcementsSubscription.unsubscribe();
         };
-    }, [supabase]);
+    }, []);
 
     // If embedded, render just the content
     if (embedded) {

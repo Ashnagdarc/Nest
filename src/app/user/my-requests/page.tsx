@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { apiGet } from '@/lib/apiClient';
 
 interface GearRequest {
   id: string;
@@ -37,13 +38,20 @@ type RealtimeGearRequestPayload = RealtimePostgresChangesPayload<{
   new: GearRequest;
 }>;
 
+// Extend GearRequest locally to include gears and teamMemberProfiles for UI
+type GearWithExtras = { id: string; name?: string; category?: string };
+type GearRequestWithExtras = GearRequest & {
+  gears?: GearWithExtras[];
+  teamMemberProfiles?: unknown[];
+};
+
 function MyRequestsContent() {
-  const [requests, setRequests] = useState<any[]>([]);
-  const [filteredRequests, setFilteredRequests] = useState<any[]>([]);
+  const [requests, setRequests] = useState<GearRequestWithExtras[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<GearRequestWithExtras[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<GearRequestWithExtras | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const { toast } = useToast();
   const supabase = createClient();
@@ -59,121 +67,83 @@ function MyRequestsContent() {
   });
   const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchRequests = async () => {
-      setLoading(true);
-      try {
-        // Get the current user
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
-          router.push('/auth/login');
-          return;
-        }
-
-        // First fetch the user's requests - log at each step to debug
-        console.log("Fetching requests for user:", user.id);
-        const { data: requestsData, error: requestsError } = await supabase
-          .from('gear_requests')
-          .select(`
-            id, 
-            created_at,
-            reason,
-            destination,
-            expected_duration,
-            status,
-            user_id,
-            gear_ids,
-            team_members
-          `)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        console.log("Requests data:", requestsData);
-        console.log("Requests error:", requestsError);
-
-        if (requestsError) {
-          throw requestsError;
-        }
-
-        if (!requestsData || requestsData.length === 0) {
-          setRequests([]);
-          setFilteredRequests([]); // Make sure filtered requests is also empty
-          setLoading(false);
-          return;
-        }
-
-        // Then fetch gear details separately for each request
-        const requestsWithGear = await Promise.all(
-          requestsData.map(async (request: any) => {
-            // For gear_ids as an array
-            if (!request.gear_ids || request.gear_ids.length === 0) {
-              return { ...request, gears: [] };
-            }
-
-            // Fetch all gears in the request
-            const { data: gearData, error: gearError } = await supabase
-              .from('gears')
-              .select('id, name, category')
-              .in('id', request.gear_ids);
-
-            if (gearError) {
-              console.warn(`Error fetching gears for request ${request.id}:`, gearError);
-              return { ...request, gears: [] };
-            }
-
-            // Fetch team member profiles if available
-            let teamMemberProfiles = [];
-            if (request.team_members) {
-              try {
-                const teamMemberIds = request.team_members.split(',').filter(Boolean);
-                if (teamMemberIds.length > 0) {
-                  const { data: profiles } = await supabase
-                    .from('profiles')
-                    .select('id, full_name, email')
-                    .in('id', teamMemberIds);
-
-                  teamMemberProfiles = profiles || [];
-                }
-              } catch (e) {
-                console.warn('Error fetching team member profiles:', e);
-              }
-            }
-
-            return {
-              ...request,
-              gears: gearData || [],
-              teamMemberProfiles
-            };
-          })
-        );
-
-        console.log("Final processed requests:", requestsWithGear);
-        setRequests(requestsWithGear);
-        setFilteredRequests(requestsWithGear);
-
-        // Calculate and set stats
-        const stats = calculateRequestStats(requestsWithGear);
-        setRequestStats(stats);
-
-      } catch (error: any) {
-        console.error('Error fetching requests:', error.message || error);
-        toast({
-          title: "Error loading requests",
-          description: "There was a problem loading your gear requests. Please try again.",
-          variant: "destructive"
-        });
-      } finally {
-        setLoading(false);
+  const fetchRequests = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Fetch the user's requests from API
+      const { data: requestsData, error: requestsError } = await apiGet<{ data: GearRequest[]; error: string | null }>(`/api/requests/user`);
+      if (requestsError) {
+        throw new Error(requestsError);
       }
-    };
+      if (!requestsData || requestsData.length === 0) {
+        setRequests([]);
+        setFilteredRequests([]);
+        setLoading(false);
+        return;
+      }
+      // Then fetch gear details separately for each request
+      const allGearIds = Array.from(new Set(requestsData.flatMap((request: GearRequest) => request.gear_ids || [])));
+      let allGears: GearWithExtras[] = [];
+      if (allGearIds.length > 0) {
+        const { data: gearData, error: gearError } = await apiGet<{ data: any[]; error: string | null }>(`/api/gears?ids=${allGearIds.join(',')}`);
+        if (gearError) {
+          console.warn('Error fetching gears for requests:', gearError);
+        } else {
+          allGears = gearData || [];
+        }
+      }
+      const requestsWithGear = await Promise.all(
+        requestsData.map(async (request) => {
+          const gears = (request.gear_ids || [])
+            .map((id: string) => (allGears as GearWithExtras[]).find(g => g.id === id))
+            .filter((g): g is GearWithExtras => !!g);
+          // Fetch team member profiles if available
+          let teamMemberProfiles: unknown[] = [];
+          if (request.team_members) {
+            try {
+              const teamMemberIds = request.team_members.split(',').filter(Boolean);
+              if (teamMemberIds.length > 0) {
+                // Fetch team member profiles from API
+                const { data: profiles, error: profilesError } = await apiGet<{ data: unknown[]; error: string | null }>(`/api/users?ids=${teamMemberIds.join(',')}`);
+                if (!profilesError) teamMemberProfiles = profiles || [];
+              }
+            } catch (e) {
+              console.warn('Error fetching team member profiles:', e);
+            }
+          }
+          return {
+            ...(request as GearRequest),
+            gears,
+            teamMemberProfiles
+          };
+        })
+      );
+      setRequests(requestsWithGear);
+      setFilteredRequests(requestsWithGear);
+      // Calculate and set stats
+      const stats = calculateRequestStats(requestsWithGear);
+      setRequestStats(stats);
+    } catch (error) {
+      let message = 'Failed to fetch requests';
+      if (error instanceof Error) message = error.message;
+      console.error('Error fetching requests:', message);
+      toast({
+        title: 'Error',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
+  useEffect(() => {
     fetchRequests();
-  }, [supabase, router, toast]);
+  }, [fetchRequests]);
 
   useEffect(() => {
     let mounted = true;
-
+    let channel: any;
     const setupRealtimeSubscription = async () => {
       try {
         // Get the current session
@@ -184,7 +154,7 @@ function MyRequestsContent() {
         }
 
         // Set up real-time subscription for gear requests
-        const channel = supabase
+        channel = supabase
           .channel('gear_requests_changes')
           .on(
             'postgres_changes',
@@ -217,37 +187,36 @@ function MyRequestsContent() {
 
               if (updatedRequests && mounted) {
                 // Process the requests with gear details
+                const allGearIds = Array.from(new Set(updatedRequests.flatMap((request: GearRequestWithExtras) => request.gear_ids || [])));
+                let allGears: GearWithExtras[] = [];
+                if (allGearIds.length > 0) {
+                  const { data: gearData, error: gearError } = await apiGet<{ data: any[]; error: string | null }>(`/api/gears?ids=${allGearIds.join(',')}`);
+                  if (gearError) {
+                    console.warn('Error fetching gears for requests:', gearError);
+                  } else {
+                    allGears = gearData || [];
+                  }
+                }
                 const requestsWithGear = await Promise.all(
-                  updatedRequests.map(async (request: any) => {
-                    if (!request.gear_ids || request.gear_ids.length === 0) {
-                      return { ...request, gears: [] };
-                    }
-
-                    const { data: gearData } = await supabase
-                      .from('gears')
-                      .select('id, name, category')
-                      .in('id', request.gear_ids);
-
-                    let teamMemberProfiles = [];
+                  updatedRequests.map(async (request: GearRequestWithExtras) => {
+                    const gears = (request.gear_ids || [])
+                      .map((id: string) => (allGears as GearWithExtras[]).find(g => g.id === id))
+                      .filter((g): g is GearWithExtras => !!g);
+                    let teamMemberProfiles: unknown[] = [];
                     if (request.team_members) {
                       try {
                         const teamMemberIds = request.team_members.split(',').filter(Boolean);
                         if (teamMemberIds.length > 0) {
-                          const { data: profiles } = await supabase
-                            .from('profiles')
-                            .select('id, full_name, email')
-                            .in('id', teamMemberIds);
-
-                          teamMemberProfiles = profiles || [];
+                          const { data: profiles, error: profilesError } = await apiGet<{ data: unknown[]; error: string | null }>(`/api/users?ids=${teamMemberIds.join(',')}`);
+                          if (!profilesError) teamMemberProfiles = profiles || [];
                         }
                       } catch (e) {
                         console.warn('Error fetching team member profiles:', e);
                       }
                     }
-
                     return {
                       ...request,
-                      gears: gearData || [],
+                      gears,
                       teamMemberProfiles
                     };
                   })
@@ -282,7 +251,7 @@ function MyRequestsContent() {
         cleanup.then(cleanupFn => cleanupFn?.());
       }
     };
-  }, [supabase]);
+  }, [supabase, fetchRequests]);
 
   // Apply filters
   useEffect(() => {
@@ -304,7 +273,7 @@ function MyRequestsContent() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(req =>
-        req.gears?.some((gear: any) => gear.name?.toLowerCase().includes(term)) ||
+        req.gears?.some((gear) => gear?.name?.toLowerCase().includes(term)) ||
         req.destination?.toLowerCase().includes(term) ||
         req.reason?.toLowerCase().includes(term)
       );
@@ -418,7 +387,7 @@ function MyRequestsContent() {
   };
 
   // Format duration directly from expected_duration field
-  const formatDuration = (request: any) => {
+  const formatDuration = (request: GearRequestWithExtras) => {
     if (request.expected_duration) {
       return request.expected_duration;
     }
@@ -426,7 +395,7 @@ function MyRequestsContent() {
   };
 
   // Helpers for rendering
-  const formatTeamMembers = (request: any) => {
+  const formatTeamMembers = (request: GearRequestWithExtras) => {
     if (!request.teamMemberProfiles || request.teamMemberProfiles.length === 0) {
       return 'None';
     }
@@ -447,7 +416,7 @@ function MyRequestsContent() {
   };
 
   // Stats for summary cards
-  const calculateRequestStats = (requests: any[]) => {
+  const calculateRequestStats = (requests: GearRequestWithExtras[]) => {
     return requests.reduce((stats, request) => {
       const status = request.status?.toLowerCase() || '';
 
@@ -475,7 +444,7 @@ function MyRequestsContent() {
     });
   };
 
-  const viewRequestDetails = (request: any) => {
+  const viewRequestDetails = (request: GearRequestWithExtras) => {
     setSelectedRequest(request);
     setShowDetailsModal(true);
   };
@@ -596,11 +565,11 @@ function MyRequestsContent() {
                   <Card key={req.id} className="rounded-lg shadow-sm p-3">
                     <div className="flex items-center justify-between mb-2">
                       <div className="font-semibold text-base truncate max-w-[60%]">
-                        {req.gears && req.gears.length > 0 ? req.gears.map((gear: any) => gear.name).join(", ") : 'No gear selected'}
+                        {req.gears && req.gears.length > 0 ? req.gears.map((gear) => gear.name).join(", ") : 'No gear selected'}
                       </div>
                       {getStatusBadge(req.status || 'Unknown')}
                     </div>
-                    <div className="text-xs text-muted-foreground mb-1">Requested: {formatDate(req.created_at)}</div>
+                    <div className="text-xs text-muted-foreground mb-1">Requested: {formatDate(req)}</div>
                     <div className="text-xs text-muted-foreground mb-1">Duration: {formatDuration(req)}</div>
                     <div className="text-xs text-muted-foreground mb-1">Destination: {req.destination || 'N/A'}</div>
                     <div className="text-xs text-muted-foreground mb-1">Team: {formatTeamMembers(req)}</div>
@@ -658,8 +627,8 @@ function MyRequestsContent() {
                         <TableCell className="font-medium">
                           {req.gears && req.gears.length > 0 ? (
                             <div className="space-y-1.5">
-                              {req.gears.map((gear: any) => (
-                                <div key={gear.id} className="flex items-center gap-2">
+                              {req.gears?.map((gear, idx) => (
+                                <div key={gear.id ?? idx} className="flex items-center gap-2">
                                   <span className="text-sm font-medium">{gear.name || 'Unnamed Gear'}</span>
                                   {gear.category && (
                                     <Badge variant="outline" className="text-xs">
@@ -676,7 +645,7 @@ function MyRequestsContent() {
                         <TableCell>
                           {req.created_at ? (
                             <div className="flex flex-col">
-                              <span>{formatDate(req.created_at)}</span>
+                              <span>{formatDate(req)}</span>
                               <span className="text-xs text-muted-foreground">
                                 {format(new Date(req.created_at), 'h:mm a')}
                               </span>
@@ -808,7 +777,7 @@ function MyRequestsContent() {
                     </div>
                     <div className="grid grid-cols-3 gap-1 text-sm">
                       <span className="text-muted-foreground">Requested:</span>
-                      <span className="col-span-2">{formatDate(selectedRequest.created_at)}</span>
+                      <span className="col-span-2">{formatDate(selectedRequest)}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-1 text-sm">
                       <span className="text-muted-foreground">Duration:</span>
@@ -832,8 +801,8 @@ function MyRequestsContent() {
                   <div className="bg-muted/30 rounded-lg p-3">
                     {selectedRequest.gears && selectedRequest.gears.length > 0 ? (
                       <div className="space-y-3">
-                        {selectedRequest.gears.map((gear: any, index: number) => (
-                          <div key={gear.id} className={`${index > 0 ? 'pt-2 border-t border-muted' : ''}`}>
+                        {selectedRequest.gears?.map((gear, index) => (
+                          <div key={gear.id ?? index} className={`${index > 0 ? 'pt-2 border-t border-muted' : ''}`}>
                             <div className="font-medium">{gear.name}</div>
                             <div className="text-xs text-muted-foreground">
                               {gear.category || 'No category'} • ID: {gear.id}

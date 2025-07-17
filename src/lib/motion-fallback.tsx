@@ -2,13 +2,13 @@
 import React from 'react';
 
 export const motion = {
-    div: ({ children, className, ...props }: any) => (
+    div: ({ children, className, ...props }: React.PropsWithChildren<{ className?: string }> & Record<string, unknown>) => (
         <div className={className} {...props}>{children}</div>
     ),
-    span: ({ children, className, ...props }: any) => (
+    span: ({ children, className, ...props }: React.PropsWithChildren<{ className?: string }> & Record<string, unknown>) => (
         <span className={className} {...props}>{children}</span>
     ),
-    button: ({ children, className, ...props }: any) => (
+    button: ({ children, className, ...props }: React.PropsWithChildren<{ className?: string }> & Record<string, unknown>) => (
         <button className={className} {...props}>{children}</button>
     ),
 };

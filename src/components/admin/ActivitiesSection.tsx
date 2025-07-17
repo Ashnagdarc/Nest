@@ -175,7 +175,7 @@ export function ActivitiesSection() {
 
             if (profilesError) {
                 console.warn(`Profile data error: ${profilesError.message}`);
-                // Don't throw error, continue with fallback data
+                // Don't throw error, continue with other data sources
             }
 
             // Check if we have more data
@@ -225,68 +225,16 @@ export function ActivitiesSection() {
                 activityList = [...activityList, ...gearActivities];
             }
 
-            // If no real activities found, create demo activities for better UX
-            if (activityList.length === 0 && pageNum === 1) {
-                const now = new Date();
-                activityList = [
-                    {
-                        id: 'demo-1',
-                        user: 'Admin User',
-                        action: 'updated system configuration',
-                        time: timeAgo(new Date(now.getTime() - 1000 * 60 * 5)), // 5 minutes ago
-                        icon: Activity,
-                        type: 'system',
-                        timestamp: new Date(now.getTime() - 1000 * 60 * 5)
-                    },
-                    {
-                        id: 'demo-2',
-                        user: 'System',
-                        action: 'performed maintenance check',
-                        time: timeAgo(new Date(now.getTime() - 1000 * 60 * 15)), // 15 minutes ago
-                        icon: Activity,
-                        type: 'system',
-                        timestamp: new Date(now.getTime() - 1000 * 60 * 15)
-                    },
-                    {
-                        id: 'demo-3',
-                        user: 'Admin',
-                        action: 'added new equipment category',
-                        time: timeAgo(new Date(now.getTime() - 1000 * 60 * 30)), // 30 minutes ago
-                        icon: ArrowRight,
-                        type: 'gear',
-                        timestamp: new Date(now.getTime() - 1000 * 60 * 30)
-                    },
-                    {
-                        id: 'demo-4',
-                        user: 'Dashboard',
-                        action: 'refreshed utilization data',
-                        time: timeAgo(new Date(now.getTime() - 1000 * 60 * 45)), // 45 minutes ago
-                        icon: Activity,
-                        type: 'system',
-                        timestamp: new Date(now.getTime() - 1000 * 60 * 45)
-                    },
-                    {
-                        id: 'demo-5',
-                        user: 'System',
-                        action: 'synchronized with database',
-                        time: timeAgo(new Date(now.getTime() - 1000 * 60 * 60)), // 1 hour ago
-                        icon: Activity,
-                        type: 'system',
-                        timestamp: new Date(now.getTime() - 1000 * 60 * 60)
-                    }
-                ];
-            } else {
-                // Sort by timestamp for proper chronological order
-                activityList.sort((a, b) => {
-                    if (a.timestamp && b.timestamp) {
-                        return b.timestamp.getTime() - a.timestamp.getTime();
-                    }
-                    return 0;
-                });
+            // Sort by timestamp for proper chronological order
+            activityList.sort((a, b) => {
+                if (a.timestamp && b.timestamp) {
+                    return b.timestamp.getTime() - a.timestamp.getTime();
+                }
+                return 0;
+            });
 
-                // Take only the required number of items
-                activityList = activityList.slice(0, ITEMS_PER_PAGE);
-            }
+            // Take only the required number of items
+            activityList = activityList.slice(0, ITEMS_PER_PAGE);
 
             if (reset) {
                 setActivities(activityList);
@@ -297,36 +245,11 @@ export function ActivitiesSection() {
         } catch (error: any) {
             console.error("Error fetching activities:", error.message);
             setError(error.message);
-
-            // Even on error, show demo activities to prevent blank space
-            if (reset) {
-                const now = new Date();
-                const fallbackActivities: UserActivity[] = [
-                    {
-                        id: 'fallback-1',
-                        user: 'System',
-                        action: 'dashboard loaded successfully',
-                        time: 'just now',
-                        icon: Activity,
-                        type: 'system',
-                        timestamp: now
-                    },
-                    {
-                        id: 'fallback-2',
-                        user: 'Admin Dashboard',
-                        action: 'monitoring system activity',
-                        time: '1 min ago',
-                        icon: Activity,
-                        type: 'system',
-                        timestamp: new Date(now.getTime() - 60000)
-                    }
-                ];
-                setActivities(fallbackActivities);
-            }
+            setActivities([]);
 
             toast({
                 title: "Connection issue",
-                description: "Showing demo activities. Check your connection.",
+                description: "Unable to load activities. Please check your connection.",
                 variant: "destructive",
             });
         } finally {
@@ -400,6 +323,15 @@ export function ActivitiesSection() {
                     <div className="text-center py-8 text-gray-400">
                         <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
                         <p>No recent activities</p>
+                        <p className="text-sm mt-2">Activities will appear here once users interact with the system</p>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-4"
+                            onClick={() => fetchActivities(true)}
+                        >
+                            Refresh
+                        </Button>
                     </div>
                 ) : (
                     <div className="space-y-3">
@@ -423,7 +355,7 @@ export function ActivitiesSection() {
                                         </p>
                                         <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
                                             <Calendar className="h-3 w-3" />
-                                            <span>{formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}</span>
+                                            <span>{activity.timestamp ? formatDistanceToNow(activity.timestamp, { addSuffix: true }) : 'recently'}</span>
                                         </div>
                                     </div>
                                 </div>

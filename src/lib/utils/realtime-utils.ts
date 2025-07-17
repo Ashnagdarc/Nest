@@ -7,6 +7,14 @@ const POLL_INTERVAL_MS = 1200000; // Extended from 30s to 20min (1200 seconds) t
 const MAX_RETRY_ATTEMPTS = 3;
 const STATUS_DEBOUNCE_MS = 500; // Debounce time for status change handling
 
+// Import API client functions
+import {
+    fetchAnnouncements,
+    fetchCheckins,
+    fetchCalendarBookings,
+    fetchActivities
+} from '../api/queries';
+
 // Simple debounce utility
 function debounce<T extends (...args: any[]) => any>(
     func: T,
@@ -205,6 +213,7 @@ export async function getTableTimestampColumn(tableName: string): Promise<string
 
 /**
  * Fallback polling function - this is used when realtime subscriptions fail
+ * Now uses centralized API client instead of direct Supabase queries
  */
 async function pollTableChanges(
     tableName: string,
@@ -212,64 +221,98 @@ async function pollTableChanges(
     lastFetchedAt: string | null
 ): Promise<string | null> {
     try {
-        const supabase = createClient();
+        // Use the appropriate API client function based on the table name
+        let data;
+        const newLastFetchedAt = new Date().toISOString();
 
-        // Defensive: Check if table exists first
-        const exists = await tableExists(tableName);
-        if (!exists) {
-            logger.error(`Table ${tableName} does not exist. Skipping polling.`, 'Polling fallback error');
-            return lastFetchedAt;
+        switch (tableName) {
+            case 'announcements':
+                const announcementsResponse = await fetchAnnouncements({ limit: 50 });
+                data = announcementsResponse.announcements;
+                break;
+
+            case 'checkins':
+                const checkinsResponse = await fetchCheckins({ limit: 50 });
+                data = checkinsResponse.checkins;
+                break;
+
+            case 'gear_activity_log':
+                const activitiesResponse = await fetchActivities({ limit: 50 });
+                data = activitiesResponse.activities;
+                break;
+
+            case 'gear_calendar_bookings':
+                // For calendar bookings, we need start/end dates
+                const now = new Date();
+                const oneMonthAgo = new Date();
+                oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+                const calendarResponse = await fetchCalendarBookings({
+                    startDate: oneMonthAgo.toISOString(),
+                    endDate: now.toISOString()
+                });
+                data = calendarResponse.bookings;
+                break;
+
+            default:
+                // For tables without a specific API endpoint, fall back to Supabase
+                logger.error(`No API client function for table ${tableName}, falling back to Supabase`, 'Polling fallback');
+
+                const supabase = createClient();
+                const exists = await tableExists(tableName);
+
+                if (!exists) {
+                    logger.error(`Table ${tableName} does not exist. Skipping polling.`, 'Polling fallback error');
+                    return lastFetchedAt;
+                }
+
+                const timestampColumn = await getTableTimestampColumn(tableName);
+
+                if (!timestampColumn) {
+                    logger.error(
+                        `No suitable timestamp column found for table ${tableName}. Skipping polling.`,
+                        'Polling fallback error'
+                    );
+                    return lastFetchedAt;
+                }
+
+                let query = supabase.from(tableName).select('*');
+
+                if (lastFetchedAt && timestampColumn !== 'id') {
+                    query = query.gt(timestampColumn, lastFetchedAt);
+                }
+
+                query = query.order(timestampColumn, { ascending: false }).limit(50);
+
+                const { data: supabaseData, error } = await query;
+
+                if (error) {
+                    logger.error(error, `Error polling table ${tableName}`);
+                    return lastFetchedAt;
+                }
+
+                data = supabaseData;
+                break;
         }
 
-        // Find a suitable column for ordering
-        let timestampColumn = await getTableTimestampColumn(tableName);
-
-        if (!timestampColumn) {
-            logger.error(
-                `No suitable timestamp column found for table ${tableName}. Skipping polling.`,
-                'Polling fallback error'
-            );
-            return lastFetchedAt;
-        }
-
-        // Query for new records since last fetch
-        let query = supabase.from(tableName).select('*');
-
-        if (lastFetchedAt && timestampColumn !== 'id') {
-            query = query.gt(timestampColumn, lastFetchedAt);
-        }
-
-        // Order by the timestamp column
-        query = query.order(timestampColumn, { ascending: false }).limit(50);
-
-        const { data, error } = await query;
-
-        if (error) {
-            logger.error(error, `Error polling table ${tableName}`);
-            return lastFetchedAt;
-        }
-
+        // Process the data if we have any
         if (data && data.length > 0) {
-            // Get the most recent timestamp
-            const newLastFetchedAt = timestampColumn !== 'id' ? data[0][timestampColumn] : null;
-
-            // Notify callback with new data (mimicking realtime payload)
+            // Simulate realtime payloads for each record
             data.forEach((record: RealtimeRecord) => {
                 callback({
-                    eventType: 'UPDATE', // Assume update as we can't determine exact event
+                    eventType: 'UPDATE', // Assume update since we can't differentiate in polling
                     new: record,
-                    old: {},
+                    old: null,
                     table: tableName,
                     schema: 'public'
                 });
             });
-
-            return newLastFetchedAt;
         }
 
-        return lastFetchedAt;
+        return newLastFetchedAt;
     } catch (error) {
-        logger.error(error, `Error polling table ${tableName}`);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(error, `Error polling table ${tableName}: ${errorMessage}`);
         return lastFetchedAt;
     }
 }

@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileText, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { ReportCharts, ReportMetrics } from './index';
 import { generateCsvReport, generatePdfReport } from '@/services/reportExport';
-import { WeeklyUsageReport, UserStats, GearStats, generateUsageReportForRange } from '@/services/report-client';
+import { WeeklyUsageReport, generateUsageReportForRange } from '@/services/report-client';
 import { generateReportInsights, calculatePerformanceMetrics } from '@/services/reportExport';
 
 interface WeeklyReportProps {
@@ -30,9 +30,6 @@ interface InsightObject {
     description: string;
     priority: string;
 }
-
-type InsightType = InsightObject | string;
-type RecommendationType = string;
 
 export function WeeklyActivityReport({ dateRange }: WeeklyReportProps) {
     const reportRef = useRef<HTMLDivElement>(null);
@@ -102,17 +99,17 @@ export function WeeklyActivityReport({ dateRange }: WeeklyReportProps) {
     }, [report, previousReport]);
 
     // Helper function to safely render insights
-    const renderInsight = (insight: any): string => {
+    const renderInsight = (insight: unknown): string => {
         if (typeof insight === 'object' && insight !== null && 'description' in insight) {
-            return insight.description;
+            return (insight as InsightObject).description;
         }
         return String(insight);
     };
 
     // Helper function to safely render recommendations
-    const renderRecommendation = (recommendation: any): string => {
+    const renderRecommendation = (recommendation: unknown): string => {
         if (typeof recommendation === 'object' && recommendation !== null && 'description' in recommendation) {
-            return recommendation.description;
+            return (recommendation as InsightObject).description;
         }
         return String(recommendation);
     };

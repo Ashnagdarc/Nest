@@ -69,6 +69,8 @@ export interface Database {
                     updated_at: string;
                     /** Timestamp of user's last sign-in */
                     last_sign_in_at: string | null;
+                    /** Whether the user is banned */
+                    is_banned: boolean;
                 };
                 Insert: {
                     id: string;
@@ -84,6 +86,7 @@ export interface Database {
                     created_at?: string;
                     updated_at?: string;
                     last_sign_in_at?: string | null;
+                    is_banned?: boolean;
                 };
                 Update: {
                     id?: string;
@@ -99,6 +102,7 @@ export interface Database {
                     created_at?: string;
                     updated_at?: string;
                     last_sign_in_at?: string | null;
+                    is_banned?: boolean;
                 };
             };
 

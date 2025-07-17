@@ -34,7 +34,7 @@ export interface NotificationData {
     /** Optional URL for navigation when notification is clicked */
     actionUrl?: string
     /** Optional metadata for additional context */
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
     /** Priority level affecting delivery urgency */
     priority?: 'low' | 'normal' | 'high' | 'critical'
     /** Scheduled delivery time (null for immediate delivery) */
@@ -81,5 +81,5 @@ export interface NotificationPreferences {
  */
 export type ClientNotification = Notification & {
     category?: string
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
 } 

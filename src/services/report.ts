@@ -9,9 +9,10 @@
  * @version 1.0.0
  */
 
-import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { createSupabaseClientSafe } from '@/lib/supabase/server-client'
 import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/types/supabase'
+import { apiGet } from '@/lib/apiClient';
 
 // Type definitions for report system
 type Gear = Database['public']['Tables']['gears']['Row']
@@ -279,7 +280,7 @@ export interface ReportData {
  * @class ReportService
  */
 export class ReportService {
-  private supabase: ReturnType<typeof createSupabaseServerClient>
+  private supabase: ReturnType<typeof createClient> | ReturnType<typeof createSupabaseClientSafe>
 
   /**
    * Initialize Report Service
@@ -291,7 +292,7 @@ export class ReportService {
    * @param {boolean} [isServerSide=true] - Whether to use server-side client
    */
   constructor(isServerSide: boolean = true) {
-    this.supabase = isServerSide ? createSupabaseServerClient() : createClient()
+    this.supabase = isServerSide ? createSupabaseClientSafe() : createClient()
   }
 
   /**
@@ -408,23 +409,14 @@ export class ReportService {
     try {
       // Collect equipment data if requested
       if (dataSources.equipment) {
-        let equipmentQuery = this.supabase
-          .from('gears')
-          .select('*')
-          .gte('created_at', dateRange.startDate)
-          .lte('created_at', dateRange.endDate)
-
-        // Apply equipment filters
-        if (filters?.categories?.length) {
-          equipmentQuery = equipmentQuery.in('category', filters.categories)
-        }
-        if (filters?.equipmentStatus?.length) {
-          equipmentQuery = equipmentQuery.in('status', filters.equipmentStatus)
-        }
-
-        const { data: equipment, error: equipmentError } = await equipmentQuery
-        if (equipmentError) throw equipmentError
-        data.equipment = equipment || []
+        const params = new URLSearchParams();
+        params.append('startDate', dateRange.startDate);
+        params.append('endDate', dateRange.endDate);
+        if (filters?.categories?.length) params.append('category', filters.categories.join(','));
+        if (filters?.equipmentStatus?.length) params.append('status', filters.equipmentStatus.join(','));
+        const { data: equipment, error: equipmentError } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?${params.toString()}`);
+        if (equipmentError) throw new Error(equipmentError);
+        data.equipment = equipment || [];
       }
 
       // Collect user data if requested
@@ -447,39 +439,19 @@ export class ReportService {
 
       // Collect request data if requested
       if (dataSources.requests) {
-        let requestQuery = this.supabase
-          .from('gear_requests')
-          .select(`
-            *,
-            profiles:user_id (
-              id,
-              full_name,
-              email,
-              role
-            ),
-            gears:gear_id (
-              id,
-              name,
-              category,
-              status
-            )
-          `)
-          .gte('created_at', dateRange.startDate)
-          .lte('created_at', dateRange.endDate)
-
-        // Apply request status filters
-        if (filters?.requestStatus?.length) {
-          requestQuery = requestQuery.in('status', filters.requestStatus)
-        }
-
-        const { data: requests, error: requestError } = await requestQuery
-        if (requestError) throw requestError
-        data.requests = requests || []
+        const params = new URLSearchParams();
+        params.append('startDate', dateRange.startDate);
+        params.append('endDate', dateRange.endDate);
+        if (filters?.requestStatus?.length) params.append('status', filters.requestStatus.join(','));
+        // Use centralized API client and RESTful endpoint
+        const { data: requests, error: requestError } = await apiGet<{ data: GearRequest[]; error: string | null }>(`/api/requests?${params.toString()}`);
+        if (requestError) throw new Error(requestError);
+        data.requests = requests || [];
       }
 
       // Collect activity data if requested
       if (dataSources.activity) {
-        let activityQuery = this.supabase
+        const activityQuery = this.supabase
           .from('gear_activity_log')
           .select(`
             *,

@@ -1,3 +1,4 @@
+// Signup page for user registration. Handles form validation, account creation, and redirects based on user role.
 "use client";
 
 import Link from 'next/link';
@@ -13,16 +14,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from "@/hooks/use-toast";
-import dynamic from 'next/dynamic';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { createClient } from '@/lib/supabase/client';
-
-// Dynamically import Lottie
-const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
-
-// Import actual Lottie animation JSON
-import successAnimation from "@/../public/animations/success.json";
 
 const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]\d{3}[)])?([-]?[\s]?)(\d{3})([-]?[\s]?)(\d{4})$/
@@ -333,7 +327,7 @@ export default function SignupPage() {
                 <FormField
                   control={form.control}
                   name="profilePicture"
-                  render={({ field: { value, onChange, ...fieldProps } }) => (
+                  render={({ field: { onChange, ...fieldProps } }) => (
                     <FormItem>
                       <FormLabel>Profile Photo (Optional)</FormLabel>
                       <FormControl>

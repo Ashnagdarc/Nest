@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { subscribeToTable } from '@/lib/utils/realtime-utils';
 import { Bell } from 'lucide-react';
 import { format } from 'date-fns';
+import { apiGet } from '@/lib/apiClient';
 
 interface Notification {
     id: string;
@@ -22,17 +23,11 @@ export function NotificationsSection() {
 
     // Fetch notifications
     const fetchNotifications = async () => {
-        const { data, error } = await supabase
-            .from('notifications')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(10);
-
+        const { data, error } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications?limit=10`);
         if (error) {
             console.error('Error fetching notifications:', error);
             return;
         }
-
         setNotifications(data || []);
         setIsLoading(false);
     };
@@ -45,8 +40,8 @@ export function NotificationsSection() {
             if (payload.eventType === 'INSERT') {
                 setNotifications(prev => [payload.new, ...prev].slice(0, 10));
             } else if (payload.eventType === 'UPDATE') {
-                setNotifications(prev => 
-                    prev.map(notif => 
+                setNotifications(prev =>
+                    prev.map(notif =>
                         notif.id === payload.new.id ? payload.new : notif
                     )
                 );
@@ -82,9 +77,8 @@ export function NotificationsSection() {
                         {notifications.map((notification) => (
                             <div
                                 key={notification.id}
-                                className={`p-4 rounded-lg border ${
-                                    notification.is_read ? 'bg-background' : 'bg-muted/50'
-                                }`}
+                                className={`p-4 rounded-lg border ${notification.is_read ? 'bg-background' : 'bg-muted/50'
+                                    }`}
                             >
                                 <div className="flex items-center justify-between mb-2">
                                     <h4 className="font-semibold">{notification.title}</h4>

@@ -1,86 +1,9 @@
-/**
- * Equipment Browse Page - Asset Discovery and Catalog Interface
- * 
- * A comprehensive equipment catalog and discovery interface for the Nest by Eden Oasis
- * application that enables users to explore, search, and discover available equipment/assets.
- * This page serves as the primary equipment showcase, providing detailed information about
- * each asset and facilitating quick access to request workflows.
- * 
- * Core Features:
- * - Interactive equipment catalog with visual cards
- * - Advanced search and filtering capabilities
- * - Real-time equipment status and availability updates
- * - Category-based organization and navigation
- * - Equipment details display with images and specifications
- * - Quick request functionality with seamless workflow integration
- * - Responsive design optimized for all devices
- * 
- * Catalog Components:
- * - Equipment Cards: Visual representation with images, status, and details
- * - Search Interface: Multi-field search across name, category, and description
- * - Filter System: Status and category-based filtering options
- * - Category Icons: Visual categorization with intuitive iconography
- * - Status Indicators: Real-time availability and condition status
- * - Action Buttons: Quick access to view details and request equipment
- * 
- * Search & Discovery Features:
- * - Real-time search with instant results
- * - Multi-field search across equipment attributes
- * - Category-based filtering and organization
- * - Status-based filtering (Available, Checked Out, etc.)
- * - Visual equipment cards with detailed information
- * - Quick equipment request workflow integration
- * 
- * Equipment Display Features:
- * - High-quality equipment images with fallback handling
- * - Equipment specifications and detailed descriptions
- * - Real-time status indicators with color coding
- * - Category badges with consistent visual design
- * - Equipment condition and health indicators
- * - Last activity and usage information
- * 
- * User Experience Features:
- * - Smooth animations and transitions with Framer Motion
- * - Responsive grid layout adapting to screen sizes
- * - Loading states and skeleton screens
- * - Error handling with user-friendly messages
- * - Accessibility features with proper ARIA labels
- * - Keyboard navigation support
- * - Touch-friendly interface for mobile devices
- * 
- * Integration Points:
- * - Supabase real-time subscriptions for live updates
- * - Equipment request workflow integration
- * - User authentication and authorization
- * - Notification system for equipment interactions
- * - Activity logging for usage tracking
- * - Image storage and optimization
- * 
- * Performance Optimizations:
- * - Efficient data loading and caching strategies
- * - Optimized image loading with Next.js Image component
- * - Real-time updates with minimal re-renders
- * - Scroll position preservation during updates
- * - Memory-efficient component design
- * - Progressive loading for large catalogs
- * 
- * Security & Compliance:
- * - User authentication verification for requests
- * - Role-based access control for equipment visibility
- * - Input validation and sanitization
- * - Audit logging for equipment interactions
- * - Data protection and privacy compliance
- * 
- * @fileoverview Equipment catalog and discovery interface for asset browsing
- * @author Daniel Chinonso Samuel
- * @version 1.0.0
- * @since 2024-01-15
- */
+// Equipment browse page for Nest by Eden Oasis. Provides catalog, search, and real-time status for all equipment.
 
 "use client";
 
 import { useEffect, useState, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -88,10 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import Image from 'next/image';
 import Link from 'next/link';
-import { Eye, PackagePlus, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box } from 'lucide-react'; // Icons for view details and request
+import { PackagePlus, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box, LucideIcon } from 'lucide-react'; // Icons for view details and request
 import { createClient } from '@/lib/supabase/client';
-import { createGearNotification } from '@/lib/notifications';
+// import { createGearNotification } from '@/lib/notifications'; // No longer used
 import { useToast } from "@/hooks/use-toast";
+import { apiGet } from '@/lib/apiClient';
 
 /**
  * Equipment Interface
@@ -137,7 +61,7 @@ interface Gear {
  * 
  * @constant {Record<string, any>} categoryIcons
  */
-const categoryIcons: Record<string, any> = {
+const categoryIcons: Record<string, LucideIcon> = {
   camera: Camera,
   lens: Aperture,
   drone: AirVent,
@@ -280,6 +204,10 @@ export default function BrowseGearsPage() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+  const [total, setTotal] = useState(0);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // --- UI State Preservation ---
   const listContainerRef = useRef<HTMLDivElement | null>(null);
@@ -297,7 +225,7 @@ export default function BrowseGearsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [page, pageSize, filterStatus, filterCategory, searchTerm]);
 
   async function fetchGears() {
     // Preserve scroll position before fetching
@@ -306,25 +234,28 @@ export default function BrowseGearsPage() {
     }
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('gears')
-        .select('id, name, category, status, description, image_url');
-
+      const params = new URLSearchParams({
+        status: filterStatus,
+        category: filterCategory,
+        page: String(page),
+        pageSize: String(pageSize),
+        search: searchTerm,
+      });
+      const { data, total: apiTotal, error } = await apiGet<{ data: Gear[]; total: number; error: string | null }>(`/api/gears?${params.toString()}`);
       if (error) {
-        console.error("Error fetching gears:", error.message);
+        console.error("Error fetching gears:", error);
         toast({
           title: "Error fetching gear",
-          description: error.message || "Failed to load gear items",
+          description: error || "Failed to load gear items",
           variant: "destructive",
         });
       } else {
-        console.log("Fetched gears:", data?.length || 0);
-        // Map the data to include imageUrl 
         const gearData = data?.map((gear: Gear) => ({
           ...gear,
-          imageUrl: gear.image_url // Add this mapping to handle the field name difference
+          imageUrl: gear.image_url
         })) || [];
         setGears(gearData);
+        setTotal(apiTotal || 0);
       }
     } catch (err) {
       console.error("Exception when fetching gears:", err);
@@ -335,7 +266,6 @@ export default function BrowseGearsPage() {
       });
     } finally {
       setIsLoading(false);
-      // Restore scroll position after fetching
       setTimeout(() => {
         if (listContainerRef.current) {
           listContainerRef.current.scrollTop = scrollPositionRef.current;
@@ -344,12 +274,12 @@ export default function BrowseGearsPage() {
     }
   }
 
-  const filteredGears = gears.filter(gear => {
-    const statusMatch = filterStatus === 'all' || gear.status === filterStatus || (filterStatus === 'Booked' && gear.status === 'Booked') || (filterStatus === 'Damaged' && gear.status === 'Damaged') || (filterStatus === 'New' && gear.status === 'New');
-    const categoryMatch = filterCategory === 'all' || gear.category === filterCategory;
-    const searchMatch = gear.name.toLowerCase().includes(searchTerm.toLowerCase());
-    return statusMatch && categoryMatch && searchMatch;
-  });
+  // Reset to page 1 when filters/search change
+  useEffect(() => {
+    setPage(1);
+  }, [filterStatus, filterCategory, searchTerm, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   // Animation variants
   const containerVariants = {
@@ -376,256 +306,219 @@ export default function BrowseGearsPage() {
     }
   };
 
-  const handleCheckout = async (gear: Gear) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to checkout gear",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      // Start a transaction
-      const now = new Date();
-      const dueDate = new Date(now);
-      dueDate.setDate(dueDate.getDate() + 7); // Default to 7 days
-
-      // Update gear status
-      const { error: gearError } = await supabase
-        .from('gears')
-        .update({
-          status: 'Checked Out',
-          checked_out_to: user.id,
-          last_checkout_date: now.toISOString(),
-          due_date: dueDate.toISOString(),
-          updated_at: now.toISOString()
-        })
-        .eq('id', gear.id);
-
-      if (gearError) throw gearError;
-
-      // Create a checkout record
-      const { error: checkoutError } = await supabase
-        .from('gear_checkouts')
-        .insert({
-          gear_id: gear.id,
-          user_id: user.id,
-          checkout_date: now.toISOString(),
-          expected_return_date: dueDate.toISOString(),
-          status: 'Checked Out'
-        });
-
-      if (checkoutError) {
-        // If creating checkout record fails, revert gear status
-        await supabase
-          .from('gears')
-          .update({
-            status: 'Available',
-            checked_out_to: null,
-            last_checkout_date: null,
-            due_date: null,
-            updated_at: now.toISOString()
-          })
-          .eq('id', gear.id);
-
-        throw checkoutError;
-      }
-
-      // Create notification for the user
-      await createGearNotification(user.id, gear.name, 'checkout');
-
-      // Fetch user profile for notification
-      let userProfile = null;
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('full_name, email')
-        .eq('id', user.id)
-        .single();
-      if (!profileError) userProfile = profileData;
-
-      // Send Google Chat notification for direct checkout
-      await fetch('/api/notifications/google-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventType: 'USER_CHECKOUT',
-          payload: {
-            userName: userProfile?.full_name || 'Unknown User',
-            userEmail: userProfile?.email || 'Unknown Email',
-            gearName: gear.name,
-            checkoutDate: now.toLocaleString(),
-          }
-        })
-      });
-
-      toast({
-        title: "Success",
-        description: `Successfully checked out ${gear.name}`,
-      });
-
-    } catch (error) {
-      console.error('Error during checkout:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error
-          ? `Failed to checkout gear: ${error.message}`
-          : "Failed to checkout gear. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
+  // handleCheckout removed (not used in UI)
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="space-y-6"
+      className="space-y-4 sm:space-y-6"
     >
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold text-foreground">Browse Gear</h1>
-        <Link href="/user/request">
-          <Button>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-4">
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Browse Gear</h1>
+        <Link href="/user/request" aria-label="Request Gear">
+          <Button aria-label="Request Gear">
             <PackagePlus className="mr-2 h-4 w-4" /> Request Gear
           </Button>
         </Link>
       </div>
 
+      {/* Mobile Filters Toggle */}
+      <div className="sm:hidden flex justify-end mb-2">
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={showMobileFilters ? 'Hide Filters' : 'Show Filters'}
+          onClick={() => setShowMobileFilters((v) => !v)}
+        >
+          {showMobileFilters ? 'Hide Filters' : 'Show Filters'}
+        </Button>
+      </div>
+
       {/* Filters and Search */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.4 }}
-      >
-        <Card>
-          <CardContent className="pt-6 flex flex-col md:flex-row gap-4">
-            <Input
-              placeholder="Search by gear name..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-grow"
-            />
-            <div className="flex gap-4 flex-wrap">
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Filter by Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Available">Available</SelectItem>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="Booked">Booked</SelectItem>
-                  <SelectItem value="Damaged">Damaged</SelectItem>
-                  <SelectItem value="New">New</SelectItem>
-                  {/* Add more statuses if needed */}
-                </SelectContent>
-              </Select>
-              <Select value={filterCategory} onValueChange={setFilterCategory}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Filter by Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="Camera">Camera</SelectItem>
-                  <SelectItem value="Lens">Lens</SelectItem>
-                  <SelectItem value="Drone">Drone</SelectItem>
-                  <SelectItem value="Audio">Audio</SelectItem>
-                  <SelectItem value="Laptop">Laptop</SelectItem>
-                  <SelectItem value="Monitor">Monitor</SelectItem>
-                  <SelectItem value="Cables">Cables</SelectItem>
-                  <SelectItem value="Lighting">Lighting</SelectItem>
-                  <SelectItem value="Tripod">Tripod</SelectItem>
-                  <SelectItem value="Accessory">Accessory</SelectItem>
-                  <SelectItem value="Cars">Cars</SelectItem>
-                  {/* Add more categories */}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+      <AnimatePresence>
+        {(showMobileFilters || typeof window === 'undefined' || window.innerWidth >= 640) && (
+          <motion.div
+            key="filters"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ delay: 0.1, duration: 0.4 }}
+            className={
+              'sm:block ' +
+              (showMobileFilters ? 'block' : 'hidden sm:block')
+            }
+          >
+            <Card>
+              <CardContent className="pt-4 sm:pt-6 flex flex-col md:flex-row gap-2 sm:gap-4">
+                <Input
+                  placeholder="Search by gear name..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="flex-grow min-h-[44px]"
+                  aria-label="Search by gear name"
+                />
+                <div className="flex gap-2 sm:gap-4 flex-wrap">
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]" aria-label="Filter by Status">
+                      <SelectValue placeholder="Filter by Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Available">Available</SelectItem>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="Booked">Booked</SelectItem>
+                      <SelectItem value="Damaged">Damaged</SelectItem>
+                      <SelectItem value="New">New</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={filterCategory} onValueChange={setFilterCategory}>
+                    <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]" aria-label="Filter by Category">
+                      <SelectValue placeholder="Filter by Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      <SelectItem value="Camera">Camera</SelectItem>
+                      <SelectItem value="Lens">Lens</SelectItem>
+                      <SelectItem value="Drone">Drone</SelectItem>
+                      <SelectItem value="Audio">Audio</SelectItem>
+                      <SelectItem value="Laptop">Laptop</SelectItem>
+                      <SelectItem value="Monitor">Monitor</SelectItem>
+                      <SelectItem value="Cables">Cables</SelectItem>
+                      <SelectItem value="Lighting">Lighting</SelectItem>
+                      <SelectItem value="Tripod">Tripod</SelectItem>
+                      <SelectItem value="Accessory">Accessory</SelectItem>
+                      <SelectItem value="Cars">Cars</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Loading state */}
       {isLoading && (
-        <div className="flex justify-center items-center py-20">
+        <div className="flex justify-center items-center py-16 sm:py-20">
           <p className="text-muted-foreground">Loading gear items...</p>
         </div>
       )}
 
       {/* Gear Grid */}
       {!isLoading && (
-        <motion.div
-          ref={listContainerRef}
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-        >
-          {filteredGears.length > 0 ? (
-            filteredGears.map((gear) => (
-              <motion.div key={gear.id} variants={itemVariants}>
-                <Card className="overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
-                  <CardHeader className="p-0">
-                    <div className="w-full h-48 relative bg-muted">
-                      {gear.image_url ? (
-                        <Image
-                          src={gear.image_url}
-                          alt={gear.name}
-                          fill
-                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                          className="object-cover"
-                          unoptimized // Important for Supabase Storage URLs
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                          No image available
-                        </div>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 flex-grow">
-                    <div className="flex justify-between items-start mb-2">
-                      <CardTitle className="text-lg font-semibold">{gear.name}</CardTitle>
-                      <Badge variant={
-                        gear.status === 'Available' ? 'default' :
-                          gear.status === 'Booked' ? 'secondary' :
-                            gear.status === 'Damaged' ? 'destructive' :
-                              gear.status === 'New' ? 'outline' : // Example for 'New'
-                                'secondary' // Default badge
-                      } className={`capitalize text-xs ${gear.status === 'Available' ? 'bg-accent text-accent-foreground' : ''}`}>
-                        {gear.status}
-                      </Badge>
-                    </div>
-                    <CardDescription className="text-sm mb-1">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium text-xs ${getCategoryBadgeClass(gear.category || '')}`}>
-                        {getCategoryIcon(gear.category || '', 14)}
-                        {gear.category}
-                      </span>
-                    </CardDescription>
-                    <p className="text-sm line-clamp-2">{gear.description}</p>
-                  </CardContent>
-                  <CardFooter className="p-4 bg-muted/30 flex justify-end gap-2">
-                    <Link href={`/user/request?gearId=${gear.id}`}>
-                      <Button size="sm" disabled={gear.status !== 'Available'}>
-                        <PackagePlus className="mr-1 h-4 w-4" /> Request
-                      </Button>
-                    </Link>
-                  </CardFooter>
-                </Card>
-              </motion.div>
-            ))
-          ) : (
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="col-span-full text-center text-muted-foreground py-10"
+        <>
+          <motion.div
+            ref={listContainerRef}
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6"
+          >
+            {gears.length > 0 ? (
+              gears.map((gear) => (
+                <motion.div key={gear.id} variants={itemVariants}>
+                  <Card className="overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
+                    <CardHeader className="p-0">
+                      <div className="w-full h-32 sm:h-48 relative bg-muted">
+                        {gear.image_url ? (
+                          <Image
+                            src={gear.image_url}
+                            alt={gear.name}
+                            fill
+                            sizes="(max-width: 640px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                            No image available
+                          </div>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-3 sm:p-4 flex-grow">
+                      <div className="flex justify-between items-start mb-1 sm:mb-2">
+                        <CardTitle className="text-base sm:text-lg font-semibold">{gear.name}</CardTitle>
+                        <Badge variant={
+                          gear.status === 'Available' ? 'default' :
+                            gear.status === 'Booked' ? 'secondary' :
+                              gear.status === 'Damaged' ? 'destructive' :
+                                gear.status === 'New' ? 'outline' :
+                                  'secondary'
+                        } className={`capitalize text-xs ${gear.status === 'Available' ? 'bg-accent text-accent-foreground' : ''}`}>
+                          {gear.status}
+                        </Badge>
+                      </div>
+                      <CardDescription className="text-xs sm:text-sm mb-1">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium text-xs ${getCategoryBadgeClass(gear.category || '')}`}
+                        >
+                          {getCategoryIcon(gear.category || '', 14)}
+                          {gear.category}
+                        </span>
+                      </CardDescription>
+                      <p className="text-xs sm:text-sm line-clamp-2">{gear.description}</p>
+                    </CardContent>
+                    <CardFooter className="p-3 sm:p-4 bg-muted/30 flex justify-end gap-2">
+                      <Link href={`/user/request?gearId=${gear.id}`} aria-label={`Request ${gear.name}`}>
+                        <Button size="sm" disabled={gear.status !== 'Available'} aria-label={`Request ${gear.name}`}
+                          className="min-h-[44px] min-w-[44px]">
+                          <PackagePlus className="mr-1 h-4 w-4" /> Request
+                        </Button>
+                      </Link>
+                    </CardFooter>
+                  </Card>
+                </motion.div>
+              ))
+            ) : (
+              <div className="col-span-full flex flex-col items-center justify-center py-8 sm:py-12">
+                <Box className="h-10 w-10 text-gray-400 mb-2" />
+                <div className="text-base sm:text-lg font-semibold text-gray-600 mb-1">No gear found</div>
+                <div className="text-xs sm:text-sm text-muted-foreground mb-2">Try adjusting your filters or search.</div>
+              </div>
+            )}
+          </motion.div>
+
+          {/* Sticky Pagination Controls for mobile */}
+          <div className="fixed bottom-0 left-0 w-full z-20 bg-background border-t border-border py-2 px-2 flex sm:static sm:border-0 sm:bg-transparent sm:py-0 sm:px-0 justify-center items-center gap-2 sm:gap-4 mt-4 sm:mt-8 shadow-sm sm:shadow-none">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              aria-label="Previous Page"
+              className="min-h-[44px] min-w-[44px]"
             >
-              No gear found matching your criteria.
-            </motion.p>
-          )}
-        </motion.div>
+              Previous
+            </Button>
+            <span className="text-xs sm:text-sm">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              aria-label="Next Page"
+              className="min-h-[44px] min-w-[44px]"
+            >
+              Next
+            </Button>
+            <span className="ml-2 sm:ml-4 text-[10px] sm:text-xs text-muted-foreground">
+              Showing {gears.length} of {total} items
+            </span>
+            <select
+              className="ml-2 sm:ml-4 border rounded px-2 py-1 text-[10px] sm:text-xs bg-background min-h-[36px]"
+              value={pageSize}
+              onChange={e => setPageSize(Number(e.target.value))}
+              aria-label="Items per page"
+            >
+              {[8, 12, 16, 24, 32].map(size => (
+                <option key={size} value={size}>{size} / page</option>
+              ))}
+            </select>
+          </div>
+        </>
       )}
     </motion.div>
   );

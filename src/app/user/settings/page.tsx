@@ -10,19 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Save, User, Lock, Bell } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client'; // Import Supabase client
-import { useRouter } from 'next/navigation';
-import { createProfileNotification } from '@/lib/notifications';
-import { useIsMobile } from '@/hooks/use-mobile'; // Add mobile detection
-import { Session as SupabaseSession, User as SupabaseUser } from '@supabase/supabase-js';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
 import { useSuccessFeedback } from '@/hooks/use-success-feedback';
+import { apiGet } from '@/lib/apiClient';
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -77,9 +73,7 @@ const PROFILE_FORM_DRAFT_KEY = "user-profile-form-draft";
 // --- Component ---
 export default function UserSettingsPage() {
     const { toast } = useToast();
-    const router = useRouter();
     const supabase = createClient();
-    const isMobile = useIsMobile();
     const { refreshProfile } = useUserProfile();
     const { showSuccessFeedback, showErrorFeedback, loading, setLoading } = useSuccessFeedback();
 
@@ -90,91 +84,11 @@ export default function UserSettingsPage() {
         emailOnRejection: true,
         emailOnDueSoon: true,
     });
-    const [isProfileLoading, setIsProfileLoading] = useState(false);
-    const [isPasswordLoading, setIsPasswordLoading] = useState(false);
-    const [isNotificationLoading, setIsNotificationLoading] = useState(false);
+    // Removed unused isNotificationLoading, setIsNotificationLoading
     const [isLoadingUser, setIsLoadingUser] = useState(true);
     const [showCropper, setShowCropper] = useState(false);
     const [rawImage, setRawImage] = useState<string | null>(null);
-    const [croppedFile, setCroppedFile] = useState<File | null>(null);
-
-    // --- Effects ---
-    useEffect(() => {
-        const fetchData = async (userId: string) => {
-            setIsLoadingUser(true);
-            console.log("UserSettings: Fetching profile for user ID:", userId);
-            const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-
-            let fallbackEmail = '';
-            try {
-                const { data: userData } = await supabase.auth.getUser();
-                fallbackEmail = userData?.user?.email || '';
-            } catch { }
-
-            if (profileError) {
-                console.error("UserSettings: Error fetching profile:", profileError.message);
-                toast({ title: "Error", description: "Could not load your profile data.", variant: "destructive" });
-                setCurrentUserData(null);
-            } else if (profileData) {
-                console.log("UserSettings: Profile loaded:", profileData);
-                setCurrentUserData(profileData);
-                profileForm.reset({
-                    fullName: profileData.full_name || '',
-                    email: profileData.email || fallbackEmail,
-                    phone: profileData.phone || '',
-                    department: profileData.department || '',
-                    profilePicture: undefined,
-                });
-                // TODO: Fetch and set actual user notification settings
-                // setNotificationSettings(profileData.notificationPrefs || {...});
-            } else {
-                console.error("UserSettings: Profile not found for UID:", userId);
-                toast({ title: "Error", description: "Your profile data could not be found.", variant: "destructive" });
-                setCurrentUserData(null);
-                // Consider redirecting or handling this state appropriately
-                // router.push('/login');
-            }
-            setIsLoadingUser(false);
-        };
-
-        // Listen for Auth changes to get user ID
-        const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: SupabaseSession | null) => {
-            if (session?.user && !currentUserData) { // Fetch only if user exists and data isn't loaded
-                console.log("UserSettings: Auth state change, fetching profile for", session.user.id);
-                fetchData(session.user.id);
-            } else if (!session?.user) {
-                console.log("UserSettings: No user session found, redirecting.");
-                setIsLoadingUser(false);
-                router.push('/login');
-            }
-            // Handle USER_UPDATED if necessary
-            if (event === 'USER_UPDATED' && session?.user) {
-                console.log("UserSettings: User updated, refetching profile.");
-                fetchData(session.user.id);
-            }
-        });
-
-        // Initial fetch if session already exists
-        supabase.auth.getSession().then(({ data: { session } }: { data: { session: SupabaseSession | null } }) => {
-            if (session?.user) {
-                fetchData(session.user.id);
-            } else {
-                setIsLoadingUser(false); // No user, stop loading
-                router.push('/login');
-            }
-        });
-
-
-        // Cleanup
-        return () => {
-            authListener?.subscription.unsubscribe();
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Run on mount
+    // Removed unused croppedFile, setCroppedFile
 
     // --- Forms ---
     const profileForm = useForm<ProfileFormValues>({ resolver: zodResolver(profileSchema), defaultValues: { fullName: '', email: '', phone: '', department: '', profilePicture: undefined } });
@@ -203,6 +117,52 @@ export default function UserSettingsPage() {
 
     // Clear draft on submit
     const clearProfileDraft = () => localStorage.removeItem(PROFILE_FORM_DRAFT_KEY);
+
+    // --- Effects ---
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoadingUser(true);
+            console.log("UserSettings: Fetching profile from API");
+            const { data: profileData, error: profileError } = await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/profile`);
+            let fallbackEmail = '';
+            try {
+                const { data: userData } = await supabase.auth.getUser();
+                fallbackEmail = userData?.user?.email || '';
+            } catch { }
+            if (profileError) {
+                console.error("UserSettings: Error fetching profile:", profileError);
+                toast({ title: "Error", description: "Could not load your profile data.", variant: "destructive" });
+                setCurrentUserData(null);
+            } else if (profileData) {
+                console.log("UserSettings: Profile loaded:", profileData);
+                setCurrentUserData(profileData);
+                profileForm.reset({
+                    fullName: profileData.full_name || '',
+                    email: profileData.email || fallbackEmail,
+                    phone: profileData.phone || '',
+                    department: profileData.department || '',
+                    profilePicture: undefined,
+                });
+            } else {
+                console.error("UserSettings: Profile not found");
+                toast({ title: "Error", description: "Your profile data could not be found.", variant: "destructive" });
+                setCurrentUserData(null);
+            }
+            setIsLoadingUser(false);
+        };
+        fetchData();
+        // Listen for Auth changes to refresh profile
+        const { data: authListener } = supabase.auth.onAuthStateChange((event: string) => {
+            if (event === 'USER_UPDATED' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                fetchData();
+            } else if (event === 'SIGNED_OUT') {
+                setCurrentUserData(null);
+            }
+        });
+        return () => {
+            authListener?.subscription.unsubscribe();
+        };
+    }, [supabase, toast, profileForm]);
 
     // --- Handlers ---
     const onProfileSubmit = async (data: ProfileFormValues) => {
@@ -283,7 +243,7 @@ export default function UserSettingsPage() {
             setCurrentUserData((prev) => prev ? { ...prev, ...profileUpdateData } : null);
 
             // Create notification for the user
-            await createProfileNotification(user.id, 'update');
+            // await createProfileNotification(user.id, 'update'); // This line was removed as per the edit hint
 
             showSuccessFeedback({
                 toast: { title: "Profile Updated", description: "Your profile has been updated successfully." },
@@ -294,12 +254,12 @@ export default function UserSettingsPage() {
             });
             await refreshProfile();
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Profile update error:", error);
             showErrorFeedback({
                 toast: {
                     title: "Update Failed",
-                    description: error.message || "Could not update profile.",
+                    description: (error as Error).message || "Could not update profile.",
                 },
             });
         } finally {
@@ -317,13 +277,13 @@ export default function UserSettingsPage() {
 
         if (error) {
             console.error("Supabase password update error:", error);
-            if (error.message.includes("Password should be stronger")) {
+            if (typeof (error as Error).message === 'string' && (error as Error).message.includes("Password should be stronger")) {
                 passwordForm.setError("newPassword", { message: "Password is too weak." });
                 throw new Error("New password is too weak.");
-            } else if (error.message.includes("requires recent login")) {
+            } else if (typeof (error as Error).message === 'string' && (error as Error).message.includes("requires recent login")) {
                 throw new Error("Please log out and log back in to change password.");
             } else {
-                throw new Error(error.message || "An error occurred.");
+                throw new Error((typeof (error as Error).message === 'string' && (error as Error).message) || "An error occurred.");
             }
         }
 
@@ -343,12 +303,12 @@ export default function UserSettingsPage() {
 
     const handleSaveNotificationSettings = async (settingsToSave: typeof notificationSettings) => {
         if (!currentUserData) return;
-        setIsNotificationLoading(true);
+        // Removed unused isNotificationLoading, setIsNotificationLoading
         console.log("UserSettings: Saving notification settings:", settingsToSave);
         // TODO: Implement saving notification settings to Supabase profile
         const { error } = await supabase
             .from('profiles')
-            .update({ notification_prefs: settingsToSave, updated_at: new Date().toISOString() } as any) // Cast if 'notification_prefs' isn't strictly typed yet
+            .update({ notification_prefs: settingsToSave, updated_at: new Date().toISOString() } as unknown as ProfileUpdate) // Cast if 'notification_prefs' isn't strictly typed yet
             .eq('id', currentUserData.id);
 
         if (error) {
@@ -357,7 +317,7 @@ export default function UserSettingsPage() {
         } else {
             toast({ title: "Notification Settings Saved" });
         }
-        setIsNotificationLoading(false);
+        // Removed unused isNotificationLoading, setIsNotificationLoading
     };
 
     const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
@@ -431,7 +391,6 @@ export default function UserSettingsPage() {
                                         onClose={() => setShowCropper(false)}
                                         onCropComplete={async (croppedBlob) => {
                                             const croppedFile = new File([croppedBlob], 'avatar.jpg', { type: 'image/jpeg' });
-                                            setCroppedFile(croppedFile);
                                             profileForm.setValue('profilePicture', croppedFile);
                                             setShowCropper(false);
                                         }}
