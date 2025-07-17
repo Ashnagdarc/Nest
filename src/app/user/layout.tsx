@@ -1,3 +1,5 @@
+// User layout for Nest by Eden Oasis. Provides sidebar navigation and user context for user pages.
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -27,7 +29,6 @@ import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { useIsMobile } from '@/hooks/use-mobile';
 import CustomHamburger from '@/components/CustomHamburger';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
-import { useFCM } from '@/hooks/useFCM';
 import { DashboardHeader } from '@/components/DashboardHeader';
 
 const userNavItems = [
@@ -43,7 +44,7 @@ const userNavItems = [
 ];
 
 // Use any for Profile type if the database types aren't set up properly
-type Profile = any;
+type Profile = unknown;
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -70,9 +71,6 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   };
 
   const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
-
-  // Add push notification registration
-  useFCM(currentUser?.id ?? '');
 
   return (
     <SidebarProvider defaultOpen={!isMobile}>

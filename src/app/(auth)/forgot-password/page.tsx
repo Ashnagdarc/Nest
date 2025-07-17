@@ -1,3 +1,5 @@
+// Forgot Password Page - Allows users to request a password reset email
+
 "use client";
 
 import Link from 'next/link';
@@ -11,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
-import { createClient } from '@/lib/supabase/client'; // Import Supabase client creation function
+import { createClient } from '@/lib/supabase/client';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -22,41 +24,23 @@ type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 export default function ForgotPasswordPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const supabase = createClient(); // Create Supabase client instance
+  const supabase = createClient();
 
+  // Handle form submission and send password reset email
   const onSubmit = async (data: ForgotPasswordFormValues) => {
     setIsLoading(true);
-
     try {
-      // Use Supabase Auth to send password reset email
       const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-        redirectTo: `${window.location.origin}/reset-password`, // URL user is redirected to after clicking link
+        redirectTo: `${window.location.origin}/reset-password`,
       });
-
-      if (error) {
-        console.error("Supabase Password Reset Error:", error);
-        // Handle specific errors if needed, e.g., rate limits
-        // Show a generic success message for security (prevents email enumeration)
-        toast({
-          title: "Check Your Email",
-          description: "If an account exists for this email, you will receive instructions to reset your password.",
-          variant: "success", // Use success variant even on error for security
-          duration: 7000,
-        });
-      } else {
-        // Show success message
-        toast({
-          title: "Check Your Email",
-          description: "If an account exists for this email, you will receive instructions to reset your password.",
-          variant: "success", // Use success variant
-          duration: 7000, // Give users more time to read
-        });
-
-        // Optionally clear form or redirect after a delay
-        form.reset();
-        // await new Promise(resolve => setTimeout(resolve, 2000));
-        // router.push('/login'); // Redirect after showing message
-      }
+      // Always show generic success message for security
+      toast({
+        title: "Check Your Email",
+        description: "If an account exists for this email, you will receive instructions to reset your password.",
+        variant: "success",
+        duration: 7000,
+      });
+      if (!error) form.reset();
     } catch (error: Error | unknown) {
       setIsLoading(false);
       toast({
@@ -69,9 +53,7 @@ export default function ForgotPasswordPage() {
 
   const form = useForm<ForgotPasswordFormValues>({
     resolver: zodResolver(forgotPasswordSchema),
-    defaultValues: {
-      email: '',
-    },
+    defaultValues: { email: '' },
   });
 
   return (

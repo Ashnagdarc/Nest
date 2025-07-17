@@ -1,6 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { apiGet } from '@/lib/apiClient';
 
 export type UserProfile = {
     id: string;
@@ -31,19 +32,9 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setIsLoading(true);
         setError(null);
         try {
-            const { data: { user }, error: userError } = await supabase.auth.getUser();
-            if (userError) throw userError;
-            if (!user) {
-                setProfile(null);
-                setIsLoading(false);
-                return;
-            }
-            const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .single();
-            if (profileError) throw profileError;
+            // Fetch profile from API
+            const { data: profileData, error: profileError } = await apiGet<{ data: UserProfile | null; error: string | null }>(`/api/users/profile`);
+            if (profileError) throw new Error(profileError);
             setProfile(profileData);
         } catch (err: any) {
             setError(err.message || 'Failed to load user profile');
@@ -51,12 +42,12 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
         } finally {
             setIsLoading(false);
         }
-    }, [supabase]);
+    }, []);
 
     useEffect(() => {
         fetchProfile();
         // Listen for auth state changes
-        const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: any) => {
+        const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: unknown) => {
             if (event === 'USER_UPDATED' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 fetchProfile();
             } else if (event === 'SIGNED_OUT') {

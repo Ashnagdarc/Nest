@@ -23,9 +23,11 @@ import React, {
     useMemo,
     useRef
 } from 'react'
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/types/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { apiGet } from '@/lib/apiClient'
 
 // Type definitions for cleaner code and better IntelliSense
 type Gear = Database['public']['Tables']['gears']['Row']
@@ -187,20 +189,16 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     })
 
     // Cache and refs
-    const cacheRef = useRef<Map<string, { data: any; timestamp: Date; ttl: number }>>(new Map())
-    const subscriptionsRef = useRef<any[]>([])
+    const cacheRef = useRef<Map<string, { data: unknown; timestamp: Date; ttl: number }>>(new Map())
+    const subscriptionsRef = useRef<RealtimeChannel[]>([])
     const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
     // Simplified fetch functions
     const fetchGears = useCallback(async () => {
         setLoadingStates(prev => ({ ...prev, gears: true }))
         try {
-            const { data, error } = await supabase
-                .from('gears')
-                .select('*')
-                .order('created_at', { ascending: false })
-
-            if (error) throw error
+            const { data, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears`)
+            if (error) throw new Error(error)
             setGears(data || [])
         } catch (err) {
             console.error('Failed to fetch gears:', err)
@@ -208,17 +206,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setLoadingStates(prev => ({ ...prev, gears: false }))
         }
-    }, [supabase])
+    }, [])
 
     const fetchUsers = useCallback(async () => {
         setLoadingStates(prev => ({ ...prev, users: true }))
         try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .order('created_at', { ascending: false })
-
-            if (error) throw error
+            const { data, error } = await apiGet<{ data: Profile[]; error: string | null }>(`/api/users`)
+            if (error) throw new Error(error)
             setUsers(data || [])
         } catch (err) {
             console.error('Failed to fetch users:', err)
@@ -226,17 +220,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setLoadingStates(prev => ({ ...prev, users: false }))
         }
-    }, [supabase])
+    }, [])
 
     const fetchRequests = useCallback(async () => {
         setLoadingStates(prev => ({ ...prev, requests: true }))
         try {
-            const { data, error } = await supabase
-                .from('gear_requests')
-                .select('*')
-                .order('created_at', { ascending: false })
-
-            if (error) throw error
+            // Use centralized API client and RESTful endpoint
+            const { data, error } = await apiGet<{ data: GearRequest[]; error: string | null }>(`/api/requests`)
+            if (error) throw new Error(error)
             setRequests(data || [])
         } catch (err) {
             console.error('Failed to fetch requests:', err)
@@ -244,18 +235,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setLoadingStates(prev => ({ ...prev, requests: false }))
         }
-    }, [supabase])
+    }, [])
 
     const fetchActivities = useCallback(async () => {
         setLoadingStates(prev => ({ ...prev, activities: true }))
         try {
-            const { data, error } = await supabase
-                .from('gear_activity_log')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(50)
-
-            if (error) throw error
+            // Use centralized API client and RESTful endpoint
+            const { data, error } = await apiGet<{ data: ActivityLog[]; error: string | null }>(`/api/dashboard/activities`)
+            if (error) throw new Error(error)
             setActivities(data || [])
         } catch (err) {
             console.error('Failed to fetch activities:', err)
@@ -263,18 +250,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setLoadingStates(prev => ({ ...prev, activities: false }))
         }
-    }, [supabase])
+    }, [])
 
     const fetchNotifications = useCallback(async () => {
         setLoadingStates(prev => ({ ...prev, notifications: true }))
         try {
-            const { data, error } = await supabase
-                .from('notifications')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(100)
-
-            if (error) throw error
+            // Use centralized API client and RESTful endpoint
+            const { data, error } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications`)
+            if (error) throw new Error(error)
             setNotifications(data || [])
         } catch (err) {
             console.error('Failed to fetch notifications:', err)
@@ -282,7 +265,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setLoadingStates(prev => ({ ...prev, notifications: false }))
         }
-    }, [supabase])
+    }, [])
 
     // Simplified refresh function
     const refreshData = useCallback(async () => {
@@ -443,9 +426,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                         fetchGears()
 
                         if (payload.eventType === 'INSERT') {
+                            const newPayload = payload.new as { name?: string };
                             toast({
                                 title: "New Equipment Added",
-                                description: `${(payload.new as any)?.name || 'Equipment'} has been added to inventory`,
+                                description: `${newPayload?.name || 'Equipment'} has been added to inventory`,
                             })
                         }
                     }
@@ -567,7 +551,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         return () => {
             mounted = false
         }
-    }, []) // Empty dependency array - only run once
+    }, [fetchGears, fetchUsers, fetchRequests, fetchActivities, fetchNotifications])
 
     // Real-time Setup Effect
     useEffect(() => {

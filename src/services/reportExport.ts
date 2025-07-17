@@ -2,7 +2,6 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { WeeklyUsageReport } from './report-client';
 import { format } from 'date-fns';
-import { createClient } from '@/lib/supabase/client';
 
 // Define proper color types for jsPDF
 type RGBColor = [number, number, number];
@@ -211,56 +210,87 @@ function renderMetricCards(config: PDFConfig, metrics: MetricCard[], currentY: n
 }
 
 /**
- * Generate dynamic insights based on data
+ * Generate dynamic insights based on real data
  */
 function generateDynamicInsights(realData: RealDataStructure): string[] {
-  const insights = [];
-  const utilizationRate = calculateUtilizationRate(realData.stats);
+  const insights: string[] = [];
+  const stats = realData.stats;
 
-  if (utilizationRate === 0 && realData.stats.recent_activities === 0) {
-    insights.push('SYSTEM ADOPTION: No recorded activity suggests training needs or manual tracking preferences. Consider user onboarding initiatives.');
+  // Asset utilization insights
+  const utilizationRate = calculateUtilizationRate(stats);
+  if (utilizationRate === 0) {
+    insights.push(`No equipment is currently being utilized. All ${stats.total_gears} assets are available.`);
+  } else if (utilizationRate < 30) {
+    insights.push(`Low equipment utilization rate of ${utilizationRate.toFixed(1)}%. Consider promoting available equipment to increase usage.`);
+  } else if (utilizationRate > 80) {
+    insights.push(`High equipment utilization rate of ${utilizationRate.toFixed(1)}%. Consider acquiring additional equipment to meet demand.`);
+  } else {
+    insights.push(`Healthy equipment utilization rate of ${utilizationRate.toFixed(1)}%.`);
   }
 
-  if (realData.stats.overdue_requests === 0) {
-    insights.push('COMPLIANCE EXCELLENCE: Zero overdue returns demonstrate effective tracking and strong policy adherence.');
+  // User engagement insights
+  const activeUserRate = stats.total_users > 0 ? (stats.active_users / stats.total_users) * 100 : 0;
+  if (activeUserRate === 0) {
+    insights.push(`No active users in this period. User engagement needs immediate attention.`);
+  } else if (activeUserRate < 50) {
+    insights.push(`Only ${activeUserRate.toFixed(1)}% of users are actively engaging with the system. Consider user training or outreach.`);
+  } else {
+    insights.push(`Good user engagement with ${activeUserRate.toFixed(1)}% of users actively using the system.`);
   }
 
-  if (realData.stats.total_gears > 0 && utilizationRate < 10) {
-    insights.push('UTILIZATION OPPORTUNITY: Low equipment usage may indicate availability surplus or access barriers.');
+  // Overdue items insights
+  if (stats.overdue_requests > 0) {
+    insights.push(`${stats.overdue_requests} overdue items require attention. Consider sending reminders to improve return rates.`);
+  } else {
+    insights.push(`No overdue items. Excellent compliance with return policies.`);
   }
 
-  if (insights.length === 0) {
-    insights.push('SYSTEM STATUS: Asset tracking system operating with current activity levels. Monitor for optimization opportunities.');
+  // Popular equipment insights
+  if (realData.gears.length > 0) {
+    const topGear = realData.gears.sort((a, b) => b.request_count - a.request_count)[0];
+    insights.push(`"${topGear.gear_name}" is the most requested item with ${topGear.request_count} requests.`);
   }
 
   return insights;
 }
 
 /**
- * Generate dynamic recommendations based on data
+ * Generate dynamic recommendations based on real data
  */
 function generateDynamicRecommendations(realData: RealDataStructure): string[] {
-  const recommendations = [];
-  const utilizationRate = calculateUtilizationRate(realData.stats);
+  const recommendations: string[] = [];
+  const stats = realData.stats;
 
+  // Utilization recommendations
+  const utilizationRate = calculateUtilizationRate(stats);
   if (utilizationRate === 0) {
-    recommendations.push('PRIORITY: Implement user training program to increase system adoption and equipment usage.');
+    recommendations.push(`Conduct training sessions to familiarize users with available equipment and how to request them.`);
+  } else if (utilizationRate < 30) {
+    recommendations.push(`Review equipment catalog and promote underutilized assets through internal communications.`);
+  } else if (utilizationRate > 80) {
+    recommendations.push(`Evaluate purchasing additional high-demand equipment to prevent shortages.`);
   }
 
-  if (realData.stats.active_users === 0) {
-    recommendations.push('ENGAGEMENT: Focus on onboarding staff to digital asset tracking workflows and processes.');
+  // User engagement recommendations
+  const activeUserRate = stats.total_users > 0 ? (stats.active_users / stats.total_users) * 100 : 0;
+  if (activeUserRate < 50) {
+    recommendations.push(`Implement user engagement strategies such as training sessions or simplified request processes.`);
   }
 
-  if (realData.stats.total_gears > 40 && utilizationRate < 20) {
-    recommendations.push('OPTIMIZATION: Consider asset reallocation or review access procedures to improve utilization.');
+  // Overdue items recommendations
+  if (stats.overdue_requests > 0) {
+    recommendations.push(`Set up automated reminders for users with overdue equipment to improve return rates.`);
   }
 
-  if (realData.stats.overdue_requests === 0) {
-    recommendations.push('MAINTAIN: Continue current tracking and return policies - excellent compliance achieved.');
+  // Equipment maintenance recommendations
+  const needsMaintenanceCount = realData.gears.filter(g => g.condition === 'Poor' || g.condition === 'Needs Repair').length;
+  if (needsMaintenanceCount > 0) {
+    recommendations.push(`Schedule maintenance for ${needsMaintenanceCount} items reported in poor condition.`);
   }
 
-  if (recommendations.length === 0) {
-    recommendations.push('MONITORING: Establish regular reporting cadence to track system adoption and usage patterns.');
+  // Policy recommendations based on usage patterns
+  if (stats.recent_activities > 0 && stats.overdue_requests === 0) {
+    recommendations.push(`Current equipment policies are working well. Maintain current approach.`);
   }
 
   return recommendations;

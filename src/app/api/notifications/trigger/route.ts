@@ -256,10 +256,10 @@ export async function POST(req: NextRequest) {
         }
     }
 
-    let errors = [];
+    const errors = [];
     for (const target of targets) {
         const targetId = target.id;
-        let targetEmail = target.email;
+        const targetEmail = target.email;
         let notificationId = null;
         let lastError = null;
         const prefs = target.preferences || {};

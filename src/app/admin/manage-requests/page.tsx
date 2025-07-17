@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Check, X, Clock, Filter, ThumbsUp, ThumbsDown, Download, Package, RotateCcw, AlertCircle, CheckCircle, XCircle, Bell, BellRing, Loader2 } from 'lucide-react';
+import { X, Filter, Download, Bell, BellRing, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -19,21 +19,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Mail } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import { createSystemNotification } from '@/lib/notifications';
-import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -46,8 +40,11 @@ import {
 } from "@/components/ui/dialog";
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { useSuccessFeedback } from '@/hooks/use-success-feedback';
+import { apiGet } from '@/lib/apiClient';
+import { createClient } from '@/lib/supabase/client';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // --- Dynamically import Lottie ---
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
@@ -59,86 +56,10 @@ import rejectAnimation from "@/../public/animations/reject.json";
 // --- Import the notification sound ---
 const NOTIFICATION_SOUND_URL = '/sounds/notification-bell.mp3'; // Add this sound file to your public folder
 
-type StatusHistory = { status: string; timestamp: Date; note?: string }[];
-type GearDetail = { name: string; description: string; specs: string };
-
-// Add these types at the top of the file
-type GearCheckout = {
-  gear_id: string;
-  user_id: string;
-  request_id: string;
-  checkout_date: string;
-  due_date: string;
-  status: string;
-};
-
-type GearInfo = {
-  id: string;
-  name: string;
-};
-
-// Add these types at the top of the file
-type GearStatus = {
-  id: string;
-  status: string;
-  checked_out_to: string | null;
-};
-
-// Add these types at the top of the file
-type UpdatedGear = {
-  id: string;
-  status: string;
-  checked_out_to: string | null;
-};
-
-// Mock Data - Replace with actual data fetching
-// Added more diverse statuses and dates
-const mockRequests = [
-  { id: 'req1', userName: 'Alice Smith', gearNames: ['Canon EOS R5', 'Tripod X'], requestDate: new Date(2024, 6, 20, 10, 30), duration: '3 days', reason: 'Client Photoshoot', destination: 'Studio A', status: 'Pending', adminNotes: null, checkoutDate: null, dueDate: null, checkinDate: null },
-  { id: 'req2', userName: 'Bob Johnson', gearNames: ['DJI Mavic 3'], requestDate: new Date(2024, 6, 19, 14, 0), duration: '1 day', reason: 'Property Survey', destination: 'Site B', status: 'Approved', adminNotes: 'Approved, pickup ready.', checkoutDate: new Date(2024, 6, 20), dueDate: new Date(2024, 6, 21), checkinDate: null },
-  { id: 'req3', userName: 'Charlie Brown', gearNames: ['Sony A7 IV', 'Rode Mic'], requestDate: new Date(2024, 6, 18, 9, 0), duration: '5 days', reason: 'Video Interview', destination: 'Office Conf Room', status: 'Checked In', adminNotes: 'Returned.', checkoutDate: new Date(2024, 6, 18), dueDate: new Date(2024, 6, 23), checkinDate: new Date(2024, 6, 23) },
-  { id: 'req4', userName: 'David Lee', gearNames: ['Lens Kit'], requestDate: new Date(2024, 6, 21, 11, 0), duration: '2 hours', reason: 'Testing', destination: 'Tech Lab', status: 'Rejected', adminNotes: 'Duplicate request.', checkoutDate: null, dueDate: null, checkinDate: null },
-  { id: 'req5', userName: 'Alice Smith', gearNames: ['Aputure Light Dome'], requestDate: new Date(2024, 5, 15, 10, 0), duration: '1 week', reason: 'Internal Project', destination: 'Studio C', status: 'Checked In', adminNotes: 'Returned with minor wear.', checkoutDate: new Date(2024, 5, 16), dueDate: new Date(2024, 5, 23), checkinDate: new Date(2024, 5, 22) },
-  { id: 'req6', userName: 'Eve Davis', gearNames: ['Manfrotto Tripod'], requestDate: new Date(2024, 6, 22, 15, 0), duration: '2 days', reason: 'Outdoor Shoot', destination: 'Park Area', status: 'Pending', adminNotes: null, checkoutDate: null, dueDate: null, checkinDate: null },
-  { id: 'req7', userName: 'Bob Johnson', gearNames: ['Canon R5'], requestDate: new Date(2024, 4, 10), duration: '3 days', reason: 'Archived Project', destination: 'Site X', status: 'Checked In', adminNotes: 'Archived', checkoutDate: new Date(2024, 4, 11), dueDate: new Date(2024, 4, 14), checkinDate: new Date(2024, 4, 14) }, // Older request
-];
-
-// Mock gear details
-const gearDetails: Record<string, GearDetail> = {
-  'Canon EOS R5': { name: 'Canon EOS R5', description: 'High-res mirrorless camera', specs: '45MP, 8K video' },
-  'Tripod X': { name: 'Tripod X', description: 'Sturdy tripod', specs: 'Max height: 180cm' },
-  'DJI Mavic 3': { name: 'DJI Mavic 3', description: 'Professional drone', specs: '4/3 CMOS, 46min flight' },
-  'Sony A7 IV': { name: 'Sony A7 IV', description: 'Full-frame mirrorless', specs: '33MP, 4K60p' },
-  'Rode Mic': { name: 'Rode Mic', description: 'Shotgun microphone', specs: 'Supercardioid' },
-  'Lens Kit': { name: 'Lens Kit', description: 'Assorted lenses', specs: '24-70mm, 70-200mm' },
-  'Aputure Light Dome': { name: 'Aputure Light Dome', description: 'Softbox for lighting', specs: '34.8" diameter' },
-  'Manfrotto Tripod': { name: 'Manfrotto Tripod', description: 'Lightweight tripod', specs: 'Max height: 160cm' },
-  'Canon R5': { name: 'Canon R5', description: 'Mirrorless camera', specs: '45MP, 8K video' },
-  'LED Panel': { name: 'LED Panel', description: 'Bi-color LED light', specs: '3200-5600K' },
-};
-
-// Update the isNewRequest function to check for pending status
-const isNewRequest = (status: string) => {
-  return status.toLowerCase() === 'pending';
-};
-
 // Add a function to determine if a request has been attended to
 const isAttendedRequest = (status: string) => {
   const attendedStatuses = ['approved', 'rejected', 'checked out', 'checked in', 'completed', 'cancelled'];
   return attendedStatuses.includes(status.toLowerCase());
-};
-
-// Add priority calculation function
-const getRequestPriority = (requestDate: Date): { level: 'low' | 'medium' | 'high', label: string } => {
-  const now = new Date();
-  const hoursSinceRequest = Math.floor((now.getTime() - requestDate.getTime()) / (1000 * 60 * 60));
-
-  if (hoursSinceRequest >= 24) {
-    return { level: 'high', label: 'High Priority' };
-  } else if (hoursSinceRequest >= 12) {
-    return { level: 'medium', label: 'Medium Priority' };
-  }
-  return { level: 'low', label: 'Low Priority' };
 };
 
 // Add timeline components
@@ -192,6 +113,7 @@ interface GearRequest {
   id: string;
   userName: string;
   userEmail?: string;
+  avatarUrl?: string;
   gearNames: string[];
   requestDate: Date;
   duration: string;
@@ -221,13 +143,11 @@ function ManageRequestsContent() {
   const [requests, setRequests] = useState<GearRequest[]>([]); // Now fetched from DB
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [filterUser, setFilterUser] = useState('');
   const [filterStatus, setFilterStatus] = useState(statusParam || 'all');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [gearFilter, setGearFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [keyword, setKeyword] = useState('');
-  const [currentUserRole, setCurrentUserRole] = useState<string>('');
   const { toast } = useToast(); // Initialize toast
   const [requestToReject, setRequestToReject] = useState<string | null>(null); // For rejection confirmation
   const [showAnimation, setShowAnimation] = useState<{ type: 'approve' | 'reject'; id: string | null }>({ type: 'approve', id: null }); // State for animations
@@ -235,14 +155,16 @@ function ManageRequestsContent() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false); // For details modal
   const [rejectionReason, setRejectionReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [statusHistory, setStatusHistory] = useState<any[]>([]); // For audit trail
-  const [previousRequestCount, setPreviousRequestCount] = useState<number>(0);
-  const [newRequestNotification, setNewRequestNotification] = useState<GearRequest | null>(null);
+  const [statusHistory, setStatusHistory] = useState<StatusHistoryItem[]>([]); // For audit trail
   const [showNotificationPopup, setShowNotificationPopup] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true); // Default sound on
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedRequests, setSelectedRequests] = useState<string[]>([]);
   const { showSuccessFeedback } = useSuccessFeedback();
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
   // Initialize audio element
   useEffect(() => {
@@ -260,121 +182,79 @@ function ManageRequestsContent() {
     localStorage.setItem('flowtagSoundEnabled', soundEnabled.toString());
   }, [soundEnabled]);
 
-  // Add this before the useEffect hooks
-  const fetchRequests = async () => {
+  // Update fetchRequests to use pagination and filters
+  const fetchRequests = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
-
     try {
-      // Fetch gear requests from the gear_requests table
-      const { data: requestsData, error: requestsError } = await supabase
-        .from('gear_requests')
-        .select('*, profiles:user_id(id, full_name, email)')
-        .order('created_at', { ascending: false });
-
+      // Build query params
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('pageSize', String(pageSize));
+      if (filterStatus && filterStatus !== 'all') params.set('status', filterStatus);
+      // Add more filters as needed (userFilter, gearFilter, keyword, dateRange)
+      // (For now, only status is supported server-side)
+      const { data: requestsData, total: totalCount, error: requestsError } = await apiGet<{ data: Record<string, unknown>[]; total: number; error: string | null }>(`/api/requests?${params.toString()}`);
       if (requestsError) {
         console.error('Error fetching gear requests:', requestsError);
         setFetchError('Failed to load gear requests.');
         setRequests([]);
+        setTotal(0);
         return;
       }
-
+      setTotal(totalCount || 0);
       // Process and map the data to the format expected by the UI
-      const processedRequests = await Promise.all(requestsData.map(async (request: any) => {
+      const processedRequests = await Promise.all((requestsData || []).map(async (request: Record<string, unknown>) => {
         // Fetch gear details for gear_ids array
         let gearNames: string[] = [];
-        if (request.gear_ids && request.gear_ids.length > 0) {
-          const { data: gearData } = await supabase
-            .from('gears')
-            .select('id, name')
-            .in('id', request.gear_ids);
-
-          gearNames = gearData ? gearData.map((gear: any) => gear.name) : [];
+        if (Array.isArray(request.gear_ids) && request.gear_ids.length > 0) {
+          const { data: gearData } = await apiGet<{ data: { name: string }[]; error: string | null }>(`/api/gears?ids=${request.gear_ids.join(',')}`);
+          gearNames = gearData ? gearData.map((gear) => gear.name) : [];
         }
-
+        // Extract first name from full_name
+        let firstName = 'Unknown User';
+        if (typeof request.profiles === 'object' && request.profiles && 'full_name' in request.profiles && typeof request.profiles.full_name === 'string') {
+          firstName = request.profiles.full_name.split(' ')[0] || request.profiles.full_name;
+        }
         return {
-          id: request.id,
-          userName: request.profiles?.full_name || 'Unknown User',
-          userEmail: request.profiles?.email,
-          userId: request.user_id,
+          id: request.id as string,
+          userName: firstName,
+          userEmail: request.profiles && typeof request.profiles === 'object' && 'email' in request.profiles ? request.profiles.email as string : undefined,
+          avatarUrl: request.profiles && typeof request.profiles === 'object' && 'avatar_url' in request.profiles ? request.profiles.avatar_url as string : undefined,
+          userId: request.user_id as string,
           gearNames: gearNames,
-          requestDate: new Date(request.created_at),
-          duration: request.expected_duration || 'Not specified',
-          reason: request.reason || 'Not specified',
-          destination: request.destination || 'Not specified',
-          status: request.status || 'Pending',
-          adminNotes: request.admin_notes || null,
-          checkoutDate: request.checkout_date ? new Date(request.checkout_date) : null,
-          dueDate: request.due_date ? new Date(request.due_date) : null,
-          checkinDate: request.checkin_date ? new Date(request.checkin_date) : null,
+          requestDate: new Date(request.created_at as string),
+          duration: (request.expected_duration as string) || 'Not specified',
+          reason: (request.reason as string) || 'Not specified',
+          destination: (request.destination as string) || 'Not specified',
+          status: (request.status as string) || 'Pending',
+          adminNotes: (request.admin_notes as string) || null,
+          checkoutDate: request.checkout_date ? new Date(request.checkout_date as string) : null,
+          dueDate: request.due_date ? new Date(request.due_date as string) : null,
+          checkinDate: request.checkin_date ? new Date(request.checkin_date as string) : null,
           teamMembers: request.team_members || null
         };
       }));
-
-      // Check for new requests
-      if (previousRequestCount > 0 && processedRequests.length > previousRequestCount) {
-        // Find the newest request (should be at index 0 if sorted by created_at desc)
-        const newestRequest = processedRequests[0];
-
-        // Only show notification for Pending requests
-        if (newestRequest && newestRequest.status === 'Pending') {
-          setNewRequestNotification(newestRequest);
-          setShowNotificationPopup(true);
-
-          // Play sound if enabled
-          if (soundEnabled && audioRef.current) {
-            audioRef.current.play().catch(e => console.error('Error playing notification sound:', e));
-          }
-
-          // Create notifications for all admin users
-          const { data: adminUsers } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('role', 'Admin');
-
-          if (adminUsers && adminUsers.length > 0) {
-            // Create notification for each admin
-            for (const admin of adminUsers) {
-              await createSystemNotification(
-                admin.id,
-                'New Gear Request',
-                `${newestRequest.userName} has requested ${newestRequest.gearNames.join(', ')}`
-              );
-            }
-          }
-        }
-      }
-
-      // Update request count for next comparison
-      setPreviousRequestCount(processedRequests.length);
-
-      console.log('Processed requests:', processedRequests);
       setRequests(processedRequests);
-    } catch (error: any) {
-      console.error('Error fetching requests:', error);
-      setFetchError(error.message);
+    } catch (error) {
+      console.error('Error fetching gear requests:', error);
+      setFetchError('Failed to load gear requests.');
       setRequests([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, filterStatus]);
 
-  // Update the useEffect to use the fetchRequests function
+  // Refetch when page, pageSize, or filterStatus changes
   useEffect(() => {
     fetchRequests();
+  }, [fetchRequests]);
 
-    // Set up real-time subscription
-    const channel = supabase
-      .channel('public:gear_requests')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gear_requests' }, () => {
-        fetchRequests();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+  // Reset to page 1 when filters/search change
+  useEffect(() => {
+    setPage(1);
+  }, [filterStatus, userFilter, gearFilter, keyword, dateRange]);
 
   // Fetch status history when a request is selected
   useEffect(() => {
@@ -384,9 +264,17 @@ function ManageRequestsContent() {
         .select('status, changed_at, note, profiles:changed_by(full_name)')
         .eq('request_id', selectedRequest.id)
         .order('changed_at', { ascending: true })
-        .then(({ data }: { data: any[] | null }) => {
-          if (data) {
-            setStatusHistory(data);
+        .then((res) => {
+          if (Array.isArray(res.data)) {
+            // Map to StatusHistoryItem if needed
+            setStatusHistory(res.data.map((item) => ({
+              status: item.status,
+              changed_at: item.changed_at,
+              note: item.note,
+              profiles: item.profiles && Array.isArray(item.profiles) && item.profiles[0] && typeof item.profiles[0].full_name === 'string'
+                ? { full_name: item.profiles[0].full_name }
+                : undefined,
+            })));
           } else {
             setStatusHistory([]);
           }
@@ -398,10 +286,9 @@ function ManageRequestsContent() {
 
   // Fetch current user's role for role-based access
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user } }: { data: { user: any } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }: { data: { user: { id: string } | null } }) => {
       if (user?.id) {
-        const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-        setCurrentUserRole(data?.role || '');
+        await supabase.from('profiles').select('role').eq('id', user.id).single();
       }
     });
   }, [supabase]);
@@ -434,7 +321,6 @@ function ManageRequestsContent() {
         .select('*, profiles:user_id(id, full_name, email)')
         .eq('id', requestId)
         .single();
-
       if (requestError) throw requestError;
 
       const { user_id, gear_ids } = request;
@@ -457,13 +343,12 @@ function ManageRequestsContent() {
           due_date: formattedDueDate
         })
         .in('id', gear_ids);
-
       if (gearStatusError) throw gearStatusError;
 
       // Create checkout records - now using a transaction to ensure all records are created
-      const checkoutRecords = gear_ids.map((gearId: string) => ({
+      const checkoutRecords = (gear_ids as string[]).map((gearId: string) => ({
         gear_id: gearId,
-        user_id: user_id,
+        user_id: user_id as string,
         request_id: requestId,
         checkout_date: formattedCheckoutDate,
         expected_return_date: formattedDueDate,
@@ -476,14 +361,12 @@ function ManageRequestsContent() {
         .update({ status: 'Returned', expected_return_date: formattedCheckoutDate })
         .in('gear_id', gear_ids)
         .eq('status', 'Checked Out');
-
       if (updateOldCheckoutsError) throw updateOldCheckoutsError;
 
       // Then insert new checkout records
       const { error: checkoutError } = await supabase
         .from('gear_checkouts')
         .insert(checkoutRecords);
-
       if (checkoutError) throw checkoutError;
 
       // Update gear_requests status to Checked Out (not just Approved)
@@ -496,12 +379,11 @@ function ManageRequestsContent() {
           due_date: formattedDueDate
         })
         .eq('id', requestId);
-
       if (requestUpdateError) throw requestUpdateError;
 
       // Create notification for the user
       await createSystemNotification(
-        user_id,
+        user_id as string,
         'Gear Request Approved',
         `Your gear request has been approved and checked out. You can now pick up your equipment.`
       );
@@ -589,7 +471,7 @@ function ManageRequestsContent() {
         toast: {
           title: "Error",
           description: "Failed to approve the request. Please try again.",
-          variant: "destructive",
+          variant: "default",
         },
       });
     } finally {
@@ -604,7 +486,7 @@ function ManageRequestsContent() {
         toast: {
           title: "Error",
           description: "Request ID and rejection reason are required.",
-          variant: "destructive",
+          variant: "default",
         },
       });
       return;
@@ -745,7 +627,7 @@ function ManageRequestsContent() {
         toast: {
           title: "Error",
           description: error.message || "Failed to reject the request. Please try again.",
-          variant: "destructive",
+          variant: "default",
         },
       });
     } finally {
@@ -848,7 +730,7 @@ function ManageRequestsContent() {
           </div>
 
           <DialogFooter>
-            {isNewRequest(request.status) && (
+            {isAttendedRequest(request.status) && (
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -897,7 +779,7 @@ function ManageRequestsContent() {
   // Function to handle CSV download (simulating PDF)
   const downloadRequestsCSV = () => {
     if (filteredRequests.length === 0) {
-      toast({ title: "No Data", description: "There are no requests to download.", variant: "destructive" });
+      toast({ title: "No Data", description: "There are no requests to download.", variant: "default" });
       return;
     }
     // TODO: Replace this CSV generation with actual PDF generation using a library like jsPDF and jsPDF-AutoTable
@@ -914,9 +796,9 @@ function ManageRequestsContent() {
       `"${req.destination?.replace(/"/g, '""') ?? 'N/A'}"`,
       `"${req.status}"`,
       `"${req.adminNotes?.replace(/"/g, '""') ?? 'N/A'}"`,
-      req.checkoutDate ? format(req.checkoutDate, 'yyyy-MM-dd HH:mm') : 'N/A',
-      req.dueDate ? format(req.dueDate, 'yyyy-MM-dd') : 'N/A',
-      req.checkinDate ? format(req.checkinDate, 'yyyy-MM-dd HH:mm') : 'N/A',
+      req.checkoutDate ? format(req.checkoutDate ?? '', 'yyyy-MM-dd HH:mm') : 'N/A',
+      req.dueDate ? format(req.dueDate ?? '', 'yyyy-MM-dd') : 'N/A',
+      req.checkinDate ? format(req.checkinDate ?? '', 'yyyy-MM-dd HH:mm') : 'N/A',
     ].join(','));
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
@@ -934,7 +816,7 @@ function ManageRequestsContent() {
   // PDF Export
   const downloadRequestsPDF = () => {
     if (filteredRequests.length === 0) {
-      toast({ title: "No Data", description: "There are no requests to export.", variant: "destructive" });
+      toast({ title: "No Data", description: "There are no requests to export.", variant: "default" });
       return;
     }
     const doc = new jsPDF();
@@ -948,8 +830,7 @@ function ManageRequestsContent() {
       req.destination,
       req.status
     ]);
-    // @ts-ignore
-    doc.autoTable({ head: [headers], body: rows });
+    autoTable(doc, { head: [headers], body: rows });
     doc.save(`gear_requests_${format(new Date(), 'yyyyMMdd')}.pdf`);
     toast({ title: "Download Started", description: "Request history (PDF format) is downloading." });
   };
@@ -975,153 +856,13 @@ function ManageRequestsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAnimation.id, showAnimation.type]);
 
-  // Enhanced handleApprove/handleReject for modal
-  const handleApproveModal = async (requestId: string) => {
-    setIsProcessing(true);
-    await handleApprove(requestId);
-    setIsProcessing(false);
-    setIsDetailsOpen(false);
-  };
-  const handleRejectModal = async () => {
-    setIsProcessing(true);
-    // Optionally update the request with rejection reason
-    setRequests(prev => prev.map(r => r.id === requestToReject ? { ...r, status: 'Rejected', rejectionReason } : r));
-    await handleReject();
-    setIsProcessing(false);
-    setIsDetailsOpen(false);
-    setRejectionReason('');
-  };
-
   // Handler to view the notification request details
   const handleViewNotification = () => {
-    if (newRequestNotification) {
-      setSelectedRequest(newRequestNotification);
+    if (selectedRequest) {
+      setSelectedRequest(selectedRequest);
       setIsDetailsOpen(true);
       setShowNotificationPopup(false);
     }
-  };
-
-  // Update the table row rendering
-  const renderTableRow = (req: GearRequest) => {
-    const isNew = isNewRequest(req.status);
-    const isAttended = isAttendedRequest(req.status);
-    const priority = isNew ? getRequestPriority(req.requestDate) : null;
-
-    return (
-      <motion.tr
-        key={req.id}
-        variants={itemVariants}
-        className={cn(
-          "relative cursor-pointer transition-all",
-          isNew ? "bg-primary/5 border-l-4 border-primary" :
-            isAttended ? "bg-muted/10 hover:bg-muted/20" :
-              "hover:bg-muted/10"
-        )}
-        onClick={() => { setSelectedRequest(req); setIsDetailsOpen(true); }}
-      >
-        <TableCell className="font-medium">
-          <div className="flex items-center gap-2">
-            {isNew && (
-              <div className="flex items-center gap-2">
-                <Badge variant="default" className="bg-primary text-primary-foreground">
-                  New
-                </Badge>
-                {priority && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs",
-                      priority.level === 'high' ? "border-red-500 text-red-500" :
-                        priority.level === 'medium' ? "border-yellow-500 text-yellow-500" :
-                          "border-green-500 text-green-500"
-                    )}
-                  >
-                    {priority.label}
-                  </Badge>
-                )}
-              </div>
-            )}
-            {isAttended && (
-              <Badge variant="outline" className="bg-muted text-muted-foreground">
-                Processed
-              </Badge>
-            )}
-            <div>
-              <div>{req.userName}</div>
-              {req.userEmail && (
-                <div className="text-xs text-muted-foreground">{req.userEmail}</div>
-              )}
-            </div>
-          </div>
-        </TableCell>
-        <TableCell>
-          <div className="flex flex-wrap gap-1">
-            {req.gearNames.map((gear: string, index: number) => (
-              <Badge key={index} variant="outline" className="text-xs">
-                {gear}
-              </Badge>
-            ))}
-          </div>
-        </TableCell>
-        <TableCell>
-          <div className="flex flex-col">
-            <span>{req.requestDate instanceof Date ? format(req.requestDate, 'MMM d, yyyy') : ''}</span>
-            <span className="text-xs text-muted-foreground">
-              {req.requestDate instanceof Date ? format(req.requestDate, 'h:mm a') : ''}
-            </span>
-          </div>
-        </TableCell>
-        <TableCell>{req.duration}</TableCell>
-        <TableCell className="max-w-[200px]">
-          <div className="truncate" title={req.reason}>{req.reason}</div>
-        </TableCell>
-        <TableCell>{req.destination}</TableCell>
-        <TableCell>
-          <div className="flex items-center gap-2">
-            {getStatusBadge(req.status)}
-            {isNew && (
-              <span className="animate-pulse text-primary">•</span>
-            )}
-          </div>
-        </TableCell>
-        <TableCell className="text-right space-x-2">
-          {showAnimation.id === req.id && ActionAnimation}
-          {!showAnimation.id && isNewRequest(req.status) && (
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="bg-green-500/10 text-green-600 hover:bg-green-500/20 hover:text-green-700"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleApprove(req.id);
-                }}
-              >
-                <Check className="h-4 w-4 mr-1" />
-                Approve
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="bg-red-500/10 text-red-600 hover:bg-red-500/20 hover:text-red-700"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setRequestToReject(req.id);
-                }}
-              >
-                <X className="h-4 w-4 mr-1" />
-                Reject
-              </Button>
-            </div>
-          )}
-          {!showAnimation.id && isAttendedRequest(req.status) && (
-            <Badge variant="outline" className="ml-2">
-              {format(new Date(req.updatedAt || req.requestDate), 'MMM d, yyyy')}
-            </Badge>
-          )}
-        </TableCell>
-      </motion.tr>
-    );
   };
 
   // Add batch action handlers
@@ -1140,7 +881,7 @@ function ManageRequestsContent() {
       toast({
         title: "Error",
         description: "Failed to approve some requests. Please try again.",
-        variant: "destructive",
+        variant: "default",
       });
     } finally {
       setIsProcessing(false);
@@ -1157,6 +898,38 @@ function ManageRequestsContent() {
       setFilterStatus(statusParam);
     }
   }, [statusParam]);
+
+  // Filter chips logic
+  const hasActiveFilters = userFilter || gearFilter || keyword || filterStatus !== 'all' || dateRange;
+  const filterChips = [
+    userFilter && {
+      label: `User: ${userFilter}`,
+      onRemove: () => setUserFilter(''),
+    },
+    gearFilter && {
+      label: `Gear: ${gearFilter}`,
+      onRemove: () => setGearFilter(''),
+    },
+    keyword && {
+      label: `Search: "${keyword}"`,
+      onRemove: () => setKeyword(''),
+    },
+    filterStatus !== 'all' && {
+      label: `Status: ${filterStatus}`,
+      onRemove: () => setFilterStatus('all'),
+    },
+    dateRange && (dateRange.from || dateRange.to) && {
+      label: `Date: ${dateRange.from ? format(dateRange.from, 'MMM d, yyyy') : ''}${dateRange.from && dateRange.to ? ' - ' : ''}${dateRange.to ? format(dateRange.to, 'MMM d, yyyy') : ''}`,
+      onRemove: () => setDateRange(undefined),
+    },
+  ].filter(Boolean);
+  const handleClearAllFilters = () => {
+    setUserFilter('');
+    setGearFilter('');
+    setKeyword('');
+    setFilterStatus('all');
+    setDateRange(undefined);
+  };
 
   return (
     <motion.div
@@ -1189,7 +962,7 @@ function ManageRequestsContent() {
 
       {/* New Request Notification Popup */}
       <AnimatePresence>
-        {showNotificationPopup && newRequestNotification && (
+        {showNotificationPopup && selectedRequest && (
           <motion.div
             initial={{ opacity: 0, y: -50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1205,9 +978,13 @@ function ManageRequestsContent() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <p className="mb-1"><span className="font-semibold">From:</span> {newRequestNotification.userName}</p>
-                <p className="mb-1"><span className="font-semibold">Gear:</span> {newRequestNotification.gearNames.join(', ')}</p>
-                <p className="mb-3"><span className="font-semibold">Requested:</span> {format(newRequestNotification.requestDate, 'PPp')}</p>
+                {selectedRequest && (
+                  <>
+                    <p className="mb-1"><span className="font-semibold">From:</span> {selectedRequest.userName}</p>
+                    <p className="mb-1"><span className="font-semibold">Gear:</span> {selectedRequest.gearNames.join(', ')}</p>
+                    <p className="mb-3"><span className="font-semibold">Requested:</span> {format(selectedRequest.requestDate, 'PPp')}</p>
+                  </>
+                )}
                 <div className="flex justify-between gap-2">
                   <Button
                     variant="default"
@@ -1246,7 +1023,7 @@ function ManageRequestsContent() {
             </Button>
           </div>
 
-          <Card>
+          <Card className="shadow-md border-muted">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1267,8 +1044,8 @@ function ManageRequestsContent() {
               <div className="mt-4 flex flex-col sm:flex-row gap-4">
                 <Input
                   placeholder="Filter by user name..."
-                  value={filterUser}
-                  onChange={(e) => setFilterUser(e.target.value)}
+                  value={userFilter}
+                  onChange={(e) => setUserFilter(e.target.value)}
                   className="max-w-xs"
                   list="user-names"
                 />
@@ -1313,58 +1090,52 @@ function ManageRequestsContent() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="text-sm">
-                    <span className="font-medium">{filteredRequests.filter(r => isNewRequest(r.status)).length}</span> new requests
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    <span className="font-medium">{filteredRequests.filter(r => isAttendedRequest(r.status)).length}</span> processed
-                  </div>
+            <CardContent className="px-2 pt-4 md:px-6">
+              {/* Filter chips and clear button */}
+              {hasActiveFilters && !loading && (
+                <div className="flex flex-wrap items-center gap-2 mb-4 sm:flex-row sm:items-center">
+                  {filterChips.map((chip, idx) => {
+                    if (!chip || typeof chip !== 'object' || !('label' in chip) || !('onRemove' in chip)) return null;
+                    return (
+                      <span key={idx} className="inline-flex items-center bg-muted px-3 py-1 rounded-full text-sm text-foreground border">
+                        {chip.label}
+                        <button
+                          className="ml-2 text-muted-foreground hover:text-red-500 focus:outline-none"
+                          onClick={chip.onRemove}
+                          aria-label={`Remove ${chip.label}`}
+                          type="button"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                  <button
+                    className="ml-2 px-3 py-1 rounded-full bg-orange-600 text-white text-sm hover:bg-orange-700 focus:outline-none"
+                    onClick={handleClearAllFilters}
+                    type="button"
+                  >
+                    Clear All Filters
+                  </button>
                 </div>
-                {selectedRequests.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedRequests([])}
-                      className="text-muted-foreground"
-                    >
-                      Clear Selection ({selectedRequests.length})
-                    </Button>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={handleBatchApprove}
-                      disabled={isProcessing}
-                    >
-                      {isProcessing ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>Approve Selected</>
-                      )}
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleBatchReject}
-                      disabled={isProcessing || selectedRequests.length !== 1}
-                    >
-                      Reject Selected
-                    </Button>
-                  </div>
-                )}
-              </div>
-
+              )}
+              {/* Loading skeletons for filters */}
+              {loading && (
+                <div className="flex flex-col gap-4 mb-4 sm:flex-row sm:flex-wrap">
+                  <Skeleton className="h-10 w-40" />
+                  <Skeleton className="h-10 w-40" />
+                  <Skeleton className="h-10 w-48" />
+                  <Skeleton className="h-10 w-48" />
+                </div>
+              )}
+              {/* Table skeletons */}
               <motion.div
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
-                className="overflow-x-auto"
+                className="overflow-x-auto rounded-lg border border-muted/40 bg-background"
+                tabIndex={0}
+                aria-label="Requests Table"
               >
                 <Table>
                   <TableHeader>
@@ -1373,13 +1144,13 @@ function ManageRequestsContent() {
                         <Checkbox
                           checked={
                             filteredRequests.length > 0 &&
-                            selectedRequests.length === filteredRequests.filter(r => isNewRequest(r.status)).length
+                            selectedRequests.length === filteredRequests.filter(r => isAttendedRequest(r.status)).length
                           }
                           onCheckedChange={(checked) => {
                             if (checked) {
                               setSelectedRequests(
                                 filteredRequests
-                                  .filter(r => isNewRequest(r.status))
+                                  .filter(r => isAttendedRequest(r.status))
                                   .map(r => r.id)
                               );
                             } else {
@@ -1397,93 +1168,159 @@ function ManageRequestsContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRequests.map((req) => (
-                      <TableRow key={req.id}>
-                        <TableCell>
-                          {isNewRequest(req.status) && (
-                            <Checkbox
-                              checked={selectedRequests.includes(req.id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedRequests([...selectedRequests, req.id]);
-                                } else {
-                                  setSelectedRequests(selectedRequests.filter(id => id !== req.id));
-                                }
-                              }}
-                              aria-label={`Select request ${req.id}`}
-                            />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {req.userName}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {req.gearNames.map((gear: string, index: number) => (
-                              <Badge key={index} variant="outline" className="text-xs">
-                                {gear}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span>{req.requestDate instanceof Date ? format(req.requestDate, 'MMM d, yyyy') : ''}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {req.requestDate instanceof Date ? format(req.requestDate, 'h:mm a') : ''}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getStatusBadge(req.status)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          {showAnimation.id === req.id && ActionAnimation}
-                          {!showAnimation.id && isNewRequest(req.status) && (
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="bg-green-500/10 text-green-600 hover:bg-green-500/20 hover:text-green-700"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleApprove(req.id);
-                                }}
-                              >
-                                <Check className="h-4 w-4 mr-1" />
-                                Approve
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="bg-red-500/10 text-red-600 hover:bg-red-500/20 hover:text-red-700"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setRequestToReject(req.id);
-                                }}
-                              >
-                                <X className="h-4 w-4 mr-1" />
-                                Reject
-                              </Button>
+                    {loading ? (
+                      // Show 5 skeleton rows
+                      Array.from({ length: 5 }).map((_, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell><Skeleton className="h-5 w-5 rounded" /></TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 min-w-[140px]">
+                              <Skeleton className="h-8 w-8 rounded-full" />
+                              <div className="flex flex-col gap-1">
+                                <Skeleton className="h-4 w-20" />
+                                <Skeleton className="h-3 w-28" />
+                              </div>
                             </div>
-                          )}
-                          {!showAnimation.id && isAttendedRequest(req.status) && (
-                            <Badge variant="outline" className="ml-2">
-                              {format(new Date(req.updatedAt || req.requestDate), 'MMM d, yyyy')}
-                            </Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                          <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      filteredRequests.map((req) => (
+                        <TableRow key={req.id}>
+                          <TableCell>
+                            {isAttendedRequest(req.status) && (
+                              <Checkbox
+                                checked={selectedRequests.includes(req.id)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedRequests([...selectedRequests, req.id]);
+                                  } else {
+                                    setSelectedRequests(selectedRequests.filter(id => id !== req.id));
+                                  }
+                                }}
+                                aria-label={`Select request ${req.id}`}
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 min-w-[140px]">
+                              <Avatar className="h-8 w-8">
+                                <AvatarImage src={req.avatarUrl || undefined} alt={req.userName} />
+                                <AvatarFallback>{req.userName?.[0] || '?'}</AvatarFallback>
+                              </Avatar>
+                              <div className="flex flex-col">
+                                <span className="font-medium leading-tight">{req.userName}</span>
+                                {req.userEmail && (
+                                  <a
+                                    href={`mailto:${req.userEmail}`}
+                                    className="text-xs text-blue-600 hover:underline focus:underline focus:outline-none"
+                                    tabIndex={0}
+                                    aria-label={`Email ${req.userName}`}
+                                  >
+                                    {req.userEmail}
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {req.gearNames.map((gear: string, index: number) => (
+                                <Badge key={index} variant="outline" className="text-xs">
+                                  {gear}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span>{req.requestDate instanceof Date ? format(req.requestDate, 'MMM d, yyyy') : ''}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {req.requestDate instanceof Date ? format(req.requestDate, 'h:mm a') : ''}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(req.status)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right space-x-2">
+                            {showAnimation.id === req.id && ActionAnimation}
+                            {!showAnimation.id && isAttendedRequest(req.status) && (
+                              <Badge variant="outline" className="ml-2">
+                                {format(new Date((req as GearRequest).updatedAt || (req as GearRequest).requestDate), 'MMM d, yyyy')}
+                              </Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </motion.div>
+              {/* Empty state when no requests match and not loading */}
+              {!loading && filteredRequests.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <span className="text-2xl text-muted-foreground">No requests found</span>
+                  <span className="text-sm text-muted-foreground">Try adjusting your filters or search terms.</span>
+                  <div className="flex gap-2 mt-2">
+                    <Button variant="outline" onClick={fetchRequests}>Refresh</Button>
+                    {hasActiveFilters && (
+                      <Button variant="secondary" onClick={handleClearAllFilters}>Clear All Filters</Button>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* Pagination Controls */}
+          {!loading && total > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  aria-label="Previous Page"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm">
+                  Page {page} of {Math.max(1, Math.ceil(total / pageSize))}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(Math.ceil(total / pageSize), p + 1))}
+                  disabled={page >= Math.ceil(total / pageSize)}
+                  aria-label="Next Page"
+                >
+                  Next
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Rows per page:</span>
+                <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
+                  <SelectTrigger className="w-20 h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground ml-2">{total} total</span>
+              </div>
+            </div>
+          )}
 
           {/* Rejection Dialog */}
           <AlertDialog open={!!requestToReject} onOpenChange={(open) => !open && setRequestToReject(null)}>

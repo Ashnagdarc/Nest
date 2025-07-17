@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Camera, Package, ArrowUpDown, PlusCircle, Search, AlertTriangle, CalendarDays } from "lucide-react";
+import { Package, ArrowUpDown, PlusCircle, Search, AlertTriangle, CalendarDays } from "lucide-react";
 
 interface QuickAction {
     label: string;
@@ -64,30 +64,32 @@ export function QuickActions() {
                 <CardTitle className="text-md">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="w-full overflow-x-auto">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-3 w-full">
-                        {actions.map((action, index) => (
-                            <motion.div
-                                key={action.label}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.1 }}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 w-full">
+                    {actions.map((action, index) => (
+                        <motion.div
+                            key={action.label}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.08 }}
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                        >
+                            <Button
+                                asChild
+                                variant={action.variant}
+                                className="w-full min-h-[88px] flex flex-col items-center justify-center gap-2 rounded-lg text-center break-words"
+                                aria-label={action.label}
                             >
-                                <Link href={action.href} className="block w-full h-full">
-                                    <Button
-                                        variant={action.variant}
-                                        className="w-full h-full min-h-[88px] flex-1 flex flex-col items-center justify-center gap-2 rounded-lg text-center break-words"
-                                    >
-                                        {action.icon}
-                                        <div className="flex flex-col w-full text-center">
-                                            <span className="text-sm font-medium break-words">{action.label}</span>
-                                            <span className="text-xs font-normal opacity-80 break-words">{action.description}</span>
-                                        </div>
-                                    </Button>
+                                <Link href={action.href} prefetch={false} tabIndex={0}>
+                                    {action.icon}
+                                    <div className="flex flex-col w-full text-center">
+                                        <span className="text-sm font-medium break-words">{action.label}</span>
+                                        <span className="text-xs font-normal opacity-80 break-words">{action.description}</span>
+                                    </div>
                                 </Link>
-                            </motion.div>
-                        ))}
-                    </div>
+                            </Button>
+                        </motion.div>
+                    ))}
                 </div>
             </CardContent>
         </Card>

@@ -19,12 +19,10 @@
 
 import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/types/supabase'
+import { apiGet } from '@/lib/apiClient';
 
 // Type definitions for client report system
 type Gear = Database['public']['Tables']['gears']['Row']
-type Profile = Database['public']['Tables']['profiles']['Row']
-type GearRequest = Database['public']['Tables']['gear_requests']['Row']
-type ActivityLog = Database['public']['Tables']['gear_activity_log']['Row']
 
 /**
  * Weekly Usage Report Interface
@@ -123,10 +121,7 @@ export async function generateUsageReportForRange(
         // Fetch all required data in parallel for better performance
         const [gearsResult, usersResult, requestsResult, activitiesResult] = await Promise.all([
             // Fetch gears data
-            supabase
-                .from('gears')
-                .select('*')
-                .order('created_at', { ascending: false }),
+            apiGet<{ data: Gear[]; error: string | null }>(`/api/gears`),
 
             // Fetch users data
             supabase
@@ -267,7 +262,6 @@ export async function generateUsageReportForRange(
         const totalCheckins = activities.filter(act => act.activity_type === 'checkin').length
 
         // Calculate overall utilization rate
-        const availableGears = gears.filter(gear => gear.status === 'Available').length
         const checkedOutGears = gears.filter(gear => gear.status === 'Checked Out').length
         const utilizationRate = gears.length > 0 ? (checkedOutGears / gears.length) * 100 : 0
 

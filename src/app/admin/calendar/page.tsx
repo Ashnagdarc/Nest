@@ -47,7 +47,7 @@ interface GearData {
 // Custom event styling
 const eventStyleGetter = (event: any) => {
     const status = event.resource?.status?.toLowerCase() || '';
-    let style: React.CSSProperties = {
+    const style: React.CSSProperties = {
         borderRadius: '4px',
         opacity: 0.9,
         color: 'white',

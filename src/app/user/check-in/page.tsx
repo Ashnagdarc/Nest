@@ -1,10 +1,4 @@
-/**
- * Equipment Check-In Page - Asset return workflow with QR scanning, condition reporting,
- * and multi-item selection for comprehensive equipment return management.
- * 
- * @author Daniel Chinonso Samuel
- * @version 1.0.0
- */
+// Equipment check-in page for Nest by Eden Oasis. Handles asset return, QR scanning, and condition reporting.
 
 "use client";
 
@@ -22,21 +16,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from '@/components/ui/label';
-import { UploadCloud, PackageCheck } from 'lucide-react';
+import { PackageCheck } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import Image from 'next/image';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import dynamic from 'next/dynamic';
-import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { cn } from '@/lib/utils';
-import { User } from '@supabase/supabase-js';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { History } from 'lucide-react';
 import { Calendar } from 'lucide-react';
-import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { useRouter } from 'next/navigation';
 import { useSuccessFeedback } from '@/hooks/use-success-feedback';
+import { apiGet } from '@/lib/apiClient';
 
 /**
  * Dynamic Lottie Import - prevents SSR issues and reduces bundle size
@@ -71,46 +63,6 @@ type GearCheckoutRecord = {
   due_date: string;
   /** Current checkout status */
   status: string;
-};
-
-/**
- * Gear with Checkout Information
- * 
- * Equipment object extended with checkout records for
- * comprehensive return workflow management.
- */
-type GearWithCheckout = {
-  /** Unique equipment identifier */
-  id: string;
-  /** Equipment name/title */
-  name: string;
-  /** Current equipment status */
-  status: string;
-  /** Equipment category */
-  category: string;
-  /** Equipment image URL */
-  imageUrl: string;
-  /** Associated checkout records */
-  gear_checkouts: GearCheckoutRecord[];
-};
-
-/**
- * Gear Request Interface
- * 
- * Represents equipment request with checkout information
- * for linking returns to original requests.
- */
-type GearRequest = {
-  /** Unique request identifier */
-  id: string;
-  /** Array of equipment IDs in request */
-  gear_ids: string[];
-  /** Request status */
-  status: string;
-  /** Checkout date */
-  checkout_date: string;
-  /** Due date for return */
-  due_date: string;
 };
 
 /**
@@ -155,56 +107,6 @@ type ProcessedGear = {
   due_date: string | null;
   /** Equipment image URL */
   image_url: string | null;
-};
-
-/**
- * Gear Data Interface
- * 
- * Primary equipment data structure for check-in operations
- * with complete metadata and status information.
- */
-type GearData = {
-  /** Unique equipment identifier */
-  id: string;
-  /** Equipment name/title */
-  name: string;
-  /** Current equipment status */
-  status: string;
-  /** Equipment category */
-  category: string;
-  /** Equipment image URL */
-  image_url: string | null;
-  /** User ID of current checkout holder */
-  checked_out_to: string;
-  /** Due date for return */
-  due_date: string | null;
-  /** Current active request ID */
-  current_request_id: string | null;
-  /** Last checkout timestamp */
-  last_checkout_date: string | null;
-};
-
-/**
- * Postgres Change Payload Interface
- * 
- * Type definition for Supabase real-time change events
- * to handle equipment status updates during check-in.
- */
-type PostgresChangePayload = {
-  /** Database schema name */
-  schema: string;
-  /** Table name */
-  table: string;
-  /** Change timestamp */
-  commit_timestamp: string;
-  /** Type of database event */
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  /** New record data */
-  new: Record<string, any>;
-  /** Old record data */
-  old: Record<string, any>;
-  /** Any errors that occurred */
-  errors: null | any[];
 };
 
 /**
@@ -408,7 +310,7 @@ export default function CheckInGearPage() {
     return () => {
       supabase.removeChannel(gearChannel);
     };
-  }, [userId, toast]);
+  }, [userId, toast, fetchCheckedOutGear]);
 
   /**
    * QR Scanner Initialization Effect
@@ -477,28 +379,27 @@ export default function CheckInGearPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: gears, error } = await supabase
-        .from('gears')
-        .select(`
-          id,
-          name,
-          category,
-          status,
-          checked_out_to,
-          current_request_id,
-          last_checkout_date,
-          due_date,
-          image_url
-        `)
-        .eq('checked_out_to', user.id)
-        .eq('status', 'Checked Out');
-
+      const { data: gears, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Checked%20Out`);
       if (error) {
         console.error("Error fetching checked out gear:", error);
         return;
       }
 
-      setCheckedOutGears(gears || []);
+      // Filter gears by checked_out_to === user.id and map to ProcessedGear
+      const userCheckedOutGears = (gears || [])
+        .filter(g => g.checked_out_to === user.id)
+        .map(g => ({
+          id: g.id,
+          name: g.name || '',
+          category: g.category || '',
+          status: g.status,
+          checked_out_to: g.checked_out_to || null,
+          current_request_id: g.current_request_id || null,
+          last_checkout_date: g.last_checkout_date || null,
+          due_date: g.due_date || null,
+          image_url: g.image_url || null,
+        }));
+      setCheckedOutGears(userCheckedOutGears);
     } catch (error) {
       console.error("Error in fetchCheckedOutGear:", error);
     }

@@ -11,6 +11,7 @@ import {
     loadSoundPreferences,
     playLoginNotificationSound
 } from '@/lib/soundUtils';
+import { apiGet, apiPut, apiPost } from '@/lib/apiClient';
 
 // Simplified notification type matching our new DB schema
 type Notification = {
@@ -99,201 +100,80 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
         try {
             console.log('Fetching notifications for user:', userId);
-
-            // Use direct select to get all fields, including category and metadata
-            const { data, error } = await supabase
-                .from('notifications')
-                .select('*')
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false });
-
+            // Use centralized API client and RESTful endpoint
+            const { data, error } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications?userId=${userId}`);
             if (error) {
-                console.error('Error fetching notifications:', error);
-                setError(error.message);
+                setError(error);
                 return;
             }
-
             if (data) {
                 setNotifications(data);
-
-                // Play login sound if this is first login and there are unread notifications
                 if (isFirstLogin && hasUserInteracted) {
                     const unreadNotifications = data.filter((n: Notification) => !n.is_read);
                     const unreadIds = unreadNotifications.map((n: Notification) => n.id);
-
                     if (unreadIds.length > 0) {
                         playLoginNotificationSound(unreadIds);
                     }
-
                     setIsFirstLogin(false);
                 }
             }
         } catch (error) {
-            console.error('Error fetching data:', error);
             setError(error instanceof Error ? error.message : 'An error occurred');
         } finally {
             setIsLoading(false);
         }
-    }, [userId, isFirstLogin, hasUserInteracted, supabase]);
+    }, [userId, isFirstLogin, hasUserInteracted]);
 
     const markAsRead = useCallback(async (notificationId: string): Promise<boolean> => {
         if (!userId) {
             const error = new Error("Cannot mark notification as read: No user ID available");
-            console.error(error.message);
             setError(error.message);
             return false;
         }
-
         setError(null);
-
         try {
-            console.log(`Marking notification ${notificationId} as read for user ${userId}`);
-
-            // Try direct database update instead of RPC call
-            const { data, error: updateError } = await supabase
-                .from('notifications')
-                .update({
-                    is_read: true,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', notificationId)
-                .eq('user_id', userId);
-
-            // Log the raw response for debugging
-            console.log('Update Response:', { data, error: updateError });
-
-            if (updateError) {
-                console.error("Error updating notification:", {
-                    error: updateError,
-                    code: updateError.code,
-                    message: updateError.message,
-                    details: updateError.details
-                });
-                setError(`Failed to mark notification as read: ${updateError.message}`);
+            // Use centralized API client PUT endpoint
+            const { data, error } = await apiPut<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });
+            if (error) {
+                setError(`Failed to mark notification as read: ${error}`);
                 return false;
             }
-
-            // Success case
-            console.log("Successfully marked as read through direct update");
-
-            // Mark notification as viewed to prevent sound replay
             markNotificationViewed(notificationId);
-
-            // Update local state immediately 
-            setNotifications(prev =>
-                prev.map(n =>
-                    n.id === notificationId
-                        ? { ...n, is_read: true }
-                        : n
-                )
-            );
-
-            // Show success toast
-            toast({
-                title: "Success",
-                description: "Notification marked as read.",
-                variant: "default"
-            });
-
+            setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n));
+            toast({ title: "Success", description: "Notification marked as read.", variant: "default" });
             return true;
-
         } catch (error) {
-            // Handle unexpected errors
-            const errorMessage = error instanceof Error
-                ? error.message
-                : "Unexpected error marking notification as read";
-
-            console.error("Unexpected error in markAsRead:", {
-                error,
-                message: errorMessage,
-                notificationId,
-                userId
-            });
-
+            const errorMessage = error instanceof Error ? error.message : "Unexpected error marking notification as read";
             setError(errorMessage);
-
-            toast({
-                title: "Error",
-                description: errorMessage,
-                variant: "destructive"
-            });
-
+            toast({ title: "Error", description: errorMessage, variant: "destructive" });
             return false;
         }
-    }, [userId, supabase, toast, markNotificationViewed]);
+    }, [userId, toast]);
 
     const markAllAsRead = useCallback(async (): Promise<boolean> => {
         if (!userId) {
-            console.error("Cannot mark all notifications as read: No user ID available");
+            setError("Cannot mark all notifications as read: No user ID available");
             return false;
         }
-
         setError(null);
-
         try {
-            console.log(`Marking all notifications as read for user ${userId}`);
-
-            // Use direct update instead of RPC
-            const { data, error: updateError } = await supabase
-                .from('notifications')
-                .update({
-                    is_read: true,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('user_id', userId)
-                .eq('is_read', false);
-
-            if (updateError) {
-                console.error("Error marking all notifications as read:", {
-                    error: updateError,
-                    code: updateError.code,
-                    message: updateError.message,
-                    details: updateError.details
-                });
-                setError(`Failed to mark all notifications as read: ${updateError.message}`);
+            // Use centralized API client POST endpoint for bulk update
+            const { data, error } = await apiPost<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, { userId });
+            if (error) {
+                setError(`Failed to mark all notifications as read: ${error}`);
                 return false;
             }
-
-            console.log("Successfully marked all as read through direct update");
-
-            // Update local state right away
-            setNotifications(prev =>
-                prev.map(n => ({ ...n, is_read: true }))
-            );
-
-            // Mark all notifications as viewed
+            setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
             notifications.forEach(n => markNotificationViewed(n.id));
-
-            // Show success toast
-            toast({
-                title: "Success",
-                description: "All notifications marked as read.",
-                variant: "default"
-            });
-
+            toast({ title: "Success", description: "All notifications marked as read.", variant: "default" });
             return true;
         } catch (error) {
-            const errorMessage = error instanceof Error
-                ? error.message
-                : "Unexpected error marking all notifications as read";
-
-            console.error("Error marking all notifications as read:", {
-                error,
-                message: errorMessage,
-                userId
-            });
-
+            const errorMessage = error instanceof Error ? error.message : "Unexpected error marking all notifications as read";
             setError(errorMessage);
-
-            toast({
-                title: "Error",
-                description: errorMessage,
-                variant: "destructive"
-            });
-
+            toast({ title: "Error", description: errorMessage, variant: "destructive" });
             return false;
         }
-    }, [userId, notifications, supabase, toast, markNotificationViewed]);
+    }, [userId, notifications, toast]);
 
     // Refresh function that can be called externally
     const refresh = useCallback(async () => {
@@ -316,7 +196,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             .channel('notifications')
             .on('postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-                (payload: { new: any }) => {
+                (payload: { new: unknown }) => {
                     // Reset notification state for new notification
                     resetNotificationState(payload.new.id);
 

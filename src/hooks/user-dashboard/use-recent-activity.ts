@@ -5,10 +5,13 @@
  * Handles gear requests, check-ins, and activity processing logic.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { logger } from '@/utils/logger';
 import { createSupabaseSubscription } from '@/utils/supabase-subscription';
+import { apiGet } from '@/lib/apiClient';
+import { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/supabase';
 
 export interface ActivityItem {
     id: string;
@@ -21,16 +24,16 @@ export interface ActivityItem {
 }
 
 export function useRecentActivity() {
-    const supabase = createClient();
     const [activities, setActivities] = useState<ActivityItem[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchActivity = async () => {
+    // Memoize fetchActivity to prevent effect from re-running on every render
+    const fetchActivity = useCallback(async () => {
         try {
             setLoading(true);
 
             // Get current user
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await createClient().auth.getSession();
             if (!session?.user) {
                 setLoading(false);
                 return;
@@ -39,7 +42,7 @@ export function useRecentActivity() {
             // Fetch latest activity from various tables
             const promises = [
                 // Gear requests (checkout/returns)
-                supabase
+                createClient()
                     .from('gear_requests')
                     .select('id, gear_ids, user_id, created_at, status, due_date')
                     .eq('user_id', session.user.id)
@@ -47,7 +50,7 @@ export function useRecentActivity() {
                     .limit(5),
 
                 // Check-ins (returns)
-                supabase
+                createClient()
                     .from('checkins')
                     .select('id, gear_id, user_id, checkin_date, status, condition')
                     .eq('user_id', session.user.id)
@@ -67,53 +70,51 @@ export function useRecentActivity() {
 
             // Get unique gear IDs from both sources
             const gearIds = [
-                ...(requestsResponse.data?.flatMap((req: any) =>
-                    Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids]).filter(Boolean) || []),
-                ...(checkinsResponse.data?.map((checkin: any) => checkin.gear_id) || [])
+                ...(requestsResponse.data?.flatMap((req: unknown) =>
+                    Array.isArray((req as { gear_ids?: unknown }).gear_ids) ? (req as { gear_ids: unknown[] }).gear_ids : [(req as { gear_ids?: unknown }).gear_ids]).filter(Boolean) || []),
+                ...(checkinsResponse.data?.map((checkin: unknown) => (checkin as { gear_id?: unknown }).gear_id) || [])
             ].filter(Boolean);
 
             // Fetch gear details if there are any IDs
             let gearDetails: Record<string, { name: string }> = {};
 
             if (gearIds.length > 0) {
-                const { data: gears, error: gearError } = await supabase
-                    .from('gears')
-                    .select('id, name')
-                    .in('id', gearIds);
-
+                const { data: gears, error: gearError } = await apiGet<{ data: unknown[]; error: string | null }>(`/api/gears?ids=${gearIds.join(',')}`);
                 if (gearError) {
                     throw gearError;
                 }
-
-                gearDetails = (gears || []).reduce((acc: Record<string, { name: string }>, gear: any) => {
-                    acc[gear.id] = { name: gear.name };
+                gearDetails = (gears || []).reduce((acc: Record<string, { name: string }>, gear: unknown) => {
+                    const g = gear as { id: string; name: string };
+                    acc[g.id] = { name: g.name };
                     return acc;
                 }, {} as Record<string, { name: string }>);
             }
 
             // Process request activities
-            const requestActivities = (requestsResponse.data || []).flatMap((request: any) => {
-                const gearIdList = Array.isArray(request.gear_ids) ? request.gear_ids : [request.gear_ids];
+            const requestActivities = (requestsResponse.data || []).flatMap((request: unknown) => {
+                const req = request as { id: string; gear_ids: unknown[]; user_id: string; created_at: string; status: string };
+                const gearIdList = Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids];
 
-                return gearIdList.filter(Boolean).map((gearId: string) => {
+                return gearIdList.filter(Boolean).map((gearId) => {
+                    const gearIdStr = String(gearId);
                     let type: ActivityItem["type"];
                     let status: string;
-                    let timestamp: string = request.created_at;
+                    const timestamp: string = req.created_at;
 
-                    if (request.status === 'CheckedOut') {
+                    if (req.status === 'CheckedOut') {
                         type = 'checkout';
                         status = 'Checked out successfully';
                     } else {
                         type = 'request';
-                        status = `Request ${request.status?.toLowerCase() || 'pending'}`;
+                        status = `Request ${req.status?.toLowerCase() || 'pending'}`;
                     }
 
                     return {
-                        id: `request-${request.id}-${gearId}`,
+                        id: `request-${req.id}-${gearIdStr}`,
                         type,
-                        item: gearDetails[gearId]?.name || 'Equipment',
-                        gear_id: gearId,
-                        user_id: request.user_id,
+                        item: gearDetails[gearIdStr]?.name || 'Equipment',
+                        gear_id: gearIdStr,
+                        user_id: req.user_id,
                         timestamp,
                         status
                     };
@@ -121,15 +122,16 @@ export function useRecentActivity() {
             });
 
             // Process checkin activities
-            const checkinActivities = (checkinsResponse.data || []).map((checkin: any) => {
+            const checkinActivities = (checkinsResponse.data || []).map((checkin: unknown) => {
+                const c = checkin as { id: string; gear_id: string; user_id: string; checkin_date: string; condition?: string };
                 return {
-                    id: `checkin-${checkin.id}`,
+                    id: `checkin-${c.id}`,
                     type: 'return' as const,
-                    item: gearDetails[checkin.gear_id]?.name || 'Equipment',
-                    gear_id: checkin.gear_id,
-                    user_id: checkin.user_id,
-                    timestamp: checkin.checkin_date,
-                    status: `Returned in ${checkin.condition?.toLowerCase() || 'unknown'} condition`
+                    item: gearDetails[c.gear_id]?.name || 'Equipment',
+                    gear_id: c.gear_id,
+                    user_id: c.user_id,
+                    timestamp: c.checkin_date,
+                    status: `Returned in ${c.condition?.toLowerCase() || 'unknown'} condition`
                 };
             });
 
@@ -148,7 +150,7 @@ export function useRecentActivity() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchActivity();
@@ -156,14 +158,14 @@ export function useRecentActivity() {
         // Set up real-time subscriptions
         const subscriptions = [
             createSupabaseSubscription({
-                supabase,
+                supabase: createClient() as unknown as SupabaseClient<Database>,
                 channel: 'activity-requests-changes',
                 config: { event: '*', schema: 'public', table: 'gear_requests' },
                 callback: fetchActivity,
                 pollingInterval: 30000
             }),
             createSupabaseSubscription({
-                supabase,
+                supabase: createClient() as unknown as SupabaseClient<Database>,
                 channel: 'activity-checkins-changes',
                 config: { event: '*', schema: 'public', table: 'checkins' },
                 callback: fetchActivity,
@@ -174,7 +176,7 @@ export function useRecentActivity() {
         return () => {
             subscriptions.forEach(sub => sub.unsubscribe());
         };
-    }, []);
+    }, [fetchActivity]);
 
     return {
         activities,

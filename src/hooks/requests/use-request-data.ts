@@ -8,8 +8,8 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { useToast } from "@/hooks/use-toast";
+import { apiGet } from '@/lib/apiClient';
 
 interface RequestItem {
     id: string;
@@ -26,7 +26,6 @@ interface RequestItem {
 }
 
 export function useRequestData() {
-    const supabase = createClient();
     const { toast } = useToast();
 
     // State management
@@ -46,47 +45,13 @@ export function useRequestData() {
             setIsLoading(true);
             setError(null);
 
-            // Check if gear_requests table exists
-            const { count, error: tableError } = await supabase
-                .from('gear_requests')
-                .select('*', { count: 'exact', head: true });
-
-            if (tableError) {
-                throw new Error(`Table error: ${tableError.message}`);
-            }
-
-            if (count === null) {
-                setRequests([]);
-                return;
-            }
-
-            // Build query based on filter
-            let query = supabase
-                .from('gear_requests')
-                .select(`
-          id,
-          status,
-          created_at,
-          updated_at,
-          due_date,
-          user_id,
-          gear_ids,
-          profiles:user_id (
-            full_name,
-            email
-          )
-        `)
-                .order('created_at', { ascending: false });
-
-            // Apply status filter
-            if (filter !== "all") {
-                query = query.eq('status', filter);
-            }
-
-            const { data, error: fetchError } = await query;
+            // Fetch requests from API
+            const params = new URLSearchParams();
+            if (filter !== 'all') params.append('status', filter);
+            const { data, error: fetchError } = await apiGet<{ data: RequestItem[]; error: string | null }>(`/api/requests?${params.toString()}`);
 
             if (fetchError) {
-                throw new Error(`Data fetch error: ${fetchError.message}`);
+                throw new Error(`Data fetch error: ${fetchError}`);
             }
 
             setRequests(data || []);

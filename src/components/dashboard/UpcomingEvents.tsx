@@ -12,7 +12,7 @@ import { EmptyState } from "./EmptyState";
 import { useUpcomingEvents } from '@/hooks/user-dashboard/use-upcoming-events';
 
 export function UpcomingEvents() {
-    const { events, pendingEvents, loading, refetch } = useUpcomingEvents();
+    const { events, pendingEvents, loading } = useUpcomingEvents();
 
     if (loading) {
         return (
@@ -60,7 +60,7 @@ export function UpcomingEvents() {
                         />
                     ) : (
                         <div className="space-y-3">
-                            {events.map((event, index) => (
+                            {events.map((event) => (
                                 <div key={event.id} className="flex items-center justify-between p-3 border rounded-lg">
                                     <div className="flex items-center space-x-3">
                                         <Calendar className="h-5 w-5" />

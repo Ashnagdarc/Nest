@@ -12,8 +12,7 @@ import { useNotifications } from "./NotificationProvider";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from "date-fns";
-import { useState, useEffect } from 'react';
-import type { ClientNotification as Notification } from '@/types/notifications';
+import { useState } from 'react';
 
 const CATEGORY_TABS = [
     { key: 'all', label: 'All' },

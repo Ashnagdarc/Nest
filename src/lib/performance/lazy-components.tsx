@@ -4,40 +4,40 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 // Loading fallback component
 const LoadingFallback = () => (
-    <div className= "space-y-4" >
-    <Skeleton className="h-4 w-full" />
+    <div className="space-y-4" >
+        <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-                </div>
+        <Skeleton className="h-4 w-1/2" />
+    </div>
 );
 
 // Dashboard fallback with specific layout
 const DashboardLoadingFallback = () => (
-    <div className= "space-y-6" >
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" >
-    {
-        [...Array(4)].map((_, i) => (
-            <Skeleton key= { i } className = "h-24 w-full" />
-            ))
-    }
+    <div className="space-y-6" >
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" >
+            {
+                [...Array(4)].map((_, i) => (
+                    <Skeleton key={i} className="h-24 w-full" />
+                ))
+            }
         </div>
-        < div className = "grid grid-cols-1 lg:grid-cols-3 gap-6" >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Skeleton className="h-64 col-span-2" />
-                <Skeleton className="h-64" />
-                    </div>
-                    </div>
+            <Skeleton className="h-64" />
+        </div>
+    </div>
 );
 
 // Table loading fallback
 const TableLoadingFallback = () => (
-    <div className= "space-y-3" >
-    <Skeleton className="h-10 w-full" />
-    {
-        [...Array(5)].map((_, i) => (
-            <Skeleton key= { i } className = "h-8 w-full" />
-        ))
-    }
-        </div>
+    <div className="space-y-3" >
+        <Skeleton className="h-10 w-full" />
+        {
+            [...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+            ))
+        }
+    </div>
 );
 
 /**
@@ -46,7 +46,7 @@ const TableLoadingFallback = () => (
 
 // Dashboard Components
 export const LazyDashboardStats = dynamic(
-    () => import('@/components/admin/DashboardStats'),
+    () => import('@/components/admin/DashboardStats').then(m => m.default),
     {
         loading: () => <DashboardLoadingFallback />,
         ssr: false,
@@ -54,7 +54,7 @@ export const LazyDashboardStats = dynamic(
 );
 
 export const LazyRequestStats = dynamic(
-    () => import('@/components/admin/RequestStats'),
+    () => import('@/components/admin/RequestStats').then(m => m.default),
     {
         loading: () => <DashboardLoadingFallback />,
         ssr: false,
@@ -62,7 +62,7 @@ export const LazyRequestStats = dynamic(
 );
 
 export const LazyActivitiesSection = dynamic(
-    () => import('@/components/admin/ActivitiesSection'),
+    () => import('@/components/admin/ActivitiesSection').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -70,7 +70,7 @@ export const LazyActivitiesSection = dynamic(
 );
 
 export const LazyUtilizationSection = dynamic(
-    () => import('@/components/admin/UtilizationSection'),
+    () => import('@/components/admin/UtilizationSection').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -78,24 +78,24 @@ export const LazyUtilizationSection = dynamic(
 );
 
 // Management Components (Heavy tables)
-export const LazyRequestsManagement = dynamic(
-    () => import('@/components/admin/RequestsManagement'),
+export const LazyRequestsManagement = dynamic<{ default: ComponentType }>(
+    () => import('@/components/admin/RequestsManagement').then(m => m.default),
     {
         loading: () => <TableLoadingFallback />,
         ssr: false,
     }
 );
 
-export const LazyInventoryManagement = dynamic(
-    () => import('@/components/admin/InventoryManagement'),
+export const LazyInventoryManagement = dynamic<{ default: ComponentType }>(
+    () => import('@/components/admin/InventoryManagement').then(m => m.default),
     {
         loading: () => <TableLoadingFallback />,
         ssr: false,
     }
 );
 
-export const LazyUsersManagement = dynamic(
-    () => import('@/components/admin/UsersManagement'),
+export const LazyUsersManagement = dynamic<{ default: ComponentType }>(
+    () => import('@/components/admin/UsersManagement').then(m => m.default),
     {
         loading: () => <TableLoadingFallback />,
         ssr: false,
@@ -104,7 +104,7 @@ export const LazyUsersManagement = dynamic(
 
 // Reports Components (Heavy data processing)
 export const LazyWeeklyActivityReport = dynamic(
-    () => import('@/components/reports/WeeklyActivityReport'),
+    () => import('@/components/reports/WeeklyActivityReport').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -113,7 +113,7 @@ export const LazyWeeklyActivityReport = dynamic(
 
 // User Components
 export const LazyPopularGearWidget = dynamic(
-    () => import('@/components/dashboard/PopularGearWidget'),
+    () => import('@/components/dashboard/PopularGearWidget').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: true,
@@ -121,7 +121,7 @@ export const LazyPopularGearWidget = dynamic(
 );
 
 export const LazyRecentActivity = dynamic(
-    () => import('@/components/dashboard/RecentActivity'),
+    () => import('@/components/dashboard/RecentActivity').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: true,
@@ -129,7 +129,7 @@ export const LazyRecentActivity = dynamic(
 );
 
 export const LazyUpcomingEvents = dynamic(
-    () => import('@/components/dashboard/UpcomingEvents'),
+    () => import('@/components/dashboard/UpcomingEvents').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: true,
@@ -138,7 +138,7 @@ export const LazyUpcomingEvents = dynamic(
 
 // Modals (Only load when needed)
 export const LazyViewRequestModal = dynamic(
-    () => import('@/components/admin/ViewRequestModal'),
+    () => import('@/components/admin/ViewRequestModal').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -146,7 +146,7 @@ export const LazyViewRequestModal = dynamic(
 );
 
 export const LazyEditItemModal = dynamic(
-    () => import('@/components/admin/EditItemModal'),
+    () => import('@/components/admin/EditItemModal').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -154,7 +154,7 @@ export const LazyEditItemModal = dynamic(
 );
 
 export const LazyAnnouncementPopup = dynamic(
-    () => import('@/components/AnnouncementPopup'),
+    () => import('@/components/AnnouncementPopup').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -163,7 +163,7 @@ export const LazyAnnouncementPopup = dynamic(
 
 // QR Scanner (Heavy external dependency)
 export const LazyQRScanner = dynamic(
-    () => import('@/components/qr-scanner'),
+    () => import('@/components/qr-scanner').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -172,7 +172,7 @@ export const LazyQRScanner = dynamic(
 
 // Image Cropper (Heavy external dependency)
 export const LazyImageCropper = dynamic(
-    () => import('@/components/ui/ImageCropperModal'),
+    () => import('@/components/ui/ImageCropperModal').then(m => m.default),
     {
         loading: () => <LoadingFallback />,
         ssr: false,

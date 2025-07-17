@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { logInfo, logError, validateTableContext } from '@/utils/logger';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { useSuccessFeedback } from '@/hooks/use-success-feedback';
+import { apiGet, apiPatch, apiPost } from '@/lib/apiClient';
 
 type Announcement = {
   id: string;
@@ -58,133 +59,56 @@ export default function UserNotificationsPage() {
       try {
         logInfo('Fetching notifications and read status', 'fetchNotificationsAndReadStatus');
 
-        // Get current user
-        const { data: userData, error: userError } = await supabase.auth.getUser();
-
-        if (userError) {
-          logError(userError, 'fetchNotificationsAndReadStatus', {
-            stage: 'getUser',
-            error: {
-              code: userError.code,
-              message: userError.message
-            }
-          });
-          throw userError;
-        }
-
-        if (!userData.user) {
-          const noUserError = new Error('No user found');
-          logError(noUserError, 'fetchNotificationsAndReadStatus', {
-            stage: 'validateUser'
-          });
-          return;
-        }
-
-        // Fetch notifications using the simplified function
-        const { data: notificationsData, error: notificationsError } = await supabase
-          .rpc('get_user_notifications', { p_limit: 100, p_offset: 0 });
-
+        // Fetch notifications using the centralized API client
+        const { data: notificationsData, error: notificationsError } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications`);
         if (notificationsError) {
-          logError(notificationsError, 'fetchNotificationsAndReadStatus', {
-            stage: 'fetchNotifications',
-            userId: userData.user.id,
-            error: {
-              code: notificationsError.code,
-              message: notificationsError.message,
-              details: notificationsError.details,
-              hint: notificationsError.hint
-            }
-          });
+          logError(notificationsError, 'fetchNotificationsAndReadStatus', { stage: 'fetchNotifications' });
           throw notificationsError;
         }
-
         if (notificationsData) {
           setLocalNotifications(notificationsData);
-
-          // Initialize the readNotificationIds array with IDs of notifications that are already marked as read
-          const readIds = notificationsData
-            .filter((notification: { is_read: boolean }) => notification.is_read)
-            .map((notification: { id: string }) => notification.id);
-
+          const readIds = notificationsData.filter((notification: { is_read: boolean }) => notification.is_read).map((notification: { id: string }) => notification.id);
           setReadNotificationIds(readIds);
-
           logInfo('Notifications fetched successfully', 'fetchNotificationsAndReadStatus', {
-            userId: userData.user.id,
             notificationCount: notificationsData.length,
             readNotificationsCount: readIds.length
           });
         }
 
-        // Fetch announcements
+        // Fetch announcements (still using Supabase)
         const { data: announcementsData, error: announcementsError } = await supabase
           .from('announcements')
           .select('*')
           .order('created_at', { ascending: false });
-
         if (announcementsError) {
-          logError(announcementsError, 'fetchNotificationsAndReadStatus', {
-            stage: 'fetchAnnouncements',
-            error: {
-              code: announcementsError.code,
-              message: announcementsError.message,
-              details: announcementsError.details,
-              hint: announcementsError.hint
-            }
-          });
+          logError(announcementsError, 'fetchNotificationsAndReadStatus', { stage: 'fetchAnnouncements' });
         } else if (announcementsData) {
           setAnnouncements(announcementsData);
-          logInfo('Announcements fetched successfully', 'fetchNotificationsAndReadStatus', {
-            announcementCount: announcementsData.length
-          });
+          logInfo('Announcements fetched successfully', 'fetchNotificationsAndReadStatus', { announcementCount: announcementsData.length });
         }
 
-        // Fetch read announcements
+        // Fetch read announcements (still using Supabase)
         const { data: readAnnouncementsData, error: readAnnouncementsError } = await supabase
           .from('read_announcements')
           .select('announcement_id')
-          .eq('user_id', userData.user.id);
-
+          .eq('user_id', (await supabase.auth.getUser()).data.user?.id);
         if (readAnnouncementsError) {
-          logError(readAnnouncementsError, 'fetchNotificationsAndReadStatus', {
-            stage: 'fetchReadAnnouncements',
-            userId: userData.user.id,
-            error: {
-              code: readAnnouncementsError.code,
-              message: readAnnouncementsError.message,
-              details: readAnnouncementsError.details,
-              hint: readAnnouncementsError.hint
-            }
-          });
+          logError(readAnnouncementsError, 'fetchNotificationsAndReadStatus', { stage: 'fetchReadAnnouncements' });
         } else if (readAnnouncementsData) {
           const readIds = readAnnouncementsData.map((item: ReadAnnouncement) => item.announcement_id);
           setReadAnnouncements(readIds);
-          logInfo('Read announcements fetched successfully', 'fetchNotificationsAndReadStatus', {
-            userId: userData.user.id,
-            readAnnouncementsCount: readIds.length
-          });
+          logInfo('Read announcements fetched successfully', 'fetchNotificationsAndReadStatus', { readAnnouncementsCount: readIds.length });
         }
-
       } catch (error) {
-        // Ensure error is properly formatted before logging
         const formattedError = error instanceof Error ? error : new Error(JSON.stringify(error));
-        logError(formattedError, 'fetchNotificationsAndReadStatus', {
-          stage: 'unexpectedError',
-          originalError: error
-        });
+        logError(formattedError, 'fetchNotificationsAndReadStatus', { stage: 'unexpectedError', originalError: error });
         console.error("Error fetching data:", error);
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchNotificationsAndReadStatus();
-
-    // Set up refresh interval
-    const refreshInterval = setInterval(() => {
-      fetchNotificationsAndReadStatus();
-    }, 30000); // Refresh every 30 seconds
-
-    // Cleanup interval on unmount
+    const refreshInterval = setInterval(() => { fetchNotificationsAndReadStatus(); }, 30000);
     return () => clearInterval(refreshInterval);
   }, []);
 

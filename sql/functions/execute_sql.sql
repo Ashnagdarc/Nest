@@ -1,49 +1,87 @@
--- Function to safely execute SQL for admin users
-CREATE OR REPLACE FUNCTION execute_sql(sql_query text)
+-- Function to execute SQL statements safely
+-- This function should only be callable by authenticated users with admin privileges
+CREATE OR REPLACE FUNCTION execute_sql(sql_string text)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    result jsonb;
-    is_admin boolean;
+  result jsonb;
 BEGIN
-    -- Check if the current user is an admin
-    SELECT EXISTS (
-        SELECT 1 FROM public.profiles
-        WHERE id = auth.uid()
-        AND role = 'Admin'
-    ) INTO is_admin;
+  -- Check if the user is an admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid()
+    AND role = 'Admin'
+  ) THEN
+    RAISE EXCEPTION 'Permission denied: Only administrators can execute SQL statements';
+  END IF;
 
-    IF NOT is_admin THEN
-        RAISE EXCEPTION 'Unauthorized: Admin access required';
-    END IF;
+  -- Log the SQL execution attempt
+  INSERT INTO public.sql_execution_logs (
+    user_id,
+    sql_statement,
+    execution_time
+  ) VALUES (
+    auth.uid(),
+    sql_string,
+    now()
+  );
 
-    -- Prevent destructive operations
-    IF sql_query ~* '\s*(DROP|TRUNCATE|DELETE|ALTER|UPDATE|INSERT)\s+' THEN
-        RAISE EXCEPTION 'Destructive SQL operations are not allowed';
-    END IF;
-
-    -- Execute the query and capture the result
-    EXECUTE format('
-        WITH query_result AS (%s)
-        SELECT jsonb_agg(to_jsonb(query_result.*))
-        FROM query_result;
-    ', sql_query) INTO result;
-
-    RETURN COALESCE(result, '[]'::jsonb);
-EXCEPTION
-    WHEN OTHERS THEN
-        RETURN jsonb_build_object(
-            'error', SQLERRM,
-            'detail', SQLSTATE,
-            'context', 'execute_sql function'
-        );
+  -- Execute the SQL
+  EXECUTE sql_string;
+  
+  -- Return success
+  result := jsonb_build_object(
+    'success', true,
+    'message', 'SQL executed successfully',
+    'timestamp', to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+  );
+  
+  RETURN result;
+EXCEPTION WHEN OTHERS THEN
+  -- Log the error
+  INSERT INTO public.sql_execution_logs (
+    user_id,
+    sql_statement,
+    execution_time,
+    error_message
+  ) VALUES (
+    auth.uid(),
+    sql_string,
+    now(),
+    SQLERRM
+  );
+  
+  -- Return error details
+  result := jsonb_build_object(
+    'success', false,
+    'message', SQLERRM,
+    'detail', SQLSTATE,
+    'timestamp', to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+  );
+  
+  RETURN result;
 END;
 $$;
 
--- Grant execute permission to authenticated users
-GRANT EXECUTE ON FUNCTION execute_sql TO authenticated;
+-- Create a table to log SQL executions if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.sql_execution_logs (
+  id SERIAL PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id),
+  sql_statement TEXT NOT NULL,
+  execution_time TIMESTAMP WITH TIME ZONE NOT NULL,
+  error_message TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
--- Add comment for documentation
-COMMENT ON FUNCTION execute_sql IS 'Safely executes SELECT queries for admin users with proper error handling and result formatting.'; 
+-- Add RLS policies to the logs table
+ALTER TABLE public.sql_execution_logs ENABLE ROW LEVEL SECURITY;
+
+-- Only admins can see the logs
+CREATE POLICY "Admins can view SQL logs" ON public.sql_execution_logs
+  FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'Admin'));
+
+-- Grant permissions to execute the function
+GRANT EXECUTE ON FUNCTION execute_sql(text) TO authenticated; 

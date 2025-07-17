@@ -12,13 +12,13 @@
 
 import { createClient } from '@/lib/supabase/client'
 // Server client imported dynamically to avoid bundling in client code
-import type { Database } from '@/types/supabase'
 import type {
   Notification,
   Profile,
   NotificationData,
   NotificationPreferences
 } from '@/types/notifications'
+import { apiGet, apiPost, apiPatch } from '@/lib/apiClient';
 
 // Re-export types for backward compatibility
 export type { Notification, Profile, NotificationData, NotificationPreferences }
@@ -85,51 +85,20 @@ export class NotificationService {
     notification?: Notification
   }> {
     try {
-      // Validate required fields
       if (!notificationData.userId || !notificationData.title || !notificationData.message) {
         return {
           success: false,
           error: 'Missing required notification fields: userId, title, or message'
         }
       }
-
-      // Create notification record
-      const { data: notification, error } = await this.supabase
-        .from('notifications')
-        .insert({
-          user_id: notificationData.userId,
-          title: notificationData.title,
-          message: notificationData.message,
-          type: notificationData.type || 'info',
-          action_url: notificationData.actionUrl,
-          metadata: notificationData.metadata,
-          priority: notificationData.priority || 'normal',
-          category: notificationData.category || 'system',
-          is_read: false,
-          scheduled_for: notificationData.scheduledFor,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
+      // Use centralized API client
+      const { data, error } = await apiPost<{ data: Notification; error: string | null }>(`/api/notifications`, notificationData);
       if (error) {
-        console.error('Failed to create notification:', error)
-        return {
-          success: false,
-          error: error.message
-        }
+        return { success: false, error };
       }
-
-      return {
-        success: true,
-        notification
-      }
+      return { success: true, notification: data };
     } catch (error) {
-      console.error('Notification creation exception:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      }
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
     }
   }
 
@@ -205,8 +174,7 @@ export class NotificationService {
               break
 
             case 'push':
-              // Push notification delivery would be implemented here
-              // Integration with Firebase Cloud Messaging
+              // Push notification delivery channel was removed (Firebase FCM integration deprecated)
               deliveryStatus.push = false // Placeholder
               break
 
@@ -291,34 +259,14 @@ export class NotificationService {
    * const result = await notificationService.markAsRead('notif-123', 'user-456')
    * ```
    */
-  async markAsRead(notificationId: string, userId: string): Promise<{
-    success: boolean
-    error?: string
-  }> {
+  async markAsRead(notificationId: string, userId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await this.supabase
-        .from('notifications')
-        .update({
-          is_read: true,
-          read_at: new Date().toISOString()
-        })
-        .eq('id', notificationId)
-        .eq('user_id', userId)
-
-      if (error) {
-        return {
-          success: false,
-          error: error.message
-        }
-      }
-
-      return { success: true }
+      // Use centralized API client
+      const { error } = await apiPatch<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });
+      if (error) return { success: false, error };
+      return { success: true };
     } catch (error) {
-      console.error('Failed to mark notification as read:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      }
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
     }
   }
 
@@ -359,46 +307,16 @@ export class NotificationService {
     error?: string
   }> {
     try {
-      let query = this.supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-
-      // Apply filters
-      if (options.unreadOnly) {
-        query = query.eq('is_read', false)
-      }
-
-      if (options.category) {
-        query = query.eq('category', options.category)
-      }
-
-      // Apply pagination
-      if (options.limit) {
-        const offset = options.offset || 0
-        query = query.range(offset, offset + options.limit - 1)
-      }
-
-      const { data: notifications, error } = await query
-
-      if (error) {
-        return {
-          success: false,
-          error: error.message
-        }
-      }
-
-      return {
-        success: true,
-        notifications: notifications || []
-      }
+      const params = new URLSearchParams();
+      if (options.unreadOnly) params.append('unreadOnly', 'true');
+      if (options.category) params.append('category', options.category);
+      if (options.limit) params.append('limit', String(options.limit));
+      if (options.offset) params.append('offset', String(options.offset));
+      const { data, error } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications?userId=${userId}&${params.toString()}`);
+      if (error) return { success: false, error };
+      return { success: true, notifications: data };
     } catch (error) {
-      console.error('Failed to get user notifications:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      }
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
     }
   }
 }

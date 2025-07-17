@@ -46,9 +46,9 @@ export default function QRScanner({ onResult, onError }: QRScannerProps) {
                             onError(err?.message || 'Failed to start scanner');
                         }
                     });
-            } catch (err: any) {
+            } catch (err: unknown) {
                 if (onError) {
-                    onError(err?.message || 'Failed to initialize scanner');
+                    onError((err as Error)?.message || 'Failed to initialize scanner');
                 }
                 console.error('QR scanner initialization error:', err);
             }

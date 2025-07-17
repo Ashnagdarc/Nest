@@ -14,8 +14,6 @@ export const FloatingNav = ({
     }[];
     className?: string;
 }) => {
-    const [visible, setVisible] = useState(true);
-
     return (
         <div
             className={cn(

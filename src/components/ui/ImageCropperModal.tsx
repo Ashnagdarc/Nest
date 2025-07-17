@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-// @ts-ignore
 import Cropper from 'react-easy-crop';
 import { Dialog, DialogContent, DialogTitle } from './dialog';
 import { Button } from './button';
+import Image from 'next/image';
 
 interface ImageCropperModalProps {
     open: boolean;
@@ -134,7 +134,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({ open, imag
                         <span className="text-xs text-muted-foreground mb-1">Preview</span>
                         <div className="w-24 h-24 rounded-full overflow-hidden border border-muted bg-background flex items-center justify-center">
                             {previewUrl ? (
-                                <img src={previewUrl} alt="Cropped preview" className="object-cover w-full h-full" />
+                                <Image src={previewUrl} alt="Cropped preview" width={400} height={400} className="object-cover w-full h-full" />
                             ) : (
                                 <span className="text-xs text-muted-foreground">No preview</span>
                             )}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { apiGet } from '@/lib/apiClient';
 import {
     Dialog,
     DialogContent,
@@ -39,31 +40,15 @@ export function ViewRequestModal({ requestId, open, onOpenChange }: ViewRequestM
     async function loadRequestDetails(id: string) {
         setLoading(true);
         try {
-            // Load the request
-            const { data: requestData, error: requestError } = await supabase
-                .from('gear_requests')
-                .select(`
-          *,
-          profiles:user_id (
-            id,
-            full_name,
-            email
-          )
-        `)
-                .eq('id', id)
-                .single();
-
-            if (requestError) throw requestError;
+            // Load the request from the API
+            const { data: requestData, error: requestError } = await apiGet<{ data: any; error: string | null }>(`/api/requests/${id}`);
+            if (requestError) throw new Error(requestError);
             setRequest(requestData);
 
             // Load gear items if there are any
             if (requestData?.gear_ids && requestData.gear_ids.length > 0) {
-                const { data: gearData, error: gearError } = await supabase
-                    .from('gears')
-                    .select('*')
-                    .in('id', requestData.gear_ids);
-
-                if (gearError) throw gearError;
+                const { data: gearData, error: gearError } = await apiGet<{ data: any[]; error: string | null }>(`/api/gears?ids=${requestData.gear_ids.join(',')}`);
+                if (gearError) throw new Error(gearError);
                 setGearItems(gearData || []);
             }
         } catch (error: any) {

@@ -38,7 +38,7 @@ const sendToServer = async (level: LogLevel, message: string, context: string, m
 };
 
 // Helper functions for common log types
-export const logError = (error: any, context: string, metadata?: any) => {
+export const logError = (error: unknown, context: string, metadata?: any) => {
     // Ensure error is properly formatted
     let errorObj: Error;
     if (error instanceof Error) {
@@ -50,7 +50,7 @@ export const logError = (error: any, context: string, metadata?: any) => {
     } else {
         errorObj = new Error('An unknown error occurred');
     }
-    
+
     const logData: LogData = {
         message: errorObj.message || 'An error occurred',
         context,
@@ -107,5 +107,14 @@ const logger = {
     info: logInfo,
     debug: logDebug
 };
+
+// Redirect vanilla console.log to our logger in production to avoid stray logs
+if (process.env.NODE_ENV === 'production') {
+
+    console.log = (...args: unknown[]) => {
+        logInfo(args.join(' '), 'console');
+    };
+
+}
 
 export default logger; 

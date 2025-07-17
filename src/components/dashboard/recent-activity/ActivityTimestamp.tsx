@@ -23,7 +23,7 @@ export function ActivityTimestamp({ timestamp, className = "text-xs text-muted-f
             } else {
                 return format(date, 'MMM d, yyyy');
             }
-        } catch (error) {
+        } catch {
             return 'Invalid date';
         }
     };

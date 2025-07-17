@@ -1,10 +1,4 @@
-/**
- * Email Notification API - Automated email communications for equipment workflows,
- * user notifications, and administrative alerts with template system and delivery tracking.
- * 
- * @author Daniel Chinonso Samuel
- * @version 1.0.0
- */
+// API endpoint for sending gear-related email notifications in Nest by Eden Oasis.
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendGearRequestEmail } from '@/lib/email';

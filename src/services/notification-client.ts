@@ -13,9 +13,9 @@
 import { createClient } from '@/lib/supabase/client'
 import type {
     Notification,
-    NotificationData,
-    NotificationPreferences
+    NotificationData
 } from '@/types/notifications'
+import { apiGet, apiPost, apiPatch } from '@/lib/apiClient';
 
 /**
  * Client-Side Notification Service Class
@@ -56,43 +56,12 @@ export class ClientNotificationService {
                 }
             }
 
-            // Create notification record
-            const { data: notification, error } = await this.supabase
-                .from('notifications')
-                .insert({
-                    user_id: notificationData.userId,
-                    title: notificationData.title,
-                    message: notificationData.message,
-                    type: notificationData.type || 'info',
-                    action_url: notificationData.actionUrl,
-                    metadata: notificationData.metadata,
-                    priority: notificationData.priority || 'normal',
-                    category: notificationData.category || 'system',
-                    is_read: false,
-                    scheduled_for: notificationData.scheduledFor,
-                    created_at: new Date().toISOString()
-                })
-                .select()
-                .single()
-
-            if (error) {
-                console.error('Failed to create notification:', error)
-                return {
-                    success: false,
-                    error: error.message
-                }
-            }
-
-            return {
-                success: true,
-                notification
-            }
+            // Use centralized API client
+            const { data, error } = await apiPost<{ data: Notification; error: string | null }>(`/api/notifications`, notificationData);
+            if (error) return { success: false, error };
+            return { success: true, notification: data };
         } catch (error) {
-            console.error('Notification creation exception:', error)
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error occurred'
-            }
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
         }
     }
 
@@ -101,34 +70,14 @@ export class ClientNotificationService {
      * 
      * Marks a notification as read using the browser client.
      */
-    async markAsRead(notificationId: string, userId: string): Promise<{
-        success: boolean
-        error?: string
-    }> {
+    async markAsRead(notificationId: string, userId: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const { error } = await this.supabase
-                .from('notifications')
-                .update({
-                    is_read: true,
-                    read_at: new Date().toISOString()
-                })
-                .eq('id', notificationId)
-                .eq('user_id', userId)
-
-            if (error) {
-                return {
-                    success: false,
-                    error: error.message
-                }
-            }
-
-            return { success: true }
+            // Use centralized API client
+            const { error } = await apiPatch<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });
+            if (error) return { success: false, error };
+            return { success: true };
         } catch (error) {
-            console.error('Failed to mark notification as read:', error)
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error occurred'
-            }
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
         }
     }
 
@@ -151,46 +100,16 @@ export class ClientNotificationService {
         error?: string
     }> {
         try {
-            let query = this.supabase
-                .from('notifications')
-                .select('*')
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false })
-
-            // Apply filters
-            if (options.unreadOnly) {
-                query = query.eq('is_read', false)
-            }
-
-            if (options.category) {
-                query = query.eq('category', options.category)
-            }
-
-            // Apply pagination
-            if (options.limit) {
-                const offset = options.offset || 0
-                query = query.range(offset, offset + options.limit - 1)
-            }
-
-            const { data: notifications, error } = await query
-
-            if (error) {
-                return {
-                    success: false,
-                    error: error.message
-                }
-            }
-
-            return {
-                success: true,
-                notifications: notifications || []
-            }
+            const params = new URLSearchParams();
+            if (options.unreadOnly) params.append('unreadOnly', 'true');
+            if (options.category) params.append('category', options.category);
+            if (options.limit) params.append('limit', String(options.limit));
+            if (options.offset) params.append('offset', String(options.offset));
+            const { data, error } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications?userId=${userId}&${params.toString()}`);
+            if (error) return { success: false, error };
+            return { success: true, notifications: data };
         } catch (error) {
-            console.error('Failed to get user notifications:', error)
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error occurred'
-            }
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
         }
     }
 }
@@ -200,56 +119,4 @@ export class ClientNotificationService {
  * 
  * Pre-configured client notification service for browser environments.
  */
-export const clientNotificationService = new ClientNotificationService()
-
-/**
- * Client-Side Helper Functions
- */
-
-/**
- * Create Equipment Request Notification (Client-Side)
- * 
- * Client-safe version of equipment request notification creation.
- */
-export async function createEquipmentRequestNotification(
-    userId: string,
-    equipmentName: string,
-    status: string,
-    actionUrl?: string
-): Promise<{ success: boolean; error?: string }> {
-    const statusMessages = {
-        approved: {
-            title: 'Equipment Request Approved',
-            message: `Your request for ${equipmentName} has been approved and is ready for pickup.`,
-            type: 'success' as const
-        },
-        rejected: {
-            title: 'Equipment Request Rejected',
-            message: `Your request for ${equipmentName} has been rejected. Please contact an administrator for more information.`,
-            type: 'error' as const
-        },
-        pending: {
-            title: 'Equipment Request Submitted',
-            message: `Your request for ${equipmentName} has been submitted and is pending approval.`,
-            type: 'info' as const
-        }
-    }
-
-    const messageConfig = statusMessages[status as keyof typeof statusMessages]
-    if (!messageConfig) {
-        return {
-            success: false,
-            error: `Unknown request status: ${status}`
-        }
-    }
-
-    return await clientNotificationService.createNotification({
-        userId,
-        title: messageConfig.title,
-        message: messageConfig.message,
-        type: messageConfig.type,
-        actionUrl,
-        category: 'equipment',
-        priority: 'normal'
-    })
-} 
+export const clientNotificationService = new ClientNotificationService() 

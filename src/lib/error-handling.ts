@@ -20,6 +20,9 @@
  * - Validation Errors: Form validation, data integrity issues
  * - Database Errors: Query failures, constraint violations
  * - System Errors: Unexpected runtime errors, memory issues
+ * - User permission and access control errors
+ * - Resource not found errors
+ * - Rate limiting and quota exceeded errors
  * 
  * Error Handling Strategy:
  * - Graceful degradation for non-critical errors
@@ -413,9 +416,6 @@ export const handleError = (
     const {
         showToast = true,
         logError: shouldLog = true,
-        enableRetry = false,
-        maxRetries = 3,
-        reportError = false
     } = config
 
     // Log error if configured

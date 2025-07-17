@@ -1,81 +1,89 @@
+"use client";
 import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Search, Filter, UserPlus } from 'lucide-react';
+import { Loader2, Search, Filter } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import ErrorDisplay from '@/components/ui/error-display';
+import { apiGet } from '@/lib/apiClient';
+import { Pagination } from '@/components/ui/Pagination';
+import type { Profile } from '@/types/supabase';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from '@/components/ui/dialog';
 
+/**
+ * Manage Users admin page with robust server-side pagination, search, and filtering.
+ */
 export function UsersManagement() {
-    const supabase = createClient();
+    // const supabase = createClient(); // Not used
     const { toast } = useToast();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [users, setUsers] = useState<any[]>([]);
-    const [filter, setFilter] = useState("all");
-    const [searchTerm, setSearchTerm] = useState("");
+    const [users, setUsers] = useState<Profile[]>([]);
+    const [filter, setFilter] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+    const [total, setTotal] = useState(0);
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
 
     useEffect(() => {
         fetchUsers();
-    }, [filter]);
+    }, [filter, searchTerm, page, pageSize]);
 
     async function fetchUsers() {
         setIsLoading(true);
         setError(null);
-
         try {
-            // Check if table exists
-            const { count, error: tableError } = await supabase
-                .from('profiles')
-                .select('*', { count: 'exact', head: true });
-
-            if (tableError) {
-                throw new Error(`Table error: ${tableError.message}`);
-            }
-
-            if (count === null) {
-                setUsers([]);
-                return;
-            }
-
-            // Build query
-            let query = supabase
-                .from('profiles')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            // Apply role filter
-            if (filter !== "all") {
-                query = query.eq('role', filter);
-            }
-
-            const { data, error } = await query;
-
-            if (error) throw new Error(`Data fetch error: ${error.message}`);
-
-            // If we get data, log the first item to see its structure
-            if (data && data.length > 0) {
-                console.info("Sample user profile structure:",
-                    Object.keys(data[0]),
-                    "First item:", data[0]
-                );
-            }
-
+            const params = new URLSearchParams();
+            if (filter !== 'all') params.append('role', filter);
+            if (searchTerm) params.set('search', searchTerm);
+            params.set('page', String(page));
+            params.set('pageSize', String(pageSize));
+            const { data, total: totalCount, error } = await apiGet<{ data: Profile[]; total: number; error: string | null }>(`/api/users?${params.toString()}`);
+            if (error) throw new Error(`Data fetch error: ${error}`);
             setUsers(data || []);
-        } catch (error: any) {
-            console.error("Error fetching users:", error.message);
-            setError(error.message);
+            setTotal(totalCount || 0);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            setError(message);
             toast({
-                title: "Error fetching users",
-                description: error.message,
-                variant: "destructive",
+                title: 'Error fetching users',
+                description: message,
+                variant: 'destructive',
             });
         } finally {
             setIsLoading(false);
+        }
+    }
+
+    async function handleDelete(user: Profile) {
+        setActionLoading(user.id);
+        try {
+            const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' });
+            const resJson = await res.json();
+            console.log('API response (Delete):', resJson, JSON.stringify(resJson));
+            if (!resJson.success) throw new Error(resJson.error);
+            setUsers(prev => prev.filter(u => u.id !== user.id));
+            toast({ title: 'User deleted', description: `${user.full_name} has been deleted.` });
+        } catch (e) {
+            let message = 'Unknown error';
+            if (e instanceof Error) message = e.message;
+            else if (typeof e === 'object' && e !== null) {
+                if ('error' in e && typeof (e as any).error === 'string') message = (e as any).error;
+                else if ('message' in e && typeof (e as any).message === 'string') message = (e as any).message;
+                else message = JSON.stringify(e);
+            } else if (typeof e === 'string') message = e;
+            console.error('Action error:', e);
+            toast({ title: 'Error', description: message, variant: 'destructive' });
+        } finally {
+            setActionLoading(null);
+            setConfirmDeleteId(null);
         }
     }
 
@@ -105,27 +113,20 @@ export function UsersManagement() {
         }
     };
 
-    const filteredUsers = users.filter(user => {
-        if (!searchTerm) return true;
-
-        const searchLower = searchTerm.toLowerCase();
-        return (
-            String(user.full_name || '').toLowerCase().includes(searchLower) ||
-            String(user.email || '').toLowerCase().includes(searchLower) ||
-            String(user.role || '').toLowerCase().includes(searchLower)
-        );
-    });
-
     function getInitials(name: string = '') {
         if (!name) return 'U';
         return name.split(' ').map(n => n[0]).join('').toUpperCase();
     }
 
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const from = (page - 1) * pageSize + 1;
+    const to = Math.min(page * pageSize, total);
+
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap gap-2 justify-between">
                 <div className="flex gap-2 items-center">
-                    <Select value={filter} onValueChange={setFilter}>
+                    <Select value={filter} onValueChange={value => { setFilter(value); setPage(1); }}>
                         <SelectTrigger className="w-[180px]">
                             <Filter className="h-4 w-4 mr-2" />
                             <SelectValue placeholder="Filter by Role" />
@@ -143,16 +144,35 @@ export function UsersManagement() {
                             placeholder="Search users..."
                             className="pl-8"
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
                         />
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
+                        <SelectTrigger className="w-[100px]">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="5">5 / page</SelectItem>
+                            <SelectItem value="10">10 / page</SelectItem>
+                            <SelectItem value="20">20 / page</SelectItem>
+                            <SelectItem value="50">50 / page</SelectItem>
+                        </SelectContent>
+                    </Select>
                     <Button onClick={() => fetchUsers()}>Refresh</Button>
                     <Button variant="outline">
-                        <UserPlus className="h-4 w-4 mr-2" />
                         Add User
                     </Button>
+                </div>
+            </div>
+
+            <div className="flex items-center justify-between text-sm text-muted-foreground px-1">
+                <div>
+                    Showing {from}-{to} of {total} users
+                </div>
+                <div>
+                    Page {page} of {totalPages}
                 </div>
             </div>
 
@@ -163,50 +183,83 @@ export function UsersManagement() {
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     <span className="ml-2">Loading users...</span>
                 </div>
-            ) : filteredUsers.length === 0 ? (
+            ) : users.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                     No users found
                 </div>
             ) : (
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>User</TableHead>
-                                <TableHead>Email</TableHead>
-                                <TableHead>Role</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Joined</TableHead>
-                                <TableHead>Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredUsers.map(user => (
-                                <TableRow key={user.id}>
-                                    <TableCell>
-                                        <div className="flex items-center gap-3">
-                                            <Avatar>
-                                                <AvatarImage src={user.avatar_url} />
-                                                <AvatarFallback>{getInitials(user.full_name)}</AvatarFallback>
-                                            </Avatar>
-                                            <span className="font-medium">{user.full_name}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>{user.email}</TableCell>
-                                    <TableCell>{getRoleBadge(user.role)}</TableCell>
-                                    <TableCell>{getStatusBadge(user.status)}</TableCell>
-                                    <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}</TableCell>
-                                    <TableCell>
-                                        <div className="flex gap-2">
-                                            <Button variant="outline" size="sm">View</Button>
-                                            <Button variant="outline" size="sm">Edit</Button>
-                                        </div>
-                                    </TableCell>
+                <>
+                    <div className="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>User</TableHead>
+                                    <TableHead>Email</TableHead>
+                                    <TableHead>Role</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Joined</TableHead>
+                                    <TableHead>Actions</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                            </TableHeader>
+                            <TableBody>
+                                {users.map(user => (
+                                    <TableRow key={user.id}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-3">
+                                                <Avatar>
+                                                    <AvatarImage src={user.avatar_url || undefined} />
+                                                    <AvatarFallback>{getInitials(user.full_name || '')}</AvatarFallback>
+                                                </Avatar>
+                                                <span className="font-medium">{user.full_name}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{user.email}</TableCell>
+                                        <TableCell>{getRoleBadge(user.role)}</TableCell>
+                                        <TableCell>{getStatusBadge(user.status)}</TableCell>
+                                        <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}</TableCell>
+                                        <TableCell>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0" disabled={actionLoading === user.id}>
+                                                        More
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => handleDelete(user)} disabled={actionLoading === user.id}>
+                                                        Delete
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                            <Dialog open={confirmDeleteId === user.id} onOpenChange={open => { if (!open) setConfirmDeleteId(null); }}>
+                                                <DialogContent>
+                                                    <DialogHeader>
+                                                        <DialogTitle>Delete User</DialogTitle>
+                                                        <DialogDescription>
+                                                            Are you sure you want to delete {user.full_name}? This action cannot be undone.
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+                                                    <DialogFooter>
+                                                        <Button variant="destructive" onClick={() => handleDelete(user)} disabled={actionLoading === user.id}>Delete</Button>
+                                                        <DialogClose asChild>
+                                                            <Button variant="outline">Cancel</Button>
+                                                        </DialogClose>
+                                                    </DialogFooter>
+                                                </DialogContent>
+                                            </Dialog>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                    <div className="flex justify-center mt-4">
+                        <Pagination
+                            currentPage={page}
+                            totalPages={totalPages}
+                            onPageChange={p => setPage(p)}
+                        />
+                    </div>
+                </>
             )}
         </div>
     );

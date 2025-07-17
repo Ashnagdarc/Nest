@@ -1,10 +1,4 @@
-/**
- * Equipment Request Page - Asset request workflow with multi-select equipment selection,
- * comprehensive form validation, and real-time availability updates.
- * 
- * @author Daniel Chinonso Samuel
- * @version 1.0.0
- */
+// Equipment request page for Nest by Eden Oasis. Handles multi-select requests, validation, and real-time updates.
 
 "use client";
 
@@ -18,20 +12,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Image from 'next/image';
-import { Send, Users, Clock, Tag, Search } from 'lucide-react';
+import { Send, Search } from 'lucide-react';
 import { createSystemNotification } from '@/lib/notifications';
 import { createClient } from '@/lib/supabase/client';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
-// Import types from the database if available, otherwise use any
-type Gear = any;
-type Profile = any;
+import { apiGet } from '@/lib/apiClient';
+import type { Profile, Gear } from '@/types/supabase';
 
 /**
  * Predefined Reason Options
@@ -121,44 +113,6 @@ type RequestFormValues = z.infer<typeof requestSchema>;
  */
 const REQUEST_FORM_DRAFT_KEY = "user-request-gear-form-draft";
 
-/**
- * Request Gear Content Component
- * 
- * Main component that handles the equipment request workflow including
- * equipment discovery, selection, form submission, and status management.
- * Provides a comprehensive interface for users to request equipment
- * with real-time updates and validation.
- * 
- * Key Functionalities:
- * - Equipment catalog display with real-time availability
- * - Multi-select equipment selection interface
- * - Comprehensive request form with validation
- * - Team member assignment and collaboration
- * - Form persistence and draft recovery
- * - Real-time equipment status updates
- * - Automated notification generation
- * 
- * State Management:
- * - Form state with React Hook Form and Zod validation
- * - Equipment data with real-time Supabase subscriptions
- * - User authentication and profile data
- * - Loading states and error handling
- * - Draft persistence in localStorage
- * 
- * @component
- * @returns {JSX.Element} Equipment request interface
- * 
- * @example
- * ```typescript
- * // Basic usage in a page component
- * <Suspense fallback={<LoadingFallback />}>
- *   <RequestGearContent />
- * </Suspense>
- * 
- * // With preselected equipment via URL parameter
- * // /user/request?gearId=123 will preselect equipment with ID 123
- * ```
- */
 function RequestGearContent() {
   // URL parameter handling for preselected equipment
   const searchParams = useSearchParams();
@@ -172,7 +126,7 @@ function RequestGearContent() {
   // Component state management
   const [isLoading, setIsLoading] = useState(false);
   const [availableGears, setAvailableGears] = useState<Gear[]>([]);
-  const [availableUsers, setAvailableUsers] = useState<Pick<Profile, 'id' | 'email' | 'full_name' | 'role'>[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<Profile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -279,12 +233,7 @@ function RequestGearContent() {
      */
     const fetchGears = async () => {
       try {
-        const { data, error } = await supabase
-          .from('gears')
-          .select('*')
-          .eq('status', 'Available')
-          .order('name');
-
+        const { data, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Available&pageSize=1000`);
         if (error) {
           console.error('Error fetching gears:', error);
           toast({
@@ -326,7 +275,22 @@ function RequestGearContent() {
             variant: "destructive",
           });
         } else {
-          setAvailableUsers(data || []);
+          setAvailableUsers((data || []).map((u: any) => ({
+            id: u.id,
+            full_name: u.full_name ?? null,
+            email: u.email ?? null,
+            role: u.role,
+            department: u.department ?? null,
+            avatar_url: u.avatar_url ?? null,
+            status: u.status ?? 'Active',
+            phone: u.phone ?? null,
+            location: u.location ?? null,
+            employee_id: u.employee_id ?? null,
+            created_at: u.created_at ?? '',
+            updated_at: u.updated_at ?? '',
+            last_sign_in_at: u.last_sign_in_at ?? null,
+            is_banned: u.is_banned ?? false,
+          })));
         }
       } catch (error) {
         console.error('Exception fetching users:', error);
@@ -410,11 +374,11 @@ function RequestGearContent() {
       const { data: requestData, error } = await supabase
         .from('gear_requests')
         .insert({
-          user_id: userId,
+          user_id: userId || '',
           gear_ids: data.selectedGears,
-          reason: data.reason,
-          destination: data.destination,
-          expected_duration: data.duration,
+          reason: data.reason || '',
+          destination: data.destination || '',
+          expected_duration: data.duration || '',
           team_members: data.teamMembers.length ? data.teamMembers.join(',') : null,
           status: 'Pending'
         })
@@ -440,29 +404,26 @@ function RequestGearContent() {
 
       // Resolve equipment names for notification display
       const selectedGearNames = availableGears
-        .filter(gear => data.selectedGears.includes(gear.id))
-        .map(gear => gear.name);
+        .filter(gear => data.selectedGears.includes((gear as { id: string }).id))
+        .map(gear => (gear as { name?: string }).name);
 
       // Create system notification for administrators
       await createSystemNotification(
         `New Equipment Request: ${selectedGearNames.join(', ')}`,
-        `${userProfile?.full_name || 'Unknown User'} has requested equipment for ${data.reason}`,
+        `${userProfile?.full_name || 'Unknown User'} has requested equipment for ${data.reason || ''}`,
         'gear_request'
       );
 
       // Send external notification to Google Chat
-      await notifyGoogleChat(
-        NotificationEventType.NEW_REQUEST,
-        {
-          userName: userProfile?.full_name || 'Unknown User',
-          userEmail: userProfile?.email || '',
-          gearNames: selectedGearNames,
-          reason: data.reason,
-          destination: data.destination,
-          duration: data.duration,
-          requestId: requestData[0]?.id || 'unknown'
-        }
-      );
+      await notifyGoogleChat(NotificationEventType.USER_REQUEST, {
+        userName: userProfile?.full_name || 'Unknown User',
+        userEmail: userProfile?.email || '',
+        gearNames: selectedGearNames,
+        reason: data.reason,
+        destination: data.destination,
+        duration: data.duration,
+        requestId: requestData[0]?.id || 'unknown'
+      });
 
       // Log activity for audit trail
       if (data.selectedGears.length > 0) {
@@ -512,11 +473,11 @@ function RequestGearContent() {
 
     const term = searchTerm.toLowerCase();
     return availableGears.filter(gear =>
-      gear.name?.toLowerCase().includes(term) ||
-      gear.category?.toLowerCase().includes(term) ||
-      gear.description?.toLowerCase().includes(term) ||
-      gear.brand?.toLowerCase().includes(term) ||
-      gear.model?.toLowerCase().includes(term)
+      (gear as { name?: string; category?: string; description?: string; brand?: string; model?: string }).name?.toLowerCase().includes(term) ||
+      (gear as { category?: string }).category?.toLowerCase().includes(term) ||
+      (gear as { description?: string }).description?.toLowerCase().includes(term) ||
+      (gear as { brand?: string }).brand?.toLowerCase().includes(term) ||
+      (gear as { model?: string }).model?.toLowerCase().includes(term)
     );
   }, [availableGears, searchTerm]);
 
@@ -565,10 +526,11 @@ function RequestGearContent() {
                             </div>
                           ) : (
                             filteredGears.map((gear) => {
-                              const isSelected = field.value?.includes(gear.id);
+                              const isSelected = field.value?.includes((gear as { id: string }).id);
+                              const g = gear as { id: string; name?: string; image_url?: string; category?: string; status?: string; condition?: string };
                               return (
                                 <Card
-                                  key={gear.id}
+                                  key={g.id}
                                   className={`relative transition-all duration-200 hover:shadow-md cursor-pointer ${isSelected ? 'ring-2 ring-primary bg-primary/5' : 'hover:bg-muted/50'
                                     }`}
                                 >
@@ -581,8 +543,8 @@ function RequestGearContent() {
                                           onCheckedChange={(checked) => {
                                             const currentValues = field.value || [];
                                             const newValues = checked
-                                              ? [...currentValues, gear.id]
-                                              : currentValues.filter((value) => value !== gear.id);
+                                              ? [...currentValues, g.id]
+                                              : currentValues.filter((value) => value !== g.id);
                                             field.onChange(newValues);
                                           }}
                                           className="h-5 w-5 shrink-0"
@@ -592,8 +554,8 @@ function RequestGearContent() {
                                       {/* Gear Image */}
                                       <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border overflow-hidden bg-muted shrink-0">
                                         <Image
-                                          src={gear.image_url || '/images/placeholder-gear.svg'}
-                                          alt={gear.name}
+                                          src={g.image_url || '/images/placeholder-gear.svg'}
+                                          alt={g.name}
                                           width={80}
                                           height={80}
                                           className="w-full h-full object-cover"
@@ -603,23 +565,23 @@ function RequestGearContent() {
                                       {/* Gear Details */}
                                       <div className="flex-1 min-w-0 space-y-1">
                                         <h4 className="font-semibold text-sm sm:text-base text-foreground truncate">
-                                          {gear.name}
+                                          {g.name}
                                         </h4>
                                         <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                                          {gear.category}
+                                          {g.category}
                                         </p>
                                         <div className="flex flex-wrap gap-1">
                                           <Badge
                                             variant="secondary"
                                             className="text-xs px-2 py-0.5"
                                           >
-                                            {gear.status}
+                                            {g.status}
                                           </Badge>
                                           <Badge
                                             variant="outline"
                                             className="text-xs px-2 py-0.5"
                                           >
-                                            {gear.condition}
+                                            {g.condition}
                                           </Badge>
                                         </div>
                                       </div>
@@ -633,8 +595,8 @@ function RequestGearContent() {
                                           const currentValues = field.value || [];
                                           const checked = !isSelected;
                                           const newValues = checked
-                                            ? [...currentValues, gear.id]
-                                            : currentValues.filter((value) => value !== gear.id);
+                                            ? [...currentValues, g.id]
+                                            : currentValues.filter((value) => value !== g.id);
                                           field.onChange(newValues);
                                         }}
                                       />
@@ -835,31 +797,34 @@ function RequestGearContent() {
                 <CardContent className="space-y-4">
                   <div className="space-y-3">
                     {availableGears
-                      .filter(gear => form.watch("selectedGears")?.includes(gear.id))
-                      .map(gear => (
-                        <div key={gear.id} className="p-3 border rounded-lg bg-muted/30">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded border overflow-hidden bg-background">
-                                <Image
-                                  src={gear.image_url || '/images/placeholder-gear.svg'}
-                                  alt={gear.name}
-                                  width={48}
-                                  height={48}
-                                  className="w-full h-full object-cover"
-                                />
+                      .filter(gear => form.watch("selectedGears")?.includes((gear as { id: string }).id))
+                      .map(gear => {
+                        const g = gear as { id: string; name?: string; image_url?: string; category?: string; condition?: string };
+                        return (
+                          <div key={g.id} className="p-3 border rounded-lg bg-muted/30">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded border overflow-hidden bg-background">
+                                  <Image
+                                    src={g.image_url || '/images/placeholder-gear.svg'}
+                                    alt={g.name}
+                                    width={48}
+                                    height={48}
+                                  />
+                                </div>
+                                <div>
+                                  <h4 className="font-medium text-sm">{g.name}</h4>
+                                  <p className="text-xs text-muted-foreground">{g.category}</p>
+                                </div>
                               </div>
-                              <div>
-                                <h4 className="font-medium text-sm">{gear.name}</h4>
-                                <p className="text-xs text-muted-foreground">{gear.category}</p>
-                              </div>
+                              <Badge variant="outline" className="text-xs">
+                                {g.condition}
+                              </Badge>
                             </div>
-                            <Badge variant="outline" className="text-xs">
-                              {gear.condition}
-                            </Badge>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })
+                    }
                   </div>
 
                   <FormField

@@ -1,5 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useCallback } from 'react'
 import type {
     Gear,
     Profile,
@@ -9,13 +8,12 @@ import type {
     LoadingStates,
     PerformanceState
 } from '@/types/dashboard'
+import { apiGet } from '@/lib/apiClient'
 
 /**
  * Custom hook for dashboard data management
  */
 export function useDashboardData() {
-    const supabase = createClient()
-
     // Data State
     const [gears, setGears] = useState<Gear[]>([])
     const [users, setUsers] = useState<Profile[]>([])
@@ -58,15 +56,12 @@ export function useDashboardData() {
         const startTime = Date.now()
 
         try {
-            const { data, error } = await supabase
-                .from('gears')
-                .select('*')
-                .order('name')
-
+            // Fetch all gears (no pagination)
+            const { data, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?pageSize=1000`)
             const queryTime = Date.now() - startTime
             trackPerformance(queryTime, !!error)
 
-            if (error) throw error
+            if (error) throw new Error(error)
             setGears(data || [])
         } catch (error) {
             console.error('Failed to fetch gears:', error)
@@ -74,22 +69,19 @@ export function useDashboardData() {
         } finally {
             setLoadingStates(prev => ({ ...prev, gears: false }))
         }
-    }, [supabase, trackPerformance])
+    }, [trackPerformance])
 
     const fetchUsers = useCallback(async () => {
         setLoadingStates(prev => ({ ...prev, users: true }))
         const startTime = Date.now()
 
         try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .order('full_name')
-
+            // Fetch all users (no pagination)
+            const { data, error } = await apiGet<{ data: Profile[]; error: string | null }>(`/api/users?pageSize=1000`)
             const queryTime = Date.now() - startTime
             trackPerformance(queryTime, !!error)
 
-            if (error) throw error
+            if (error) throw new Error(error)
             setUsers(data || [])
         } catch (error) {
             console.error('Failed to fetch users:', error)
@@ -97,22 +89,19 @@ export function useDashboardData() {
         } finally {
             setLoadingStates(prev => ({ ...prev, users: false }))
         }
-    }, [supabase, trackPerformance])
+    }, [trackPerformance])
 
     const fetchRequests = useCallback(async () => {
         setLoadingStates(prev => ({ ...prev, requests: true }))
         const startTime = Date.now()
 
         try {
-            const { data, error } = await supabase
-                .from('gear_requests')
-                .select('*')
-                .order('created_at', { ascending: false })
-
+            // Use centralized API client and RESTful endpoint
+            const { data, error } = await apiGet<{ data: GearRequest[]; error: string | null }>(`/api/requests`)
             const queryTime = Date.now() - startTime
             trackPerformance(queryTime, !!error)
 
-            if (error) throw error
+            if (error) throw new Error(error)
             setRequests(data || [])
         } catch (error) {
             console.error('Failed to fetch requests:', error)
@@ -120,23 +109,19 @@ export function useDashboardData() {
         } finally {
             setLoadingStates(prev => ({ ...prev, requests: false }))
         }
-    }, [supabase, trackPerformance])
+    }, [trackPerformance])
 
     const fetchActivities = useCallback(async () => {
         setLoadingStates(prev => ({ ...prev, activities: true }))
         const startTime = Date.now()
 
         try {
-            const { data, error } = await supabase
-                .from('gear_activity_log')
-                .select('*')
-                .order('timestamp', { ascending: false })
-                .limit(50)
-
+            // Use centralized API client and RESTful endpoint
+            const { data, error } = await apiGet<{ data: ActivityLog[]; error: string | null }>(`/api/dashboard/activities`)
             const queryTime = Date.now() - startTime
             trackPerformance(queryTime, !!error)
 
-            if (error) throw error
+            if (error) throw new Error(error)
             setActivities(data || [])
         } catch (error) {
             console.error('Failed to fetch activities:', error)
@@ -144,23 +129,19 @@ export function useDashboardData() {
         } finally {
             setLoadingStates(prev => ({ ...prev, activities: false }))
         }
-    }, [supabase, trackPerformance])
+    }, [trackPerformance])
 
     const fetchNotifications = useCallback(async () => {
         setLoadingStates(prev => ({ ...prev, notifications: true }))
         const startTime = Date.now()
 
         try {
-            const { data, error } = await supabase
-                .from('notifications')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(20)
-
+            // Use centralized API client and RESTful endpoint
+            const { data, error } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications`)
             const queryTime = Date.now() - startTime
             trackPerformance(queryTime, !!error)
 
-            if (error) throw error
+            if (error) throw new Error(error)
             setNotifications(data || [])
         } catch (error) {
             console.error('Failed to fetch notifications:', error)
@@ -168,7 +149,7 @@ export function useDashboardData() {
         } finally {
             setLoadingStates(prev => ({ ...prev, notifications: false }))
         }
-    }, [supabase, trackPerformance])
+    }, [trackPerformance])
 
     // Refresh all data
     const refreshData = useCallback(async () => {

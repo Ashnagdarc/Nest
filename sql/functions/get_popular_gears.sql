@@ -1,5 +1,9 @@
 -- Create a function to handle the gear_ids relationship
-CREATE OR REPLACE FUNCTION public.get_popular_gears(start_date timestamp with time zone, end_date timestamp with time zone)
+CREATE OR REPLACE FUNCTION public.get_popular_gears(
+    start_date timestamp with time zone, 
+    end_date timestamp with time zone,
+    limit_count integer DEFAULT 5
+)
 RETURNS TABLE (
     gear_id uuid,
     name text,
@@ -35,7 +39,7 @@ BEGIN
     JOIN gears g ON g.id = u.gear_id
     GROUP BY g.id, g.name, g.full_name
     ORDER BY request_count DESC
-    LIMIT 5;
+    LIMIT limit_count;
 
     RETURN;
 EXCEPTION

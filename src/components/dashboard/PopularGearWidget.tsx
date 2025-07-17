@@ -4,13 +4,10 @@ import { createClient } from '@/lib/supabase/client';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye } from "lucide-react";
 import Link from "next/link";
 import { logger } from "@/utils/logger";
-import { createSupabaseSubscription } from "@/utils/supabase-subscription";
-import { motion } from "framer-motion";
-// Removed EmptyState import to prevent React rendering errors
 import { TrendingUp, TrendingDown, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box } from 'lucide-react';
+import Image from 'next/image';
 
 interface PopularGear {
     gear_id: string;
@@ -26,7 +23,6 @@ export function PopularGearWidget() {
     const [popularGear, setPopularGear] = useState<PopularGear[]>([]);
     const [loading, setLoading] = useState(true);
     const [trendData, setTrendData] = useState<Record<string, 'up' | 'down' | null>>({});
-    const supabase = createClient();
 
     // --- UI State Preservation ---
     const listContainerRef = useRef<HTMLDivElement | null>(null);
@@ -76,39 +72,39 @@ export function PopularGearWidget() {
         return categoryColors[key] || 'bg-gray-200 text-gray-700';
     };
 
-    // Fetch popular gear data with a date range (last 30 days)
+    // Fetch popular gear data with a date range (last 7 days)
     const fetchPopularGear = async () => {
         try {
             setLoading(true);
             const endDate = new Date();
             const startDate = new Date();
             startDate.setDate(endDate.getDate() - 7);
-            // Call the RPC with date arguments
-            const { data, error } = await supabase.rpc('get_popular_gears', {
+
+            // Use direct Supabase query
+            const supabase = createClient();
+            const { data: directData, error: directError } = await supabase.rpc('get_popular_gears', {
                 start_date: startDate.toISOString(),
                 end_date: endDate.toISOString(),
+                limit_count: 10
             });
 
-            if (error) {
-                logger.error("PopularGear RPC error", {
-                    code: error?.code,
-                    message: error?.message,
-                    details: error?.details,
-                    hint: error?.hint,
-                    raw: error
-                });
-                setPopularGear([]);
-            } else if (Array.isArray(data) && data.length > 0) {
+            if (directError) {
+                throw directError;
+            }
+
+            if (Array.isArray(directData) && directData.length > 0) {
                 // Fetch extra details for each gear (category, image_url, status)
-                const gearIds = data.map((g: any) => g.gear_id);
-                const { data: gearDetails, error: gearDetailsError } = await supabase
+                const gearIds = directData.map((g: any) => g.gear_id);
+                const { data: gearDetails } = await supabase
                     .from('gears')
                     .select('id, category, image_url, status')
                     .in('id', gearIds);
+
                 const detailsMap = new Map();
                 gearDetails?.forEach((g: any) => detailsMap.set(g.id, g));
+
                 setPopularGear(
-                    data.map((g: any) => ({
+                    directData.map((g: any) => ({
                         ...g,
                         category: detailsMap.get(g.gear_id)?.category || '',
                         image_url: detailsMap.get(g.gear_id)?.image_url || null,
@@ -116,12 +112,11 @@ export function PopularGearWidget() {
                     }))
                 );
             } else {
-                // No error, just no data
+                // No data available
                 setPopularGear([]);
-                logger.info("No popular gear found for the selected period.");
             }
         } catch (error: any) {
-            logger.error("PopularGear unexpected error", { error });
+            logger.error("PopularGear query error", { error });
             setPopularGear([]);
         } finally {
             setLoading(false);
@@ -144,35 +139,7 @@ export function PopularGearWidget() {
 
     useEffect(() => {
         fetchPopularGearWithScroll();
-
-        // Set up subscriptions for INSERT, UPDATE, DELETE events
-        const unsubscribes = [
-            createSupabaseSubscription({
-                supabase,
-                channel: 'popular-gear-updates-insert',
-                config: { event: 'INSERT', schema: 'public', table: 'gears' },
-                callback: fetchPopularGearWithScroll,
-                pollingInterval: 30000
-            }),
-            createSupabaseSubscription({
-                supabase,
-                channel: 'popular-gear-updates-update',
-                config: { event: 'UPDATE', schema: 'public', table: 'gears' },
-                callback: fetchPopularGearWithScroll,
-                pollingInterval: 30000
-            }),
-            createSupabaseSubscription({
-                supabase,
-                channel: 'popular-gear-updates-delete',
-                config: { event: 'DELETE', schema: 'public', table: 'gears' },
-                callback: fetchPopularGearWithScroll,
-                pollingInterval: 30000
-            })
-        ];
-
-        return () => {
-            unsubscribes.forEach(u => u.unsubscribe());
-        };
+        return () => { };
     }, []);
 
     const getStatusColor = (status: string) => {
@@ -186,28 +153,6 @@ export function PopularGearWidget() {
             default:
                 return 'bg-gray-500/10 text-gray-500';
         }
-    };
-
-    const renderImagePlaceholder = (category: string) => {
-        const colors = {
-            Camera: 'bg-red-100 text-red-500',
-            Lens: 'bg-blue-100 text-blue-500',
-            Lighting: 'bg-yellow-100 text-yellow-500',
-            Audio: 'bg-green-100 text-green-500',
-            Microphone: 'bg-purple-100 text-purple-500',
-            Laptop: 'bg-indigo-100 text-indigo-500',
-            Storage: 'bg-gray-100 text-gray-500',
-            Gimbal: 'bg-orange-100 text-orange-500',
-            Monitor: 'bg-teal-100 text-teal-500',
-        };
-
-        const colorClass = colors[category as keyof typeof colors] || 'bg-gray-100 text-gray-500';
-
-        return (
-            <div className={`w-full h-full flex items-center justify-center text-xl font-medium ${colorClass} rounded-md`}>
-                {category.charAt(0)}
-            </div>
-        );
     };
 
     return (
@@ -235,15 +180,12 @@ export function PopularGearWidget() {
                         className="space-y-4 w-full overflow-x-auto"
                     >
                         {popularGear.map((gear) => (
-                            <motion.div
+                            <div
                                 key={gear.gear_id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.3 }}
                                 className="flex flex-col sm:flex-row flex-wrap items-center gap-3 gap-y-2 p-3 rounded-lg bg-muted/30 min-w-0"
                             >
                                 {gear.image_url ? (
-                                    <img src={gear.image_url} alt={gear.name} className="h-10 w-10 rounded object-cover flex-shrink-0" />
+                                    <Image src={gear.image_url} alt={gear.name} width={40} height={40} className="h-10 w-10 rounded object-cover flex-shrink-0" />
                                 ) : (
                                     <div className="h-10 w-10 rounded bg-gray-200 flex items-center justify-center text-lg font-bold text-gray-500 flex-shrink-0">{gear.name[0]}</div>
                                 )}
@@ -262,7 +204,7 @@ export function PopularGearWidget() {
                                 <Badge className={getStatusColor(gear.status || "") + " truncate max-w-[90px]"}>{gear.status}</Badge>
                                 <Link href={`/user/browse?gear=${gear.gear_id}`} className="w-full sm:w-auto"><Button size="sm" variant="outline" aria-label="View Details" className="w-full sm:w-auto max-w-[120px] truncate">View Details</Button></Link>
                                 <Link href={`/user/request?gear=${gear.gear_id}`} className="w-full sm:w-auto"><Button size="sm" aria-label="Request Again" className="w-full sm:w-auto max-w-[120px] truncate">Request Again</Button></Link>
-                            </motion.div>
+                            </div>
                         ))}
                     </div>
                 ) : (

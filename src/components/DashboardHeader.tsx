@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import Image from 'next/image';
 
 export function DashboardHeader() {
     const { profile: currentUser, isLoading: isLoadingUser } = useUserProfile();
@@ -23,7 +24,7 @@ export function DashboardHeader() {
     return (
         <header className="sticky top-0 z-30 w-full bg-background/95 border-b flex items-center justify-between px-4 py-2 shadow-sm">
             <Link href="/" className="flex items-center gap-2 font-bold text-lg text-primary">
-                <img src="/favicon.png" alt="Logo" className="h-7 w-7" />
+                <Image src="/favicon.png" alt="Logo" width={28} height={28} className="h-7 w-7" />
                 <span className="hidden sm:inline">Nest by Eden Oasis</span>
             </Link>
             <div className="flex items-center gap-3">

@@ -2,32 +2,22 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import Image from 'next/image';
 import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { AlertCircle, Package, Clock, BarChart, Users, ChevronDown, Menu, X } from 'lucide-react';
+import { AlertCircle, Package, Clock, BarChart, Users, Menu, X } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import FlipWordsHero from "./FlipWordsHero";
 
 export default function LandingPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [isLoadingLogo, setIsLoadingLogo] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const supabase = useMemo(() => createClient(), []);
 
-  const navItems = [
-    { name: "Features", link: "#features" },
-    { name: "Pricing", link: "#pricing" },
-    { name: "Contact", link: "#contact" },
-  ];
-
   useEffect(() => {
     setIsMounted(true);
     const fetchLogo = async () => {
-      setIsLoadingLogo(true);
       try {
         // Use default logo path as fallback
         const defaultLogoPath = '/Nest-logo.png';
@@ -66,40 +56,17 @@ export default function LandingPage() {
         }
 
         setConfigError(null);
-      } catch (error: any) {
-        console.error("Error fetching Supabase settings for logo:", error.message);
-        // Always fallback to local logo
-        setLogoUrl('/Nest-logo.png');
-      } finally {
-        setIsLoadingLogo(false);
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error("Error fetching Supabase settings for logo:", error.message);
+          // Always fallback to local logo
+          setLogoUrl('/Nest-logo.png');
+        }
       }
     };
 
     fetchLogo();
   }, [supabase]);
-
-  const features = [
-    {
-      icon: <Package className="w-8 h-8" />,
-      title: "Track Equipment",
-      description: "Keep detailed records of all company gear"
-    },
-    {
-      icon: <Clock className="w-8 h-8" />,
-      title: "Request & Schedule",
-      description: "Book gear when you need it"
-    },
-    {
-      icon: <BarChart className="w-8 h-8" />,
-      title: "Analytics",
-      description: "Track usage patterns and status"
-    },
-    {
-      icon: <Users className="w-8 h-8" />,
-      title: "Team Management",
-      description: "Coordinate equipment use"
-    }
-  ];
 
   if (!isMounted) {
     return null; // Prevent hydration issues by not rendering until client-side

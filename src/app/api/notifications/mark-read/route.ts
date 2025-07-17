@@ -13,12 +13,13 @@ export async function POST(request: NextRequest) {
         }
 
         // Create Supabase client with proper server-side auth
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
 
         // Get the user's session
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 
         if (authError || !user) {
+            console.error('Authentication error:', authError);
             return NextResponse.json(
                 { error: 'User not authenticated' },
                 { status: 401 }
@@ -62,12 +63,13 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
     try {
         // Mark all notifications as read
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
 
         // Get the user's session
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 
         if (authError || !user) {
+            console.error('Authentication error:', authError);
             return NextResponse.json(
                 { error: 'User not authenticated' },
                 { status: 401 }

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Bell, Mail, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
@@ -22,7 +21,7 @@ const CHANNELS = [
 ];
 
 export default function NotificationSettings() {
-    const [preferences, setPreferences] = useState<any>({});
+    const [preferences, setPreferences] = useState<unknown>({});
     const [loading, setLoading] = useState(true);
     const supabase = createClient();
 
@@ -41,10 +40,10 @@ export default function NotificationSettings() {
     }, [supabase]);
 
     const handleToggle = (channel: string, event: string, value: boolean) => {
-        setPreferences((prev: any) => ({
-            ...prev,
+        setPreferences((prev: unknown) => ({
+            ...(prev as any),
             [channel]: {
-                ...(prev[channel] || {}),
+                ...((prev as any)[channel] || {}),
                 [event]: value,
             },
         }));
@@ -84,7 +83,7 @@ export default function NotificationSettings() {
                                 {CHANNELS.map(channel => (
                                     <td key={channel.key} className="p-2 text-center">
                                         <Switch
-                                            checked={!!preferences?.[channel.key]?.[event.key]}
+                                            checked={!!(preferences as any)?.[channel.key]?.[event.key]}
                                             onCheckedChange={val => handleToggle(channel.key, event.key, val)}
                                             disabled={loading}
                                         />

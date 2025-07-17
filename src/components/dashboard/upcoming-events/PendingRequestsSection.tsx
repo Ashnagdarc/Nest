@@ -28,7 +28,7 @@ export function PendingRequestsSection({ pendingEvents }: PendingRequestsSection
             </CardHeader>
             <CardContent>
                 <div className="space-y-3">
-                    {pendingEvents.map((request: any, index: number) => (
+                    {pendingEvents.map((request: unknown) => (
                         <div key={request.id} className="flex items-center justify-between p-3 bg-white rounded border">
                             <div className="flex-1">
                                 <p className="font-medium text-sm">
