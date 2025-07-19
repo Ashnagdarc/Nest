@@ -4,14 +4,19 @@ type LogData = {
     message: string;
     context: string;
     timestamp: string;
-    [key: string]: any;
+    [key: string]: unknown;
 };
+
+// Store original console methods to avoid infinite recursion
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const originalConsoleDebug = console.debug;
 
 // Helper function to get current timestamp
 const getTimestamp = () => new Date().toISOString();
 
 // Helper function to send logs to server
-const sendToServer = async (level: LogLevel, message: string, context: string, metadata?: any) => {
+const sendToServer = async (level: LogLevel, message: string, context: string, metadata?: Record<string, unknown>) => {
     try {
         const response = await fetch('/api/log', {
             method: 'POST',
@@ -30,15 +35,15 @@ const sendToServer = async (level: LogLevel, message: string, context: string, m
         });
 
         if (!response.ok) {
-            console.error('Failed to send log to server:', await response.text());
+            originalConsoleError('Failed to send log to server:', await response.text());
         }
     } catch (error) {
-        console.error('Error sending log to server:', error);
+        originalConsoleError('Error sending log to server:', error);
     }
 };
 
 // Helper functions for common log types
-export const logError = (error: unknown, context: string, metadata?: any) => {
+export const logError = (error: unknown, context: string, metadata?: Record<string, unknown>) => {
     // Ensure error is properly formatted
     let errorObj: Error;
     if (error instanceof Error) {
@@ -60,8 +65,8 @@ export const logError = (error: unknown, context: string, metadata?: any) => {
         ...metadata
     };
 
-    // Log to console with better formatting
-    console.error('[Error]', logData);
+    // Log to console with better formatting using original console.error
+    originalConsoleError('[Error]', logData);
 
     // Send to server
     sendToServer('error', logData.message, context, {
@@ -71,7 +76,7 @@ export const logError = (error: unknown, context: string, metadata?: any) => {
     });
 };
 
-export const logInfo = (message: string, context: string, metadata?: any) => {
+export const logInfo = (message: string, context: string, metadata?: Record<string, unknown>) => {
     const logData: LogData = {
         message,
         context,
@@ -79,14 +84,14 @@ export const logInfo = (message: string, context: string, metadata?: any) => {
         ...metadata
     };
 
-    // Log to console
-    console.log('[Info]', logData);
+    // Log to console using original console.log to avoid infinite recursion
+    originalConsoleLog('[Info]', logData);
 
     // Send to server
     sendToServer('info', message, context, metadata);
 };
 
-export const logDebug = (message: string, context: string, metadata?: any) => {
+export const logDebug = (message: string, context: string, metadata?: Record<string, unknown>) => {
     const logData: LogData = {
         message,
         context,
@@ -94,8 +99,8 @@ export const logDebug = (message: string, context: string, metadata?: any) => {
         ...metadata
     };
 
-    // Log to console
-    console.debug('[Debug]', logData);
+    // Log to console using original console.debug
+    originalConsoleDebug('[Debug]', logData);
 
     // Send to server
     sendToServer('debug', message, context, metadata);
@@ -110,11 +115,9 @@ const logger = {
 
 // Redirect vanilla console.log to our logger in production to avoid stray logs
 if (process.env.NODE_ENV === 'production') {
-
     console.log = (...args: unknown[]) => {
         logInfo(args.join(' '), 'console');
     };
-
 }
 
 export default logger; 
