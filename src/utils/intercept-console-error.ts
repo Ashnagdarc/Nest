@@ -12,6 +12,7 @@
 
 // Store the original console.error function
 const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
 
 // Patterns to identify non-error messages from Supabase Realtime
 const realtimeIgnorePatterns = [
@@ -66,8 +67,8 @@ console.error = function (...args) {
     });
 
     if (hasChannelError) {
-        // Log as warning instead of error for CHANNEL_ERROR
-        console.warn('🟡 Supabase realtime channel error (falling back to polling):', ...args);
+        // Log as warning instead of error for CHANNEL_ERROR using original console.warn
+        originalConsoleWarn(' Supabase realtime channel error (falling back to polling):', ...args);
         return;
     }
 

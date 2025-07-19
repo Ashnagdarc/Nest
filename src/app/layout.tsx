@@ -14,6 +14,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 // Patch console.error for Supabase real-time polling fallback
 if (typeof window !== 'undefined') {
   const originalError = console.error;
+  const originalWarn = console.warn;
   console.error = function (...args) {
     const isChannelError = args.some(arg => {
       const str = typeof arg === 'string' ? arg :
@@ -24,7 +25,7 @@ if (typeof window !== 'undefined') {
         str.includes('RealtimeClient');
     });
     if (isChannelError) {
-      console.warn('🟡 Supabase real-time using polling fallback (normal in development)');
+      originalWarn(' Supabase real-time using polling fallback (normal in development)');
       return;
     }
     originalError.apply(console, args);
