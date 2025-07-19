@@ -1,6 +1,10 @@
 import { Resend } from 'resend';
 
-console.log('RESEND_API_KEY:', process.env.RESEND_API_KEY); // DEBUG: Remove after testing
+// Validate environment variable
+if (!process.env.RESEND_API_KEY) {
+    console.error('[Email Service] RESEND_API_KEY environment variable is not set');
+}
+
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendGearRequestEmail({
@@ -12,12 +16,23 @@ export async function sendGearRequestEmail({
     subject: string;
     html: string;
 }) {
-    return resend.emails.send({
-        from: 'noreply@edenoasisrealty.com',
-        to,
-        subject,
-        html,
-    });
+    // Check if Resend is properly configured
+    if (!process.env.RESEND_API_KEY) {
+        throw new Error('RESEND_API_KEY environment variable is not configured');
+    }
+
+    try {
+        return await resend.emails.send({
+            from: 'Nest by Eden Oasis <onboarding@resend.dev>',
+            to,
+            subject,
+            html,
+        });
+    } catch (error: unknown) {
+        console.error('[Email Service Error]:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Failed to send email: ${errorMessage}`);
+    }
 }
 
 // Backward compatible approval email
@@ -42,7 +57,7 @@ export async function sendApprovalEmail({
       <p><b>Due Date:</b> ${dueDate}</p>
       <p>If you have any questions, please contact the admin team.</p>
       <br/>
-      <p>Thank you,<br/>Eden Oasis Realty Team</p>
+      <p>Thank you,<br/>Nest by Eden Oasis Team</p>
     `,
     });
 } 
