@@ -10,7 +10,7 @@
  * 3. Providing graceful fallback messaging
  */
 
-// Store original console methods
+// Store original console methods to avoid infinite recursion
 const originalError = console.error;
 const originalWarn = console.warn;
 
@@ -51,8 +51,8 @@ function patchConsoleForChannelErrors() {
         });
 
         if (hasChannelError) {
-            // Convert to warning with helpful message
-            console.warn(
+            // Convert to warning with helpful message using original console.warn
+            originalWarn(
                 '🟡 Supabase real-time subscription temporarily unavailable - using polling fallback:',
                 'This is normal in development environments'
             );
