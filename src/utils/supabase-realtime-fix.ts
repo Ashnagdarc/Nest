@@ -18,7 +18,7 @@ const originalWarn = console.warn;
  * Enhanced console error interceptor for CHANNEL_ERROR
  */
 function patchConsoleForChannelErrors() {
-    console.error = function (...args: any[]) {
+    console.error = function (...args: unknown[]) {
         // Check if any argument contains CHANNEL_ERROR patterns
         const hasChannelError = args.some(arg => {
             if (typeof arg === 'string') {
