@@ -1,7 +1,6 @@
-// Admin layout for Nest by Eden Oasis. Provides sidebar navigation and user context for admin pages.
 "use client";
 
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -16,7 +15,6 @@ import {
   SidebarMenuButton,
   SidebarInset,
 } from '@/components/ui/sidebar';
-import CustomHamburger from '@/components/CustomHamburger';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -27,6 +25,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { DashboardHeader } from '@/components/DashboardHeader';
+import EnhancedNavbar from '@/components/navigation/enhanced-navbar';
 
 const adminNavItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: Home },
@@ -47,14 +46,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const supabase = createClient();
   const { profile: adminUser, isLoading: isLoadingUser } = useUserProfile();
   const isMobile = useIsMobile();
-  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
-  const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
-
-  // Improved toggle function for hamburger and sidebar sync
-  const toggleSidebar = () => {
-    setIsHamburgerOpen(!isHamburgerOpen);
-    setSidebarOpen(!sidebarOpen);
-  };
 
   const handleLogout = async () => {
     try {
@@ -67,6 +58,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : 'A';
 
+  // Show enhanced navbar on mobile, sidebar on desktop
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-background">
+        <EnhancedNavbar variant="admin" />
+        <div className="pt-16 sm:pt-18">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop sidebar layout
   return (
     <SidebarProvider defaultOpen={!isMobile}>
       <Sidebar collapsible="icon">
@@ -76,16 +82,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <SidebarTrigger className="hidden md:flex">
                 <PanelLeft className="h-4 w-4" />
               </SidebarTrigger>
-              <div className="md:hidden">
-                <SidebarTrigger>
-                  <CustomHamburger
-                    size={20}
-                    direction="right"
-                    toggled={isHamburgerOpen}
-                    toggle={toggleSidebar}
-                  />
-                </SidebarTrigger>
-              </div>
               <Link href="/admin/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary truncate group-data-[collapsible=icon]:hidden">
                 <span className="truncate">Nest Admin</span>
               </Link>
@@ -155,34 +151,32 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-background px-4 md:hidden">
-          <Link href="/admin/dashboard" className="flex items-center gap-2 font-semibold text-primary truncate max-w-[70%]">
-            <span className="truncate">Nest Admin</span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <SidebarTrigger>
-              <CustomHamburger
-                size={20}
-                direction="right"
-                toggled={isHamburgerOpen}
-                toggle={toggleSidebar}
-              />
-            </SidebarTrigger>
-          </div>
-        </div>
         <DashboardHeader />
-        <div className="p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
+        <div className="p-3 sm:p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
           <div className="max-w-full">
             {/* Render children only if user loading is complete and user is verified admin */}
             {!isLoadingUser && adminUser ? (
-              <div className="container mx-auto px-4 w-full">
+              <div className="container mx-auto px-2 sm:px-4 w-full">
                 {children}
               </div>
             ) : (
               <div className="flex justify-center items-center h-64">
                 {/* Optional: Show a loading spinner or unauthorized message */}
-                {isLoadingUser ? <p>Loading admin data...</p> : <p>Access denied.</p>}
+                {isLoadingUser ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full"></div>
+                    <p className="text-sm sm:text-base text-muted-foreground">Loading admin data...</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="h-8 w-8 text-destructive">
+                      <svg fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <p className="text-sm sm:text-base text-destructive">Access denied.</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -483,25 +483,25 @@ function RequestGearContent() {
 
   return (
     <div className="w-full min-h-screen">
-      <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-6 sm:space-y-8">
         {/* Page Header */}
-        <div className="space-y-2">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Request Gear</h1>
-          <p className="text-muted-foreground text-sm sm:text-base">
+        <div className="space-y-2 sm:space-y-3">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-foreground">Request Equipment</h1>
+          <p className="text-muted-foreground text-sm sm:text-base lg:text-lg">
             Select equipment and provide details for your gear request.
           </p>
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 sm:space-y-8">
 
             {/* Equipment Selection */}
-            <Card className="w-full">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg sm:text-xl">Select Equipment</CardTitle>
-                <CardDescription className="text-sm">Choose the gear you need for your request</CardDescription>
+            <Card className="w-full shadow-sm">
+              <CardHeader className="pb-4 sm:pb-6">
+                <CardTitle className="text-lg sm:text-xl lg:text-2xl">Select Equipment</CardTitle>
+                <CardDescription className="text-sm sm:text-base">Choose the gear you need for your request</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 sm:space-y-6">
                 {/* Search Bar */}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -509,7 +509,7 @@ function RequestGearContent() {
                     placeholder="Search gears by name, category, or description..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 w-full"
+                    className="pl-10 w-full min-h-[44px] text-sm sm:text-base"
                   />
                 </div>
 
@@ -518,11 +518,26 @@ function RequestGearContent() {
                   name="selectedGears"
                   render={({ field }) => (
                     <FormItem>
-                      <ScrollArea className="h-[300px] sm:h-[400px] w-full rounded-md border p-4">
-                        <div className="space-y-3">
+                      <ScrollArea className="h-[300px] sm:h-[400px] lg:h-[500px] w-full rounded-md border p-3 sm:p-4">
+                        <div className="space-y-3 sm:space-y-4">
                           {filteredGears.length === 0 ? (
-                            <div className="text-center py-8 text-muted-foreground">
-                              {searchTerm ? `No gears found matching "${searchTerm}"` : 'No available equipment found'}
+                            <div className="text-center py-8 sm:py-12 text-muted-foreground">
+                              <div className="flex flex-col items-center gap-3">
+                                <Search className="h-8 w-8 opacity-50" />
+                                <p className="text-sm sm:text-base">
+                                  {searchTerm ? `No equipment found matching "${searchTerm}"` : 'No available equipment found'}
+                                </p>
+                                {searchTerm && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setSearchTerm('')}
+                                    className="mt-2"
+                                  >
+                                    Clear Search
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           ) : (
                             filteredGears.map((gear) => {
@@ -534,8 +549,8 @@ function RequestGearContent() {
                                   className={`relative transition-all duration-200 hover:shadow-md cursor-pointer ${isSelected ? 'ring-2 ring-primary bg-primary/5' : 'hover:bg-muted/50'
                                     }`}
                                 >
-                                  <CardContent className="p-4">
-                                    <div className="flex items-center gap-4">
+                                  <CardContent className="p-3 sm:p-4">
+                                    <div className="flex items-center gap-3 sm:gap-4">
                                       {/* Checkbox */}
                                       <FormControl>
                                         <Checkbox
@@ -547,15 +562,15 @@ function RequestGearContent() {
                                               : currentValues.filter((value) => value !== g.id);
                                             field.onChange(newValues);
                                           }}
-                                          className="h-5 w-5 shrink-0"
+                                          className="h-4 w-4 sm:h-5 sm:w-5 shrink-0"
                                         />
                                       </FormControl>
 
                                       {/* Gear Image */}
-                                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border overflow-hidden bg-muted shrink-0">
+                                      <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-lg border overflow-hidden bg-muted shrink-0">
                                         <Image
                                           src={g.image_url || '/images/placeholder-gear.svg'}
-                                          alt={g.name}
+                                          alt={g.name || 'Equipment'}
                                           width={80}
                                           height={80}
                                           className="w-full h-full object-cover"
@@ -563,14 +578,14 @@ function RequestGearContent() {
                                       </div>
 
                                       {/* Gear Details */}
-                                      <div className="flex-1 min-w-0 space-y-1">
-                                        <h4 className="font-semibold text-sm sm:text-base text-foreground truncate">
+                                      <div className="flex-1 min-w-0 space-y-1 sm:space-y-2">
+                                        <h4 className="font-semibold text-sm sm:text-base lg:text-lg text-foreground truncate">
                                           {g.name}
                                         </h4>
                                         <p className="text-xs sm:text-sm text-muted-foreground truncate">
                                           {g.category}
                                         </p>
-                                        <div className="flex flex-wrap gap-1">
+                                        <div className="flex flex-wrap gap-1 sm:gap-2">
                                           <Badge
                                             variant="secondary"
                                             className="text-xs px-2 py-0.5"
@@ -616,12 +631,12 @@ function RequestGearContent() {
             </Card>
 
             {/* Request Details */}
-            <Card className="w-full">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg sm:text-xl">Request Details</CardTitle>
-                <CardDescription className="text-sm">Provide information about your request</CardDescription>
+            <Card className="w-full shadow-sm">
+              <CardHeader className="pb-4 sm:pb-6">
+                <CardTitle className="text-lg sm:text-xl lg:text-2xl">Request Details</CardTitle>
+                <CardDescription className="text-sm sm:text-base">Provide information about your request</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-6 sm:space-y-8">
 
                 {/* Reason for Use */}
                 <FormField
@@ -629,12 +644,12 @@ function RequestGearContent() {
                   name="reason"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium">Reason for Use</FormLabel>
+                      <FormLabel className="text-sm sm:text-base font-medium">Reason for Use</FormLabel>
                       <FormControl>
                         <RadioGroup
                           onValueChange={field.onChange}
                           value={field.value}
-                          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+                          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3"
                         >
                           {reasonOptions.map((reason) => (
                             <div key={reason} className="relative">
@@ -648,7 +663,7 @@ function RequestGearContent() {
                                 </FormControl>
                                 <FormLabel
                                   htmlFor={`reason-${reason}`}
-                                  className={`flex-1 w-full p-3 border rounded-lg cursor-pointer text-center text-xs sm:text-sm transition-all hover:bg-muted hover:border-primary/50 ${field.value === reason
+                                  className={`flex-1 w-full p-3 sm:p-4 border rounded-lg cursor-pointer text-center text-xs sm:text-sm lg:text-base transition-all hover:bg-muted hover:border-primary/50 ${field.value === reason
                                     ? 'border-primary bg-primary/10 text-primary font-medium'
                                     : 'border-border'
                                     }`}
@@ -672,12 +687,12 @@ function RequestGearContent() {
                   name="destination"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium">Destination / Location</FormLabel>
+                      <FormLabel className="text-sm sm:text-base font-medium">Destination / Location</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="e.g., Studio B, Client Office, Site Alpha"
                           {...field}
-                          className="w-full"
+                          className="w-full min-h-[44px] text-sm sm:text-base"
                         />
                       </FormControl>
                       <FormMessage />
@@ -691,10 +706,10 @@ function RequestGearContent() {
                   name="duration"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium">Expected Duration</FormLabel>
+                      <FormLabel className="text-sm sm:text-base font-medium">Expected Duration</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger className="w-full min-h-[44px] text-sm sm:text-base">
                             <SelectValue placeholder="Select duration" />
                           </SelectTrigger>
                         </FormControl>
@@ -717,13 +732,13 @@ function RequestGearContent() {
                   name="teamMembers"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium">Team Members (Optional)</FormLabel>
+                      <FormLabel className="text-sm sm:text-base font-medium">Team Members (Optional)</FormLabel>
                       <Select
                         onValueChange={(value) => field.onChange([...field.value, value])}
                         value=""
                       >
                         <FormControl>
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger className="w-full min-h-[44px] text-sm sm:text-base">
                             <SelectValue placeholder="Select team members" />
                           </SelectTrigger>
                         </FormControl>
@@ -740,8 +755,8 @@ function RequestGearContent() {
                               .map((user) => (
                                 <SelectItem key={user.id} value={user.id}>
                                   <div className="flex flex-col">
-                                    <span className="font-medium">{user.full_name || 'Unnamed User'}</span>
-                                    <span className="text-xs text-muted-foreground">
+                                    <span className="font-medium text-sm sm:text-base">{user.full_name || 'Unnamed User'}</span>
+                                    <span className="text-xs sm:text-sm text-muted-foreground">
                                       {user.email} {user.role && `• ${user.role}`}
                                     </span>
                                   </div>
@@ -751,14 +766,14 @@ function RequestGearContent() {
                         </SelectContent>
                       </Select>
                       {field.value.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-2">
+                        <div className="mt-3 sm:mt-4 flex flex-wrap gap-2">
                           {field.value.map((memberId: string) => {
                             const member = availableUsers.find(u => u.id === memberId);
                             return (
                               <Badge
                                 key={memberId}
                                 variant="secondary"
-                                className="flex items-center gap-1"
+                                className="flex items-center gap-1 text-xs sm:text-sm"
                               >
                                 {member?.full_name || member?.email || 'Unknown user'}
                                 <Button
@@ -777,7 +792,7 @@ function RequestGearContent() {
                           })}
                         </div>
                       )}
-                      <FormDescription className="text-xs">
+                      <FormDescription className="text-xs sm:text-sm">
                         Select team members who might use the gear during this request.
                       </FormDescription>
                       <FormMessage />
@@ -789,61 +804,60 @@ function RequestGearContent() {
 
             {/* Condition Confirmation */}
             {form.watch("selectedGears")?.length > 0 && (
-              <Card className="w-full">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-lg sm:text-xl">Confirm Equipment Condition</CardTitle>
-                  <CardDescription className="text-sm">Review the condition of selected gear</CardDescription>
+              <Card className="w-full shadow-sm">
+                <CardHeader className="pb-4 sm:pb-6">
+                  <CardTitle className="text-lg sm:text-xl lg:text-2xl">Confirm Equipment Condition</CardTitle>
+                  <CardDescription className="text-sm sm:text-base">Review the condition of selected gear</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
+                <CardContent className="space-y-4 sm:space-y-6">
+                  <div className="space-y-3 sm:space-y-4">
                     {availableGears
                       .filter(gear => form.watch("selectedGears")?.includes((gear as { id: string }).id))
-                      .map(gear => {
-                        const g = gear as { id: string; name?: string; image_url?: string; category?: string; condition?: string };
+                      .map((gear) => {
+                        const g = gear as { id: string; name?: string; image_url?: string; condition?: string };
                         return (
-                          <div key={g.id} className="p-3 border rounded-lg bg-muted/30">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded border overflow-hidden bg-background">
-                                  <Image
-                                    src={g.image_url || '/images/placeholder-gear.svg'}
-                                    alt={g.name}
-                                    width={48}
-                                    height={48}
-                                  />
-                                </div>
-                                <div>
-                                  <h4 className="font-medium text-sm">{g.name}</h4>
-                                  <p className="text-xs text-muted-foreground">{g.category}</p>
-                                </div>
-                              </div>
-                              <Badge variant="outline" className="text-xs">
-                                {g.condition}
-                              </Badge>
+                          <div key={g.id} className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg">
+                            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg border overflow-hidden bg-muted shrink-0">
+                              <Image
+                                src={g.image_url || '/images/placeholder-gear.svg'}
+                                alt={g.name || 'Equipment'}
+                                width={64}
+                                height={64}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-sm sm:text-base text-foreground truncate">
+                                {g.name}
+                              </h4>
+                              <p className="text-xs sm:text-sm text-muted-foreground">
+                                Condition: {g.condition}
+                              </p>
                             </div>
                           </div>
                         );
-                      })
-                    }
+                      })}
                   </div>
 
                   <FormField
                     control={form.control}
                     name="conditionConfirmed"
-                    render={({ field: checkboxField }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 p-4 border rounded-lg bg-background">
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                         <FormControl>
                           <Checkbox
-                            checked={checkboxField.value}
-                            onCheckedChange={checkboxField.onChange}
-                            className="mt-0.5"
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            className="mt-1"
                           />
                         </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel className="cursor-pointer text-sm">
-                            I acknowledge the current condition of the selected gear and will return it in the same condition.
+                        <div className="space-y-1">
+                          <FormLabel className="text-sm sm:text-base font-medium">
+                            I confirm that I have reviewed the condition of all selected equipment
                           </FormLabel>
-                          <FormMessage />
+                          <FormDescription className="text-xs sm:text-sm">
+                            By checking this box, you acknowledge that you have reviewed the condition of all selected equipment and understand your responsibility for its care during use.
+                          </FormDescription>
                         </div>
                       </FormItem>
                     )}
@@ -853,31 +867,32 @@ function RequestGearContent() {
             )}
 
             {/* Submit Button */}
-            <div className="flex justify-center sm:justify-end pt-4">
-              <FormField
-                control={form.control}
-                name="selectedGears"
-                render={({ field }) => (
-                  <Button
-                    type="submit"
-                    disabled={!field.value || field.value.length === 0 || isLoading}
-                    className="w-full sm:w-auto px-8 py-3 text-sm font-medium"
-                    size="lg"
-                  >
-                    {isLoading ? (
-                      <>
-                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                        Submitting...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="mr-2 h-4 w-4" />
-                        Submit Request
-                      </>
-                    )}
-                  </Button>
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4 sm:pt-6">
+              <Button
+                type="submit"
+                disabled={isLoading || !form.watch("selectedGears")?.length}
+                className="w-full sm:w-auto min-h-[44px] text-sm sm:text-base"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 mr-2 border-2 border-current border-t-transparent rounded-full" />
+                    Submitting Request...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Submit Request
+                  </>
                 )}
-              />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push('/user/browse')}
+                className="w-full sm:w-auto min-h-[44px] text-sm sm:text-base"
+              >
+                Cancel
+              </Button>
             </div>
           </form>
         </Form>

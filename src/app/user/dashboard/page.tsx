@@ -5,7 +5,7 @@
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PackageCheck, Clock, Box, Search, ArrowUpDown } from 'lucide-react';
+import { PackageCheck, Clock, Box, Search, ArrowUpDown, ArrowUpRight, Activity, Megaphone } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
@@ -269,33 +269,35 @@ export default function UserDashboardPage() {
 
   return (
     <ErrorBoundary>
-      <div className="container mx-auto px-4 py-6 space-y-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-6 sm:space-y-8">
         {/* Header Section */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6"
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6"
         >
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground truncate">
               Welcome back, {userData?.full_name || 'User'}
             </h1>
-            <p className="text-muted-foreground mt-1 text-sm md:text-base">
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base lg:text-lg">
               {userData?.department ? `${userData.department} Department` : 'Dashboard'}
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-4 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-3 w-full sm:w-auto">
             <Link href="/user/browse" className="w-full sm:w-auto">
-              <Button className="gap-2 w-full min-h-[44px] min-w-[44px]">
+              <Button className="gap-2 w-full sm:w-auto min-h-[44px] text-sm sm:text-base">
                 <Search className="h-4 w-4" />
-                Browse Gear
+                <span className="hidden xs:inline">Browse Gear</span>
+                <span className="xs:hidden">Browse</span>
               </Button>
             </Link>
             <Link href="/user/check-in" className="w-full sm:w-auto">
-              <Button variant="outline" className="gap-2 w-full min-h-[44px] min-w-[44px]">
+              <Button variant="outline" className="gap-2 w-full sm:w-auto min-h-[44px] text-sm sm:text-base">
                 <ArrowUpDown className="h-4 w-4" />
-                Check-in Gear
+                <span className="hidden xs:inline">Check-in Gear</span>
+                <span className="xs:hidden">Check-in</span>
               </Button>
             </Link>
           </div>
@@ -314,7 +316,7 @@ export default function UserDashboardPage() {
         {isLoading ? (
           <LoadingState variant="cards" count={3} />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {userStats.map((stat, i) => (
               <motion.div
                 key={stat.title}
@@ -324,15 +326,15 @@ export default function UserDashboardPage() {
                 variants={cardVariants}
                 className="w-full"
               >
-                <Card className="h-full">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-base md:text-lg font-semibold flex items-center gap-2">
-                      {React.createElement(stat.icon, { className: `h-6 w-6 ${stat.color}` })}
-                      {stat.title}
+                <Card className="h-full hover:shadow-lg transition-shadow duration-200">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
+                    <CardTitle className="text-sm sm:text-base lg:text-lg font-semibold flex items-center gap-2 truncate">
+                      {React.createElement(stat.icon, { className: `h-5 w-5 sm:h-6 sm:w-6 ${stat.color} flex-shrink-0` })}
+                      <span className="truncate">{stat.title}</span>
                     </CardTitle>
                     <Badge
                       className={
-                        'text-base px-3 py-1 font-bold shadow-none ' +
+                        'text-xs sm:text-sm px-2 sm:px-3 py-1 font-bold shadow-none flex-shrink-0 ' +
                         (stat.title === 'Checked Out Gears' ? 'bg-blue-600 text-white' :
                           stat.title === 'Overdue Gears' ? 'bg-red-600 text-white' :
                             stat.title === 'Available Gears' ? 'bg-green-600 text-white' :
@@ -342,12 +344,15 @@ export default function UserDashboardPage() {
                       {stat.value}
                     </Badge>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-xs md:text-sm text-muted-foreground mb-2">{stat.description}</p>
+                  <CardContent className="p-4 sm:p-6 pt-0">
+                    <p className="text-xs sm:text-sm text-muted-foreground mb-2 line-clamp-2">{stat.description}</p>
                     {stat.value === 0 && (
                       <div className="text-xs text-muted-foreground italic">No {stat.title.toLowerCase()}.</div>
                     )}
-                    <Link href={stat.link} className="text-blue-500 hover:underline text-xs">View details</Link>
+                    <Link href={stat.link} className="text-blue-500 hover:underline text-xs sm:text-sm inline-flex items-center gap-1">
+                      View details
+                      <ArrowUpRight className="h-3 w-3" />
+                    </Link>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -356,27 +361,33 @@ export default function UserDashboardPage() {
         )}
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8">
           {/* Left Column */}
-          <div className="space-y-6">
+          <div className="space-y-6 sm:space-y-8">
             <UpcomingEvents />
             <PopularGearWidget />
           </div>
 
           {/* Right Column - Combined Activity and Announcements */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-md md:text-lg">Activity & Announcements</CardTitle>
+          <div className="space-y-6 sm:space-y-8">
+            <Card className="h-fit">
+              <CardHeader className="pb-3 sm:pb-4">
+                <CardTitle className="text-base sm:text-lg lg:text-xl">Activity & Announcements</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="grid grid-cols-1 divide-y">
-                  <div className="p-4">
-                    <h3 className="text-xs md:text-sm font-medium mb-2">Recent Activity</h3>
+                  <div className="p-4 sm:p-6">
+                    <h3 className="text-sm sm:text-base font-medium mb-3 sm:mb-4 flex items-center gap-2">
+                      <Activity className="h-4 w-4" />
+                      Recent Activity
+                    </h3>
                     <RecentActivity embedded={true} />
                   </div>
-                  <div className="p-4">
-                    <h3 className="text-xs md:text-sm font-medium mb-2">Announcements</h3>
+                  <div className="p-4 sm:p-6">
+                    <h3 className="text-sm sm:text-base font-medium mb-3 sm:mb-4 flex items-center gap-2">
+                      <Megaphone className="h-4 w-4" />
+                      Announcements
+                    </h3>
                     <AnnouncementsWidget embedded={true} />
                   </div>
                 </div>
