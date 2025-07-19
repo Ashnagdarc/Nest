@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -27,9 +27,9 @@ import { createClient } from '@/lib/supabase/client';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { useIsMobile } from '@/hooks/use-mobile';
-import CustomHamburger from '@/components/CustomHamburger';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { DashboardHeader } from '@/components/DashboardHeader';
+import EnhancedNavbar from '@/components/navigation/enhanced-navbar';
 
 const userNavItems = [
   { href: '/user/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -43,23 +43,12 @@ const userNavItems = [
   { href: '/user/settings', label: 'Settings', icon: Settings },
 ];
 
-// Use any for Profile type if the database types aren't set up properly
-type Profile = unknown;
-
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
-  const { profile: currentUser, isLoading: isLoadingUser, refreshProfile } = useUserProfile();
+  const { profile: currentUser, isLoading: isLoadingUser } = useUserProfile();
   const isMobile = useIsMobile();
-  const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
-
-  // Toggle function for hamburger and sidebar sync
-  const toggleSidebar = () => {
-    setIsHamburgerOpen(!isHamburgerOpen);
-    setSidebarOpen(!sidebarOpen);
-  };
 
   const handleLogout = async () => {
     try {
@@ -72,6 +61,22 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
 
   const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
 
+  // Show enhanced navbar on mobile, sidebar on desktop
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-background">
+        <EnhancedNavbar variant="user" />
+        <div className="pt-16 sm:pt-18">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+            {children}
+          </div>
+        </div>
+        <AnnouncementPopup />
+      </div>
+    );
+  }
+
+  // Desktop sidebar layout
   return (
     <SidebarProvider defaultOpen={!isMobile}>
       <Sidebar collapsible="icon">
@@ -82,17 +87,6 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
               <SidebarTrigger className="hidden md:flex">
                 <PanelLeft className="h-4 w-4" />
               </SidebarTrigger>
-              {/* Hamburger for mobile */}
-              <div className="md:hidden">
-                <SidebarTrigger>
-                  <CustomHamburger
-                    size={20}
-                    direction="right"
-                    toggled={isHamburgerOpen}
-                    toggle={toggleSidebar}
-                  />
-                </SidebarTrigger>
-              </div>
               <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-lg text-primary truncate group-data-[collapsible=icon]:hidden">
                 <span className="truncate">Nest User</span>
               </Link>
@@ -162,28 +156,10 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        {/* Header for mobile view with hamburger trigger */}
-        <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-background px-4 md:hidden">
-          <Link href="/user/dashboard" className="flex items-center gap-2 font-semibold text-primary truncate max-w-[70%]">
-            <span className="truncate">Nest User</span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <SidebarTrigger>
-              <CustomHamburger
-                size={20}
-                direction="right"
-                toggled={isHamburgerOpen}
-                toggle={toggleSidebar}
-              />
-            </SidebarTrigger>
-          </div>
-        </div>
         <DashboardHeader />
-        <div className="p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
+        <div className="p-3 sm:p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
           <div className="max-w-full">
-            {/* Always render children - remove authentication check temporarily */}
-            <div className="container mx-auto px-4 w-full">
+            <div className="container mx-auto px-2 sm:px-4 w-full">
               {children}
             </div>
           </div>

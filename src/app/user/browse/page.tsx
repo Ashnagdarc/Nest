@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import Image from 'next/image';
 import Link from 'next/link';
-import { PackagePlus, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box, LucideIcon } from 'lucide-react'; // Icons for view details and request
+import { PackagePlus, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box, LucideIcon, ArrowLeft, Filter, ChevronLeft, ChevronRight } from 'lucide-react'; // Icons for view details and request
 import { createClient } from '@/lib/supabase/client';
 // import { createGearNotification } from '@/lib/notifications'; // No longer used
 import { useToast } from "@/hooks/use-toast";
@@ -313,25 +313,39 @@ export default function BrowseGearsPage() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="space-y-4 sm:space-y-6"
+      className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6"
     >
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Browse Gear</h1>
-        <Link href="/user/request" aria-label="Request Gear">
-          <Button aria-label="Request Gear">
-            <PackagePlus className="mr-2 h-4 w-4" /> Request Gear
-          </Button>
-        </Link>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground truncate">
+            Browse Equipment
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base lg:text-lg">
+            Discover and request available equipment for your projects
+          </p>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link href="/user/dashboard">
+            <Button variant="outline" size="sm" className="text-sm sm:text-base">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              <span className="hidden xs:inline">Back to Dashboard</span>
+              <span className="xs:hidden">Back</span>
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      {/* Mobile Filters Toggle */}
-      <div className="sm:hidden flex justify-end mb-2">
+      {/* Mobile Filter Toggle */}
+      <div className="sm:hidden flex justify-end">
         <Button
           variant="outline"
           size="sm"
           aria-label={showMobileFilters ? 'Hide Filters' : 'Show Filters'}
           onClick={() => setShowMobileFilters((v) => !v)}
+          className="text-sm"
         >
+          <Filter className="h-4 w-4 mr-2" />
           {showMobileFilters ? 'Hide Filters' : 'Show Filters'}
         </Button>
       </div>
@@ -350,47 +364,49 @@ export default function BrowseGearsPage() {
               (showMobileFilters ? 'block' : 'hidden sm:block')
             }
           >
-            <Card>
-              <CardContent className="pt-4 sm:pt-6 flex flex-col md:flex-row gap-2 sm:gap-4">
-                <Input
-                  placeholder="Search by gear name..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-grow min-h-[44px]"
-                  aria-label="Search by gear name"
-                />
-                <div className="flex gap-2 sm:gap-4 flex-wrap">
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]" aria-label="Filter by Status">
-                      <SelectValue placeholder="Filter by Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Available">Available</SelectItem>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="Booked">Booked</SelectItem>
-                      <SelectItem value="Damaged">Damaged</SelectItem>
-                      <SelectItem value="New">New</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={filterCategory} onValueChange={setFilterCategory}>
-                    <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]" aria-label="Filter by Category">
-                      <SelectValue placeholder="Filter by Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      <SelectItem value="Camera">Camera</SelectItem>
-                      <SelectItem value="Lens">Lens</SelectItem>
-                      <SelectItem value="Drone">Drone</SelectItem>
-                      <SelectItem value="Audio">Audio</SelectItem>
-                      <SelectItem value="Laptop">Laptop</SelectItem>
-                      <SelectItem value="Monitor">Monitor</SelectItem>
-                      <SelectItem value="Cables">Cables</SelectItem>
-                      <SelectItem value="Lighting">Lighting</SelectItem>
-                      <SelectItem value="Tripod">Tripod</SelectItem>
-                      <SelectItem value="Accessory">Accessory</SelectItem>
-                      <SelectItem value="Cars">Cars</SelectItem>
-                    </SelectContent>
-                  </Select>
+            <Card className="shadow-sm">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex flex-col lg:flex-row gap-3 sm:gap-4">
+                  <Input
+                    placeholder="Search by gear name..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="flex-grow min-h-[44px] text-sm sm:text-base"
+                    aria-label="Search by gear name"
+                  />
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger className="w-full sm:w-[160px] lg:w-[180px] min-h-[44px] text-sm" aria-label="Filter by Status">
+                        <SelectValue placeholder="Filter by Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Available">Available</SelectItem>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="Booked">Booked</SelectItem>
+                        <SelectItem value="Damaged">Damaged</SelectItem>
+                        <SelectItem value="New">New</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={filterCategory} onValueChange={setFilterCategory}>
+                      <SelectTrigger className="w-full sm:w-[160px] lg:w-[180px] min-h-[44px] text-sm" aria-label="Filter by Category">
+                        <SelectValue placeholder="Filter by Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        <SelectItem value="Camera">Camera</SelectItem>
+                        <SelectItem value="Lens">Lens</SelectItem>
+                        <SelectItem value="Drone">Drone</SelectItem>
+                        <SelectItem value="Audio">Audio</SelectItem>
+                        <SelectItem value="Laptop">Laptop</SelectItem>
+                        <SelectItem value="Monitor">Monitor</SelectItem>
+                        <SelectItem value="Cables">Cables</SelectItem>
+                        <SelectItem value="Lighting">Lighting</SelectItem>
+                        <SelectItem value="Tripod">Tripod</SelectItem>
+                        <SelectItem value="Accessory">Accessory</SelectItem>
+                        <SelectItem value="Cars">Cars</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -401,7 +417,10 @@ export default function BrowseGearsPage() {
       {/* Loading state */}
       {isLoading && (
         <div className="flex justify-center items-center py-16 sm:py-20">
-          <p className="text-muted-foreground">Loading gear items...</p>
+          <div className="flex flex-col items-center gap-4">
+            <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+            <p className="text-muted-foreground text-sm sm:text-base">Loading equipment...</p>
+          </div>
         </div>
       )}
 
@@ -413,57 +432,66 @@ export default function BrowseGearsPage() {
             variants={containerVariants}
             initial="hidden"
             animate="visible"
-            className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6"
           >
             {gears.length > 0 ? (
               gears.map((gear) => (
                 <motion.div key={gear.id} variants={itemVariants}>
-                  <Card className="overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
+                  <Card className="overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex flex-col h-full group">
                     <CardHeader className="p-0">
-                      <div className="w-full h-32 sm:h-48 relative bg-muted">
+                      <div className="w-full h-40 sm:h-48 lg:h-52 relative bg-muted overflow-hidden">
                         {gear.image_url ? (
                           <Image
                             src={gear.image_url}
                             alt={gear.name}
                             fill
-                            sizes="(max-width: 640px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                            className="object-cover"
+                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                            className="object-cover group-hover:scale-105 transition-transform duration-300"
                             unoptimized
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                            No image available
+                            <Box className="h-12 w-12 opacity-50" />
                           </div>
                         )}
+                        <div className="absolute top-2 right-2">
+                          <Badge variant={
+                            gear.status === 'Available' ? 'default' :
+                              gear.status === 'Booked' ? 'secondary' :
+                                gear.status === 'Damaged' ? 'destructive' :
+                                  gear.status === 'New' ? 'outline' :
+                                    'secondary'
+                          } className={`capitalize text-xs font-medium ${gear.status === 'Available' ? 'bg-green-500 text-white' : ''}`}>
+                            {gear.status}
+                          </Badge>
+                        </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="p-3 sm:p-4 flex-grow">
-                      <div className="flex justify-between items-start mb-1 sm:mb-2">
-                        <CardTitle className="text-base sm:text-lg font-semibold">{gear.name}</CardTitle>
-                        <Badge variant={
-                          gear.status === 'Available' ? 'default' :
-                            gear.status === 'Booked' ? 'secondary' :
-                              gear.status === 'Damaged' ? 'destructive' :
-                                gear.status === 'New' ? 'outline' :
-                                  'secondary'
-                        } className={`capitalize text-xs ${gear.status === 'Available' ? 'bg-accent text-accent-foreground' : ''}`}>
-                          {gear.status}
-                        </Badge>
+                    <CardContent className="p-4 sm:p-5 flex-grow">
+                      <div className="space-y-2 sm:space-y-3">
+                        <div>
+                          <CardTitle className="text-base sm:text-lg font-semibold line-clamp-2 mb-2">{gear.name}</CardTitle>
+                          <CardDescription className="text-xs sm:text-sm mb-3">
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full font-medium text-xs ${getCategoryBadgeClass(gear.category || '')}`}>
+                              {getCategoryIcon(gear.category || '', 14)}
+                              {gear.category}
+                            </span>
+                          </CardDescription>
+                        </div>
+                        <p className="text-xs sm:text-sm text-muted-foreground line-clamp-3 leading-relaxed">{gear.description}</p>
                       </div>
-                      <CardDescription className="text-xs sm:text-sm mb-1">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium text-xs ${getCategoryBadgeClass(gear.category || '')}`}
-                        >
-                          {getCategoryIcon(gear.category || '', 14)}
-                          {gear.category}
-                        </span>
-                      </CardDescription>
-                      <p className="text-xs sm:text-sm line-clamp-2">{gear.description}</p>
                     </CardContent>
-                    <CardFooter className="p-3 sm:p-4 bg-muted/30 flex justify-end gap-2">
-                      <Link href={`/user/request?gearId=${gear.id}`} aria-label={`Request ${gear.name}`}>
-                        <Button size="sm" disabled={gear.status !== 'Available'} aria-label={`Request ${gear.name}`}
-                          className="min-h-[44px] min-w-[44px]">
-                          <PackagePlus className="mr-1 h-4 w-4" /> Request
+                    <CardFooter className="p-4 sm:p-5 bg-muted/30 flex justify-end">
+                      <Link href={`/user/request?gearId=${gear.id}`} aria-label={`Request ${gear.name}`} className="w-full">
+                        <Button
+                          size="sm"
+                          disabled={gear.status !== 'Available'}
+                          aria-label={`Request ${gear.name}`}
+                          className="w-full min-h-[44px] text-sm sm:text-base"
+                        >
+                          <PackagePlus className="mr-2 h-4 w-4" />
+                          <span className="hidden xs:inline">Request Equipment</span>
+                          <span className="xs:hidden">Request</span>
                         </Button>
                       </Link>
                     </CardFooter>
@@ -471,52 +499,74 @@ export default function BrowseGearsPage() {
                 </motion.div>
               ))
             ) : (
-              <div className="col-span-full flex flex-col items-center justify-center py-8 sm:py-12">
-                <Box className="h-10 w-10 text-gray-400 mb-2" />
-                <div className="text-base sm:text-lg font-semibold text-gray-600 mb-1">No gear found</div>
-                <div className="text-xs sm:text-sm text-muted-foreground mb-2">Try adjusting your filters or search.</div>
+              <div className="col-span-full flex flex-col items-center justify-center py-12 sm:py-16">
+                <Box className="h-16 w-16 text-muted-foreground mb-4" />
+                <div className="text-lg sm:text-xl font-semibold text-foreground mb-2">No equipment found</div>
+                <div className="text-sm sm:text-base text-muted-foreground text-center max-w-md">
+                  Try adjusting your filters or search terms to find what you&apos;re looking for.
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilterStatus('all');
+                    setFilterCategory('all');
+                  }}
+                  className="mt-4"
+                >
+                  Clear Filters
+                </Button>
               </div>
             )}
           </motion.div>
 
-          {/* Sticky Pagination Controls for mobile */}
-          <div className="fixed bottom-0 left-0 w-full z-20 bg-background border-t border-border py-2 px-2 flex sm:static sm:border-0 sm:bg-transparent sm:py-0 sm:px-0 justify-center items-center gap-2 sm:gap-4 mt-4 sm:mt-8 shadow-sm sm:shadow-none">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              aria-label="Previous Page"
-              className="min-h-[44px] min-w-[44px]"
-            >
-              Previous
-            </Button>
-            <span className="text-xs sm:text-sm">
-              Page {page} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              aria-label="Next Page"
-              className="min-h-[44px] min-w-[44px]"
-            >
-              Next
-            </Button>
-            <span className="ml-2 sm:ml-4 text-[10px] sm:text-xs text-muted-foreground">
-              Showing {gears.length} of {total} items
-            </span>
-            <select
-              className="ml-2 sm:ml-4 border rounded px-2 py-1 text-[10px] sm:text-xs bg-background min-h-[36px]"
-              value={pageSize}
-              onChange={e => setPageSize(Number(e.target.value))}
-              aria-label="Items per page"
-            >
-              {[8, 12, 16, 24, 32].map(size => (
-                <option key={size} value={size}>{size} / page</option>
-              ))}
-            </select>
+          {/* Responsive Pagination Controls */}
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-6 mt-6 sm:mt-8 p-4 sm:p-6 bg-muted/30 rounded-lg">
+            <div className="flex items-center gap-2 sm:gap-4 order-2 sm:order-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                aria-label="Previous Page"
+                className="min-h-[44px] text-sm"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <span className="text-sm sm:text-base font-medium">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                aria-label="Next Page"
+                className="min-h-[44px] text-sm"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 order-1 sm:order-2">
+              <span className="text-xs sm:text-sm text-muted-foreground">
+                Showing {gears.length} of {total} items
+              </span>
+              <Select value={pageSize.toString()} onValueChange={(value) => setPageSize(Number(value))}>
+                <SelectTrigger className="w-full sm:w-[120px] min-h-[44px] text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[8, 12, 16, 24, 32].map(size => (
+                    <SelectItem key={size} value={size.toString()}>
+                      {size} per page
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </>
       )}
