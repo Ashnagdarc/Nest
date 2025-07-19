@@ -216,7 +216,7 @@ export default function EnhancedNavbar({
                     {/* Logo/Brand */}
                     <Link href={variant === 'admin' ? '/admin/dashboard' : '/user/dashboard'}
                         className="flex items-center space-x-3 group">
-                        <div className="relative">
+                        <div className="relative hidden sm:block">
                             <img
                                 src={logoUrl}
                                 alt="Nest Logo"
