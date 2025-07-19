@@ -23,7 +23,7 @@ type CheckinData = {
   notes: string | null;
   status: string;
   condition: string;
-  damage_notes: string | null;
+  damage_notes?: string | null;
   gears: {
     name: string;
     current_request_id: string | null;
@@ -140,7 +140,7 @@ export default function ManageCheckinsPage() {
         (profilesData as ProfileData[] || []).map(p => [p.id, p.full_name])
       );
 
-      const processedCheckins = (checkinsData as CheckinData[]).map((c: CheckinData) => {
+      const processedCheckins = (checkinsData as any[]).map((c: any) => {
         const checkin = {
           id: c.id,
           userId: c.user_id,
@@ -172,15 +172,7 @@ export default function ManageCheckinsPage() {
     }
   }
 
-  const handleApproveClick = (checkin: Checkin) => {
-    setSelectedCheckin(checkin);
-    setShowApproveDialog(true);
-  };
 
-  const handleRejectClick = (checkin: Checkin) => {
-    setSelectedCheckin(checkin);
-    setShowRejectDialog(true);
-  };
 
   const handleApproveAllInGroup = async (requestId: string) => {
     const group = groupedByRequest[requestId];
@@ -375,7 +367,7 @@ export default function ManageCheckinsPage() {
               `<p><b>Reason:</b> ${rejectionReason}</p>` +
               `<p>If you have any questions, please contact the admin team.</p>` +
               `<br/>` +
-              `<p>Thank you,<br/>Eden Oasis Realty Team</p>`
+              `<p>Thank you,<br/>Nest by Eden Oasis Team</p>`
           }),
         });
       }
