@@ -414,6 +414,14 @@ function RequestGearContent() {
         'gear_request'
       );
 
+      // Create notification for the user
+      await createSystemNotification(
+        userId,
+        'Request Submitted Successfully',
+        `Your request for ${selectedGearNames.join(', ')} has been submitted and is pending approval.`,
+        'gear_request'
+      );
+
       // Send external notification to Google Chat
       await notifyGoogleChat(NotificationEventType.USER_REQUEST, {
         userName: userProfile?.full_name || 'Unknown User',

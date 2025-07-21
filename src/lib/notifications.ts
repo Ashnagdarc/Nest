@@ -100,16 +100,36 @@ export async function createProfileNotification(
 }
 
 export async function createSystemNotification(
-    title: string,
-    message: string,
-    type: string = 'system',
+    userIdOrTitle: string,
+    messageOrMessage: string,
+    typeOrType: string = 'system',
     userIds?: string[]
 ) {
     const supabase = createClient();
 
     try {
+        // Handle both old and new function signatures
+        let title: string;
+        let message: string;
+        let type: string;
+        let targetUserIds: string[] | undefined;
+
+        if (userIds) {
+            // New signature: createSystemNotification(title, message, type, userIds?)
+            title = userIdOrTitle;
+            message = messageOrMessage;
+            type = typeOrType;
+            targetUserIds = userIds;
+        } else {
+            // Old signature: createSystemNotification(userId, title, message)
+            const userId = userIdOrTitle;
+            title = messageOrMessage;
+            message = typeOrType;
+            type = 'system';
+            targetUserIds = [userId];
+        }
+
         // If no specific userIds provided, get all admin users
-        let targetUserIds = userIds;
         if (!targetUserIds || targetUserIds.length === 0) {
             const { data: adminUsers, error: adminError } = await supabase
                 .from('profiles')
