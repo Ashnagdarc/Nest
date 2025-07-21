@@ -1,8 +1,14 @@
 import { Resend } from 'resend';
 
+// Debug logging for environment variable
+console.log('[Email Service Debug] RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
+console.log('[Email Service Debug] RESEND_API_KEY length:', process.env.RESEND_API_KEY?.length || 0);
+console.log('[Email Service Debug] RESEND_API_KEY starts with:', process.env.RESEND_API_KEY?.substring(0, 3) || 'undefined');
+console.log('[Email Service Debug] RESEND_API_KEY ends with:', process.env.RESEND_API_KEY?.substring(-3) || 'undefined');
+
 // Validate environment variable
 if (!process.env.RESEND_API_KEY) {
-    console.error('[Email Service] RESEND_API_KEY environment variable is not set');
+    console.warn('[Email Service] RESEND_API_KEY environment variable is not set - email notifications will be skipped');
 }
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -18,20 +24,24 @@ export async function sendGearRequestEmail({
 }) {
     // Check if Resend is properly configured
     if (!process.env.RESEND_API_KEY) {
-        throw new Error('RESEND_API_KEY environment variable is not configured');
+        console.warn('[Email Service] RESEND_API_KEY not configured - skipping email');
+        // Don't throw error, just log and continue
+        return { success: false, error: 'Email service not configured' };
     }
 
     try {
-        return await resend.emails.send({
+        const result = await resend.emails.send({
             from: 'Nest by Eden Oasis <onboarding@resend.dev>',
             to,
             subject,
             html,
         });
+        console.log('[Email Service] Email sent successfully:', { to, subject });
+        return { success: true, result };
     } catch (error: unknown) {
         console.error('[Email Service Error]:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        throw new Error(`Failed to send email: ${errorMessage}`);
+        return { success: false, error: `Failed to send email: ${errorMessage}` };
     }
 }
 

@@ -564,6 +564,13 @@ function ManageRequestsContent() {
         .single();
 
       if (!detailsError && requestDetails) {
+        // Create notification for the user
+        await createSystemNotification(
+          requestDetails.user_id,
+          'Gear Request Rejected',
+          `Your gear request has been rejected. Reason: ${rejectionReason}`
+        );
+
         // Fetch admin profile
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         const { data: adminProfile } = await supabase
@@ -825,10 +832,10 @@ function ManageRequestsContent() {
       req.userName,
       req.gearNames.join(', '),
       req.requestDate && req.requestDate instanceof Date ? format(req.requestDate, 'PPp') : '',
-      req.duration,
-      req.reason,
-      req.destination,
-      req.status
+      req.duration || '',
+      req.reason || '',
+      req.destination || '',
+      req.status || ''
     ]);
     autoTable(doc, { head: [headers], body: rows });
     doc.save(`gear_requests_${format(new Date(), 'yyyyMMdd')}.pdf`);
@@ -1251,10 +1258,58 @@ function ManageRequestsContent() {
                           </TableCell>
                           <TableCell className="text-right space-x-2">
                             {showAnimation.id === req.id && ActionAnimation}
-                            {!showAnimation.id && isAttendedRequest(req.status) && (
-                              <Badge variant="outline" className="ml-2">
-                                {format(new Date((req as GearRequest).updatedAt || (req as GearRequest).requestDate), 'MMM d, yyyy')}
-                              </Badge>
+                            {!showAnimation.id && (
+                              <div className="flex items-center justify-end gap-2">
+                                {/* Show action buttons only for pending requests */}
+                                {req.status.toLowerCase() === 'pending' && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleApprove(req.id)}
+                                      disabled={isProcessing}
+                                      className="bg-green-600 hover:bg-green-700 text-white"
+                                    >
+                                      {isProcessing ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        'Approve'
+                                      )}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      onClick={() => {
+                                        setRequestToReject(req.id);
+                                        setRejectionReason('');
+                                      }}
+                                      disabled={isProcessing}
+                                    >
+                                      {isProcessing ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        'Reject'
+                                      )}
+                                    </Button>
+                                  </>
+                                )}
+                                {/* Show processed date for attended requests */}
+                                {isAttendedRequest(req.status) && (
+                                  <Badge variant="outline" className="ml-2">
+                                    {format(new Date((req as GearRequest).updatedAt || (req as GearRequest).requestDate), 'MMM d, yyyy')}
+                                  </Badge>
+                                )}
+                                {/* View details button for all requests */}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedRequest(req);
+                                    setIsDetailsOpen(true);
+                                  }}
+                                >
+                                  View
+                                </Button>
+                              </div>
                             )}
                           </TableCell>
                         </TableRow>

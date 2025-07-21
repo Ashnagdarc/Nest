@@ -42,6 +42,22 @@ export async function POST(req: NextRequest) {
         const BRAND_COLOR = appSettings['brand_primary_color'] || '#ff6300';
         const notificationDefaults = appSettings['notification_defaults'] ? JSON.parse(appSettings['notification_defaults']) : { email: true, push: true, in_app: true };
 
+        // Helper to send email to all admins
+        async function notifyAdminsByEmail(subject: string, html: string) {
+            const { data: admins } = await supabase.from('profiles').select('email').eq('role', 'Admin').eq('status', 'Active');
+            if (admins && Array.isArray(admins)) {
+                for (const admin of admins) {
+                    if (admin.email) {
+                        await sendGearRequestEmail({
+                            to: admin.email,
+                            subject,
+                            html,
+                        });
+                    }
+                }
+            }
+        }
+
         type NotificationTarget = { id: string; email?: string; preferences?: Record<string, unknown> };
         let notificationTargets: NotificationTarget[] = [];
         let title = '';
@@ -72,7 +88,13 @@ export async function POST(req: NextRequest) {
                 metadata = { gear_id: record.gear_id, request_id: record.id };
                 // Find all admin users and their preferences
                 const { data: admins } = await supabase.from('profiles').select('id,email,notification_preferences,role').eq('role', 'Admin');
-                notificationTargets = (admins || []).filter((a): a is { id: string; email: string; notification_preferences?: Record<string, unknown>; role: string } => !!a.email).map(a => ({ id: a.id, email: a.email, preferences: a['notification_preferences'] }));
+                notificationTargets = (admins || [])
+                    .filter(a => !!a.email)
+                    .map(a => ({ 
+                        id: a.id, 
+                        email: a.email, 
+                        preferences: a.notification_preferences 
+                    }));
                 // ALSO notify the user who made the request
                 if (record.user_id) {
                     const { data: user } = await supabase.from('profiles').select('email,full_name,notification_preferences').eq('id', record.user_id).single();
@@ -123,6 +145,8 @@ export async function POST(req: NextRequest) {
                         }
                     }
                 }
+                // After user email, also notify admins by email
+                await notifyAdminsByEmail(title, emailHtml);
             } else if (type === 'UPDATE' && record.status === 'approved' && old_record.status !== 'approved') {
                 title = 'Your Gear Request Was Approved!';
                 message = `Your request for ${record.gear_name || 'equipment'} has been approved.`;
@@ -141,6 +165,84 @@ export async function POST(req: NextRequest) {
                 userId = record.user_id;
                 category = 'request';
                 metadata = { gear_id: record.gear_id, request_id: record.id };
+                await notifyAdminsByEmail(title, emailHtml);
+            }
+            else if (type === 'UPDATE' && record.status === 'Rejected' && old_record.status !== 'Rejected') {
+                title = 'Your Gear Request Was Rejected';
+                message = `Your request for ${record.gear_name || 'equipment'} has been rejected.`;
+                emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+        <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
+        <h2 style="color: ${BRAND_COLOR};">Request Rejected</h2>
+        <p>Hi ${record.requester_name || 'there'},</p>
+        <p>Your request for <strong>${record.gear_name || 'equipment'}</strong> has been <b>rejected</b>.</p>
+        <p>Reason: ${record.admin_notes || 'No reason provided.'}</p>
+        <p>View details in <a href="https://nestbyeden.app/user/my-requests">Nest by Eden Oasis</a>.</p>
+        <hr>
+        <small style="color: #888;">Nest by Eden Oasis Team</small>
+      </div>
+    `;
+                userId = record.user_id;
+                category = 'request';
+                metadata = { gear_id: record.gear_id, request_id: record.id };
+                await notifyAdminsByEmail(title, emailHtml);
+            }
+            else if (type === 'UPDATE' && record.status === 'Cancelled' && old_record.status !== 'Cancelled') {
+                title = 'Your Gear Request Was Cancelled';
+                message = `Your request for ${record.gear_name || 'equipment'} has been cancelled.`;
+                emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+        <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
+        <h2 style="color: ${BRAND_COLOR};">Request Cancelled</h2>
+        <p>Hi ${record.requester_name || 'there'},</p>
+        <p>Your request for <strong>${record.gear_name || 'equipment'}</strong> has been <b>cancelled</b>.</p>
+        <p>View details in <a href=\"https://nestbyeden.app/user/my-requests\">Nest by Eden Oasis</a>.</p>
+        <hr>
+        <small style="color: #888;">Nest by Eden Oasis Team</small>
+      </div>
+    `;
+                userId = record.user_id;
+                category = 'request';
+                metadata = { gear_id: record.gear_id, request_id: record.id };
+                await notifyAdminsByEmail(title, emailHtml);
+            }
+            else if (type === 'UPDATE' && record.status === 'Returned' && old_record.status !== 'Returned') {
+                title = 'Your Gear Has Been Returned';
+                message = `Your gear request for ${record.gear_name || 'equipment'} has been marked as returned.`;
+                emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+        <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
+        <h2 style="color: ${BRAND_COLOR};">Gear Returned</h2>
+        <p>Hi ${record.requester_name || 'there'},</p>
+        <p>Your gear request for <strong>${record.gear_name || 'equipment'}</strong> has been marked as <b>returned</b>.</p>
+        <p>Thank you for using Nest!</p>
+        <hr>
+        <small style="color: #888;">Nest by Eden Oasis Team</small>
+      </div>
+    `;
+                userId = record.user_id;
+                category = 'request';
+                metadata = { gear_id: record.gear_id, request_id: record.id };
+                await notifyAdminsByEmail(title, emailHtml);
+            }
+            // Overdue logic would typically be handled in a scheduled job, but if you want to handle it here:
+            else if (type === 'UPDATE' && record.status === 'Overdue' && old_record.status !== 'Overdue') {
+                title = 'Your Gear Is Overdue';
+                message = `Your gear request for ${record.gear_name || 'equipment'} is overdue. Please return it as soon as possible.`;
+                emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+        <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
+        <h2 style="color: ${BRAND_COLOR};">Gear Overdue</h2>
+        <p>Hi ${record.requester_name || 'there'},</p>
+        <p>Your gear request for <strong>${record.gear_name || 'equipment'}</strong> is <b>overdue</b>. Please return it as soon as possible.</p>
+        <hr>
+        <small style="color: #888;">Nest by Eden Oasis Team</small>
+      </div>
+    `;
+                userId = record.user_id;
+                category = 'request';
+                metadata = { gear_id: record.gear_id, request_id: record.id };
+                await notifyAdminsByEmail(title, emailHtml);
             }
         }
 
@@ -202,6 +304,35 @@ export async function POST(req: NextRequest) {
             notificationTargets = (admins || []).filter((a): a is { id: string; email: string } => !!a.email).map(a => ({ id: a.id, email: a.email }));
             category = 'maintenance_record';
             metadata = { maintenance_id: record.id };
+        }
+
+        // Maintenance: notify user if their gear is under maintenance
+        else if (table === 'gear_maintenance' && type === 'INSERT' && record.gear_id) {
+            // Find the user who last checked out the gear
+            const { data: lastRequest } = await supabase
+                .from('gear_requests')
+                .select('user_id, gear_name')
+                .eq('gear_id', record.gear_id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+            if (lastRequest && lastRequest.user_id) {
+                title = 'Your Gear Is Under Maintenance';
+                message = `Your gear (${lastRequest.gear_name || 'equipment'}) is currently under maintenance.`;
+                emailHtml = `
+      <div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: auto;\">
+        <img src=\"${BRAND_LOGO_URL}\" alt=\"Nest by Eden Oasis\" style=\"height: 40px; margin-bottom: 16px;\">
+        <h2 style=\"color: ${BRAND_COLOR};\">Gear Under Maintenance</h2>
+        <p>Hi there,</p>
+        <p>Your gear <strong>${lastRequest.gear_name || 'equipment'}</strong> is currently under maintenance. We will notify you when it is available again.</p>
+        <hr>
+        <small style=\"color: #888;\">Nest by Eden Oasis Team</small>
+      </div>
+    `;
+                userId = lastRequest.user_id;
+                category = 'maintenance_record';
+                metadata = { maintenance_id: record.id };
+            }
         }
 
         // --- Profile Updates ---
@@ -276,9 +407,9 @@ export async function POST(req: NextRequest) {
             let lastError = null;
             const prefs = target.preferences || {};
             // Determine channels for this event
-            const sendInApp = prefs.in_app?.[table] ?? notificationDefaults.in_app;
-            const sendEmail = prefs.email?.[table] ?? notificationDefaults.email;
-            const sendPush = prefs.push?.[table] ?? notificationDefaults.push;
+            const sendInApp = (prefs as any).in_app?.[table] ?? notificationDefaults.in_app;
+            const sendEmail = (prefs as any).email?.[table] ?? notificationDefaults.email;
+            const sendPush = (prefs as any).push?.[table] ?? notificationDefaults.push;
 
             // In-app notification
             if (sendInApp) {
@@ -306,16 +437,21 @@ export async function POST(req: NextRequest) {
             // Email notification
             if (sendEmail && targetEmail) {
                 try {
-                    // Check if Resend is configured
-                    if (!process.env.RESEND_API_KEY) {
-                        throw new Error('RESEND_API_KEY environment variable is not configured');
-                    }
-
-                    await sendGearRequestEmail({
+                    const emailResult = await sendGearRequestEmail({
                         to: targetEmail,
                         subject: title,
                         html: emailHtml || `<p>${message}</p>`,
                     });
+                    
+                    if (!emailResult.success) {
+                        lastError = `Email: ${emailResult.error}`;
+                        errors.push(lastError);
+                        console.error('[Email Notification Error]', {
+                            error: emailResult.error,
+                            targetEmail,
+                            hasResendKey: !!process.env.RESEND_API_KEY,
+                        });
+                    }
                 } catch (err: unknown) {
                     const errorMessage = err instanceof Error ? err.message : 'Unknown email error';
                     lastError = `Email: ${errorMessage}`;
