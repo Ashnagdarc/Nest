@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
@@ -27,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { History } from 'lucide-react';
 import { Calendar } from 'lucide-react';
 import { useSuccessFeedback } from '@/hooks/use-success-feedback';
-import { apiGet } from '@/lib/apiClient';
+import { useCheckedOutGears } from '@/hooks/check-in/useCheckedOutGears';
 
 /**
  * Dynamic Lottie Import - prevents SSR issues and reduces bundle size
@@ -48,33 +48,6 @@ const supabase = createClient();
  * Comprehensive type definitions for equipment return workflow
  * with proper TypeScript support and data validation.
  */
-
-/**
- * Basic Gear Interface
- * 
- * Core equipment data structure for status and
- * ownership tracking during return process.
- */
-type Gear = {
-  /** Unique equipment identifier */
-  id: string;
-  /** Current equipment status */
-  status: string;
-  /** User ID of current checkout holder */
-  checked_out_to: string;
-  /** Optional due date for return */
-  due_date?: string;
-  /** Equipment name/title */
-  name?: string;
-  /** Equipment category */
-  category?: string;
-  /** Current active request ID */
-  current_request_id?: string | null;
-  /** Last checkout timestamp */
-  last_checkout_date?: string | null;
-  /** Equipment image URL */
-  image_url?: string | null;
-};
 
 /**
  * Processed Gear Interface
@@ -166,7 +139,6 @@ export default function CheckInGearPage() {
   const { showSuccessFeedback } = useSuccessFeedback();
 
   // Equipment and user state
-  const [checkedOutGears, setCheckedOutGears] = useState<ProcessedGear[]>([]);
   const [selectedGears, setSelectedGears] = useState<string[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [checkInHistory, setCheckInHistory] = useState<CheckInHistory[]>([]);
@@ -188,9 +160,8 @@ export default function CheckInGearPage() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannedCode, setScannedCode] = useState<string | null>(null);
 
-  // UI state preservation
-  const listContainerRef = useRef<HTMLDivElement | null>(null);
-  const scrollPositionRef = useRef<number>(0);
+  // Use the new custom hook for checked out gears
+  const { checkedOutGears, fetchCheckedOutGear, listContainerRef, scrollPositionRef } = useCheckedOutGears(userId, toast);
 
   /**
    * User Authentication Effect
@@ -211,38 +182,6 @@ export default function CheckInGearPage() {
     };
     fetchUser();
   }, [supabase]);
-
-  // Function to fetch checked out gear
-  const fetchCheckedOutGear = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: gears, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Checked%20Out`);
-      if (error) {
-        console.error("Error fetching checked out gear:", error);
-        return;
-      }
-
-      // Filter gears by checked_out_to === user.id and map to ProcessedGear
-      const userCheckedOutGears = (gears || [])
-        .filter(g => g.checked_out_to === user.id)
-        .map(g => ({
-          id: g.id,
-          name: g.name || '',
-          category: g.category || '',
-          status: g.status,
-          checked_out_to: g.checked_out_to || null,
-          current_request_id: g.current_request_id || null,
-          last_checkout_date: g.last_checkout_date || null,
-          due_date: g.due_date || null,
-          image_url: g.image_url || null,
-        }));
-      setCheckedOutGears(userCheckedOutGears);
-    } catch (error) {
-      console.error("Error in fetchCheckedOutGear:", error);
-    }
-  };
 
   /**
    * Equipment Data and Real-time Updates Effect
@@ -306,7 +245,7 @@ export default function CheckInGearPage() {
     return () => {
       supabase.removeChannel(gearChannel);
     };
-  }, [userId, toast, fetchCheckedOutGear]);
+  }, [userId, toast, fetchCheckedOutGear, listContainerRef, scrollPositionRef]);
 
   /**
    * QR Scanner Initialization Effect
@@ -670,16 +609,19 @@ export default function CheckInGearPage() {
         status: string;
         condition: string;
         notes: string;
-        gears?: { name?: string } | null;
+        gears: { name?: string }[];
       };
-      const processedHistory: CheckInHistory[] = (historyData || []).map((item: SupabaseCheckInHistoryRow) => ({
-        id: item.id,
-        gearName: item.gears?.name || 'Unknown Gear',
-        checkinDate: new Date(item.checkin_date),
-        status: item.status || 'Unknown',
-        condition: item.condition || 'Not specified',
-        notes: item.notes || ''
-      }));
+      const processedHistory: CheckInHistory[] = (historyData || []).map((item) => {
+        const row = item as SupabaseCheckInHistoryRow;
+        return {
+          id: row.id,
+          gearName: row.gears[0]?.name || 'Unknown Gear',
+          checkinDate: new Date(row.checkin_date),
+          status: row.status || 'Unknown',
+          condition: row.condition || 'Not specified',
+          notes: row.notes || ''
+        };
+      });
 
       setCheckInHistory(processedHistory);
     } catch (error) {
@@ -810,7 +752,6 @@ export default function CheckInGearPage() {
                               </Badge>
                             </div>
                             <div className="flex items-center justify-between">
-                              <CardDescription>Choose items to return</CardDescription>
                               {checkedOutGears.length > 0 && (
                                 <Button
                                   variant="ghost"
