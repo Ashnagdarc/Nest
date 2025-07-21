@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
@@ -26,7 +26,6 @@ import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { History } from 'lucide-react';
 import { Calendar } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useSuccessFeedback } from '@/hooks/use-success-feedback';
 import { apiGet } from '@/lib/apiClient';
 
@@ -51,21 +50,6 @@ const supabase = createClient();
  */
 
 /**
- * Gear Checkout Record Interface
- * 
- * Represents a checkout record with dates and status information
- * for tracking equipment usage periods and return deadlines.
- */
-type GearCheckoutRecord = {
-  /** Date when equipment was checked out */
-  checkout_date: string;
-  /** Date when equipment is due for return */
-  due_date: string;
-  /** Current checkout status */
-  status: string;
-};
-
-/**
  * Basic Gear Interface
  * 
  * Core equipment data structure for status and
@@ -80,6 +64,16 @@ type Gear = {
   checked_out_to: string;
   /** Optional due date for return */
   due_date?: string;
+  /** Equipment name/title */
+  name?: string;
+  /** Equipment category */
+  category?: string;
+  /** Current active request ID */
+  current_request_id?: string | null;
+  /** Last checkout timestamp */
+  last_checkout_date?: string | null;
+  /** Equipment image URL */
+  image_url?: string | null;
 };
 
 /**
@@ -131,34 +125,6 @@ type CheckInHistory = {
 };
 
 /**
- * Image URL Validation Helper
- * 
- * Type guard function to validate equipment image URLs
- * and ensure proper image display with fallback handling.
- * 
- * @param {string | null | undefined} url - Image URL to validate
- * @returns {url is string} True if URL is valid string
- */
-const isValidImageUrl = (url: string | null | undefined): url is string => {
-  return typeof url === 'string' && url.trim().length > 0;
-};
-
-/**
- * Date Parsing Helper
- * 
- * Safely parses date strings with error handling to prevent
- * invalid date objects and provide proper date validation.
- * 
- * @param {string | null} dateStr - Date string to parse
- * @returns {Date | null} Parsed date object or null if invalid
- */
-const parseDate = (dateStr: string | null): Date | null => {
-  if (!dateStr) return null;
-  const date = new Date(dateStr);
-  return isNaN(date.getTime()) ? null : date;
-};
-
-/**
  * Check-In Gear Page Component
  * 
  * Main page component that renders the equipment check-in interface
@@ -197,8 +163,6 @@ const parseDate = (dateStr: string | null): Date | null => {
 export default function CheckInGearPage() {
   // Core services and utilities
   const { toast } = useToast();
-  const supabase = createClient();
-  const router = useRouter();
   const { showSuccessFeedback } = useSuccessFeedback();
 
   // Equipment and user state
@@ -247,6 +211,38 @@ export default function CheckInGearPage() {
     };
     fetchUser();
   }, [supabase]);
+
+  // Function to fetch checked out gear
+  const fetchCheckedOutGear = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: gears, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Checked%20Out`);
+      if (error) {
+        console.error("Error fetching checked out gear:", error);
+        return;
+      }
+
+      // Filter gears by checked_out_to === user.id and map to ProcessedGear
+      const userCheckedOutGears = (gears || [])
+        .filter(g => g.checked_out_to === user.id)
+        .map(g => ({
+          id: g.id,
+          name: g.name || '',
+          category: g.category || '',
+          status: g.status,
+          checked_out_to: g.checked_out_to || null,
+          current_request_id: g.current_request_id || null,
+          last_checkout_date: g.last_checkout_date || null,
+          due_date: g.due_date || null,
+          image_url: g.image_url || null,
+        }));
+      setCheckedOutGears(userCheckedOutGears);
+    } catch (error) {
+      console.error("Error in fetchCheckedOutGear:", error);
+    }
+  };
 
   /**
    * Equipment Data and Real-time Updates Effect
@@ -364,46 +360,6 @@ export default function CheckInGearPage() {
       };
     }
   }, [scannerInitialized, scannedCode, isScannerOpen]);
-
-  const handleCheckboxChange = (gearId: string, checked: boolean | string) => {
-    if (checked === true) { // Ensure it's strictly boolean true
-      setSelectedGears((prev) => [...prev, gearId]);
-    } else {
-      setSelectedGears((prev) => prev.filter((id) => id !== gearId));
-    }
-  };
-
-  // Function to fetch checked out gear
-  const fetchCheckedOutGear = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: gears, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Checked%20Out`);
-      if (error) {
-        console.error("Error fetching checked out gear:", error);
-        return;
-      }
-
-      // Filter gears by checked_out_to === user.id and map to ProcessedGear
-      const userCheckedOutGears = (gears || [])
-        .filter(g => g.checked_out_to === user.id)
-        .map(g => ({
-          id: g.id,
-          name: g.name || '',
-          category: g.category || '',
-          status: g.status,
-          checked_out_to: g.checked_out_to || null,
-          current_request_id: g.current_request_id || null,
-          last_checkout_date: g.last_checkout_date || null,
-          due_date: g.due_date || null,
-          image_url: g.image_url || null,
-        }));
-      setCheckedOutGears(userCheckedOutGears);
-    } catch (error) {
-      console.error("Error in fetchCheckedOutGear:", error);
-    }
-  };
 
   const handleCheckinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -565,29 +521,6 @@ export default function CheckInGearPage() {
     return new Date(date) < new Date();
   };
 
-  const formatDueDate = (date: string | null) => {
-    if (!date) return 'No due date';
-    return format(new Date(date), 'PP');
-  };
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1
-    }
-  };
-
   // Memoize Lottie component
   const SuccessAnimationComponent = useMemo(() => {
     return showSuccessAnimation ? (
@@ -610,21 +543,6 @@ export default function CheckInGearPage() {
       </motion.div>
     ) : null;
   }, [showSuccessAnimation]);
-
-  const handleScan = useCallback((result: any) => {
-    if (result?.text) {
-      const scannedId = result.text;
-      const found = checkedOutGears.find(gear => gear.id === scannedId);
-      if (found) {
-        setSelectedGears(prev => prev.includes(scannedId) ? prev : [...prev, scannedId]);
-        setQrError(null);
-        setIsScannerOpen(false);
-        toast({ title: 'Gear Selected', description: `${found.name} selected for check-in.`, variant: 'success' });
-      } else {
-        setQrError('Scanned gear is not checked out by you.');
-      }
-    }
-  }, [checkedOutGears, setSelectedGears, toast]);
 
   const handleCheckIn = async () => {
     if (!scannedCode) return;
@@ -744,7 +662,17 @@ export default function CheckInGearPage() {
         return;
       }
 
-      const processedHistory: CheckInHistory[] = (historyData || []).map((item: any) => ({
+      // Define a type for the check-in history row returned from Supabase
+      // and use it in the processedHistory mapping instead of 'any' or 'unknown'.
+      type SupabaseCheckInHistoryRow = {
+        id: string;
+        checkin_date: string;
+        status: string;
+        condition: string;
+        notes: string;
+        gears?: { name?: string } | null;
+      };
+      const processedHistory: CheckInHistory[] = (historyData || []).map((item: SupabaseCheckInHistoryRow) => ({
         id: item.id,
         gearName: item.gears?.name || 'Unknown Gear',
         checkinDate: new Date(item.checkin_date),
@@ -782,7 +710,7 @@ export default function CheckInGearPage() {
         <div className="text-center py-10">
           <History className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
           <h3 className="text-lg font-semibold mb-2">No Check-in History</h3>
-          <p className="text-muted-foreground mb-4">You haven't checked in any gear yet.</p>
+          <p className="text-muted-foreground mt-1">You haven&apos;t checked in any gear yet.</p>
         </div>
       );
     }
@@ -865,9 +793,7 @@ export default function CheckInGearPage() {
                   <Card className="flex flex-col items-center justify-center py-16 px-4 text-center">
                     <PackageCheck className="h-16 w-16 text-muted-foreground mb-4" />
                     <CardTitle className="text-xl mb-3">No Gear to Check-in</CardTitle>
-                    <CardDescription className="max-w-md mb-8">
-                      You currently have no gear checked out. Browse our available equipment and request some gear to get started.
-                    </CardDescription>
+                    <CardDescription className="max-w-md mb-8">You currently have no gear checked out. Browse our available equipment and request some gear to get started.</CardDescription>
                     <Button size="lg" asChild><a href="/user/browse">Browse Available Gear</a></Button>
                   </Card>
                 ) : (
