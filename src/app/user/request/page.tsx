@@ -388,6 +388,19 @@ function RequestGearContent() {
         throw error;
       }
 
+      // Notify admins via API trigger
+      if (requestData && requestData[0]) {
+        await fetch('/api/notifications/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'INSERT',
+            table: 'gear_requests',
+            record: requestData[0],
+          }),
+        });
+      }
+
       // Fetch user profile for notification context
       let userProfile = null;
       if (userId) {

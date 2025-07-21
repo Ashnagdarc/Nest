@@ -152,114 +152,116 @@ export function EditItemModal({ itemId, open, onOpenChange, onSaved }: EditItemM
     return (
         <Dialog open={open} onOpenChange={(val) => { onOpenChange(val); if (!val) clearDraft(); }}>
             <DialogContent className="sm:max-w-[600px]">
-                <DialogHeader>
-                    <DialogTitle>Edit Item</DialogTitle>
-                    <DialogDescription>
-                        Update the details for this gear item.
-                    </DialogDescription>
-                </DialogHeader>
+                <div className="max-h-[100dvh] overflow-y-auto px-1 pb-32 sm:pb-8">
+                    <DialogHeader>
+                        <DialogTitle>Edit Item</DialogTitle>
+                        <DialogDescription>
+                            Update the details for this gear item.
+                        </DialogDescription>
+                    </DialogHeader>
 
-                {loading ? (
-                    <div className="flex justify-center items-center py-8">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                ) : (
-                    <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="name" className="text-right">Name</Label>
-                            <Input
-                                id="name"
-                                name="name"
-                                value={item.name}
-                                onChange={handleInputChange}
-                                className="col-span-3"
-                            />
+                    {loading ? (
+                        <div className="flex justify-center items-center py-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         </div>
+                    ) : (
+                        <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="name" className="text-right">Name</Label>
+                                <Input
+                                    id="name"
+                                    name="name"
+                                    value={item.name}
+                                    onChange={handleInputChange}
+                                    className="col-span-3"
+                                />
+                            </div>
 
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="category" className="text-right">Category</Label>
-                            <Input
-                                id="category"
-                                name="category"
-                                value={item.category || ''}
-                                onChange={handleInputChange}
-                                className="col-span-3"
-                            />
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="category" className="text-right">Category</Label>
+                                <Input
+                                    id="category"
+                                    name="category"
+                                    value={item.category || ''}
+                                    onChange={handleInputChange}
+                                    className="col-span-3"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="status" className="text-right">Status</Label>
+                                <Select
+                                    value={item.status}
+                                    onValueChange={(value) => handleSelectChange('status', value)}
+                                >
+                                    <SelectTrigger className="col-span-3">
+                                        <SelectValue placeholder="Select status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="available">Available</SelectItem>
+                                        <SelectItem value="checked_out">Checked Out</SelectItem>
+                                        <SelectItem value="maintenance">Maintenance</SelectItem>
+                                        <SelectItem value="damaged">Damaged</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="serial_number" className="text-right">Serial Number</Label>
+                                <Input
+                                    id="serial_number"
+                                    name="serial_number"
+                                    value={item.serial_number || ''}
+                                    onChange={handleInputChange}
+                                    className="col-span-3"
+                                />
+                            </div>
+
+                            <Separator />
+
+                            <div className="grid grid-cols-4 items-start gap-4">
+                                <Label htmlFor="description" className="text-right">Description</Label>
+                                <Textarea
+                                    id="description"
+                                    name="description"
+                                    value={item.description || ''}
+                                    onChange={handleInputChange}
+                                    className="col-span-3"
+                                    rows={3}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-4 items-start gap-4">
+                                <Label htmlFor="notes" className="text-right">Notes</Label>
+                                <Textarea
+                                    id="notes"
+                                    name="notes"
+                                    value={item.notes || ''}
+                                    onChange={handleInputChange}
+                                    className="col-span-3"
+                                    rows={2}
+                                />
+                            </div>
                         </div>
+                    )}
 
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="status" className="text-right">Status</Label>
-                            <Select
-                                value={item.status}
-                                onValueChange={(value) => handleSelectChange('status', value)}
-                            >
-                                <SelectTrigger className="col-span-3">
-                                    <SelectValue placeholder="Select status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="available">Available</SelectItem>
-                                    <SelectItem value="checked_out">Checked Out</SelectItem>
-                                    <SelectItem value="maintenance">Maintenance</SelectItem>
-                                    <SelectItem value="damaged">Damaged</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="serial_number" className="text-right">Serial Number</Label>
-                            <Input
-                                id="serial_number"
-                                name="serial_number"
-                                value={item.serial_number || ''}
-                                onChange={handleInputChange}
-                                className="col-span-3"
-                            />
-                        </div>
-
-                        <Separator />
-
-                        <div className="grid grid-cols-4 items-start gap-4">
-                            <Label htmlFor="description" className="text-right">Description</Label>
-                            <Textarea
-                                id="description"
-                                name="description"
-                                value={item.description || ''}
-                                onChange={handleInputChange}
-                                className="col-span-3"
-                                rows={3}
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-4 items-start gap-4">
-                            <Label htmlFor="notes" className="text-right">Notes</Label>
-                            <Textarea
-                                id="notes"
-                                name="notes"
-                                value={item.notes || ''}
-                                onChange={handleInputChange}
-                                className="col-span-3"
-                                rows={2}
-                            />
-                        </div>
-                    </div>
-                )}
-
-                <DialogFooter>
-                    <Button
-                        variant="outline"
-                        onClick={() => { onOpenChange(false); clearDraft(); }}
-                        disabled={saving}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={handleSave}
-                        loading={saving}
-                        disabled={loading || saving}
-                    >
-                        Save Changes
-                    </Button>
-                </DialogFooter>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => { onOpenChange(false); clearDraft(); }}
+                            disabled={saving}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleSave}
+                            loading={saving}
+                            disabled={loading || saving}
+                        >
+                            Save Changes
+                        </Button>
+                    </DialogFooter>
+                </div>
             </DialogContent>
         </Dialog>
     );

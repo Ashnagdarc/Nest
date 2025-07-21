@@ -35,7 +35,7 @@ const gearSchema = z.object({
   status: z.enum(["Available", "Damaged", "Under Repair", "New"], {
     required_error: "Please select an initial status.",
   }),
-  image: z.instanceof(FileList).optional().transform(val =>
+  image_url: z.instanceof(FileList).optional().transform(val =>
     val && val.length > 0 ? Array.from(val)[0] : undefined
   ),
 });
@@ -62,7 +62,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
       purchase_date: "",
       initial_condition: "",
       status: "Available",
-      image: undefined,
+      image_url: undefined,
     },
   });
 
@@ -81,7 +81,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
   useEffect(() => {
     const subscription = form.watch((values) => {
       // Don't persist File objects (image)
-      const { image, ...rest } = values;
+      const { image_url, ...rest } = values;
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(rest));
     });
     return () => subscription.unsubscribe();
@@ -105,7 +105,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
       description: `${data.name} has been added successfully.`,
     });
 
-    onSubmit(data); // Call the callback function passed via props
+    onSubmit(data); // Now passes image_url as the file
     form.reset(); // Reset form after successful submission
     clearDraft();
     setIsLoading(false);
@@ -114,166 +114,168 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Gear Name</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., Canon EOS R5" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="category"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Category</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+      <div className="max-h-[100dvh] overflow-y-auto px-1 pb-32 sm:pb-8">
+        <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Gear Name</FormLabel>
                 <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
+                  <Input placeholder="e.g., Canon EOS R5" {...field} />
                 </FormControl>
-                <SelectContent>
-                  <SelectItem value="Camera">Camera</SelectItem>
-                  <SelectItem value="Lens">Lens</SelectItem>
-                  <SelectItem value="Drone">Drone</SelectItem>
-                  <SelectItem value="Audio">Audio</SelectItem>
-                  <SelectItem value="Laptop">Laptop</SelectItem>
-                  <SelectItem value="Monitor">Monitor</SelectItem>
-                  <SelectItem value="Cables">Cables</SelectItem>
-                  <SelectItem value="Lighting">Lighting</SelectItem>
-                  <SelectItem value="Tripod">Tripod</SelectItem>
-                  <SelectItem value="Accessory">Accessory</SelectItem>
-                  <SelectItem value="Cars">Cars</SelectItem>
-                  {/* Add more categories */}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description <span className="text-muted-foreground">(Optional)</span></FormLabel>
-              <FormControl>
-                <Textarea placeholder="Brief description of the gear..." {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+          <FormField
+            control={form.control}
+            name="category"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Category</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="Camera">Camera</SelectItem>
+                    <SelectItem value="Lens">Lens</SelectItem>
+                    <SelectItem value="Drone">Drone</SelectItem>
+                    <SelectItem value="Audio">Audio</SelectItem>
+                    <SelectItem value="Laptop">Laptop</SelectItem>
+                    <SelectItem value="Monitor">Monitor</SelectItem>
+                    <SelectItem value="Cables">Cables</SelectItem>
+                    <SelectItem value="Lighting">Lighting</SelectItem>
+                    <SelectItem value="Tripod">Tripod</SelectItem>
+                    <SelectItem value="Accessory">Accessory</SelectItem>
+                    <SelectItem value="Cars">Cars</SelectItem>
+                    {/* Add more categories */}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <FormField
-          control={form.control}
-          name="serial_number"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Serial Number</FormLabel>
-              <FormControl>
-                <Input placeholder="Unique serial number" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="purchase_date"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Purchase Date <span className="text-muted-foreground">(Optional)</span></FormLabel>
-              <FormControl>
-                <Input type="date" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="initial_condition"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Initial Condition</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., New, Good, Minor scratches" {...field} />
-              </FormControl>
-              <FormDescription>Describe the condition when added.</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="status"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Initial Status</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description <span className="text-muted-foreground">(Optional)</span></FormLabel>
                 <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select initial status" />
-                  </SelectTrigger>
+                  <Textarea placeholder="Brief description of the gear..." {...field} />
                 </FormControl>
-                <SelectContent>
-                  <SelectItem value="Available">Available</SelectItem>
-                  <SelectItem value="New">New</SelectItem>
-                  <SelectItem value="Damaged">Damaged</SelectItem>
-                  <SelectItem value="Under Repair">Under Repair</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <FormField
-          control={form.control}
-          name="image"
-          render={({ field: { value, onChange, ...fieldProps } }) => (
-            <FormItem>
-              <FormLabel>Gear Image</FormLabel>
-              <FormControl>
-                <Input
-                  {...fieldProps}
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => onChange(event.target.files)}
-                  className="cursor-pointer"
-                />
-              </FormControl>
-              <FormDescription>Upload an image of the gear (JPG, PNG).</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+          <FormField
+            control={form.control}
+            name="serial_number"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Serial Number</FormLabel>
+                <FormControl>
+                  <Input placeholder="Unique serial number" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <DialogFooter className="pt-4">
-          <DialogClose asChild>
-            <Button type="button" variant="outline" onClick={clearDraft}>
-              Cancel
+          <FormField
+            control={form.control}
+            name="purchase_date"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Purchase Date <span className="text-muted-foreground">(Optional)</span></FormLabel>
+                <FormControl>
+                  <Input type="date" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="initial_condition"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Initial Condition</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., New, Good, Minor scratches" {...field} />
+                </FormControl>
+                <FormDescription>Describe the condition when added.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="status"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Initial Status</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select initial status" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="Available">Available</SelectItem>
+                    <SelectItem value="New">New</SelectItem>
+                    <SelectItem value="Damaged">Damaged</SelectItem>
+                    <SelectItem value="Under Repair">Under Repair</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="image_url"
+            render={({ field: { value, onChange, ...fieldProps } }) => (
+              <FormItem>
+                <FormLabel>Gear Image</FormLabel>
+                <FormControl>
+                  <Input
+                    {...fieldProps}
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => onChange(event.target.files)}
+                    className="cursor-pointer"
+                  />
+                </FormControl>
+                <FormDescription>Upload an image of the gear (JPG, PNG).</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <DialogFooter className="pt-4">
+            <DialogClose asChild>
+              <Button type="button" variant="outline" onClick={clearDraft}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button type="submit" loading={isLoading} disabled={isLoading}>
+              Add Gear
             </Button>
-          </DialogClose>
-          <Button type="submit" loading={isLoading} disabled={isLoading}>
-            Add Gear
-          </Button>
-        </DialogFooter>
-      </form>
+          </DialogFooter>
+        </form>
+      </div>
     </Form>
   );
 }

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
     try {
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
         const { data, error } = await supabase.from('gears').select('*').eq('id', params.id).single();
         if (error) {
             if (error.code === 'PGRST116' || error.message?.toLowerCase().includes('row not found')) {
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
     try {
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
         const body = await request.json();
         const { data, error } = await supabase.from('gears').update(body).eq('id', params.id).select().single();
         if (error) throw error;
@@ -34,7 +34,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
     try {
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
         const { error } = await supabase.from('gears').delete().eq('id', params.id);
         if (error) throw error;
         return NextResponse.json({ success: true });

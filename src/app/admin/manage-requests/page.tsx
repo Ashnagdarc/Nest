@@ -426,6 +426,19 @@ function ManageRequestsContent() {
         }
       }
 
+      // Notify admins via API trigger
+      if (request) {
+        await fetch('/api/notifications/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'UPDATE',
+            table: 'gear_requests',
+            record: request,
+          }),
+        });
+      }
+
       // Fetch admin profile
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       const { data: adminProfile } = await supabase
