@@ -244,41 +244,43 @@ export default function AnnouncementsPage() {
                         </Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[525px]">
-                        <DialogHeader>
-                            <DialogTitle>Create New Announcement</DialogTitle>
-                            <DialogDescription>
-                                Write and post a new announcement for all users.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <form onSubmit={handleAddAnnouncement} className="space-y-4 py-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="announcement-title">Title</Label>
-                                <Input
-                                    id="announcement-title"
-                                    value={newTitle}
-                                    onChange={(e) => setNewTitle(e.target.value)}
-                                    placeholder="Announcement Title"
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="announcement-content">Content</Label>
-                                <Textarea
-                                    id="announcement-content"
-                                    value={newContent}
-                                    onChange={(e) => setNewContent(e.target.value)}
-                                    placeholder="Write your announcement here..."
-                                    rows={5}
-                                />
-                            </div>
-                            <DialogFooter>
-                                <DialogClose asChild>
-                                    <Button type="button" variant="outline">Cancel</Button>
-                                </DialogClose>
-                                <Button type="submit" disabled={loading}>
-                                    {loading ? 'Posting...' : 'Post Announcement'}
-                                </Button>
-                            </DialogFooter>
-                        </form>
+                        <div className="max-h-[100dvh] overflow-y-auto px-1 pb-32 sm:pb-8">
+                            <DialogHeader>
+                                <DialogTitle>Create New Announcement</DialogTitle>
+                                <DialogDescription>
+                                    Write and post a new announcement for all users.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <form onSubmit={handleAddAnnouncement} className="space-y-4 py-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="announcement-title">Title</Label>
+                                    <Input
+                                        id="announcement-title"
+                                        value={newTitle}
+                                        onChange={(e) => setNewTitle(e.target.value)}
+                                        placeholder="Announcement Title"
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="announcement-content">Content</Label>
+                                    <Textarea
+                                        id="announcement-content"
+                                        value={newContent}
+                                        onChange={(e) => setNewContent(e.target.value)}
+                                        placeholder="Write your announcement here..."
+                                        rows={5}
+                                    />
+                                </div>
+                                <DialogFooter>
+                                    <DialogClose asChild>
+                                        <Button type="button" variant="outline">Cancel</Button>
+                                    </DialogClose>
+                                    <Button type="submit" disabled={loading}>
+                                        {loading ? 'Posting...' : 'Post Announcement'}
+                                    </Button>
+                                </DialogFooter>
+                            </form>
+                        </div>
                     </DialogContent>
                 </Dialog>
             </div>

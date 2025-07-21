@@ -263,33 +263,50 @@ export default function ManageGearsPage() {
       // Generate a unique ID for the new gear
       const gearId = crypto.randomUUID();
 
+      // Log the file received from the form
+      console.log("[AddGear] Received image_url:", data.image_url);
+
       // Handle image upload if there is one
       let imageUrl = null;
-      if (data.image_url && data.image_url instanceof File) {
-        const fileExt = data.image_url.name.split('.').pop();
+      if (data.image_url instanceof File) {
+        const fileExt = data.image_url.name.split('.')?.pop();
         const filePath = `gears/${gearId}/${Date.now()}.${fileExt}`;
-
-        console.log("Uploading gear image to", filePath);
-
+        // Upload to the correct bucket: 'gear_images' (not 'gears')
         const { error: uploadError, data: uploadData } = await supabase.storage
-          .from('gears') // Make sure this bucket exists in your Supabase
+          .from('gear_images')
           .upload(filePath, data.image_url, { upsert: true });
-
-        if (uploadError) {
-          console.error("Error uploading gear image:", uploadError);
+        if (uploadError || !uploadData) {
+          console.error("[AddGear] Error uploading gear image:", uploadError);
           toast({
             title: "Warning",
             description: "Gear added but image upload failed. Try updating the gear later.",
             variant: "destructive",
           });
         } else {
-          // Get the public URL for the uploaded image
+          // Retrieve the public URL from the correct bucket
           const { data: urlData } = supabase.storage
-            .from('gears')
+            .from('gear_images')
             .getPublicUrl(uploadData.path);
-
-          imageUrl = urlData?.publicUrl || null;
-          console.log("Gear image URL:", imageUrl);
+          if (!urlData?.publicUrl) {
+            console.error("[AddGear] Error getting public URL for uploaded image.");
+            toast({
+              title: "Warning",
+              description: "Gear added but image URL could not be retrieved.",
+              variant: "destructive",
+            });
+          } else {
+            imageUrl = urlData.publicUrl;
+            console.log("[AddGear] Gear image URL:", imageUrl);
+          }
+        }
+      } else {
+        toast({
+          title: "No Image Provided",
+          description: "Gear will be added without an image. You can update it later.",
+          variant: "destructive",
+        });
+        if (data.image_url !== undefined) {
+          console.warn("[AddGear] image_url is not a File:", data.image_url);
         }
       }
 
@@ -299,22 +316,35 @@ export default function ManageGearsPage() {
         name: data.name,
         category: data.category,
         description: data.description,
-        serial_number: data.serial_number, // Use serial_number field
+        serial_number: data.serial_number,
         status: data.status,
         owner_id: user.id,
         created_at: new Date().toISOString(),
         image_url: imageUrl,
       };
+      console.log("[AddGear] Inserting gear:", gearToInsert);
 
-      console.log("Adding gear:", gearToInsert);
-
-      const { error } = await supabase
+      const { error: insertError } = await supabase
         .from('gears')
         .insert([gearToInsert]);
 
-      if (error) {
-        console.error("Error adding gear:", error);
-        throw error;
+      if (insertError) {
+        if (insertError instanceof Error) {
+          console.error("Error adding gear:", insertError);
+          toast({
+            title: "Error",
+            description: insertError.message || "Failed to add gear",
+            variant: "destructive",
+          });
+        } else {
+          console.error("Error adding gear:", insertError);
+          toast({
+            title: "Error",
+            description: "Failed to add gear",
+            variant: "destructive",
+          });
+        }
+        throw insertError;
       }
 
       // Create notification
@@ -351,13 +381,22 @@ export default function ManageGearsPage() {
           }
         })
       });
-    } catch (error: any) {
-      console.error("Error adding gear:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add gear",
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Error adding gear:", error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to add gear",
+          variant: "destructive",
+        });
+      } else {
+        console.error("Error adding gear:", error);
+        toast({
+          title: "Error",
+          description: "Failed to add gear",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -375,79 +414,52 @@ export default function ManageGearsPage() {
         });
         return;
       }
-
-      console.log("Updating gear:", gear.id, "with data:", updates);
-
+      console.log("[UpdateGear] Received image_url:", updates.image_url);
       // Handle image upload if there's a new file
-      let imageUrl = gear.image_url; // Start with current URL
-      if (updates.image_url && updates.image_url instanceof File) {
-        // Remove old image if it exists
-        if (gear.image_url) {
-          try {
-            const urlParts = new URL(gear.image_url);
-            const pathSegments = urlParts.pathname.split('/');
-            const bucketIndex = pathSegments.findIndex(segment => segment === 'gears');
-            if (bucketIndex !== -1) {
-              const oldStoragePath = pathSegments.slice(bucketIndex + 1).join('/');
-              console.log("Attempting to remove old gear image:", oldStoragePath);
-              const { error: removeError } = await supabase.storage
-                .from('gears')
-                .remove([oldStoragePath]);
-              if (removeError) {
-                console.error("Error removing old image:", removeError);
-                // Continue with upload even if removal fails
-              }
-            }
-          } catch (e) {
-            console.error("Error parsing old image URL:", e);
-          }
-        }
-
-        // Upload new image
-        const fileExt = updates.image_url.name.split('.').pop();
+      let imageUrl = gear.image_url;
+      if (updates.image_url instanceof File) {
+        const fileExt = updates.image_url.name.split('.')?.pop();
         const filePath = `gears/${gear.id}/${Date.now()}.${fileExt}`;
-
-        console.log("Uploading new gear image to", filePath);
-
+        // Upload to the correct bucket: 'gear_images' (not 'gears')
         const { error: uploadError, data: uploadData } = await supabase.storage
-          .from('gears')
+          .from('gear_images')
           .upload(filePath, updates.image_url, { upsert: true });
-
-        if (uploadError) {
-          console.error("Error uploading gear image:", uploadError);
+        if (uploadError || !uploadData) {
+          console.error("[UpdateGear] Error uploading gear image:", uploadError);
           toast({
             title: "Warning",
             description: "Gear updated but image upload failed.",
             variant: "destructive",
           });
         } else {
-          // Get the public URL for the uploaded image
+          // Retrieve the public URL from the correct bucket
           const { data: urlData } = supabase.storage
-            .from('gears')
+            .from('gear_images')
             .getPublicUrl(uploadData.path);
-
-          imageUrl = urlData?.publicUrl || null;
-          console.log("New gear image URL:", imageUrl);
+          if (!urlData?.publicUrl) {
+            console.error("[UpdateGear] Error getting public URL for uploaded image.");
+            toast({
+              title: "Warning",
+              description: "Gear updated but image URL could not be retrieved.",
+              variant: "destructive",
+            });
+          } else {
+            imageUrl = urlData.publicUrl;
+            console.log("[UpdateGear] New gear image URL:", imageUrl);
+          }
+        }
+      } else {
+        if (updates.image_url !== undefined) {
+          console.warn("[UpdateGear] image_url is not a File:", updates.image_url);
         }
       }
-
       const updateData = {
         ...updates,
         updated_at: new Date().toISOString(),
         image_url: imageUrl,
         ...(updates.serial_number ? { serial_number: updates.serial_number } : {})
       };
-
-      // Remove the image File object from the update data
-      // as we've already processed it and stored the URL
-      if ('image_url' in updateData) {
-        delete updateData.image_url;
-      }
-
-      // Remove any serial field if it was accidentally included
-      if ('serial_number' in updateData) {
-        delete updateData.serial_number;
-      }
+      console.log("[UpdateGear] Updating gear:", updateData);
 
       const { error } = await supabase
         .from('gears')
@@ -489,13 +501,22 @@ export default function ManageGearsPage() {
           }
         })
       });
-    } catch (error: any) {
-      console.error("Error updating gear:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update gear",
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Error updating gear:", error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to update gear",
+          variant: "destructive",
+        });
+      } else {
+        console.error("Error updating gear:", error);
+        toast({
+          title: "Error",
+          description: "Failed to update gear",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -544,12 +565,21 @@ export default function ManageGearsPage() {
 
       return true;
     } catch (error) {
-      console.error("Error fixing database permissions:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update database permissions",
-        variant: "destructive",
-      });
+      if (error instanceof Error) {
+        console.error("Error fixing database permissions:", error);
+        toast({
+          title: "Error",
+          description: "Failed to update database permissions",
+          variant: "destructive",
+        });
+      } else {
+        console.error("Error fixing database permissions:", error);
+        toast({
+          title: "Error",
+          description: "Failed to update database permissions",
+          variant: "destructive",
+        });
+      }
       return false;
     } finally {
       setLoading(false);
@@ -705,14 +735,22 @@ export default function ManageGearsPage() {
       // Refresh gear list
       setTimeout(() => fetchGears(), 1000);
 
-    } catch (error: any) {
-      console.error("Error deleting gear:", error);
-
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete gear",
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Error deleting gear:", error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to delete gear",
+          variant: "destructive",
+        });
+      } else {
+        console.error("Error deleting gear:", error);
+        toast({
+          title: "Error",
+          description: "Failed to delete gear",
+          variant: "destructive",
+        });
+      }
 
       // Refresh data to ensure UI is in sync with backend
       fetchGears();
@@ -863,7 +901,7 @@ export default function ManageGearsPage() {
       });
 
       setSelectedGearIds([]);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Batch delete error:", error);
       toast({
         title: 'Batch Delete Error',
@@ -918,7 +956,7 @@ export default function ManageGearsPage() {
       });
 
       setSelectedGearIds([]);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Batch update error:", error);
       toast({
         title: 'Batch Update Error',
@@ -983,7 +1021,7 @@ export default function ManageGearsPage() {
         console.log(`Fetched ${retryData?.length || 0} maintenance records on retry`);
         setMaintenanceRecords(retryData || []);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // For any uncaught errors, just log them without showing a toast
       console.log("Exception in maintenance records fetch:", err.message || "Unknown error");
     } finally {
@@ -1138,7 +1176,7 @@ export default function ManageGearsPage() {
           })
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.log("Exception adding maintenance:", err.message || "Unknown error");
       toast({
         title: 'System Error',
@@ -1281,13 +1319,22 @@ export default function ManageGearsPage() {
       });
 
       setIsEditModalOpen(false);
-    } catch (error: any) {
-      console.error("Error updating gear:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update gear",
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Error updating gear:", error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to update gear",
+          variant: "destructive",
+        });
+      } else {
+        console.error("Error updating gear:", error);
+        toast({
+          title: "Error",
+          description: "Failed to update gear",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }

@@ -91,6 +91,19 @@ export async function POST(request: NextRequest) {
             );
         }
 
+≈        // Notify admins via API trigger
+        if (data && data[0]) {
+            await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifications/trigger`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'INSERT',
+                    table: 'checkins',
+                    record: data[0],
+                }),
+            });
+        }
+
         // Update gear status to Available
         const { error: gearError } = await supabase
             .from('gears')
