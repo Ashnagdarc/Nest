@@ -66,17 +66,31 @@ export function UsersManagement() {
         setActionLoading(user.id);
         try {
             const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' });
-            const resJson = await res.json();
+            let resJson: unknown = null;
+            try {
+                const contentType = res.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const text = await res.text();
+                    resJson = text ? JSON.parse(text) : {};
+                } else {
+                    resJson = {};
+                }
+            } catch {
+                resJson = {};
+            }
             console.log('API response (Delete):', resJson, JSON.stringify(resJson));
-            if (!resJson.success) throw new Error(resJson.error);
+            if (!resJson || typeof resJson !== 'object' || !('success' in resJson) || !(resJson as { success?: boolean }).success) {
+                const errorMsg = (resJson && typeof resJson === 'object' && 'error' in resJson && typeof (resJson as { error?: string }).error === 'string') ? (resJson as { error: string }).error : 'Failed to delete user';
+                throw new Error(errorMsg);
+            }
             setUsers(prev => prev.filter(u => u.id !== user.id));
             toast({ title: 'User deleted', description: `${user.full_name} has been deleted.` });
-        } catch (e) {
+        } catch (e: unknown) {
             let message = 'Unknown error';
             if (e instanceof Error) message = e.message;
             else if (typeof e === 'object' && e !== null) {
-                if ('error' in e && typeof (e as any).error === 'string') message = (e as any).error;
-                else if ('message' in e && typeof (e as any).message === 'string') message = (e as any).message;
+                if ('error' in e && typeof (e as { error?: string }).error === 'string') message = (e as { error: string }).error;
+                else if ('message' in e && typeof (e as { message?: string }).message === 'string') message = (e as { message: string }).message;
                 else message = JSON.stringify(e);
             } else if (typeof e === 'string') message = e;
             console.error('Action error:', e);
