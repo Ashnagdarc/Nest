@@ -38,6 +38,7 @@ const gearSchema = z.object({
             if (val instanceof File) return val;
             return undefined;
         }),
+    quantity: z.coerce.number().int().min(1, { message: "Quantity must be at least 1." }).default(1),
 });
 
 type GearFormValues = z.infer<typeof gearSchema>;
@@ -63,6 +64,7 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
             status: gear?.status || "Available",
             purchase_date: gear?.purchase_date || "",
             condition: gear?.condition || "",
+            quantity: gear?.quantity || 1,
         },
     });
 
@@ -107,6 +109,7 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
                 purchase_date: gear.purchase_date || "",
                 condition: gear.condition || "",
                 image_url: undefined,
+                quantity: gear.quantity || 1,
             });
             setImagePreview(gear.image_url || null);
         }
@@ -260,6 +263,21 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
                                     />
                                 </FormControl>
                                 <FormDescription>Describe the current physical condition of the gear.</FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name="quantity"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Quantity</FormLabel>
+                                <FormControl>
+                                    <Input type="number" min={1} step={1} {...field} />
+                                </FormControl>
+                                <FormDescription>How many units of this gear do you have?</FormDescription>
                                 <FormMessage />
                             </FormItem>
                         )}

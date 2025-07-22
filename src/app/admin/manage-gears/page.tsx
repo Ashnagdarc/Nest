@@ -1595,6 +1595,7 @@ export default function ManageGearsPage() {
                     <TableHead>Name</TableHead>
                     <TableHead className="hidden md:table-cell">Category</TableHead>
                     <TableHead className="hidden md:table-cell">Status</TableHead>
+                    <TableHead className="hidden md:table-cell">Quantity</TableHead>
                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1672,6 +1673,13 @@ export default function ManageGearsPage() {
                         >
                           {gear.status}
                         </span>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-center">
+                        {typeof gear.available_quantity === 'number' && typeof gear.quantity === 'number'
+                          ? `${gear.available_quantity} / ${gear.quantity}`
+                          : typeof gear.quantity === 'number'
+                            ? gear.quantity
+                            : '—'}
                       </TableCell>
                       <TableCell className="text-right p-1" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">

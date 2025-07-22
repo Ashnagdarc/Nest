@@ -11,7 +11,7 @@ import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from 
 import AddGearForm from "@/components/admin/add-gear-form";
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Table, TableHead, TableRow, TableCell, TableBody } from '@/components/ui/table';
+import { Table, TableHead, TableRow, TableCell, TableBody, TableHeader } from '@/components/ui/table';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import BulkActionsToolbar from '@/components/admin/analytics/BulkActionsToolbar';
 import AdvancedSearchBar from '@/components/admin/analytics/AdvancedSearchBar';
@@ -131,7 +131,7 @@ function OverdueGearTable() {
                     onAction={handleBulkAction}
                 />
                 <Table>
-                    <TableHead>
+                    <TableHeader>
                         <TableRow>
                             <TableHead>
                                 <input
@@ -147,7 +147,7 @@ function OverdueGearTable() {
                             <TableHead>Email</TableHead>
                             <TableHead>Due Date</TableHead>
                         </TableRow>
-                    </TableHead>
+                    </TableHeader>
                     <TableBody>
                         {selectionData.map(row => (
                             <TableRow key={row.request_id} className={isSelected(row.id) ? 'bg-orange-50 dark:bg-orange-900/10' : ''}>
@@ -292,8 +292,8 @@ export default function AdminDashboardPage() {
     }, []);
 
     // Compute stats
-    const totalEquipment = gears.length;
-    const availableEquipment = gears.filter((g: Gear) => g.status === "Available").length;
+    const totalEquipment = gears.reduce((sum, g) => sum + (g.quantity ?? 1), 0);
+    const availableEquipment = gears.reduce((sum, g) => sum + (g.available_quantity ?? 0), 0);
     const checkedOutEquipment = gears.filter((g: Gear) => g.status === "Checked Out").length;
     const underRepairEquipment = gears.filter((g: Gear) => g.status === "Under Repair").length;
     const utilizationRate = totalEquipment > 0 ? Math.round((checkedOutEquipment / totalEquipment) * 100) : 0;

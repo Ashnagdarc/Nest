@@ -222,7 +222,8 @@ export default function ManageCheckinsPage() {
             checked_out_to: null,
             current_request_id: null,
             condition: c.condition,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
+            available_quantity: supabase.raw('available_quantity + 1')
           })
           .eq('id', c.gearId);
         // Log activity

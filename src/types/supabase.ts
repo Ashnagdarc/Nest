@@ -155,6 +155,10 @@ export interface Database {
                     created_at: string;
                     /** Timestamp when asset record was last updated */
                     updated_at: string;
+                    /** Total quantity of this gear */
+                    quantity?: number;
+                    /** Number of available units of this gear */
+                    available_quantity?: number;
                 };
                 Insert: {
                     id?: string;

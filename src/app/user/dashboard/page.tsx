@@ -42,6 +42,7 @@ interface Gear {
   due_date: string | null;
   status?: string;
   checked_out_to?: string; // Added for user-specific stats
+  available_quantity?: number;
 }
 
 /**
@@ -109,7 +110,7 @@ export default function UserDashboardPage() {
       setUserStats(prev => [
         { ...prev[0], value: checkedOutGears.length },
         { ...prev[1], value: overdueGears.length },
-        { ...prev[2], value: available.length }
+        { ...prev[2], value: available.reduce((sum, g) => sum + (g.available_quantity ?? 0), 0) }
       ]);
     } catch {
       // error handling (toast/log) only
