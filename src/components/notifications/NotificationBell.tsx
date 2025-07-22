@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from "date-fns";
 import { useState } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 
 const CATEGORY_TABS = [
     { key: 'all', label: 'All' },
@@ -26,6 +27,8 @@ export function NotificationBell() {
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('all');
+    const router = useRouter();
+    const pathname = usePathname();
 
     // Filter notifications by category
     const filteredNotifications = activeTab === 'all'
@@ -85,43 +88,107 @@ export function NotificationBell() {
                             No notifications
                         </div>
                     ) : (
-                        filteredNotifications.map((notification) => (
-                            <DropdownMenuItem
-                                key={notification.id}
-                                className={`flex flex-col items-start p-4 cursor-pointer transition-colors ${!notification.is_read ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-accent'}`}
-                                onClick={() => markAsRead(notification.id)}
-                            >
-                                <div className="flex items-start justify-between w-full">
-                                    <div>
-                                        <p className={`font-medium ${!notification.is_read ? 'text-primary' : ''}`}>
-                                            {notification.title}
-                                        </p>
-                                        <p className="text-sm text-muted-foreground">
-                                            {notification.message}
-                                        </p>
-                                        {/* Show metadata if available */}
-                                        {notification.metadata && (
-                                            <div className="text-xs mt-1 text-muted-foreground">
-                                                {notification.metadata.gear_id && <span>Gear ID: {notification.metadata.gear_id} </span>}
-                                                {notification.metadata.request_id && <span>Request ID: {notification.metadata.request_id} </span>}
-                                                {notification.metadata.announcement_id && <span>Announcement ID: {notification.metadata.announcement_id} </span>}
-                                                {/* Add more as needed */}
-                                            </div>
+                        filteredNotifications.map((notification) => {
+                            // Robust null checks for all fields
+                            const title = notification.title || 'Untitled';
+                            const message = notification.message || '';
+                            const createdAt = notification.created_at ? new Date(notification.created_at) : null;
+                            const metadata = notification.metadata || {};
+                            let timeAgo = '';
+                            try {
+                                if (createdAt && !isNaN(createdAt.getTime())) {
+                                    timeAgo = formatDistanceToNow(createdAt, { addSuffix: true });
+                                }
+                            } catch {
+                                timeAgo = '';
+                            }
+                            // Determine notifications page route
+                            let target = null;
+                            // Prefer explicit link
+                            if (notification.link) {
+                                target = notification.link;
+                            } else if (metadata && metadata.request_id) {
+                                target = pathname?.includes('/admin')
+                                    ? `/admin/manage-requests/${metadata.request_id}`
+                                    : `/user/my-requests/${metadata.request_id}`;
+                            } else if (metadata && metadata.gear_id) {
+                                target = pathname?.includes('/admin')
+                                    ? `/admin/manage-gears?gear=${metadata.gear_id}`
+                                    : `/user/browse?gear=${metadata.gear_id}`;
+                            } else if (metadata && metadata.announcement_id) {
+                                target = pathname?.includes('/admin')
+                                    ? `/admin/announcements?announcement=${metadata.announcement_id}`
+                                    : `/user/announcements?announcement=${metadata.announcement_id}`;
+                            }
+                            // Fallback to notifications page
+                            if (!target) {
+                                if (pathname?.includes('/admin')) target = '/admin/notifications';
+                                else if (pathname?.includes('/user')) target = '/user/notifications';
+                                else target = '/notifications';
+                            }
+                            return (
+                                <DropdownMenuItem
+                                    key={notification.id || Math.random()}
+                                    className={`flex flex-col items-start p-4 cursor-pointer transition-colors ${!notification.is_read ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-accent'}`}
+                                    onClick={() => {
+                                        if (notification.id) markAsRead(notification.id);
+                                        let target = null;
+                                        // Prefer explicit link
+                                        if (notification.link) {
+                                            target = notification.link;
+                                        } else if (metadata && metadata.request_id) {
+                                            target = pathname?.includes('/admin')
+                                                ? `/admin/manage-requests/${metadata.request_id}`
+                                                : `/user/my-requests/${metadata.request_id}`;
+                                        } else if (metadata && metadata.gear_id) {
+                                            target = pathname?.includes('/admin')
+                                                ? `/admin/manage-gears?gear=${metadata.gear_id}`
+                                                : `/user/browse?gear=${metadata.gear_id}`;
+                                        } else if (metadata && metadata.announcement_id) {
+                                            target = pathname?.includes('/admin')
+                                                ? `/admin/announcements?announcement=${metadata.announcement_id}`
+                                                : `/user/announcements?announcement=${metadata.announcement_id}`;
+                                        }
+                                        // Fallback to notifications page
+                                        if (!target) {
+                                            if (pathname?.includes('/admin')) target = '/admin/notifications';
+                                            else if (pathname?.includes('/user')) target = '/user/notifications';
+                                            else target = '/notifications';
+                                        }
+                                        console.log('[NotificationBell] Clicked notification:', {
+                                            notification,
+                                            target,
+                                            pathname
+                                        });
+                                        if (target !== pathname) {
+                                            router.push(target);
+                                        }
+                                        setIsOpen(false);
+                                    }}
+                                >
+                                    <div className="flex items-start justify-between w-full">
+                                        <div>
+                                            <p className={`font-medium ${!notification.is_read ? 'text-primary' : ''}`}>{title}</p>
+                                            {message && <p className="text-sm text-muted-foreground">{message}</p>}
+                                            {/* Show metadata if available */}
+                                            {metadata && typeof metadata === 'object' && (
+                                                <div className="text-xs mt-1 text-muted-foreground">
+                                                    {metadata.gear_id && <span>Gear ID: {metadata.gear_id} </span>}
+                                                    {metadata.request_id && <span>Request ID: {metadata.request_id} </span>}
+                                                    {metadata.announcement_id && <span>Announcement ID: {metadata.announcement_id} </span>}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {!notification.is_read && (
+                                            <Badge variant="secondary" className="ml-2 bg-primary text-white">
+                                                New
+                                            </Badge>
                                         )}
                                     </div>
-                                    {!notification.is_read && (
-                                        <Badge variant="secondary" className="ml-2 bg-primary text-white">
-                                            New
-                                        </Badge>
-                                    )}
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {formatDistanceToNow(new Date(notification.created_at), {
-                                        addSuffix: true,
-                                    })}
-                                </p>
-                            </DropdownMenuItem>
-                        ))
+                                    {timeAgo && <p className="text-xs text-muted-foreground mt-1">{timeAgo}</p>}
+                                </DropdownMenuItem>
+                            );
+                        })
                     )}
                 </ScrollArea>
             </DropdownMenuContent>
