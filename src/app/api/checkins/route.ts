@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-≈        // Notify admins via API trigger
+        // Notify admins via API trigger
         if (data && data[0]) {
             await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifications/trigger`, {
                 method: 'POST',

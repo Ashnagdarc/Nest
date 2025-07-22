@@ -336,6 +336,23 @@ function ManageRequestsContent() {
       dueDate.setDate(dueDate.getDate() + parseInt(request.expected_duration || '7'));
       const formattedDueDate = dueDate.toISOString();
 
+      // Fetch current available_quantity for each gear
+      const { data: gearsData, error: gearsError } = await supabase
+        .from('gears')
+        .select('id, available_quantity')
+        .in('id', gear_ids);
+      if (gearsError) throw gearsError;
+      if (!gearsData || gearsData.some(g => g.available_quantity <= 0)) {
+        throw new Error('One or more gears are not available for checkout.');
+      }
+      // Decrement available_quantity for each gear
+      for (const gear of gearsData) {
+        await supabase
+          .from('gears')
+          .update({ available_quantity: gear.available_quantity - 1 })
+          .eq('id', gear.id);
+      }
+
       // Update gear status to Checked Out
       const { error: gearStatusError } = await supabase
         .from('gears')

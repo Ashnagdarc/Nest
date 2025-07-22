@@ -14,7 +14,7 @@ export async function POST(req: Request) {
         const { level, message, context, metadata } = body;
 
         // Add request headers to metadata for debugging
-        const headersList = headers();
+        const headersList = await headers();
         const userAgent = headersList.get('user-agent');
         const timestamp = new Date().toISOString();
 

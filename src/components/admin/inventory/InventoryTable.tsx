@@ -17,6 +17,8 @@ interface InventoryItem {
     category?: string;
     status: string;
     serial_number?: string;
+    quantity?: number;
+    available_quantity?: number;
 }
 
 interface InventoryTableProps {
@@ -43,6 +45,8 @@ export function InventoryTable({ items, onViewItem, onEditItem }: InventoryTable
                         <TableHead>Category</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Serial Number</TableHead>
+                        <TableHead>Total Quantity</TableHead>
+                        <TableHead>Available</TableHead>
                         <TableHead>Actions</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -55,6 +59,8 @@ export function InventoryTable({ items, onViewItem, onEditItem }: InventoryTable
                                 <EquipmentStatusBadge status={item.status} />
                             </TableCell>
                             <TableCell>{item.serial_number || 'N/A'}</TableCell>
+                            <TableCell>{item.quantity ?? 'N/A'}</TableCell>
+                            <TableCell>{item.available_quantity ?? 'N/A'}</TableCell>
                             <TableCell>
                                 <div className="flex gap-2">
                                     <Button

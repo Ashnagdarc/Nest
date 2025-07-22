@@ -23,8 +23,8 @@ export function useDashboardStats(
 ) {
     const stats = useMemo((): EnhancedDashboardStats => {
         // Equipment Statistics
-        const totalEquipment = gears.length
-        const availableEquipment = gears.filter(gear => gear.status === 'Available').length
+        const totalEquipment = gears.reduce((sum, gear) => sum + (gear.quantity ?? 1), 0)
+        const availableEquipment = gears.reduce((sum, gear) => sum + (gear.available_quantity ?? 0), 0)
         const checkedOutEquipment = gears.filter(gear => gear.status === 'Checked Out').length
         const underRepairEquipment = gears.filter(gear => gear.status === 'Under Repair').length
         const retiredEquipment = gears.filter(gear => gear.status === 'Retired').length

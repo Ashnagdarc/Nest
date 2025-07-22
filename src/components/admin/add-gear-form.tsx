@@ -16,11 +16,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog"; // Import for close button
@@ -38,6 +33,7 @@ const gearSchema = z.object({
   image_url: z.instanceof(FileList).optional().transform(val =>
     val && val.length > 0 ? Array.from(val)[0] : undefined
   ),
+  quantity: z.coerce.number().int().min(1, { message: "Quantity must be at least 1." }).default(1),
 });
 
 type GearFormValues = z.infer<typeof gearSchema>;
@@ -63,6 +59,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
       initial_condition: "",
       status: "Available",
       image_url: undefined,
+      quantity: 1,
     },
   });
 
@@ -73,7 +70,9 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
       try {
         const values = JSON.parse(draft);
         form.reset({ ...form.getValues(), ...values });
-      } catch { }
+      } catch {
+        // ignore parse errors
+      }
     }
   }, [form]);
 
@@ -95,16 +94,12 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
     console.log("Form data submitted:", data);
 
     // TODO: Add actual API call to save the gear data
-    // Handle image upload if file exists (data.imageUrl[0])
-
     // Simulate API call delay
     await new Promise((resolve) => setTimeout(resolve, 1000));
-
     toast({
       title: "Gear Added",
       description: `${data.name} has been added successfully.`,
     });
-
     onSubmit(data); // Now passes image_url as the file
     form.reset(); // Reset form after successful submission
     clearDraft();
@@ -246,12 +241,11 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
           <FormField
             control={form.control}
             name="image_url"
-            render={({ field: { value, onChange, ...fieldProps } }) => (
+            render={({ field: { onChange } }) => (
               <FormItem>
                 <FormLabel>Gear Image</FormLabel>
                 <FormControl>
                   <Input
-                    {...fieldProps}
                     type="file"
                     accept="image/*"
                     onChange={(event) => onChange(event.target.files)}
@@ -259,6 +253,21 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
                   />
                 </FormControl>
                 <FormDescription>Upload an image of the gear (JPG, PNG).</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="quantity"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Quantity</FormLabel>
+                <FormControl>
+                  <Input type="number" min={1} step={1} {...field} />
+                </FormControl>
+                <FormDescription>How many units of this gear do you have?</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
