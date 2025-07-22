@@ -133,182 +133,39 @@ export default function ReportsPage() {
         throw new Error('Invalid date range');
       }
 
-      console.log('Fetching popular gears for date range:', {
-        from: dateRange.from.toISOString(),
-        to: dateRange.to.toISOString()
-      });
-
-      // First try using the RPC function
-      const { data: rpcData, error: rpcError } = await supabase
-        .rpc('get_popular_gears', {
-          start_date: dateRange.from.toISOString(),
-          end_date: dateRange.to.toISOString(),
-          limit_count: 10
-        });
-
-      if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
-        console.log('Successfully fetched popular gears via RPC', rpcData);
-        return rpcData.map(item => ({
-          name: item.name || 'Unknown Gear',
-          fullName: item.full_name || 'Unknown Gear',
-          count: Number(item.request_count) || 0
-        }));
-      }
-
-      // If RPC fails or returns empty, try the direct query approach
-      console.warn('RPC method did not return data, trying direct query:', rpcError);
-
-      // Log more detailed error for debugging
-      if (rpcError) {
-        console.error('RPC Error Details:', {
-          message: rpcError.message,
-          code: rpcError.code,
-          details: rpcError.details,
-          hint: rpcError.hint
-        });
-      }
-
-      // First check if gear_requests table has gear_ids field or gears join capability
-      const { data: tableInfo, error: tableError } = await supabase
-        .from('gear_requests')
+      // Use the new view to get all gear requests with their gears
+      const { data: requestData, error: queryError } = await supabase
+        .from('gear_requests_with_gears')
         .select('*')
-        .limit(1);
-
-      if (tableError) {
-        console.error('Error checking gear_requests table:', tableError);
-        throw new Error(`Failed to check gear_requests table: ${tableError.message}`);
-      }
-
-      const hasGearIds = tableInfo && tableInfo[0] && 'gear_ids' in tableInfo[0];
-      const directQuery = hasGearIds
-        ? // Use gear_ids array if it exists
-        supabase
-          .from('gear_requests')
-          .select(`
-              id,
-              gear_ids
-            `)
-          .gte('created_at', dateRange.from.toISOString())
-          .lte('created_at', dateRange.to.toISOString())
-        : // Otherwise try to use a join or relationship
-        supabase
-          .from('gear_requests')
-          .select(`
-          id,
-          gears (
-            id,
-            name,
-            full_name
-          )
-        `)
-          .gte('created_at', dateRange.from.toISOString())
-          .lte('created_at', dateRange.to.toISOString());
-
-      const { data: requestData, error: queryError } = await directQuery;
+        .gte('request_created_at', dateRange.from.toISOString())
+        .lte('request_created_at', dateRange.to.toISOString());
 
       if (queryError) {
-        console.error('Query Error Details:', {
-          message: queryError.message,
-          code: queryError.code,
-          details: queryError.details,
-          hint: queryError.hint
-        });
-        throw new Error(`Failed to query gear requests: ${queryError.message}`);
+        console.error('Query Error Details:', queryError);
+        throw new Error(`Failed to query gear_requests_with_gears: ${queryError.message}`);
       }
 
       if (!Array.isArray(requestData)) {
-        throw new Error('Invalid response format: expected an array of gear requests');
+        throw new Error('Invalid response format: expected an array of gear requests with gears');
       }
 
-      // Process and aggregate the gear usage data
+      // Aggregate gear usage by gear_id
       const gearUsage = new Map<string, { name: string; fullName: string; count: number }>();
+      requestData.forEach(row => {
+        const key = row.gear_id;
+        const name = row.gear_name || 'Unknown Gear';
+        const fullName = row.gear_name || 'Unknown Gear';
+        const existing = gearUsage.get(key) || { name, fullName, count: 0 };
+        gearUsage.set(key, { ...existing, count: existing.count + 1 });
+      });
 
-      if (hasGearIds) {
-        // Process gear_ids array approach
-        const gearIds = requestData.flatMap(request => {
-          // Use type assertion to handle the gear_ids property
-          const gearRequest = request as { gear_ids?: string[] };
-          return gearRequest.gear_ids || [];
-        });
-
-        if (gearIds.length > 0) {
-          // Fetch gear details for all the unique IDs
-          const uniqueIds = [...new Set(gearIds)];
-          const { data: gearsData, error: gearsError } = await supabase
-            .from('gears')
-            .select('id, name, full_name')
-            .in('id', uniqueIds);
-
-          if (gearsError) {
-            throw new Error(`Failed to fetch gear details: ${gearsError.message}`);
-          }
-
-          // Create a lookup map for gear details
-          const gearDetailsMap = new Map();
-          gearsData?.forEach((gear: { id: string; name: string; full_name?: string | null }) => {
-            gearDetailsMap.set(gear.id, {
-              name: gear.name,
-              fullName: gear.full_name || gear.name
-            });
-          });
-
-          // Count occurrences of each gear ID
-          gearIds.forEach(gearId => {
-            if (!gearId) return;
-            const details = gearDetailsMap.get(gearId) || { name: 'Unknown', fullName: 'Unknown Gear' };
-            const existing = gearUsage.get(gearId) || {
-              name: details.name,
-              fullName: details.fullName,
-              count: 0
-            };
-            gearUsage.set(gearId, { ...existing, count: existing.count + 1 });
-          });
-        }
-      } else {
-        // Process using gears relationship approach
-        requestData.forEach((request: GearRequest) => {
-          if (request.gears) {
-            // Process array of gears if gears is an array
-            if (Array.isArray(request.gears)) {
-              request.gears.forEach((gear: Gear) => {
-                if (gear && typeof gear === 'object' && 'id' in gear && 'name' in gear) {
-                  const key = String(gear.id);
-                  const name = String(gear.name);
-                  const fullName = gear.full_name ? String(gear.full_name) : name;
-
-                  const existing = gearUsage.get(key) || {
-                    name,
-                    fullName,
-                    count: 0
-                  };
-                  gearUsage.set(key, { ...existing, count: existing.count + 1 });
-                }
-              });
-            }
-            // Otherwise just log that we got an unexpected format
-            else {
-              console.warn('Unexpected gears format in request:', request.id);
-            }
-          }
-        });
-      }
-
-      const result = Array.from(gearUsage.values())
+      return Array.from(gearUsage.values())
         .sort((a, b) => b.count - a.count)
         .map(item => ({
           name: item.name,
           fullName: item.fullName,
           count: item.count
         }));
-
-      if (result.length === 0) {
-        console.info('No popular gears found in the selected date range');
-      } else {
-        console.log(`Found ${result.length} popular gears`, result);
-      }
-
-      return result;
-
     } catch (error) {
       console.error('Error fetching popular gears:', error);
       return [];
