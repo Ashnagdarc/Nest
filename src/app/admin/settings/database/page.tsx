@@ -16,7 +16,7 @@ export default function DatabaseSetupPage() {
     const [dbStatus, setDbStatus] = useState<{
         isComplete: boolean;
         missingTables: string[];
-        error?: any;
+        error?: Error;
     }>({
         isComplete: false,
         missingTables: []

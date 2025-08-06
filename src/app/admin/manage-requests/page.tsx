@@ -478,7 +478,7 @@ function ManageRequestsContent() {
         .from('gears')
         .select('name')
         .in('id', gear_ids);
-      const gearNames = gearData ? gearData.map((g: any) => g.name) : [];
+      const gearNames = gearData ? gearData.map((g: { name: string }) => g.name) : [];
       // Send Google Chat notification for approval
       await fetch('/api/notifications/google-chat', {
         method: 'POST',
@@ -499,7 +499,7 @@ function ManageRequestsContent() {
       // Refresh the requests list
       fetchRequests();
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error approving request:', error);
       showSuccessFeedback({
         toast: {
@@ -623,7 +623,7 @@ function ManageRequestsContent() {
           .from('gears')
           .select('name')
           .in('id', requestDetails.gear_ids || []);
-        const gearNames = gearData ? gearData.map((g: any) => g.name) : [];
+        const gearNames = gearData ? gearData.map((g: { name: string }) => g.name) : [];
         // Send Google Chat notification for rejection
         await fetch('/api/notifications/google-chat', {
           method: 'POST',
@@ -662,7 +662,7 @@ function ManageRequestsContent() {
       // Refresh requests
       await fetchRequests();
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error rejecting request:', error);
       showSuccessFeedback({
         toast: {

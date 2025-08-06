@@ -1,32 +1,68 @@
 #!/bin/bash
 
 # Nest by Eden Oasis development setup script
-# Run this script manually when you need to set up your development environment
+# This script provides a guided setup for your development environment.
 
-# Next.js setup
-npx create-next-app@latest . --ts --tailwind --eslint --app --src-dir
-npm install resend @supabase/supabase-js @supabase/auth-helpers-nextjs postgres://$POSTGRES_URL
+# --- Helper Functions ---
+function print_header() {
+  echo "=================================================="
+  echo "$1"
+  echo "=================================================="
+}
 
-# Supabase functions
-supabase functions deploy get_popular_gears --project-ref lkgxzrvcozfxydpmbtqq
-cd /Users/gfx2edenoasis/Downloads/Development/GearFlow && npx ts-node scripts/verify-schema.ts
-cd /Users/gfx2edenoasis/Downloads/Development/GearFlow && npm install --save-dev ts-node @types/node dotenv @supabase/supabase-js
-cd /Users/gfx2edenoasis/Downloads/Development/GearFlow && npx ts-node scripts/db-structures.ts
-npm install --save-dev dotenv @supabase/supabase-js
-cd npx ts-node scripts/cleanup-tables.ts
-npm install --save-dev ts-node && npx run cleanup-tables.ts
+function print_success() {
+  echo "✅ $1"
+}
 
-# Database setup
-supabase status
-PGPASSWORD=Edensupabase12 psql -h db.lkgxzrvcozfxydpmbtqq.supabase.co -p 5432 -U postgres -c "\dt+ notifications;" -c "\dp$"
-cd /Users/gfx2edenoasis/Downloads/Development/GearFlow && supabase link --project-ref lkgxzrvcozfxydpmbtqq
-cd /Users/gfx2edenoasis/Downloads/Development/GearFlow && supabase link --project-ref lkgxzrvcozfxydpmbtqq --password Eden$
-PGPASSWORD=Edensupabase12 psql -h db.lkgxzrvcozfxydpmbtqq.supabase.co -p 5432 -U postgres -d postgres -c "\dt+"
-docker stop $(docker ps -a -q) && docker rm -f $(docker ps -a -q) && supabase link --project-ref lkgxzrvcozfxydpmbtqq supabase$
-scripts/download-notification-sounds.js http://localhost:9002> mv .env.local .env
-sudo lsof -i :5432 && kill -9 PID
+function print_error() {
+  echo "❌ $1"
+}
 
-# Cleanup
-docker system prune -af && docker volume prune -f
+function prompt_for_input() {
+  read -p "$1: " -r
+  echo "$REPLY"
+}
 
-echo "Development environment setup complete!" 
+# --- Environment Setup ---
+print_header "Setting up environment variables"
+
+if [ -f ".env.local" ]; then
+  echo "Found existing .env.local file. Skipping creation."
+else
+  cp .env.example .env.local
+  print_success "Created .env.local from .env.example"
+fi
+
+echo "Please ensure your .env.local file is correctly configured with your Supabase credentials."
+echo "You will need:"
+echo "- NEXT_PUBLIC_SUPABASE_URL"
+echo "- NEXT_PUBLIC_SUPABASE_ANON_KEY"
+echo "- SUPABASE_SERVICE_ROLE_KEY"
+
+# --- Dependency Installation ---
+print_header "Installing dependencies"
+npm install
+print_success "Dependencies installed"
+
+# --- Supabase Setup ---
+print_header "Setting up Supabase"
+
+echo "Please ensure you have the Supabase CLI installed and are logged in."
+echo "You can install it with: npm install -g supabase"
+echo "And log in with: supabase login"
+
+PROJECT_REF=$(prompt_for_input "Enter your Supabase project reference ID")
+
+if [ -z "$PROJECT_REF" ]; then
+  print_error "Supabase project reference ID is required. Exiting."
+  exit 1
+fi
+
+supabase link --project-ref "$PROJECT_REF"
+print_success "Linked Supabase project"
+
+echo "Resetting database and running migrations..."
+supabase db reset
+print_success "Database reset and migrations applied"
+
+echo "Development environment setup complete!"

@@ -8,11 +8,11 @@ type SubscriptionConfig = {
     filter?: string;
 };
 
-type SubscriptionCallback<T extends Record<string, any>> = (
+type SubscriptionCallback<T extends Record<string, unknown>> = (
     payload: RealtimePostgresChangesPayload<T>
 ) => void;
 
-interface CreateSubscriptionProps<T extends Record<string, any>> {
+interface CreateSubscriptionProps<T extends Record<string, unknown>> {
     supabase: SupabaseClient;
     channel: string;
     config: SubscriptionConfig;
@@ -26,7 +26,7 @@ interface CreateSubscriptionProps<T extends Record<string, any>> {
  * This can be safely used inside useEffect or other functions
  * Falls back to polling if realtime is not available
  */
-export function createSupabaseSubscription<T extends Record<string, any>>({
+export function createSupabaseSubscription<T extends Record<string, unknown>>({
     supabase,
     channel: channelName,
     config,
@@ -39,7 +39,7 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
     let isUsingPolling = false;
     let lastPollingError: Error | null = null;
     let consecutiveErrors = 0;
-    let lastPollingData: any[] = [];
+    let lastPollingData: T[] = [];
 
     // Wrapper for error handling to prevent empty objects
     const handleError = (error: unknown, context: string) => {
@@ -330,7 +330,7 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
         channel = supabase
             .channel(channelName)
             .on<T>(
-                'postgres_changes' as any, // Type assertion needed due to Supabase types limitation
+                'postgres_changes',
                 {
                     event: config.event,
                     schema: config.schema,
@@ -345,7 +345,7 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
                     }
                 }
             )
-            .on('system', { event: 'error' }, (error: any) => {
+            .on('system', { event: 'error' }, (error: unknown) => {
                 // Handle CHANNEL_ERROR specifically - treat as warning, not error
                 if (error && (
                     (typeof error === 'string' && error.includes('CHANNEL_ERROR')) ||
@@ -375,19 +375,19 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
                     // Filter out common "info" messages incorrectly sent as errors
                     if (error.message &&
                         !(error.message.includes("Subscribed to PostgreSQL") &&
-                            (error as any).status === "ok") &&
+                    (error as { status?: string }).status === "ok") &&
                         !(error.message.includes("postgres_changes") &&
-                            (error as any).status === "ok")) {
+                            (error as { status?: string }).status === "ok")) {
                         handleError(error, 'channel error event');
                     }
-                } else if (typeof error === 'object') {
+                } else if (typeof error === 'object' && error !== null) {
                     try {
                         const errorMsg = JSON.stringify(error);
                         // Filter out common "info" messages incorrectly sent as errors
                         if (!(errorMsg.includes("Subscribed to PostgreSQL") &&
-                            (error as any).status === "ok") &&
+                            (error as { status?: string }).status === "ok") &&
                             !(errorMsg.includes("postgres_changes") &&
-                                (error as any).status === "ok")) {
+                                (error as { status?: string }).status === "ok")) {
                             handleError(new Error(`Channel error: ${errorMsg}`), 'channel error event');
 
                             // Check for "Unable to subscribe to changes" error and set up polling
@@ -466,8 +466,8 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
                 } else if (
                     status === 'CHANNEL_ERROR' ||
                     // Handle additional error states with type assertion
-                    status === ('SUBSCRIBED_ERROR' as any) ||
-                    status === ('SUBSCRIBE_ERROR' as any)
+                    status === 'CHANNEL_ERROR' ||
+                    status === 'TIMED_OUT'
                 ) {
                     // Treat CHANNEL_ERROR as warning, not error - this is expected in dev environments
                     const message = `Channel error for ${config.table}: ${status} - falling back to polling`;

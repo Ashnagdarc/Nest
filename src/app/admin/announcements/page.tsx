@@ -181,7 +181,7 @@ export default function AnnouncementsPage() {
             setNewContent('');
             setIsModalOpen(false);
             showSuccessFeedback({ toast: { title: "Success", description: "Announcement posted successfully." }, onSuccess: () => setTimeout(() => { fetchAnnouncements(); }, 500) });
-        } catch (e: any) {
+        } catch (e: unknown) {
             showErrorFeedback({ toast: { title: "Error", description: e.message || "Failed to post announcement." } });
         } finally {
             setLoading(false);
@@ -203,7 +203,7 @@ export default function AnnouncementsPage() {
             }
 
             showSuccessFeedback({ toast: { title: "Success", description: "Announcement deleted successfully." }, onSuccess: () => fetchAnnouncements() });
-        } catch (e: any) {
+        } catch (e: unknown) {
             showErrorFeedback({ toast: { title: "Error", description: e.message || "Failed to delete announcement." } });
         } finally {
             setLoading(false);

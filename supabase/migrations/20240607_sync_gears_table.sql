@@ -98,71 +98,40 @@ END $$;
 ALTER TABLE public.gears ENABLE ROW LEVEL SECURITY;
 
 -- Policies
-CREATE POLICY "Allow insert for admins only"
-    ON public.gears
-    FOR INSERT
-    USING ((( SELECT profiles.role FROM profiles WHERE profiles.id = auth.uid()) = 'Admin'))
-    WITH CHECK ((( SELECT profiles.role FROM profiles WHERE profiles.id = auth.uid()) = 'Admin'));
+DROP POLICY IF EXISTS "Allow insert for admins only" ON public.gears;
+DROP POLICY IF EXISTS "Allow select for admins and owners" ON public.gears;
+DROP POLICY IF EXISTS "Allow select for all authenticated users" ON public.gears;
+DROP POLICY IF EXISTS "Users can view all gear" ON public.gears;
+DROP POLICY IF EXISTS "Only admins can create gear" ON public.gears;
+DROP POLICY IF EXISTS "Only admins can update gear" ON public.gears;
+DROP POLICY IF EXISTS "Users can update gear they've checked out" ON public.gears;
+DROP POLICY IF EXISTS "Users can view gear condition" ON public.gears;
+DROP POLICY IF EXISTS "admin_delete_gears_policy" ON public.gears;
+DROP POLICY IF EXISTS "Admins can do anything" ON public.gears;
+DROP POLICY IF EXISTS "Users can view all gears" ON public.gears;
+DROP POLICY IF EXISTS "Users can update their checked out gears" ON public.gears;
 
-CREATE POLICY "Allow select for admins and owners"
-    ON public.gears
-    FOR SELECT
-    USING (((( SELECT profiles.role FROM profiles WHERE profiles.id = auth.uid()) = 'Admin') OR (owner_id = auth.uid())));
-
-CREATE POLICY "Allow select for all authenticated users"
-    ON public.gears
-    FOR SELECT
-    USING (auth.role() = 'authenticated');
-
-CREATE POLICY "Users can view all gear"
-    ON public.gears
-    FOR SELECT
-    USING (true);
-
-CREATE POLICY "Only admins can create gear"
-    ON public.gears
-    FOR INSERT
-    USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin'))
-    WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin'));
-
-CREATE POLICY "Only admins can update gear"
-    ON public.gears
-    FOR UPDATE
-    USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin'));
-
-CREATE POLICY "Users can update gear they've checked out"
-    ON public.gears
-    FOR UPDATE
-    USING ((auth.uid() = checked_out_by) AND (status = 'Checked Out'))
-    WITH CHECK (status = 'Pending Check In');
-
-CREATE POLICY "Users can view gear condition"
+CREATE POLICY "Allow read access to all authenticated users"
     ON public.gears
     FOR SELECT
     TO authenticated
     USING (true);
 
-CREATE POLICY "admin_delete_gears_policy"
+CREATE POLICY "Allow insert access to admins"
+    ON public.gears
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin'));
+
+CREATE POLICY "Allow update access to admins"
+    ON public.gears
+    FOR UPDATE
+    TO authenticated
+    USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin'))
+    WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin'));
+
+CREATE POLICY "Allow delete access to admins"
     ON public.gears
     FOR DELETE
-    USING (( SELECT (auth.uid() IN ( SELECT profiles.id FROM profiles WHERE profiles.role = 'Admin'))));
-
-CREATE POLICY "Admins can do anything"
-    ON public.gears
-    FOR ALL
     TO authenticated
-    USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin'))
-    WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin'));
-
-CREATE POLICY "Users can view all gears"
-    ON public.gears
-    FOR SELECT
-    TO authenticated
-    USING (true);
-
-CREATE POLICY "Users can update their checked out gears"
-    ON public.gears
-    FOR UPDATE
-    TO authenticated
-    USING ((checked_out_to = auth.uid()) OR (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin')))
-    WITH CHECK ((checked_out_to = auth.uid()) OR (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin'))); 
+    USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'Admin'));

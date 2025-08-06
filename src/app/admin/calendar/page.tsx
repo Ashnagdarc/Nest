@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Calendar, momentLocalizer } from 'react-big-calendar';
+import { Calendar, momentLocalizer, Event } from 'react-big-calendar';
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,34 +18,25 @@ import { logError as loggerError } from '@/lib/logger';
 
 const localizer = momentLocalizer(moment);
 
-interface CalendarBooking {
-    id: string;
-    gear_id: string;
-    user_id: string;
-    title: string;
-    start_date: string;
-    end_date: string;
+interface CalendarEvent extends Event {
+  resource?: {
     status: string;
+    gearId: string;
+    gearName: string;
+    gearCategory: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
     reason: string;
     notes?: string;
-    is_all_day: boolean;
     color?: string;
-    approved_at?: string;
-    approved_by?: string;
-}
-
-interface Gear {
-    id: string;
-    name: string;
-    category: string;
-}
-
-interface GearData {
-    name: string;
+    approvedAt?: string;
+    approvedBy?: string;
+  }
 }
 
 // Custom event styling
-const eventStyleGetter = (event: any) => {
+const eventStyleGetter = (event: CalendarEvent) => {
     const status = event.resource?.status?.toLowerCase() || '';
     const style: React.CSSProperties = {
         borderRadius: '4px',
@@ -83,11 +74,11 @@ const isNonEmptyString = (value: unknown): value is string => {
 };
 
 export default function AdminCalendarPage() {
-    const [events, setEvents] = useState<any[]>([]);
+    const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [gearFilter, setGearFilter] = useState("__all__");
     const [userFilter, setUserFilter] = useState("__all__");
-    const [selectedEvent, setSelectedEvent] = useState<any>(null);
+    const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
     const [adminNotes, setAdminNotes] = useState("");
     const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
     const supabase = createClient();
@@ -127,7 +118,7 @@ export default function AdminCalendarPage() {
             }
 
             // Process bookings into calendar events
-            const calendarEvents = (bookingsData || []).map((booking: any) => ({
+            const calendarEvents = (bookingsData || []).map((booking: any): CalendarEvent => ({
                 id: booking.id,
                 title: `${booking.gear_name || 'Gear'} - ${booking.user_full_name || 'Unknown User'}`,
                 start: new Date(booking.start_date),
@@ -211,7 +202,7 @@ export default function AdminCalendarPage() {
     }, [events, gearFilter, userFilter]);
 
     // Handle event click
-    const handleSelectEvent = useCallback((event: any) => {
+    const handleSelectEvent = useCallback((event: CalendarEvent) => {
         setSelectedEvent(event);
         setAdminNotes("");
     }, []);
@@ -377,8 +368,8 @@ export default function AdminCalendarPage() {
                                     onSelectEvent={handleSelectEvent}
                                     eventPropGetter={eventStyleGetter}
                                     popup
-                                    tooltipAccessor={(event: any) =>
-                                        `${event.title}\nStatus: ${event.resource.status}\n${event.resource.reason ? `Reason: ${event.resource.reason}` : ''}`
+                                    tooltipAccessor={(event: CalendarEvent) =>
+                                        `${event.title}\nStatus: ${event.resource?.status}\n${event.resource?.reason ? `Reason: ${event.resource.reason}` : ''}`
                                     }
                                     style={{ height: 600 }}
                                 />

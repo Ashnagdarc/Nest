@@ -140,7 +140,7 @@ export default function ManageCheckinsPage() {
         (profilesData as ProfileData[] || []).map(p => [p.id, p.full_name])
       );
 
-      const processedCheckins = (checkinsData as any[]).map((c: any) => {
+      const processedCheckins = (checkinsData as Checkin[]).map((c: Checkin) => {
         const checkin = {
           id: c.id,
           userId: c.user_id,

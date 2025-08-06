@@ -34,7 +34,7 @@ const signupSchema = z.object({
     .regex(/[0-9]/, { message: 'Password must contain at least one number.' })
     .regex(/[^a-zA-Z0-9]/, { message: 'Password must contain at least one special character.' }),
   confirmPassword: z.string(),
-  profilePicture: z.any().optional(),
+  profilePicture: z.instanceof(File).optional(),
   terms: z.boolean().refine(val => val === true, { message: 'You must accept the terms and conditions.' }),
 }).refine(data => data.password === data.confirmPassword, {
   message: 'Passwords do not match.',
