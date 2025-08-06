@@ -9,7 +9,10 @@ type StatusBreakdownItem = {
 export async function GET(request: NextRequest) {
     try {
         const supabase = createSupabaseServerClient();
-        const searchParams = request.nextUrl.searchParams;
+        const { searchParams } = new URL(request.url);
+        const gearId = searchParams.get('gearId');
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
         const days = searchParams.get('days') ? parseInt(searchParams.get('days')!) : 30;
 
         // Get total gear count

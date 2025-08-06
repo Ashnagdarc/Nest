@@ -4,8 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 console.log('SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
 console.log('SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 8) + '...');
 
-export async function GET(request: NextRequest, context: { params: { id: string } }) {
-    const { id } = context.params;
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+    const { id } = params;
     try {
         const supabase = await createSupabaseServerClient();
         const { data, error } = await supabase.from('profiles').select('*').eq('id', id).single();
@@ -16,8 +16,8 @@ export async function GET(request: NextRequest, context: { params: { id: string 
     }
 }
 
-export async function PUT(request: NextRequest, context: { params: { id: string } }) {
-    const { id } = context.params;
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+    const { id } = params;
     try {
         const supabase = await createSupabaseServerClient();
         const body = await request.json();
@@ -30,8 +30,8 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
     }
 }
 
-export async function DELETE(request: NextRequest, context: { params: { id: string } }) {
-    const { id } = context.params;
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+    const { id } = params;
     try {
         // Use the admin client for deletes
         const supabase = await createSupabaseAdminClient();
