@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
+    const { searchParams } = new URL(request.url);
     try {
         const supabase = createSupabaseServerClient();
-        const searchParams = request.nextUrl.searchParams;
         const startDate = searchParams.get('startDate');
         const endDate = searchParams.get('endDate');
         const userId = searchParams.get('userId');

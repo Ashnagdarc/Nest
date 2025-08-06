@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
     try {
         const supabase = createSupabaseServerClient();
-        const searchParams = request.nextUrl.searchParams;
+        const { searchParams } = new URL(request.url);
         const days = searchParams.get('days') ? parseInt(searchParams.get('days')!) : 7;
 
         // Calculate date range

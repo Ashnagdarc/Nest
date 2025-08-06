@@ -1,8 +1,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest, context: { params: { id: string } }) {
-    const { params } = context;
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
     try {
         const supabase = await createSupabaseServerClient();
         const { data, error } = await supabase.from('gears').select('*').eq('id', params.id).single();
