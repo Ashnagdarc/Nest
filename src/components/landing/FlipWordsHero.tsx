@@ -1,4 +1,3 @@
-import React from "react";
 import { FlipWords } from "@/components/ui/flip-words";
 
 export default function FlipWordsHero() {

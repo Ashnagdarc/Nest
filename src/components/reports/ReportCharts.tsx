@@ -7,7 +7,6 @@
  * @component
  */
 
-import React from 'react';
 import {
     XAxis,
     YAxis,
