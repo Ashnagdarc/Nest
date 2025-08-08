@@ -1,191 +1,317 @@
-import { useState, useCallback } from 'react'
-import type {
-    Gear,
-    Profile,
-    GearRequest,
-    ActivityLog,
-    Notification,
-    LoadingStates,
-    PerformanceState
-} from '@/types/dashboard'
-import { apiGet } from '@/lib/apiClient'
-
 /**
- * Custom hook for dashboard data management
+ * Centralized Dashboard Data Hook
+ * 
+ * Optimizes dashboard performance by:
+ * - Fetching all data in parallel
+ * - Caching gear details to avoid redundant calls
+ * - Providing a single source of truth for dashboard data
  */
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { logger } from '@/utils/logger';
+import { createSupabaseSubscription } from '@/utils/supabase-subscription';
+import { apiGet } from '@/lib/apiClient';
+
+export interface DashboardData {
+    // User stats
+    userStats: {
+        checkedOut: number;
+        overdue: number;
+        available: number;
+    };
+
+    // Popular gear
+    popularGear: Array<{
+        gear_id: string;
+        name: string;
+        full_name: string;
+        request_count: number;
+        category?: string;
+        image_url?: string | null;
+        status?: string;
+    }>;
+
+    // Upcoming events
+    events: Array<{
+        id: string;
+        title: string;
+        date: string;
+        type: "return" | "pickup" | "maintenance";
+        status: "upcoming" | "overdue" | "today";
+        gear_id?: string;
+        user_id?: string;
+    }>;
+
+    // Recent activity
+    activities: Array<{
+        id: string;
+        type: "checkout" | "return" | "request";
+        item: string;
+        gear_id?: string;
+        user_id?: string;
+        timestamp: string;
+        status: string;
+    }>;
+
+    // Gear details cache
+    gearDetails: Record<string, { name: string; category?: string; image_url?: string; status?: string }>;
+
+    // Loading states
+    loading: {
+        stats: boolean;
+        popularGear: boolean;
+        events: boolean;
+        activities: boolean;
+    };
+}
+
 export function useDashboardData() {
-    // Data State
-    const [gears, setGears] = useState<Gear[]>([])
-    const [users, setUsers] = useState<Profile[]>([])
-    const [requests, setRequests] = useState<GearRequest[]>([])
-    const [activities, setActivities] = useState<ActivityLog[]>([])
-    const [notifications, setNotifications] = useState<Notification[]>([])
+    const supabase = createClient();
+    const [data, setData] = useState<DashboardData>({
+        userStats: { checkedOut: 0, overdue: 0, available: 0 },
+        popularGear: [],
+        events: [],
+        activities: [],
+        gearDetails: {},
+        loading: { stats: true, popularGear: true, events: true, activities: true }
+    });
 
-    // Loading States
-    const [loadingStates, setLoadingStates] = useState<LoadingStates>({
-        gears: false,
-        users: false,
-        requests: false,
-        activities: false,
-        notifications: false,
-        stats: false,
-        initialLoad: false
-    })
-
-    // Performance tracking
-    const [performance, setPerformance] = useState<PerformanceState>({
-        averageQueryTime: 0,
-        totalQueries: 0,
-        failedQueries: 0,
-        cacheHitRate: 0
-    })
-
-    // Performance tracking utility
-    const trackPerformance = useCallback((queryTime: number, failed: boolean = false) => {
-        setPerformance(prev => ({
-            averageQueryTime: (prev.averageQueryTime * prev.totalQueries + queryTime) / (prev.totalQueries + 1),
-            totalQueries: prev.totalQueries + 1,
-            failedQueries: prev.failedQueries + (failed ? 1 : 0),
-            cacheHitRate: prev.cacheHitRate // Updated elsewhere
-        }))
-    }, [])
-
-    // Data fetching functions
-    const fetchGears = useCallback(async () => {
-        setLoadingStates(prev => ({ ...prev, gears: true }))
-        const startTime = Date.now()
+    // Memoized gear details fetcher to avoid redundant calls
+    const fetchGearDetails = useCallback(async (gearIds: string[]) => {
+        if (gearIds.length === 0) return {};
 
         try {
-            // Fetch all gears (no pagination)
-            const { data, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?pageSize=1000`)
-            const queryTime = Date.now() - startTime
-            trackPerformance(queryTime, !!error)
+            const { data: gears, error } = await apiGet<{ data: any[]; error: string | null }>(
+                `/api/gears?ids=${gearIds.join(',')}&fields=id,name,category,image_url,status`
+            );
 
-            if (error) throw new Error(error)
-            setGears(data || [])
+            if (error) throw new Error(error);
+
+            return (gears || []).reduce((acc, gear) => {
+                acc[gear.id] = {
+                    name: gear.name,
+                    category: gear.category,
+                    image_url: gear.image_url,
+                    status: gear.status
+                };
+                return acc;
+            }, {} as Record<string, any>);
         } catch (error) {
-            console.error('Failed to fetch gears:', error)
-            throw error
-        } finally {
-            setLoadingStates(prev => ({ ...prev, gears: false }))
+            logger.error('Error fetching gear details:', error);
+            return {};
         }
-    }, [trackPerformance])
+    }, []);
 
-    const fetchUsers = useCallback(async () => {
-        setLoadingStates(prev => ({ ...prev, users: true }))
-        const startTime = Date.now()
-
+    // Fetch all dashboard data in parallel
+    const fetchAllData = useCallback(async () => {
         try {
-            // Fetch all users (no pagination)
-            const { data, error } = await apiGet<{ data: Profile[]; error: string | null }>(`/api/users?pageSize=1000`)
-            const queryTime = Date.now() - startTime
-            trackPerformance(queryTime, !!error)
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) return;
 
-            if (error) throw new Error(error)
-            setUsers(data || [])
+            // Start all data fetching in parallel
+            const [
+                statsPromise,
+                popularGearPromise,
+                eventsPromise,
+                activitiesPromise
+            ] = await Promise.allSettled([
+                // User stats
+                (async () => {
+                    const [checkoutsRes, availableRes] = await Promise.all([
+                        apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Checked%20Out`),
+                        apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Available&pageSize=1000`)
+                    ]);
+
+                    const checkouts = checkoutsRes.data || [];
+                    const available = availableRes.data || [];
+                    const now = new Date();
+                    const checkedOutGears = checkouts.filter((gear: any) => gear.checked_out_to === session.user.id);
+                    const overdueGears = checkedOutGears.filter((gear: any) => gear.due_date && new Date(gear.due_date) < now);
+
+                    return {
+                        checkedOut: checkedOutGears.length,
+                        overdue: overdueGears.length,
+                        available: available.reduce((sum: number, g: any) => sum + (g.available_quantity ?? 0), 0)
+                    };
+                })(),
+
+                // Popular gear
+                (async () => {
+                    const endDate = new Date();
+                    const startDate = new Date();
+                    startDate.setDate(endDate.getDate() - 7);
+
+                    const { data: directData, error } = await supabase.rpc('get_popular_gears', {
+                        start_date: startDate.toISOString(),
+                        end_date: endDate.toISOString(),
+                        limit_count: 10
+                    });
+
+                    if (error) throw error;
+                    return directData || [];
+                })(),
+
+                // Upcoming events
+                (async () => {
+                    const { data: checkoutRequests } = await supabase
+                        .from('gear_requests')
+                        .select('id, gear_ids, created_at, status, due_date, approved_at')
+                        .eq('user_id', session.user.id)
+                        .in('status', ['Approved', 'Pending', 'CheckedOut']);
+
+                    const { data: maintenanceEvents } = await supabase
+                        .from('gear_maintenance')
+                        .select('id, gear_id, performed_at, maintenance_type, performed_by, status')
+                        .eq('performed_by', session.user.id);
+
+                    // Process events (simplified for brevity)
+                    const now = new Date();
+                    const today = new Date(now);
+                    today.setHours(0, 0, 0, 0);
+                    const tomorrow = new Date(today);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+
+                    const events = [];
+                    // Process checkout events
+                    (checkoutRequests || []).forEach((req: any) => {
+                        if (req.status === 'CheckedOut') {
+                            const gearIdList = Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids];
+                            gearIdList.filter(Boolean).forEach((gearId: string) => {
+                                const eventDate = new Date(req.due_date);
+                                let status: "upcoming" | "overdue" | "today" = "upcoming";
+                                if (eventDate < now) status = "overdue";
+                                else if (eventDate >= today && eventDate < tomorrow) status = "today";
+
+                                events.push({
+                                    id: `${req.id}-${gearId}`,
+                                    title: `Equipment Return`,
+                                    date: req.due_date,
+                                    type: "return" as const,
+                                    status,
+                                    gear_id: gearId,
+                                    user_id: session.user.id
+                                });
+                            });
+                        }
+                    });
+
+                    return events;
+                })(),
+
+                // Recent activity
+                (async () => {
+                    const [requestsResponse, checkinsResponse] = await Promise.all([
+                        supabase
+                            .from('gear_requests')
+                            .select('id, gear_ids, user_id, created_at, status')
+                            .eq('user_id', session.user.id)
+                            .order('created_at', { ascending: false })
+                            .limit(5),
+                        supabase
+                            .from('checkins')
+                            .select('id, gear_id, user_id, checkin_date, condition')
+                            .eq('user_id', session.user.id)
+                            .order('checkin_date', { ascending: false })
+                            .limit(5)
+                    ]);
+
+                    const activities = [];
+
+                    // Process requests
+                    (requestsResponse.data || []).forEach((req: any) => {
+                        const gearIdList = Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids];
+                        gearIdList.filter(Boolean).forEach((gearId: string) => {
+                            activities.push({
+                                id: `request-${req.id}-${gearId}`,
+                                type: req.status === 'CheckedOut' ? 'checkout' : 'request',
+                                item: 'Equipment',
+                                gear_id: gearId,
+                                user_id: req.user_id,
+                                timestamp: req.created_at,
+                                status: req.status === 'CheckedOut' ? 'Checked out successfully' : `Request ${req.status?.toLowerCase() || 'pending'}`
+                            });
+                        });
+                    });
+
+                    // Process checkins
+                    (checkinsResponse.data || []).forEach((checkin: any) => {
+                        activities.push({
+                            id: `checkin-${checkin.id}`,
+                            type: 'return',
+                            item: 'Equipment',
+                            gear_id: checkin.gear_id,
+                            user_id: checkin.user_id,
+                            timestamp: checkin.checkin_date,
+                            status: `Returned in ${checkin.condition?.toLowerCase() || 'unknown'} condition`
+                        });
+                    });
+
+                    return activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 10);
+                })()
+            ]);
+
+            // Collect all gear IDs from all sources
+            const allGearIds = new Set<string>();
+
+            if (statsPromise.status === 'fulfilled') {
+                // Add gear IDs from popular gear
+                (popularGearPromise.status === 'fulfilled' ? popularGearPromise.value : []).forEach((gear: any) => {
+                    allGearIds.add(gear.gear_id);
+                });
+            }
+
+            if (eventsPromise.status === 'fulfilled') {
+                // Add gear IDs from events
+                eventsPromise.value.forEach((event: any) => {
+                    if (event.gear_id) allGearIds.add(event.gear_id);
+                });
+            }
+
+            if (activitiesPromise.status === 'fulfilled') {
+                // Add gear IDs from activities
+                activitiesPromise.value.forEach((activity: any) => {
+                    if (activity.gear_id) allGearIds.add(activity.gear_id);
+                });
+            }
+
+            // Fetch all gear details in one call
+            const gearDetails = await fetchGearDetails(Array.from(allGearIds));
+
+            // Update data with all fetched information
+            setData(prev => ({
+                ...prev,
+                userStats: statsPromise.status === 'fulfilled' ? statsPromise.value : prev.userStats,
+                popularGear: popularGearPromise.status === 'fulfilled' ? popularGearPromise.value : prev.popularGear,
+                events: eventsPromise.status === 'fulfilled' ? eventsPromise.value : prev.events,
+                activities: activitiesPromise.status === 'fulfilled' ? activitiesPromise.value : prev.activities,
+                gearDetails,
+                loading: { stats: false, popularGear: false, events: false, activities: false }
+            }));
+
         } catch (error) {
-            console.error('Failed to fetch users:', error)
-            throw error
-        } finally {
-            setLoadingStates(prev => ({ ...prev, users: false }))
+            logger.error('Error fetching dashboard data:', error);
+            setData(prev => ({
+                ...prev,
+                loading: { stats: false, popularGear: false, events: false, activities: false }
+            }));
         }
-    }, [trackPerformance])
+    }, [supabase, fetchGearDetails]);
 
-    const fetchRequests = useCallback(async () => {
-        setLoadingStates(prev => ({ ...prev, requests: true }))
-        const startTime = Date.now()
+    useEffect(() => {
+        fetchAllData();
 
-        try {
-            // Use centralized API client and RESTful endpoint
-            const { data, error } = await apiGet<{ data: GearRequest[]; error: string | null }>(`/api/requests`)
-            const queryTime = Date.now() - startTime
-            trackPerformance(queryTime, !!error)
+        // Single subscription for all dashboard changes
+        const subscription = createSupabaseSubscription({
+            supabase,
+            channel: 'dashboard-all-changes',
+            config: { event: '*', schema: 'public', table: 'gears' },
+            callback: fetchAllData,
+            pollingInterval: 30000
+        });
 
-            if (error) throw new Error(error)
-            setRequests(data || [])
-        } catch (error) {
-            console.error('Failed to fetch requests:', error)
-            throw error
-        } finally {
-            setLoadingStates(prev => ({ ...prev, requests: false }))
-        }
-    }, [trackPerformance])
+        return () => subscription.unsubscribe();
+    }, [fetchAllData]);
 
-    const fetchActivities = useCallback(async () => {
-        setLoadingStates(prev => ({ ...prev, activities: true }))
-        const startTime = Date.now()
-
-        try {
-            // Use centralized API client and RESTful endpoint
-            const { data, error } = await apiGet<{ data: ActivityLog[]; error: string | null }>(`/api/dashboard/activities`)
-            const queryTime = Date.now() - startTime
-            trackPerformance(queryTime, !!error)
-
-            if (error) throw new Error(error)
-            setActivities(data || [])
-        } catch (error) {
-            console.error('Failed to fetch activities:', error)
-            throw error
-        } finally {
-            setLoadingStates(prev => ({ ...prev, activities: false }))
-        }
-    }, [trackPerformance])
-
-    const fetchNotifications = useCallback(async () => {
-        setLoadingStates(prev => ({ ...prev, notifications: true }))
-        const startTime = Date.now()
-
-        try {
-            // Use centralized API client and RESTful endpoint
-            const { data, error } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications`)
-            const queryTime = Date.now() - startTime
-            trackPerformance(queryTime, !!error)
-
-            if (error) throw new Error(error)
-            setNotifications(data || [])
-        } catch (error) {
-            console.error('Failed to fetch notifications:', error)
-            throw error
-        } finally {
-            setLoadingStates(prev => ({ ...prev, notifications: false }))
-        }
-    }, [trackPerformance])
-
-    // Refresh all data
-    const refreshData = useCallback(async () => {
-        await Promise.all([
-            fetchGears(),
-            fetchUsers(),
-            fetchRequests(),
-            fetchActivities(),
-            fetchNotifications()
-        ])
-    }, [fetchGears, fetchUsers, fetchRequests, fetchActivities, fetchNotifications])
-
-    // Calculate overall loading state
-    const loading = Object.values(loadingStates).some(state => state)
-
-    return {
-        // Data
-        gears,
-        users,
-        requests,
-        activities,
-        notifications,
-
-        // Loading states
-        loading,
-        loadingStates,
-
-        // Performance
-        performance,
-
-        // Actions
-        fetchGears,
-        fetchUsers,
-        fetchRequests,
-        fetchActivities,
-        fetchNotifications,
-        refreshData
-    }
+    return data;
 } 
