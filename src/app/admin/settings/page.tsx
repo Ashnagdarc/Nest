@@ -22,6 +22,7 @@ import { useIsMobile } from '@/hooks/use-mobile'; // Add this import for respons
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
 import { apiGet } from '@/lib/apiClient';
+import { isFileList, isFile } from '@/lib/utils/browser-safe';
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -284,9 +285,9 @@ export default function AdminSettingsPage() {
         // --- Handle Profile Picture Upload (Supabase Storage) ---
         let file: File | undefined = undefined;
         if (data.profilePicture) {
-            if (data.profilePicture instanceof FileList) {
+            if (isFileList(data.profilePicture)) {
                 file = data.profilePicture[0];
-            } else if (data.profilePicture instanceof File) {
+            } else if (isFile(data.profilePicture)) {
                 file = data.profilePicture;
             }
         }

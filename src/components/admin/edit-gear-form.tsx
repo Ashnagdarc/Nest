@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
 import Image from "next/image";
+import { isFileList, isFile, getFirstFile } from "@/lib/utils/browser-safe";
 
 const gearSchema = z.object({
     name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -30,14 +31,11 @@ const gearSchema = z.object({
     }),
     purchase_date: z.string().optional().nullable(),
     condition: z.string().optional().nullable(),
-    image_url: z
-        .union([z.instanceof(FileList), z.instanceof(File)])
-        .optional()
-        .transform(val => {
-            if (val instanceof FileList && val.length > 0) return val[0];
-            if (val instanceof File) return val;
-            return undefined;
-        }),
+    image_url: z.any().optional().transform(val => {
+        if (isFileList(val) && val.length > 0) return val[0];
+        if (isFile(val)) return val;
+        return undefined;
+    }),
     quantity: z.coerce.number().int().min(1, { message: "Quantity must be at least 1." }).default(1),
 });
 
