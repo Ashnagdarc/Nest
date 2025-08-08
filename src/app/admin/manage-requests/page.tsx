@@ -419,6 +419,7 @@ function ManageRequestsContent() {
   const handleApprove = async (requestId: string) => {
     setIsProcessing(true);
     try {
+      // Update the request status - the database trigger will handle gear updates
       const { error } = await supabase
         .from('gear_requests')
         .update({
@@ -452,7 +453,13 @@ function ManageRequestsContent() {
       }
 
       // Show success feedback
-      showSuccessFeedback();
+      showSuccessFeedback({
+        toast: {
+          title: "Request Approved",
+          description: "The gear request has been approved successfully.",
+          variant: "default",
+        }
+      });
 
       // Refresh the requests list
       fetchRequests();
@@ -514,7 +521,13 @@ function ManageRequestsContent() {
       }
 
       // Show success feedback
-      showSuccessFeedback();
+      showSuccessFeedback({
+        toast: {
+          title: "Request Rejected",
+          description: "The gear request has been rejected.",
+          variant: "default",
+        }
+      });
 
       // Reset state
       setRequestToReject(null);
@@ -905,6 +918,7 @@ function ManageRequestsContent() {
 
     setIsProcessing(true);
     try {
+      // Update the requests status - the database trigger will handle gear updates
       const { error } = await supabase
         .from('gear_requests')
         .update({

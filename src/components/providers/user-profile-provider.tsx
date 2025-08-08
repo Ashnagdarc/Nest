@@ -34,7 +34,7 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
         try {
             // Fetch profile from API
             const { data: profileData, error: profileError } = await apiGet<{ data: UserProfile | null; error: string | null }>(`/api/users/profile`);
-            if (profileError) throw new Error(profileError);
+            if (profileError && profileError !== '') throw new Error(profileError);
             setProfile(profileData);
         } catch (err: any) {
             setError(err.message || 'Failed to load user profile');

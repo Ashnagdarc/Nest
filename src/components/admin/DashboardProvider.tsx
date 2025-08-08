@@ -28,6 +28,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/types/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { apiGet } from '@/lib/apiClient'
+import { calculateAccurateDashboardCounts } from '@/lib/utils/fix-dashboard-counts';
 
 // Type definitions for cleaner code and better IntelliSense
 type Gear = Database['public']['Tables']['gears']['Row']
@@ -288,30 +289,37 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
     // Calculate Enhanced Statistics
     const stats = useMemo((): EnhancedDashboardStats => {
-        const totalEquipment = gears.reduce((sum, gear) => sum + (gear.quantity ?? 1), 0)
-        const availableEquipment = gears.reduce((sum, gear) => sum + (gear.available_quantity ?? 0), 0)
-        const checkedOutEquipment = gears.filter(gear => gear.status === 'Checked Out').length
-        const underRepairEquipment = gears.filter(gear => gear.status === 'Under Repair').length
-        const retiredEquipment = gears.filter(gear => gear.status === 'Retired').length
-        const utilizationRate = totalEquipment > 0 ? Math.round((checkedOutEquipment / totalEquipment) * 100) : 0
+        // Calculate equipment statistics considering pending check-ins
+        const totalEquipment = gears.reduce((sum, gear) => sum + (gear.quantity ?? 1), 0);
 
-        const totalRequests = requests.length
-        const pendingRequests = requests.filter(req => req.status === 'Pending').length
-        const approvedRequests = requests.filter(req => req.status === 'Approved').length
-        const rejectedRequests = requests.filter(req => req.status === 'Rejected').length
-        const overdueRequests = requests.filter(req => req.status === 'Overdue').length
-        const approvalRate = totalRequests > 0 ? Math.round((approvedRequests / totalRequests) * 100) : 0
+        // Get pending check-ins to identify gears that shouldn't count as available
+        const pendingCheckinGearIds = new Set<string>();
+        // Note: This would need to be fetched from the server, but for now we'll use the available_quantity field
+        // which should be updated by our database triggers
 
-        const totalUsers = users.length
-        const activeUsers = users.filter(user => user.status === 'Active').length
-        const adminUsers = users.filter(user => user.role === 'Admin').length
-        const regularUsers = users.filter(user => user.role === 'User').length
-        const engagementRate = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0
+        const availableEquipment = gears.reduce((sum, gear) => sum + (gear.available_quantity ?? 0), 0);
+        const checkedOutEquipment = gears.filter(gear => gear.status === 'Checked Out').length;
+        const underRepairEquipment = gears.filter(gear => gear.status === 'Under Repair').length;
+        const retiredEquipment = gears.filter(gear => gear.status === 'Retired').length;
+        const utilizationRate = totalEquipment > 0 ? Math.round((checkedOutEquipment / totalEquipment) * 100) : 0;
 
-        const unreadNotifications = notifications.filter(n => !n.is_read).length
-        const totalActivities = activities.length
+        const totalRequests = requests.length;
+        const pendingRequests = requests.filter(req => req.status === 'Pending').length;
+        const approvedRequests = requests.filter(req => req.status === 'Approved').length;
+        const rejectedRequests = requests.filter(req => req.status === 'Rejected').length;
+        const overdueRequests = requests.filter(req => req.status === 'Overdue').length;
+        const approvalRate = totalRequests > 0 ? Math.round((approvedRequests / totalRequests) * 100) : 0;
 
-        let systemHealth: 'excellent' | 'good' | 'warning' | 'critical' = 'excellent'
+        const totalUsers = users.length;
+        const activeUsers = users.filter(user => user.status === 'Active').length;
+        const adminUsers = users.filter(user => user.role === 'Admin').length;
+        const regularUsers = users.filter(user => user.role === 'User').length;
+        const engagementRate = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
+
+        const unreadNotifications = notifications.filter(n => !n.is_read).length;
+        const totalActivities = activities.length;
+
+        let systemHealth: 'excellent' | 'good' | 'warning' | 'critical' = 'excellent';
         if (Object.keys(errors).length > 2) systemHealth = 'critical'
         else if (Object.keys(errors).length > 0) systemHealth = 'warning'
         else if (performance.failedQueries > performance.totalQueries * 0.1) systemHealth = 'warning'
