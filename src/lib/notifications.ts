@@ -114,7 +114,7 @@ export async function createSystemNotification(
         let type: string;
         let targetUserIds: string[] | undefined;
 
-        if (userIds) {
+        if (userIds !== undefined) {
             // New signature: createSystemNotification(title, message, type, userIds?)
             title = userIdOrTitle;
             message = messageOrMessage;
@@ -135,7 +135,7 @@ export async function createSystemNotification(
                 .from('profiles')
                 .select('id')
                 .in('role', ['Admin', 'SuperAdmin'])
-                .eq('status', 'active');
+                .eq('status', 'Active');
 
             if (adminError) {
                 console.error('Error fetching admin users:', adminError);
@@ -143,6 +143,12 @@ export async function createSystemNotification(
             }
 
             targetUserIds = adminUsers?.map(user => user.id) || [];
+        }
+
+        // Ensure targetUserIds is always an array
+        if (!Array.isArray(targetUserIds)) {
+            console.error('targetUserIds is not an array:', targetUserIds);
+            targetUserIds = [];
         }
 
         if (targetUserIds.length === 0) {

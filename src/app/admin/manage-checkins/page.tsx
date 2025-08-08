@@ -202,7 +202,7 @@ export default function ManageCheckinsPage() {
       const hasDamaged = (group as Checkin[]).some((c: Checkin) => c.condition === 'Damaged');
       // Collect notes
       const notes = (group as Checkin[]).map((c: Checkin) => c.notes).filter((note: string) => Boolean(note)).join(' | ');
-      // Batch update checkins
+      // Batch update checkins (the trigger will handle gear status updates)
       const { error: checkinError } = await supabase
         .from('checkins')
         .update({
@@ -213,29 +213,12 @@ export default function ManageCheckinsPage() {
         })
         .in('id', checkinIds);
       if (checkinError) throw checkinError;
-      // Batch update gear statuses
+
+      // Note: Gear status updates are now handled automatically by the database trigger
+      // when check-in status is changed to 'Completed'
+
+      // Log activity for each gear
       for (const c of group as Checkin[]) {
-        // First, get the current available_quantity
-        const { data: gearData } = await supabase
-          .from('gears')
-          .select('available_quantity')
-          .eq('id', c.gearId)
-          .single();
-
-        const currentQuantity = gearData?.available_quantity || 0;
-
-        await supabase
-          .from('gears')
-          .update({
-            status: c.condition === 'Damaged' ? 'Needs Repair' : 'Available',
-            checked_out_to: null,
-            current_request_id: null,
-            condition: c.condition,
-            updated_at: new Date().toISOString(),
-            available_quantity: currentQuantity + 1
-          })
-          .eq('id', c.gearId);
-        // Log activity
         await supabase.rpc('log_gear_activity', {
           p_user_id: c.userId,
           p_gear_id: c.gearId,
@@ -464,7 +447,7 @@ export default function ManageCheckinsPage() {
     if (!selectedCheckin) return;
     setIsApproving(true);
     try {
-      // Step 1: Update checkin status
+      // Step 1: Update checkin status (the trigger will handle gear status updates)
       const { data: { user } } = await supabase.auth.getUser();
       const { error: checkinError } = await supabase
         .from('checkins')
@@ -476,18 +459,11 @@ export default function ManageCheckinsPage() {
         })
         .eq('id', selectedCheckin.id);
       if (checkinError) throw checkinError;
-      // Step 2: Update gear status based on condition
-      await supabase
-        .from('gears')
-        .update({
-          status: selectedCheckin.condition === 'Damaged' ? 'Needs Repair' : 'Available',
-          checked_out_to: null,
-          current_request_id: null,
-          condition: selectedCheckin.condition,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedCheckin.gearId);
-      // Step 3: Update gear_requests status if all gear is returned
+
+      // Note: Gear status updates are now handled automatically by the database trigger
+      // when check-in status is changed to 'Completed'
+
+      // Step 2: Update gear_requests status if all gear is returned
       if (selectedCheckin.requestId) {
         const { data: request } = await supabase
           .from('gear_requests')
@@ -517,7 +493,7 @@ export default function ManageCheckinsPage() {
             });
         }
       }
-      // Step 4: Log the approval in gear_activity_log
+      // Step 3: Log the approval in gear_activity_log
       await supabase.rpc('log_gear_activity', {
         p_user_id: selectedCheckin.userId,
         p_gear_id: selectedCheckin.gearId,
@@ -531,7 +507,7 @@ export default function ManageCheckinsPage() {
           approved_by: user?.id
         })
       });
-      // Step 5: Create notification for user
+      // Step 4: Create notification for user
       await createSystemNotification(
         selectedCheckin.userId,
         'Check-in Approved',

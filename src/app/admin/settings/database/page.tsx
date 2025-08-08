@@ -1,263 +1,398 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, Database, RefreshCw, Play, FileCode } from 'lucide-react';
-import { verifyDatabaseSetup, REQUIRED_TABLES } from '@/lib/utils/database-setup';
-import { createClient } from '@/lib/supabase/client';
-import { toast } from '@/hooks/use-toast';
+import { useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Loader2, Database, CheckCircle, AlertTriangle } from 'lucide-react';
+import { useToast } from "@/hooks/use-toast";
+import { fixCheckinDataInconsistencies, validateCheckinDataIntegrity, fixSpecificGearIssues } from '@/lib/utils/fix-checkin-data';
 
-export default function DatabaseSetupPage() {
-    const [isLoading, setIsLoading] = useState(true);
+export default function DatabaseSettingsPage() {
+    const { toast } = useToast();
+    const [isValidating, setIsValidating] = useState(false);
+    const [isFixing, setIsFixing] = useState(false);
+    const [isFixingSpecific, setIsFixingSpecific] = useState(false);
     const [isRunningMigration, setIsRunningMigration] = useState(false);
-    const [dbStatus, setDbStatus] = useState<{
-        isComplete: boolean;
-        missingTables: string[];
-        error?: any;
-    }>({
-        isComplete: false,
-        missingTables: []
-    });
+    const [isFixingRelationships, setIsFixingRelationships] = useState(false);
+    const [validationResults, setValidationResults] = useState<string[]>([]);
 
-    // Fetch database status on load
-    useEffect(() => {
-        checkDatabaseStatus();
-    }, []);
+    const handleValidateData = async () => {
+        setIsValidating(true);
+        setValidationResults([]);
 
-    // Check database setup status
-    async function checkDatabaseStatus() {
-        setIsLoading(true);
         try {
-            const status = await verifyDatabaseSetup();
-            setDbStatus(status);
-        } catch (error) {
-            console.error('Error checking database status:', error);
+            // Capture console.log output
+            const originalLog = console.log;
+            const logs: string[] = [];
+            console.log = (...args) => {
+                logs.push(args.join(' '));
+                originalLog(...args);
+            };
+
+            await validateCheckinDataIntegrity();
+
+            console.log = originalLog;
+            setValidationResults(logs);
+
             toast({
-                title: 'Error',
-                description: 'Failed to check database status',
-                variant: 'destructive',
+                title: "Validation Complete",
+                description: "Data integrity validation has been completed. Check the results below.",
+                variant: "default",
+            });
+        } catch (error) {
+            console.error('Validation error:', error);
+            toast({
+                title: "Validation Error",
+                description: "An error occurred during validation.",
+                variant: "destructive",
             });
         } finally {
-            setIsLoading(false);
+            setIsValidating(false);
         }
-    }
+    };
 
-    // Run migrations
-    async function runMigrations() {
-        setIsRunningMigration(true);
+    const handleFixData = async () => {
+        setIsFixing(true);
+
         try {
-            const supabase = createClient();
-
-            // Run SQL from migration files
-            const { data, error } = await supabase.rpc('execute_sql', {
-                sql_string: `
-          -- Check if gear_maintenance table exists
-          DO $$
-          BEGIN
-            IF NOT EXISTS (
-              SELECT FROM information_schema.tables 
-              WHERE table_schema = 'public'
-              AND table_name = 'gear_maintenance'
-            ) THEN
-              -- Create the gear_maintenance table
-              CREATE TABLE public.gear_maintenance (
-                id SERIAL PRIMARY KEY,
-                gear_id UUID NOT NULL REFERENCES public.gears(id) ON DELETE CASCADE,
-                status TEXT NOT NULL,
-                type TEXT NOT NULL DEFAULT 'Maintenance', -- 'Maintenance', 'Damage Report', etc.
-                issue_description TEXT,
-                resolution TEXT,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                user_id UUID REFERENCES auth.users(id),
-                completed_at TIMESTAMP WITH TIME ZONE
-              );
-              
-              -- Add comment to table
-              COMMENT ON TABLE public.gear_maintenance IS 'Records maintenance and damage reports for equipment';
-              
-              -- Enable RLS
-              ALTER TABLE public.gear_maintenance ENABLE ROW LEVEL SECURITY;
-              
-              -- Create policies
-              CREATE POLICY "Admins can do anything" ON public.gear_maintenance
-                FOR ALL TO authenticated
-                USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'Admin'))
-                WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'Admin'));
-              
-              CREATE POLICY "Users can view maintenance records" ON public.gear_maintenance
-                FOR SELECT TO authenticated
-                USING (true);
-              
-              CREATE POLICY "Users can create damage reports" ON public.gear_maintenance
-                FOR INSERT TO authenticated
-                WITH CHECK (type = 'Damage Report');
-            END IF;
-          END $$;
-        `
-            });
-
-            if (error) {
-                throw error;
-            }
+            await fixCheckinDataInconsistencies();
 
             toast({
-                title: 'Success',
-                description: 'Database migrations completed successfully',
-                variant: 'default',
+                title: "Data Fix Complete",
+                description: "Check-in data inconsistencies have been fixed.",
+                variant: "default",
             });
 
-            // Refresh database status
-            await checkDatabaseStatus();
+            // Re-validate after fixing
+            await handleValidateData();
         } catch (error) {
-            console.error('Error running migrations:', error);
+            console.error('Fix error:', error);
             toast({
-                title: 'Migration Failed',
-                description: error instanceof Error ? error.message : 'Unknown error occurred',
-                variant: 'destructive',
+                title: "Fix Error",
+                description: "An error occurred while fixing data inconsistencies.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsFixing(false);
+        }
+    };
+
+    const handleFixSpecificGearIssues = async () => {
+        setIsFixingSpecific(true);
+
+        try {
+            await fixSpecificGearIssues();
+
+            toast({
+                title: "Specific Gear Fix Complete",
+                description: "Problematic gear data has been cleaned up.",
+                variant: "default",
+            });
+
+            // Re-validate after fixing
+            await handleValidateData();
+        } catch (error) {
+            console.error('Specific fix error:', error);
+            toast({
+                title: "Fix Error",
+                description: "An error occurred while fixing specific gear issues.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsFixingSpecific(false);
+        }
+    };
+
+    const handleRunMigration = async () => {
+        setIsRunningMigration(true);
+
+        try {
+            const response = await fetch('/api/debug/run-migration', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                toast({
+                    title: "Migration Complete",
+                    description: "Database migration has been applied successfully.",
+                    variant: "default",
+                });
+                console.log('Migration results:', result.results);
+            } else {
+                toast({
+                    title: "Migration Failed",
+                    description: result.error || "An error occurred during migration.",
+                    variant: "destructive",
+                });
+            }
+        } catch (error) {
+            console.error('Migration error:', error);
+            toast({
+                title: "Migration Error",
+                description: "An error occurred while running the migration.",
+                variant: "destructive",
             });
         } finally {
             setIsRunningMigration(false);
         }
-    }
+    };
+
+    const handleFixGearRequestRelationships = async () => {
+        setIsFixingRelationships(true);
+
+        try {
+            const response = await fetch('/api/debug/fix-gear-request-relationships', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                toast({
+                    title: "Relationships Fixed",
+                    description: `Successfully fixed ${result.results.requests_fixed} gear request relationships.`,
+                    variant: "default",
+                });
+                console.log('Relationship fix results:', result.results);
+            } else {
+                toast({
+                    title: "Fix Failed",
+                    description: result.error || "An error occurred while fixing relationships.",
+                    variant: "destructive",
+                });
+            }
+        } catch (error) {
+            console.error('Relationship fix error:', error);
+            toast({
+                title: "Fix Error",
+                description: "An error occurred while fixing gear request relationships.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsFixingRelationships(false);
+        }
+    };
 
     return (
-        <div className="container mx-auto py-8">
-            <h1 className="text-3xl font-bold mb-8 flex items-center gap-2">
-                <Database className="h-8 w-8" /> Database Setup
-            </h1>
+        <div className="container max-w-4xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <div className="mb-8">
+                <h1 className="text-3xl font-bold tracking-tight">Database Settings</h1>
+                <p className="text-muted-foreground mt-2">
+                    Manage database configurations and data integrity
+                </p>
+            </div>
 
-            <Card className="mb-8">
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle>Database Status</CardTitle>
-                            <CardDescription>
-                                Check if all required tables are set up properly
-                            </CardDescription>
-                        </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={checkDatabaseStatus}
-                            disabled={isLoading}
-                        >
-                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                            Refresh
-                        </Button>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    {isLoading ? (
-                        <div className="flex items-center justify-center p-8">
-                            <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : dbStatus.error ? (
-                        <Alert variant="destructive">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertTitle>Error</AlertTitle>
+            <div className="space-y-6">
+                {/* Data Integrity Section */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Database className="h-5 w-5" />
+                            Data Integrity Management
+                        </CardTitle>
+                        <CardDescription>
+                            Validate and fix check-in data inconsistencies
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Alert>
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertTitle>Check-in Data Issues</AlertTitle>
                             <AlertDescription>
-                                Failed to check database status: {dbStatus.error.message || 'Unknown error'}
+                                These utilities help fix issues where users see items that need to be checked in
+                                but have already been approved, and "Unknown Gear" appears in check-in history.
                             </AlertDescription>
                         </Alert>
-                    ) : dbStatus.isComplete ? (
-                        <Alert variant="default" className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900">
-                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <AlertTitle className="text-green-800 dark:text-green-400">All Set!</AlertTitle>
-                            <AlertDescription className="text-green-700 dark:text-green-300">
-                                All required database tables are set up properly.
-                            </AlertDescription>
-                        </Alert>
-                    ) : (
-                        <div className="space-y-4">
-                            <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertTitle>Missing Tables</AlertTitle>
-                                <AlertDescription>
-                                    Some required database tables are missing. Run the migrations to set them up.
-                                </AlertDescription>
-                            </Alert>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {REQUIRED_TABLES.map(table => (
-                                    <div key={table} className="flex items-center gap-2 p-2 rounded-md border">
-                                        {dbStatus.missingTables.includes(table) ? (
-                                            <AlertCircle className="h-4 w-4 text-destructive" />
-                                        ) : (
-                                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                        )}
-                                        <span>{table}</span>
-                                        <Badge variant={dbStatus.missingTables.includes(table) ? 'destructive' : 'outline'} className="ml-auto">
-                                            {dbStatus.missingTables.includes(table) ? 'Missing' : 'Ready'}
-                                        </Badge>
-                                    </div>
-                                ))}
+                        <Alert>
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertTitle>Specific Gear Issues</AlertTitle>
+                            <AlertDescription>
+                                The "Fix Specific Gear Issues" button specifically targets gears that have
+                                checked_out_to set but status is Available/Needs Repair, which causes them
+                                to appear in user check-in pages incorrectly.
+                            </AlertDescription>
+                        </Alert>
+
+                        <Alert>
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertTitle>Gear Request Relationships</AlertTitle>
+                            <AlertDescription>
+                                The "Fix Gear Request Relationships" button creates missing relationships between
+                                gear requests and gears, which fixes the issue where gear names show as "1 gear(s) requested"
+                                instead of actual gear names in the admin interface.
+                            </AlertDescription>
+                        </Alert>
+
+                        <div className="flex gap-4 flex-wrap">
+                            <Button
+                                onClick={handleValidateData}
+                                disabled={isValidating || isFixing || isFixingSpecific}
+                                variant="outline"
+                            >
+                                {isValidating ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Validating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle className="mr-2 h-4 w-4" />
+                                        Validate Data Integrity
+                                    </>
+                                )}
+                            </Button>
+
+                            <Button
+                                onClick={handleFixData}
+                                disabled={isValidating || isFixing || isFixingSpecific}
+                                variant="default"
+                            >
+                                {isFixing ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Fixing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Database className="mr-2 h-4 w-4" />
+                                        Fix Data Inconsistencies
+                                    </>
+                                )}
+                            </Button>
+
+                            <Button
+                                onClick={handleFixSpecificGearIssues}
+                                disabled={isValidating || isFixing || isFixingSpecific || isRunningMigration}
+                                variant="destructive"
+                            >
+                                {isFixingSpecific ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Fixing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <AlertTriangle className="mr-2 h-4 w-4" />
+                                        Fix Specific Gear Issues
+                                    </>
+                                )}
+                            </Button>
+
+                            <Button
+                                onClick={handleRunMigration}
+                                disabled={isValidating || isFixing || isFixingSpecific || isRunningMigration}
+                                variant="outline"
+                            >
+                                {isRunningMigration ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Running Migration...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Database className="mr-2 h-4 w-4" />
+                                        Run Database Migration
+                                    </>
+                                )}
+                            </Button>
+
+                            <Button
+                                onClick={handleFixGearRequestRelationships}
+                                disabled={isValidating || isFixing || isFixingSpecific || isRunningMigration || isFixingRelationships}
+                                variant="outline"
+                            >
+                                {isFixingRelationships ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Fixing Relationships...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Database className="mr-2 h-4 w-4" />
+                                        Fix Gear Request Relationships
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+
+                        {/* Validation Results */}
+                        {validationResults.length > 0 && (
+                            <div className="mt-4">
+                                <h4 className="font-medium mb-2">Validation Results:</h4>
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                    {validationResults.map((result, index) => (
+                                        <div
+                                            key={index}
+                                            className={`text-sm p-2 rounded ${result.includes('✅')
+                                                ? 'bg-green-50 text-green-800 border border-green-200'
+                                                : result.includes('❌')
+                                                    ? 'bg-red-50 text-red-800 border border-red-200'
+                                                    : 'bg-gray-50 text-gray-800 border border-gray-200'
+                                                }`}
+                                        >
+                                            {result}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Database Migration Status */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Migration Status</CardTitle>
+                        <CardDescription>
+                            Recent database migrations and their status
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between p-3 border rounded-lg">
+                                <div>
+                                    <h4 className="font-medium">Check-in Data Fixes</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                        Fixes gear-checkin relationships and data consistency
+                                    </p>
+                                </div>
+                                <Badge variant="default">Applied</Badge>
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 border rounded-lg">
+                                <div>
+                                    <h4 className="font-medium">Foreign Key Constraints</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                        Ensures proper relationships between tables
+                                    </p>
+                                </div>
+                                <Badge variant="default">Applied</Badge>
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 border rounded-lg">
+                                <div>
+                                    <h4 className="font-medium">Automatic Triggers</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                        Automatically updates gear status on check-in approval
+                                    </p>
+                                </div>
+                                <Badge variant="default">Applied</Badge>
                             </div>
                         </div>
-                    )}
-                </CardContent>
-                <CardFooter className="flex justify-between">
-                    <Button
-                        variant="default"
-                        onClick={runMigrations}
-                        disabled={isRunningMigration || dbStatus.isComplete}
-                        className="gap-2"
-                    >
-                        {isRunningMigration ? (
-                            <>
-                                <RefreshCw className="h-4 w-4 animate-spin" />
-                                Running Migrations...
-                            </>
-                        ) : (
-                            <>
-                                <Play className="h-4 w-4" />
-                                Run Migrations
-                            </>
-                        )}
-                    </Button>
-
-                    <Button variant="outline" className="gap-2">
-                        <FileCode className="h-4 w-4" />
-                        View Migration Files
-                    </Button>
-                </CardFooter>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Database Management</CardTitle>
-                    <CardDescription>
-                        Advanced database operations for administrators
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                        These operations should only be performed by database administrators who understand
-                        the consequences. Improper use can result in data loss.
-                    </p>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Button variant="outline" className="h-auto py-6 flex flex-col items-center justify-center">
-                            <Database className="h-6 w-6 mb-2" />
-                            <span className="font-medium">Verify Data Integrity</span>
-                            <span className="text-xs text-muted-foreground mt-1">
-                                Check for orphaned records and data consistency
-                            </span>
-                        </Button>
-
-                        <Button variant="outline" className="h-auto py-6 flex flex-col items-center justify-center">
-                            <Database className="h-6 w-6 mb-2" />
-                            <span className="font-medium">Optimize Database</span>
-                            <span className="text-xs text-muted-foreground mt-1">
-                                Run VACUUM and analyze tables for performance
-                            </span>
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     );
 } 

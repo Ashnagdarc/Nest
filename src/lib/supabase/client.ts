@@ -109,14 +109,22 @@ export const createClient = () => {
     // Critical environment validation
     // Both URL and anon key are required for client initialization
     if (!supabaseUrl || !supabaseAnonKey) {
+        console.error('Supabase configuration missing:', {
+            hasUrl: !!supabaseUrl,
+            hasAnonKey: !!supabaseAnonKey,
+            url: supabaseUrl ? `${supabaseUrl.substring(0, 20)}...` : 'NOT_SET'
+        });
         throw new SupabaseConfigError('Supabase URL and anon key must be provided');
     }
 
     // Return existing instance if already created (singleton pattern)
     // This prevents multiple clients and ensures consistent state management
     if (supabaseInstance) {
+        console.log('Returning existing Supabase client instance');
         return supabaseInstance;
     }
+
+    console.log('Creating new Supabase client instance...');
 
     try {
         /**
@@ -160,6 +168,7 @@ export const createClient = () => {
             }
         );
 
+        console.log('Supabase client instance created successfully');
         return supabaseInstance;
     } catch (error) {
         // Enhanced error logging for debugging client creation issues
