@@ -59,7 +59,7 @@ const NOTIFICATION_SOUND_URL = '/sounds/notification-bell.mp3';
 
 // Add a function to determine if a request has been attended to
 const isAttendedRequest = (status: string) => {
-  const attendedStatuses = ['approved', 'rejected', 'checked out', 'checked in', 'completed', 'cancelled'];
+  const attendedStatuses = ['approved', 'rejected', 'checked out', 'returned', 'overdue'];
   return attendedStatuses.includes(status.toLowerCase());
 };
 
@@ -216,17 +216,56 @@ function ManageRequestsContent() {
     localStorage.setItem('flowtagSoundEnabled', soundEnabled.toString());
   }, [soundEnabled]);
 
-  // Optimized gear name extraction function with caching
+  // Optimized gear name extraction function with fallback support
   const extractGearNames = useCallback((request: any): string[] => {
-    if (!request.gear_request_gears || !Array.isArray(request.gear_request_gears)) {
+    const gearNames: string[] = [];
+
+    // First, try to extract from gear_request_gears junction table
+    if (request.gear_request_gears && Array.isArray(request.gear_request_gears)) {
+      const junctionNames = request.gear_request_gears
+        .map((item: any) => item.gears?.name)
+        .filter((name: string) => name && name.trim() !== '')
+        .map((name: string) => name.trim());
+
+      if (junctionNames.length > 0) {
+        gearNames.push(...junctionNames);
+      }
+    }
+
+    // If no names found from junction table, try to extract from gear_ids array
+    if (gearNames.length === 0 && request.gear_ids && Array.isArray(request.gear_ids)) {
+      // For gear_ids, we'll return placeholder names since we don't have the actual names
+      // This will be handled by the API or we can fetch them separately
+      gearNames.push(...request.gear_ids.map((id: string) => `Gear ${id.slice(0, 8)}...`));
+    }
+
+    // If still no names, return empty array
+    return gearNames;
+  }, []);
+
+  // Function to fetch gear names for requests that don't have them in the junction table
+  const fetchMissingGearNames = useCallback(async (request: any): Promise<string[]> => {
+    if (!request.gear_ids || !Array.isArray(request.gear_ids) || request.gear_ids.length === 0) {
       return [];
     }
 
-    return request.gear_request_gears
-      .map((item: any) => item.gears?.name)
-      .filter((name: string) => name && name.trim() !== '')
-      .map((name: string) => name.trim());
-  }, []);
+    try {
+      const { data: gearsData, error } = await supabase
+        .from('gears')
+        .select('id, name')
+        .in('id', request.gear_ids);
+
+      if (error) {
+        console.error('Error fetching gear names:', error);
+        return [];
+      }
+
+      return (gearsData || []).map(gear => gear.name).filter(Boolean);
+    } catch (error) {
+      console.error('Error fetching gear names:', error);
+      return [];
+    }
+  }, [supabase]);
 
   // Update fetchRequests to use pagination and filters with better error handling
   const fetchRequests = useCallback(async () => {
@@ -257,9 +296,17 @@ function ManageRequestsContent() {
       setTotal(totalCount || 0);
 
       // Process requests with better error handling
-      const processedRequests = (requestsData || []).map((request: Record<string, unknown>) => {
+      const processedRequests = await Promise.all((requestsData || []).map(async (request: Record<string, unknown>) => {
         try {
-          const gearNames = extractGearNames(request);
+          let gearNames = extractGearNames(request);
+
+          // If no gear names found from junction table, try to fetch them from gear_ids
+          if (gearNames.length === 0 || (gearNames.length > 0 && gearNames[0].startsWith('Gear '))) {
+            const fetchedNames = await fetchMissingGearNames(request);
+            if (fetchedNames.length > 0) {
+              gearNames = fetchedNames;
+            }
+          }
 
           // Extract first name from full_name with fallback
           let firstName = 'Unknown User';
@@ -290,9 +337,11 @@ function ManageRequestsContent() {
           console.error('Error processing request:', error, request);
           return null;
         }
-      }).filter(Boolean) as GearRequest[];
+      }));
 
-      setRequests(processedRequests);
+      const validRequests = processedRequests.filter(Boolean) as GearRequest[];
+
+      setRequests(validRequests);
       setLastRefreshTime(new Date());
     } catch (error) {
       console.error('Error fetching gear requests:', error);
@@ -303,7 +352,7 @@ function ManageRequestsContent() {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [page, pageSize, filterStatus, extractGearNames]);
+  }, [page, pageSize, filterStatus, extractGearNames, fetchMissingGearNames]);
 
   // Refetch when page, pageSize, or filterStatus changes
   useEffect(() => {

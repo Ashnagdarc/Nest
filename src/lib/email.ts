@@ -13,6 +13,168 @@ if (!process.env.RESEND_API_KEY) {
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// Email template base styles
+const EMAIL_STYLES = `
+  <style>
+    .email-container {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .email-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px 40px;
+      text-align: center;
+    }
+    .email-header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .email-header .subtitle {
+      margin: 8px 0 0 0;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    .email-body {
+      padding: 40px;
+      line-height: 1.6;
+      color: #333;
+    }
+    .email-body h2 {
+      color: #2d3748;
+      margin: 0 0 20px 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .email-body p {
+      margin: 0 0 16px 0;
+    }
+    .gear-details {
+      background-color: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .gear-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .gear-item:last-child {
+      border-bottom: none;
+    }
+    .gear-name {
+      font-weight: 600;
+      color: #2d3748;
+    }
+    .gear-status {
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .status-approved {
+      background-color: #c6f6d5;
+      color: #22543d;
+    }
+    .status-rejected {
+      background-color: #fed7d7;
+      color: #742a2a;
+    }
+    .status-pending {
+      background-color: #fef5e7;
+      color: #744210;
+    }
+    .status-completed {
+      background-color: #bee3f8;
+      color: #2a4365;
+    }
+    .action-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      text-decoration: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-weight: 500;
+      margin: 20px 0;
+    }
+    .action-button:hover {
+      opacity: 0.9;
+    }
+    .email-footer {
+      background-color: #f7fafc;
+      padding: 20px 40px;
+      text-align: center;
+      border-top: 1px solid #e2e8f0;
+    }
+    .email-footer p {
+      margin: 0;
+      font-size: 14px;
+      color: #718096;
+    }
+    .email-footer a {
+      color: #667eea;
+      text-decoration: none;
+    }
+    .important-note {
+      background-color: #fff5f5;
+      border-left: 4px solid #f56565;
+      padding: 16px;
+      margin: 20px 0;
+      border-radius: 0 6px 6px 0;
+    }
+    .success-note {
+      background-color: #f0fff4;
+      border-left: 4px solid #48bb78;
+      padding: 16px;
+      margin: 20px 0;
+      border-radius: 0 6px 6px 0;
+    }
+    .info-note {
+      background-color: #ebf8ff;
+      border-left: 4px solid #4299e1;
+      padding: 16px;
+      margin: 20px 0;
+      border-radius: 0 6px 6px 0;
+    }
+  </style>
+`;
+
+// Helper function to format date
+function formatDate(dateString: string): string {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// Helper function to create gear list HTML
+function createGearListHTML(gears: Array<{ name: string; id?: string; condition?: string }>): string {
+    if (!gears || gears.length === 0) return '<p><em>No gear specified</em></p>';
+
+    return gears.map(gear => `
+    <div class="gear-item">
+      <span class="gear-name">${gear.name}</span>
+      ${gear.condition ? `<span class="gear-status status-${gear.condition.toLowerCase()}">${gear.condition}</span>` : ''}
+    </div>
+  `).join('');
+}
+
 export async function sendGearRequestEmail({
     to,
     subject,
@@ -45,8 +207,498 @@ export async function sendGearRequestEmail({
     }
 }
 
-// Backward compatible approval email
+// Enhanced approval email template
 export async function sendApprovalEmail({
+    to,
+    userName,
+    gearList,
+    dueDate,
+    requestId,
+}: {
+    to: string;
+    userName: string;
+    gearList: string;
+    dueDate: string;
+    requestId?: string;
+}) {
+    const gears = gearList.split(',').map(name => ({ name: name.trim() }));
+    const formattedDueDate = formatDate(dueDate);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Gear Request Approved</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>🎉 Request Approved!</h1>
+              <p class="subtitle">Your gear request has been approved and is ready for pickup</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName || 'there'},</h2>
+              
+              <div class="success-note">
+                <strong>Great news!</strong> Your gear request has been approved and is ready for pickup.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Approved Equipment:</h3>
+                ${createGearListHTML(gears)}
+              </div>
+              
+              <p><strong>Due Date:</strong> ${formattedDueDate}</p>
+              
+              <p><strong>Pickup Instructions:</strong></p>
+              <ul>
+                <li>Please collect your equipment from the designated pickup location</li>
+                <li>Bring your ID for verification</li>
+                <li>Inspect the equipment before leaving</li>
+                <li>Return equipment on or before the due date</li>
+              </ul>
+              
+              <a href="https://nestbyeden.app/user/my-requests" class="action-button">
+                View Request Details
+              </a>
+              
+              <div class="important-note">
+                <strong>Important:</strong> Please ensure all equipment is returned in the same condition. 
+                Any damage or missing items may result in charges.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>If you have any questions, please contact the admin team</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    return sendGearRequestEmail({
+        to,
+        subject: '🎉 Your Gear Request Has Been Approved - Ready for Pickup!',
+        html,
+    });
+}
+
+// Enhanced rejection email template
+export async function sendRejectionEmail({
+    to,
+    userName,
+    gearList,
+    reason,
+    requestId,
+}: {
+    to: string;
+    userName: string;
+    gearList: string;
+    reason: string;
+    requestId?: string;
+}) {
+    const gears = gearList.split(',').map(name => ({ name: name.trim() }));
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Gear Request Update</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>📋 Request Update</h1>
+              <p class="subtitle">Your gear request status has been updated</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName || 'there'},</h2>
+              
+              <div class="important-note">
+                <strong>Request Status:</strong> Your gear request has been reviewed and cannot be approved at this time.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Requested Equipment:</h3>
+                ${createGearListHTML(gears)}
+              </div>
+              
+              <p><strong>Reason for Rejection:</strong></p>
+              <div style="background-color: #fed7d7; padding: 12px; border-radius: 4px; margin: 12px 0;">
+                ${reason || 'No specific reason provided'}
+              </div>
+              
+              <p><strong>Next Steps:</strong></p>
+              <ul>
+                <li>Review the reason provided above</li>
+                <li>If you believe this is an error, please contact the admin team</li>
+                <li>You may submit a new request with corrected information</li>
+              </ul>
+              
+              <a href="https://nestbyeden.app/user/my-requests" class="action-button">
+                View Request Details
+              </a>
+              
+              <div class="info-note">
+                <strong>Need Help?</strong> If you have questions about this decision or need assistance 
+                with your request, please don't hesitate to contact the admin team.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>We appreciate your understanding</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    return sendGearRequestEmail({
+        to,
+        subject: '📋 Gear Request Update - Status Changed',
+        html,
+    });
+}
+
+// New: Check-in approval email template
+export async function sendCheckinApprovalEmail({
+    to,
+    userName,
+    gearList,
+    checkinDate,
+    condition,
+    notes,
+}: {
+    to: string;
+    userName: string;
+    gearList: Array<{ name: string; condition: string }>;
+    checkinDate: string;
+    condition: string;
+    notes?: string;
+}) {
+    const formattedCheckinDate = formatDate(checkinDate);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Check-in Approved</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>✅ Check-in Approved!</h1>
+              <p class="subtitle">Your equipment has been successfully returned</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName || 'there'},</h2>
+              
+              <div class="success-note">
+                <strong>Success!</strong> Your equipment check-in has been approved and processed.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Returned Equipment:</h3>
+                ${createGearListHTML(gearList)}
+              </div>
+              
+              <p><strong>Check-in Date:</strong> ${formattedCheckinDate}</p>
+              <p><strong>Overall Condition:</strong> <span class="gear-status status-${condition.toLowerCase()}">${condition}</span></p>
+              
+              ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
+              
+              <a href="https://nestbyeden.app/user/history" class="action-button">
+                View Check-in History
+              </a>
+              
+              <div class="info-note">
+                <strong>Thank you!</strong> We appreciate you returning the equipment on time and in good condition.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>Your equipment has been successfully processed</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    return sendGearRequestEmail({
+        to,
+        subject: '✅ Equipment Check-in Approved - Thank You!',
+        html,
+    });
+}
+
+// New: Check-in rejection email template
+export async function sendCheckinRejectionEmail({
+    to,
+    userName,
+    gearList,
+    reason,
+    checkinDate,
+}: {
+    to: string;
+    userName: string;
+    gearList: Array<{ name: string }>;
+    reason: string;
+    checkinDate: string;
+}) {
+    const formattedCheckinDate = formatDate(checkinDate);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Check-in Update</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>⚠️ Check-in Update</h1>
+              <p class="subtitle">Your equipment check-in requires attention</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName || 'there'},</h2>
+              
+              <div class="important-note">
+                <strong>Check-in Status:</strong> Your equipment check-in has been reviewed and requires additional action.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Equipment in Question:</h3>
+                ${createGearListHTML(gearList)}
+              </div>
+              
+              <p><strong>Check-in Date:</strong> ${formattedCheckinDate}</p>
+              
+              <p><strong>Reason for Rejection:</strong></p>
+              <div style="background-color: #fed7d7; padding: 12px; border-radius: 4px; margin: 12px 0;">
+                ${reason}
+              </div>
+              
+              <p><strong>Required Actions:</strong></p>
+              <ul>
+                <li>Please review the reason provided above</li>
+                <li>Address any issues mentioned</li>
+                <li>Contact the admin team if you have questions</li>
+                <li>You may need to resubmit the check-in with corrections</li>
+              </ul>
+              
+              <a href="https://nestbyeden.app/user/history" class="action-button">
+                View Check-in History
+              </a>
+              
+              <div class="info-note">
+                <strong>Need Assistance?</strong> If you need help resolving this issue or have questions, 
+                please contact the admin team immediately.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>We're here to help resolve any issues</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    return sendGearRequestEmail({
+        to,
+        subject: '⚠️ Equipment Check-in Update - Action Required',
+        html,
+    });
+}
+
+// New: Request received confirmation email
+export async function sendRequestReceivedEmail({
+    to,
+    userName,
+    gearList,
+    requestId,
+}: {
+    to: string;
+    userName: string;
+    gearList: string;
+    requestId?: string;
+}) {
+    const gears = gearList.split(',').map(name => ({ name: name.trim() }));
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Request Received</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>📝 Request Received</h1>
+              <p class="subtitle">Your equipment request has been submitted</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName || 'there'},</h2>
+              
+              <div class="info-note">
+                <strong>Confirmation:</strong> We've received your equipment request and it's now under review.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Requested Equipment:</h3>
+                ${createGearListHTML(gears)}
+              </div>
+              
+              <p><strong>What happens next?</strong></p>
+              <ul>
+                <li>Your request will be reviewed by the admin team</li>
+                <li>You'll receive an email notification once a decision is made</li>
+                <li>If approved, you'll get pickup instructions</li>
+                <li>If rejected, you'll receive the reason and next steps</li>
+              </ul>
+              
+              <a href="https://nestbyeden.app/user/my-requests" class="action-button">
+                Track Your Request
+              </a>
+              
+              <div class="info-note">
+                <strong>Processing Time:</strong> Most requests are processed within 24 hours during business days.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>We'll notify you as soon as your request is reviewed</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    return sendGearRequestEmail({
+        to,
+        subject: '📝 Equipment Request Received - Under Review',
+        html,
+    });
+}
+
+// New: Overdue equipment reminder email
+export async function sendOverdueReminderEmail({
+    to,
+    userName,
+    gearList,
+    dueDate,
+    overdueDays,
+}: {
+    to: string;
+    userName: string;
+    gearList: Array<{ name: string; dueDate: string }>;
+    dueDate: string;
+    overdueDays: number;
+}) {
+    const formattedDueDate = formatDate(dueDate);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Overdue Equipment Reminder</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>⏰ Equipment Overdue</h1>
+              <p class="subtitle">Please return your equipment as soon as possible</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName || 'there'},</h2>
+              
+              <div class="important-note">
+                <strong>Urgent:</strong> You have equipment that is ${overdueDays} day${overdueDays > 1 ? 's' : ''} overdue.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Overdue Equipment:</h3>
+                ${gearList.map(gear => `
+                  <div class="gear-item">
+                    <span class="gear-name">${gear.name}</span>
+                    <span style="color: #e53e3e; font-size: 12px;">Due: ${formatDate(gear.dueDate)}</span>
+                  </div>
+                `).join('')}
+              </div>
+              
+              <p><strong>Original Due Date:</strong> ${formattedDueDate}</p>
+              <p><strong>Days Overdue:</strong> ${overdueDays}</p>
+              
+              <p><strong>Immediate Action Required:</strong></p>
+              <ul>
+                <li>Please return the equipment immediately</li>
+                <li>Contact the admin team if you need an extension</li>
+                <li>Ensure equipment is in good condition</li>
+                <li>Late returns may affect future requests</li>
+              </ul>
+              
+              <a href="https://nestbyeden.app/user/check-in" class="action-button">
+                Check-in Equipment Now
+              </a>
+              
+              <div class="important-note">
+                <strong>Important:</strong> Continued delays may result in account restrictions or charges.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>Please return equipment promptly to avoid any issues</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    return sendGearRequestEmail({
+        to,
+        subject: `⏰ Equipment Overdue - ${overdueDays} Day${overdueDays > 1 ? 's' : ''} Late`,
+        html,
+    });
+}
+
+// Backward compatible approval email (keeping for existing integrations)
+export async function sendApprovalEmailLegacy({
     to,
     userName,
     gearList,

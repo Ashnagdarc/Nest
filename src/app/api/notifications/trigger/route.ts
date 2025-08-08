@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { sendGearRequestEmail } from '@/lib/email';
+import {
+    sendGearRequestEmail,
+    sendRequestReceivedEmail,
+    sendApprovalEmail,
+    sendRejectionEmail,
+    sendCheckinApprovalEmail,
+    sendCheckinRejectionEmail,
+    sendOverdueReminderEmail
+} from '@/lib/email';
 import type { Database } from '@/types/supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -90,10 +98,10 @@ export async function POST(req: NextRequest) {
                 const { data: admins } = await supabase.from('profiles').select('id,email,notification_preferences,role').eq('role', 'Admin');
                 notificationTargets = (admins || [])
                     .filter(a => !!a.email)
-                    .map(a => ({ 
-                        id: a.id, 
-                        email: a.email, 
-                        preferences: a.notification_preferences 
+                    .map(a => ({
+                        id: a.id,
+                        email: a.email,
+                        preferences: a.notification_preferences
                     }));
                 // ALSO notify the user who made the request
                 if (record.user_id) {
@@ -101,22 +109,12 @@ export async function POST(req: NextRequest) {
                     if (user?.email) {
                         const userTitle = 'Your Gear Request Was Received!';
                         const userMessage = `Hi ${user.full_name || 'there'}, your request for ${record.gear_name || 'equipment'} has been received and is pending approval.`;
-                        const userEmailHtml = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-              <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
-              <h2 style="color: ${BRAND_COLOR};">Request Received</h2>
-              <p>Hi ${user.full_name || 'there'},</p>
-              <p>Your request for <strong>${record.gear_name || 'equipment'}</strong> has been received and is pending approval.</p>
-              <p>We will notify you as soon as it is approved.</p>
-              <p>View your request in <a href="https://nestbyeden.app/user/my-requests">Nest by Eden Oasis</a>.</p>
-              <hr>
-              <small style="color: #888;">Nest by Eden Oasis Team</small>
-            </div>
-          `;
+
                         // Respect user preferences for confirmation
                         const prefs = user.notification_preferences || {};
                         const sendEmail = prefs.email?.gear_requests ?? notificationDefaults.email;
                         const sendInApp = prefs.in_app?.gear_requests ?? notificationDefaults.in_app;
+
                         if (sendInApp) {
                             await supabase.from('notifications').insert([
                                 {
@@ -132,12 +130,14 @@ export async function POST(req: NextRequest) {
                                 }
                             ]);
                         }
+
                         if (sendEmail) {
                             try {
-                                await sendGearRequestEmail({
+                                await sendRequestReceivedEmail({
                                     to: user.email,
-                                    subject: userTitle,
-                                    html: userEmailHtml,
+                                    userName: user.full_name || 'there',
+                                    gearList: record.gear_name || 'equipment',
+                                    requestId: record.id,
                                 });
                             } catch (err: any) {
                                 console.error('[Email Notification Error]', err);
@@ -150,41 +150,69 @@ export async function POST(req: NextRequest) {
             } else if (type === 'UPDATE' && record.status === 'approved' && old_record.status !== 'approved') {
                 title = 'Your Gear Request Was Approved!';
                 message = `Your request for ${record.gear_name || 'equipment'} has been approved.`;
-                emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-          <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
-          <h2 style="color: ${BRAND_COLOR};">Request Approved</h2>
-          <p>Hi ${record.requester_name || 'there'},</p>
-          <p>Your request for <strong>${record.gear_name || 'equipment'}</strong> has been <b>approved</b>.</p>
-          <p>Pick up your gear at the designated location.</p>
-          <p>View details in <a href="https://nestbyeden.app/user/my-requests">Nest by Eden Oasis</a>.</p>
-          <hr>
-          <small style="color: #888;">Nest by Eden Oasis Team</small>
-        </div>
-      `;
+
+                // Get user details for email
+                const { data: user } = await supabase.from('profiles').select('email,full_name,notification_preferences').eq('id', record.user_id).single();
+
                 userId = record.user_id;
                 category = 'request';
                 metadata = { gear_id: record.gear_id, request_id: record.id };
+
+                // Send enhanced approval email to user
+                if (user?.email) {
+                    const prefs = user.notification_preferences || {};
+                    const sendEmail = prefs.email?.gear_requests ?? notificationDefaults.email;
+
+                    if (sendEmail) {
+                        try {
+                            await sendApprovalEmail({
+                                to: user.email,
+                                userName: user.full_name || record.requester_name || 'there',
+                                gearList: record.gear_name || 'equipment',
+                                dueDate: record.due_date || new Date().toISOString(),
+                                requestId: record.id,
+                            });
+                        } catch (err: any) {
+                            console.error('[Email Notification Error]', err);
+                        }
+                    }
+                }
+
+                // Notify admins
                 await notifyAdminsByEmail(title, emailHtml);
             }
             else if (type === 'UPDATE' && record.status === 'Rejected' && old_record.status !== 'Rejected') {
                 title = 'Your Gear Request Was Rejected';
                 message = `Your request for ${record.gear_name || 'equipment'} has been rejected.`;
-                emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-        <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
-        <h2 style="color: ${BRAND_COLOR};">Request Rejected</h2>
-        <p>Hi ${record.requester_name || 'there'},</p>
-        <p>Your request for <strong>${record.gear_name || 'equipment'}</strong> has been <b>rejected</b>.</p>
-        <p>Reason: ${record.admin_notes || 'No reason provided.'}</p>
-        <p>View details in <a href="https://nestbyeden.app/user/my-requests">Nest by Eden Oasis</a>.</p>
-        <hr>
-        <small style="color: #888;">Nest by Eden Oasis Team</small>
-      </div>
-    `;
+
+                // Get user details for email
+                const { data: user } = await supabase.from('profiles').select('email,full_name,notification_preferences').eq('id', record.user_id).single();
+
                 userId = record.user_id;
                 category = 'request';
                 metadata = { gear_id: record.gear_id, request_id: record.id };
+
+                // Send enhanced rejection email to user
+                if (user?.email) {
+                    const prefs = user.notification_preferences || {};
+                    const sendEmail = prefs.email?.gear_requests ?? notificationDefaults.email;
+
+                    if (sendEmail) {
+                        try {
+                            await sendRejectionEmail({
+                                to: user.email,
+                                userName: user.full_name || record.requester_name || 'there',
+                                gearList: record.gear_name || 'equipment',
+                                reason: record.admin_notes || 'No specific reason provided',
+                                requestId: record.id,
+                            });
+                        } catch (err: any) {
+                            console.error('[Email Notification Error]', err);
+                        }
+                    }
+                }
+
+                // Notify admins
                 await notifyAdminsByEmail(title, emailHtml);
             }
             else if (type === 'UPDATE' && record.status === 'Cancelled' && old_record.status !== 'Cancelled') {
@@ -267,23 +295,86 @@ export async function POST(req: NextRequest) {
         }
 
         // --- Check-ins ---
-        if (table === 'checkins' && type === 'INSERT') {
-            // Notify user of successful check-in
-            title = 'Gear Checked In';
-            message = 'You have successfully checked in gear.';
-            emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-        <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
-        <h2 style="color: ${BRAND_COLOR};">Gear Checked In</h2>
-        <p>You have successfully checked in your gear.</p>
-        <p>Thank you for using Nest!</p>
-        <hr>
-        <small style="color: #888;">Nest by Eden Oasis Team</small>
-      </div>
-    `;
-            userId = record.user_id;
-            category = 'gear_checkin';
-            metadata = { gear_id: record.gear_id, checkin_id: record.id };
+        if (table === 'checkins') {
+            if (type === 'INSERT') {
+                // Notify user of successful check-in submission
+                title = 'Check-in Submitted';
+                message = 'Your check-in has been submitted and is pending approval.';
+                userId = record.user_id;
+                category = 'gear_checkin';
+                metadata = { gear_id: record.gear_id, checkin_id: record.id };
+            } else if (type === 'UPDATE') {
+                // Handle check-in status changes
+                if (record.status === 'Completed' && old_record.status !== 'Completed') {
+                    // Check-in approved
+                    title = 'Check-in Approved';
+                    message = 'Your check-in has been approved and processed.';
+
+                    // Get user and gear details
+                    const { data: user } = await supabase.from('profiles').select('email,full_name,notification_preferences').eq('id', record.user_id).single();
+                    const { data: gear } = await supabase.from('gears').select('name').eq('id', record.gear_id).single();
+
+                    userId = record.user_id;
+                    category = 'gear_checkin';
+                    metadata = { gear_id: record.gear_id, checkin_id: record.id };
+
+                    // Send enhanced check-in approval email
+                    if (user?.email) {
+                        const prefs = user.notification_preferences || {};
+                        const sendEmail = prefs.email?.gear_checkins ?? notificationDefaults.email;
+
+                        if (sendEmail) {
+                            try {
+                                await sendCheckinApprovalEmail({
+                                    to: user.email,
+                                    userName: user.full_name || 'there',
+                                    gearList: [{
+                                        name: gear?.name || 'equipment',
+                                        condition: record.condition || 'Good'
+                                    }],
+                                    checkinDate: record.checkin_date || record.updated_at || new Date().toISOString(),
+                                    condition: record.condition || 'Good',
+                                    notes: record.notes,
+                                });
+                            } catch (err: any) {
+                                console.error('[Email Notification Error]', err);
+                            }
+                        }
+                    }
+                } else if (record.status === 'Rejected' && old_record.status !== 'Rejected') {
+                    // Check-in rejected
+                    title = 'Check-in Rejected';
+                    message = 'Your check-in has been rejected and requires attention.';
+
+                    // Get user and gear details
+                    const { data: user } = await supabase.from('profiles').select('email,full_name,notification_preferences').eq('id', record.user_id).single();
+                    const { data: gear } = await supabase.from('gears').select('name').eq('id', record.gear_id).single();
+
+                    userId = record.user_id;
+                    category = 'gear_checkin';
+                    metadata = { gear_id: record.gear_id, checkin_id: record.id };
+
+                    // Send enhanced check-in rejection email
+                    if (user?.email) {
+                        const prefs = user.notification_preferences || {};
+                        const sendEmail = prefs.email?.gear_checkins ?? notificationDefaults.email;
+
+                        if (sendEmail) {
+                            try {
+                                await sendCheckinRejectionEmail({
+                                    to: user.email,
+                                    userName: user.full_name || 'there',
+                                    gearList: [{ name: gear?.name || 'equipment' }],
+                                    reason: record.notes || 'No specific reason provided',
+                                    checkinDate: record.checkin_date || record.updated_at || new Date().toISOString(),
+                                });
+                            } catch (err: any) {
+                                console.error('[Email Notification Error]', err);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // --- Maintenance ---
@@ -442,7 +533,7 @@ export async function POST(req: NextRequest) {
                         subject: title,
                         html: emailHtml || `<p>${message}</p>`,
                     });
-                    
+
                     if (!emailResult.success) {
                         lastError = `Email: ${emailResult.error}`;
                         errors.push(lastError);
