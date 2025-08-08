@@ -100,6 +100,25 @@ export async function POST(req: NextRequest) {
                 overdueDays,
             });
 
+            // Send enhanced overdue reminder email to user
+            try {
+                await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifications/overdue-reminder`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId,
+                        gearList: userGearMap[userId].gearNames.map((name: string, index: number) => ({
+                            name,
+                            dueDate: userGearMap[userId].dueDates[index] || earliestDue.toISOString()
+                        })),
+                        dueDate: earliestDue.toISOString(),
+                        overdueDays,
+                    }),
+                });
+            } catch (error) {
+                console.error('Error sending overdue reminder email:', error);
+            }
+
             // Notify all admins by email
             const { data: admins } = await supabase
                 .from('profiles')
