@@ -53,13 +53,16 @@ export default function OptimizedUserDashboardPage() {
         const fetchUserProfile = async () => {
             try {
                 const { data: profile, error } = await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/profile`);
-                if (error) {
+                if (error && error !== '') {
                     logError(error, 'fetchUserProfile');
                 } else if (profile) {
                     setUserData(profile);
                 }
             } catch (error) {
-                logError(error, 'fetchUserProfile');
+                // Only log if it's a real error, not an empty object
+                if (error && (typeof error === 'string' || error instanceof Error || (typeof error === 'object' && Object.keys(error).length > 0))) {
+                    logError(error, 'fetchUserProfile');
+                }
             } finally {
                 setIsLoading(false);
             }
