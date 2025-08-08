@@ -36,6 +36,7 @@ import { Gear } from '@/types/supabase';
 import { Pagination } from '@/components/ui/Pagination';
 import { gearQueries } from '@/lib/api/queries';
 import { useDebounce } from '@/hooks/useDebounce';
+import { isFileList, isFile } from '@/lib/utils/browser-safe';
 
 // Category icon and color mapping
 const categoryIcons: Record<string, LucideIcon> = {
@@ -1258,9 +1259,9 @@ export default function ManageGearsPage() {
       if (data.image_url) {
         try {
           // Handle both FileList and File types
-          const imageFile = data.image_url instanceof FileList
+          const imageFile = isFileList(data.image_url)
             ? data.image_url[0]
-            : (data.image_url instanceof File ? data.image_url : null);
+            : (isFile(data.image_url) ? data.image_url : null);
 
           if (imageFile) {
             // Upload image first

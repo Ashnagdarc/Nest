@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { createClient } from '@/lib/supabase/client';
+import { isFileList, isFile } from '@/lib/utils/browser-safe';
 
 const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]\d{3}[)])?([-]?[\s]?)(\d{3})([-]?[\s]?)(\d{4})$/
@@ -91,11 +92,11 @@ export default function SignupPage() {
       }
 
       // If a profile photo was provided, upload it and update avatar_url
-      if (data.profilePicture && (data.profilePicture instanceof FileList ? data.profilePicture[0] : data.profilePicture)) {
+      if (data.profilePicture && (isFileList(data.profilePicture) ? data.profilePicture[0] : data.profilePicture)) {
         let file: File | undefined = undefined;
-        if (data.profilePicture instanceof FileList) {
+        if (isFileList(data.profilePicture)) {
           file = data.profilePicture[0];
-        } else if (data.profilePicture instanceof File) {
+        } else if (isFile(data.profilePicture)) {
           file = data.profilePicture;
         }
         if (file) {

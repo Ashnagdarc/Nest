@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog"; // Import for close button
+import { isFileList, getFirstFile } from "@/lib/utils/browser-safe";
 
 const gearSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -30,9 +31,10 @@ const gearSchema = z.object({
   status: z.enum(["Available", "Damaged", "Under Repair", "New"], {
     required_error: "Please select an initial status.",
   }),
-  image_url: z.instanceof(FileList).optional().transform(val =>
-    val && val.length > 0 ? Array.from(val)[0] : undefined
-  ),
+  image_url: z.any().optional().transform(val => {
+    if (isFileList(val) && val.length > 0) return val[0];
+    return undefined;
+  }),
   quantity: z.coerce.number().int().min(1, { message: "Quantity must be at least 1." }).default(1),
 });
 
