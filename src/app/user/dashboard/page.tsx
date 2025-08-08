@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { PackageCheck, Clock, Box, Search, ArrowUpDown, ArrowUpRight, Activity, Megaphone } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { AnnouncementsWidget } from "@/components/dashboard/AnnouncementsWidget";
 import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
@@ -17,12 +17,11 @@ import { PopularGearWidget } from "@/components/dashboard/PopularGearWidget";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { logError, logInfo } from '@/lib/logger';
-import { logger } from '@/utils/logger';
+import { logError } from '@/lib/logger';
 import { useToast } from "@/hooks/use-toast";
-import { createSupabaseSubscription } from "@/utils/supabase-subscription";
-import React from 'react';
+import { useDashboardData } from '@/hooks/dashboard/use-dashboard-data';
 import { apiGet } from '@/lib/apiClient';
+import React from 'react';
 
 // User profile data structure
 interface Profile {
@@ -35,29 +34,45 @@ interface Profile {
   status: 'Active' | 'Inactive' | 'Suspended';
 }
 
-// Simplified gear interface for dashboard statistics
-interface Gear {
-  id: string;
-  name?: string;
-  due_date: string | null;
-  status?: string;
-  checked_out_to?: string; // Added for user-specific stats
-  available_quantity?: number;
-}
-
 /**
  * Main user dashboard component with real-time asset management interface.
- * Manages user statistics, notifications, and real-time subscriptions.
+ * Now uses optimized data fetching while maintaining the exact same design.
  */
 export default function UserDashboardPage() {
   const { toast } = useToast();
   const supabase = createClient();
 
-  // Dashboard statistics state
-  const [userStats, setUserStats] = useState([
+  // Use optimized centralized dashboard data
+  const dashboardData = useDashboardData();
+
+  const [userData, setUserData] = useState<Profile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch user profile
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const { data: profile, error } = await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/profile`);
+        if (error) {
+          logError(error, 'fetchUserProfile');
+        } else if (profile) {
+          setUserData(profile);
+        }
+      } catch (error) {
+        logError(error, 'fetchUserProfile');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
+
+  // Transform dashboard data into the format expected by the existing UI
+  const userStats = [
     {
       title: 'Checked Out Gears',
-      value: 0,
+      value: dashboardData.userStats.checkedOut,
       icon: PackageCheck,
       color: 'text-blue-500',
       bgColor: 'bg-blue-500/10',
@@ -66,7 +81,7 @@ export default function UserDashboardPage() {
     },
     {
       title: 'Overdue Gears',
-      value: 0,
+      value: dashboardData.userStats.overdue,
       icon: Clock,
       color: 'text-red-500',
       bgColor: 'bg-red-500/10',
@@ -75,185 +90,14 @@ export default function UserDashboardPage() {
     },
     {
       title: 'Available Gears',
-      value: 0,
+      value: dashboardData.userStats.available,
       icon: Box,
       color: 'text-green-500',
       bgColor: 'bg-green-500/10',
       link: '/user/browse',
       description: 'Ready for checkout'
     },
-  ]);
-
-  // const [notificationCount, setNotificationCount] = useState(0); // No longer used
-  const [isLoading, setIsLoading] = useState(true);
-  const [userData, setUserData] = useState<Profile | null>(null);
-  const hasLogged = useRef(false);
-  // error state removed
-
-  // Refactored: Fetch all stats in one go to avoid race conditions
-  const fetchAllStats = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
-        return;
-      }
-      // Fetch both in parallel
-      const [checkoutsRes, availableRes] = await Promise.all([
-        apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Checked%20Out`),
-        apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Available&pageSize=1000`)
-      ]);
-      const checkouts = checkoutsRes.data || [];
-      const available = availableRes.data || [];
-      const now = new Date();
-      const checkedOutGears = checkouts.filter((gear: Gear) => gear.checked_out_to === session.user.id);
-      const overdueGears = checkedOutGears.filter((gear: Gear) => gear.due_date && new Date(gear.due_date) < now);
-      setUserStats(prev => [
-        { ...prev[0], value: checkedOutGears.length },
-        { ...prev[1], value: overdueGears.length },
-        { ...prev[2], value: available.reduce((sum, g) => sum + (g.available_quantity ?? 0), 0) }
-      ]);
-    } catch {
-      // error handling (toast/log) only
-    }
-  };
-
-  // Fetch unread notification count
-  const fetchNotificationCount = async () => {
-    try {
-      logInfo('Starting notification count fetch', 'fetchNotificationCount');
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        logError(sessionError, 'fetchNotificationCount', { stage: 'getSession', error: sessionError });
-        throw sessionError;
-      }
-      if (!session?.user) {
-        const noSessionError = new Error('No active session found');
-        logError(noSessionError, 'fetchNotificationCount', { stage: 'checkSession' });
-        throw noSessionError;
-      }
-      logInfo('Fetching notifications', 'fetchNotificationCount', { userId: session.user.id, timestamp: new Date().toISOString() });
-      const { data: profileData, error: profileError } = await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/profile`);
-      console.log('Profile API response:', profileData, profileError);
-      if (profileError) {
-        logError(profileError, 'fetchNotificationCount', { stage: 'fetchProfile', userId: session.user.id, error: profileError });
-        throw new Error('Failed to verify user access');
-      }
-      if (!profileData) {
-        const noProfileError = new Error('User profile not found');
-        logError(noProfileError, 'fetchNotificationCount', { stage: 'checkProfile', userId: session.user.id });
-        throw noProfileError;
-      }
-      const { data: unreadCountData, error: unreadCountError } = await apiGet<{ data: number; error: string | null }>(`/api/notifications/unread-count?userId=${session.user.id}`);
-      console.log('Unread notifications API response:', unreadCountData, unreadCountError);
-      if (unreadCountError) {
-        logError(unreadCountError, 'fetchNotificationCount', { stage: 'fetchNotifications', userId: session.user.id, error: unreadCountError, userProfile: { role: profileData.role, status: profileData.status } });
-        throw new Error(unreadCountError);
-      }
-      const count = unreadCountData || 0;
-      logInfo('Successfully fetched notifications', 'fetchNotificationCount', { userId: session.user.id, count, userProfile: { role: profileData.role, status: profileData.status } });
-      // setNotificationCount(count); // No longer used
-    } catch (error: unknown) {
-      const errorDetails = error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : { error };
-      logger.error('Error fetching notification count:', errorDetails);
-      toast({ title: 'Error', description: 'Failed to fetch notification count.', variant: 'destructive' });
-    }
-  };
-
-  // Dashboard setup effect (fetch user profile)
-  useEffect(() => {
-    console.log('UserDashboardPage useEffect ran');
-    let mounted = true;
-    let cleanup: (() => void) | undefined;
-    const dataCache = new Map();
-    let refreshTimeoutId: NodeJS.Timeout | null = null;
-    const setupDashboard = async () => {
-      if (hasLogged.current) return; // Prevent repeated logging
-      hasLogged.current = true;
-      try {
-        setIsLoading(true);
-        logInfo('Starting dashboard setup', 'setupDashboard');
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) {
-          logError(sessionError, 'setupDashboard', { stage: 'getSession' });
-          throw sessionError;
-        }
-        if (!session?.user) {
-          const noUserError = new Error('No authenticated user found');
-          logError(noUserError, 'setupUser', { stage: 'checkUser' });
-          throw noUserError;
-        }
-        logInfo('Session found', 'setupDashboard', { userId: session.user.id });
-        const { data: profile, error: profileError } = await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/profile`);
-        console.log('Profile API response:', profile, profileError);
-        if (profileError) {
-          logError(profileError, 'setupDashboard', { stage: 'fetchProfile', userId: session.user.id });
-          console.error('Error fetching user profile:', profileError);
-        } else if (profile && mounted) {
-          logInfo('Profile fetched successfully', 'setupDashboard', { userId: session.user.id, hasProfile: !!profile });
-          setUserData(profile);
-        }
-        if (mounted) {
-          logInfo('Starting parallel data fetches', 'setupDashboard');
-          await fetchAllStats();
-          await fetchNotificationCount();
-          logInfo('Parallel data fetches completed', 'setupDashboard');
-          const dashboardSubscription = createSupabaseSubscription({
-            supabase,
-            channel: 'user-dashboard-all-changes',
-            config: {
-              event: '*',
-              schema: 'public',
-              table: 'gears'
-            },
-            callback: () => {
-              if (refreshTimeoutId) {
-                clearTimeout(refreshTimeoutId);
-              }
-              refreshTimeoutId = setTimeout(() => {
-                fetchAllStats();
-                dataCache.set(`dashboard-${session.user.id}`, {
-                  timestamp: Date.now(),
-                  // ... cache logic if needed ...
-                });
-              }, 1000);
-            },
-            pollingInterval: 30000
-          });
-          cleanup = () => {
-            dashboardSubscription.unsubscribe();
-            if (refreshTimeoutId) {
-              clearTimeout(refreshTimeoutId);
-            }
-            dataCache.clear();
-          };
-        }
-      } catch (error) {
-        logError(error, 'setupDashboard', {
-          errorType: error instanceof Error ? error.constructor.name : typeof error,
-          errorDetails: error instanceof Error ? error.message : String(error),
-          errorStack: error instanceof Error ? error.stack : undefined
-        });
-        console.error('Error in setupDashboard:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load dashboard data. Please try refreshing the page.",
-          variant: "destructive"
-        });
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-          logInfo('Dashboard setup completed', 'setupDashboard', { success: !isLoading });
-        }
-      }
-    };
-    setupDashboard();
-    return () => {
-      if (cleanup) {
-        cleanup();
-      }
-      mounted = false;
-    };
-  }, [supabase, toast]);
+  ];
 
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -267,6 +111,9 @@ export default function UserDashboardPage() {
       },
     }),
   };
+
+  // Check if any data is still loading
+  const isDataLoading = Object.values(dashboardData.loading).some(loading => loading);
 
   return (
     <ErrorBoundary>
@@ -314,7 +161,7 @@ export default function UserDashboardPage() {
         </motion.div>
 
         {/* Stats Cards */}
-        {isLoading ? (
+        {isDataLoading ? (
           <LoadingState variant="cards" count={3} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
