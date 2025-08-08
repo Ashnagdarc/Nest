@@ -12,8 +12,8 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
-        // Create Supabase client with proper server-side auth
-        const supabase = createSupabaseServerClient();
+        // Create Supabase client with admin privileges
+        const supabase = await createSupabaseServerClient(true);
 
         // Get the user's session
         const { data: { user }, error: authError } = await supabase.auth.getUser();

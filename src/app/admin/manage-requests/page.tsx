@@ -198,7 +198,10 @@ function ManageRequestsContent() {
       if (filterStatus && filterStatus !== 'all') params.set('status', filterStatus);
       // Add more filters as needed (userFilter, gearFilter, keyword, dateRange)
       // (For now, only status is supported server-side)
-      const { data: requestsData, total: totalCount, error: requestsError } = await apiGet<{ data: Record<string, unknown>[]; total: number; error: string | null }>(`/api/requests?${params.toString()}`);
+      const response = await apiGet<{ data: Record<string, unknown>[]; total: number; error: string | null }>(`/api/requests?${params.toString()}`);
+      console.log('🔍 API Response:', response);
+
+      const { data: requestsData, total: totalCount, error: requestsError } = response;
       if (requestsError) {
         console.error('Error fetching gear requests:', requestsError);
         setFetchError('Failed to load gear requests.');
@@ -207,13 +210,18 @@ function ManageRequestsContent() {
         return;
       }
       setTotal(totalCount || 0);
+      console.log('📊 Processing requests:', { requestsData, totalCount });
+
       // Process and map the data to the format expected by the UI
-      const processedRequests = await Promise.all((requestsData || []).map(async (request: Record<string, unknown>) => {
+      const processedRequests = (requestsData || []).map((request: Record<string, unknown>) => {
+        console.log('🔄 Processing request:', request.id);
+
         // Fetch gear details for gear_ids array
         let gearNames: string[] = [];
         if (Array.isArray(request.gear_ids) && request.gear_ids.length > 0) {
-          const { data: gearData } = await apiGet<{ data: { name: string }[]; error: string | null }>(`/api/gears?ids=${request.gear_ids.join(',')}`);
-          gearNames = gearData ? gearData.map((gear) => gear.name) : [];
+          // Temporarily skip gear names to test if that's the issue
+          gearNames = [`${request.gear_ids.length} gear(s) requested`];
+          console.log('⏭️ Skipping gear names fetch for now, using placeholder');
         }
         // Extract first name from full_name
         let firstName = 'Unknown User';
@@ -238,7 +246,8 @@ function ManageRequestsContent() {
           checkinDate: request.checkin_date ? new Date(request.checkin_date as string) : null,
           teamMembers: request.team_members || null
         };
-      }));
+      });
+      console.log('✅ Final processed requests:', processedRequests);
       setRequests(processedRequests);
     } catch (error) {
       console.error('Error fetching gear requests:', error);
@@ -302,6 +311,7 @@ function ManageRequestsContent() {
   const uniqueUserNames = Array.from(new Set(requests.map(r => r.userName))).sort();
 
   // Advanced filter logic
+  console.log('🔍 Filtering requests:', { requests: requests.length, userFilter, gearFilter, filterStatus, keyword, dateRange });
   const filteredRequests = requests.filter(req => {
     const userMatch = !userFilter || req.userName === userFilter;
     const gearMatch = !gearFilter || req.gearNames.includes(gearFilter);
@@ -311,8 +321,22 @@ function ManageRequestsContent() {
     if (dateRange?.from && dateRange?.to && req.requestDate instanceof Date) {
       dateMatch = req.requestDate >= dateRange.from && req.requestDate <= dateRange.to;
     }
-    return userMatch && gearMatch && statusMatch && keywordMatch && dateMatch;
+    const result = userMatch && gearMatch && statusMatch && keywordMatch && dateMatch;
+    if (!result) {
+      console.log('❌ Request filtered out:', {
+        id: req.id,
+        userName: req.userName,
+        status: req.status,
+        userMatch,
+        gearMatch,
+        statusMatch,
+        keywordMatch,
+        dateMatch
+      });
+    }
+    return result;
   });
+  console.log('✅ Filtered requests:', filteredRequests.length);
 
   // Approve handler: update DB and state, and insert status history and notification
   const handleApprove = async (requestId: string) => {

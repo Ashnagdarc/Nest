@@ -215,6 +215,15 @@ export default function ManageCheckinsPage() {
       if (checkinError) throw checkinError;
       // Batch update gear statuses
       for (const c of group as Checkin[]) {
+        // First, get the current available_quantity
+        const { data: gearData } = await supabase
+          .from('gears')
+          .select('available_quantity')
+          .eq('id', c.gearId)
+          .single();
+
+        const currentQuantity = gearData?.available_quantity || 0;
+
         await supabase
           .from('gears')
           .update({
@@ -223,7 +232,7 @@ export default function ManageCheckinsPage() {
             current_request_id: null,
             condition: c.condition,
             updated_at: new Date().toISOString(),
-            available_quantity: supabase.raw('available_quantity + 1')
+            available_quantity: currentQuantity + 1
           })
           .eq('id', c.gearId);
         // Log activity
