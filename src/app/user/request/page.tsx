@@ -388,6 +388,23 @@ function RequestGearContent() {
         throw error;
       }
 
+      // Populate the gear_request_gears junction table
+      if (requestData && requestData[0] && data.selectedGears.length > 0) {
+        const gearRequestGearsData = data.selectedGears.map(gearId => ({
+          gear_request_id: requestData[0].id,
+          gear_id: gearId
+        }));
+
+        const { error: junctionError } = await supabase
+          .from('gear_request_gears')
+          .insert(gearRequestGearsData);
+
+        if (junctionError) {
+          console.error('Error creating gear_request_gears relationships:', junctionError);
+          // Don't throw here as the main request was created successfully
+        }
+      }
+
       // Notify admins via API trigger
       if (requestData && requestData[0]) {
         await fetch('/api/notifications/trigger', {
@@ -424,15 +441,15 @@ function RequestGearContent() {
       await createSystemNotification(
         `New Equipment Request: ${selectedGearNames.join(', ')}`,
         `${userProfile?.full_name || 'Unknown User'} has requested equipment for ${data.reason || ''}`,
-        'gear_request'
+        'gear_request',
+        [] // Empty array means notify all admins
       );
 
       // Create notification for the user
       await createSystemNotification(
         userId,
         'Request Submitted Successfully',
-        `Your request for ${selectedGearNames.join(', ')} has been submitted and is pending approval.`,
-        'gear_request'
+        `Your request for ${selectedGearNames.join(', ')} has been submitted and is pending approval.`
       );
 
       // Send external notification to Google Chat
@@ -494,11 +511,10 @@ function RequestGearContent() {
 
     const term = searchTerm.toLowerCase();
     return availableGears.filter(gear =>
-      (gear as { name?: string; category?: string; description?: string; brand?: string; model?: string }).name?.toLowerCase().includes(term) ||
+      (gear as { name?: string; category?: string; description?: string; serial_number?: string }).name?.toLowerCase().includes(term) ||
       (gear as { category?: string }).category?.toLowerCase().includes(term) ||
       (gear as { description?: string }).description?.toLowerCase().includes(term) ||
-      (gear as { brand?: string }).brand?.toLowerCase().includes(term) ||
-      (gear as { model?: string }).model?.toLowerCase().includes(term)
+      (gear as { serial_number?: string }).serial_number?.toLowerCase().includes(term)
     );
   }, [availableGears, searchTerm]);
 
@@ -527,7 +543,7 @@ function RequestGearContent() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search gears by name, category, or description..."
+                    placeholder="Search gears by name, category, description, or serial number..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 w-full min-h-[44px] text-sm sm:text-base"

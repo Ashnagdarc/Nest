@@ -161,7 +161,7 @@ export default function CheckInGearPage() {
   const [scannedCode, setScannedCode] = useState<string | null>(null);
 
   // Use the new custom hook for checked out gears
-  const { checkedOutGears, fetchCheckedOutGear, listContainerRef, scrollPositionRef } = useCheckedOutGears(userId, toast);
+  const { checkedOutGears, fetchCheckedOutGear, listContainerRef, scrollPositionRef, isLoading } = useCheckedOutGears(userId, toast);
 
   /**
    * User Authentication Effect
@@ -184,68 +184,17 @@ export default function CheckInGearPage() {
   }, [supabase]);
 
   /**
-   * Equipment Data and Real-time Updates Effect
+   * Equipment Data Effect
    * 
-   * Fetches checked-out equipment data and sets up real-time subscriptions
-   * for live updates when equipment status changes. Preserves scroll position
-   * during updates for optimal user experience.
+   * The useCheckedOutGears hook now handles data fetching and real-time updates.
+   * This effect is kept for any additional user-specific logic if needed.
    */
   useEffect(() => {
     if (!userId) return;
 
-    /**
-     * Fetch Checked-Out Equipment with Scroll Preservation
-     * 
-     * Retrieves equipment data while maintaining UI state to prevent
-     * disruptive scroll position changes during real-time updates.
-     */
-    const fetchCheckedOutGearsWithScroll = async () => {
-      // Preserve scroll position before data refresh
-      if (listContainerRef.current) {
-        scrollPositionRef.current = listContainerRef.current.scrollTop;
-      }
-
-      await fetchCheckedOutGear();
-
-      // Restore scroll position after data refresh
-      setTimeout(() => {
-        if (listContainerRef.current) {
-          listContainerRef.current.scrollTop = scrollPositionRef.current;
-        }
-      }, 0);
-    };
-
-    // Initial data fetch
-    fetchCheckedOutGearsWithScroll();
-
-    // Set up real-time subscription for equipment changes
-    const gearChannel = supabase
-      .channel('gear_changes')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'gears',
-        filter: `checked_out_to=eq.${userId}`
-      }, fetchCheckedOutGearsWithScroll)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'gears',
-        filter: `checked_out_to=eq.${userId}`
-      }, fetchCheckedOutGearsWithScroll)
-      .on('postgres_changes', {
-        event: 'DELETE',
-        schema: 'public',
-        table: 'gears',
-        filter: `checked_out_to=eq.${userId}`
-      }, fetchCheckedOutGearsWithScroll)
-      .subscribe();
-
-    // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(gearChannel);
-    };
-  }, [userId, toast, fetchCheckedOutGear, listContainerRef, scrollPositionRef]);
+    // Any additional user-specific logic can go here
+    console.log('User ID set, gear data will be fetched by hook:', userId);
+  }, [userId]);
 
   /**
    * QR Scanner Initialization Effect
@@ -576,46 +525,95 @@ export default function CheckInGearPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: historyData, error: historyError } = await supabase
-        .from('checkins')
-        .select(`
-          id,
-          checkin_date,
-          status,
-          condition,
-          notes,
-          gears:gear_id (
-            name
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('checkin_date', { ascending: false });
+      // Use a direct query approach that's more reliable
+      let historyData, historyError;
+      try {
+        const result = await supabase
+          .from('checkins')
+          .select(`
+            id,
+            checkin_date,
+            status,
+            condition,
+            notes,
+            gear_id,
+            gears!inner (
+              name
+            )
+          `)
+          .eq('user_id', user.id)
+          .order('checkin_date', { ascending: false });
+
+        historyData = result.data;
+        historyError = result.error;
+      } catch (queryError) {
+        console.error("Exception during check-in history query:", queryError);
+        historyError = { message: "Query exception", details: queryError };
+      }
 
       if (historyError) {
         console.error("Error fetching check-in history:", historyError);
-        toast({
-          title: "Error",
-          description: "Failed to load check-in history",
-          variant: "destructive"
+        console.error("Error details:", {
+          message: historyError.message,
+          details: historyError.details,
+          hint: historyError.hint
         });
+
+        // Fallback: try to fetch check-ins without gear names first, then fetch gear names separately
+        const { data: basicHistoryData, error: basicError } = await supabase
+          .from('checkins')
+          .select('id, checkin_date, status, condition, notes, gear_id')
+          .eq('user_id', user.id)
+          .order('checkin_date', { ascending: false });
+
+        if (basicError) {
+          console.error("Fallback query also failed:", basicError);
+          toast({
+            title: "Error",
+            description: "Failed to load check-in history. Please try refreshing the page.",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        // Fetch gear names for all gear IDs
+        const gearIds = basicHistoryData?.map(item => item.gear_id).filter(Boolean) || [];
+        const { data: gearsData } = await supabase
+          .from('gears')
+          .select('id, name')
+          .in('id', gearIds);
+
+        const gearNameMap = new Map(gearsData?.map(g => [g.id, g.name]) || []);
+
+        const processedHistory: CheckInHistory[] = (basicHistoryData || []).map((item) => ({
+          id: item.id,
+          gearName: gearNameMap.get(item.gear_id) || 'Unknown Gear',
+          checkinDate: new Date(item.checkin_date),
+          status: item.status || 'Unknown',
+          condition: item.condition || 'Not specified',
+          notes: item.notes || ''
+        }));
+
+        setCheckInHistory(processedHistory);
         return;
       }
 
-      // Define a type for the check-in history row returned from Supabase
-      // and use it in the processedHistory mapping instead of 'any' or 'unknown'.
-      type SupabaseCheckInHistoryRow = {
+      // Process the data from the direct query
+      type CheckInHistoryRow = {
         id: string;
         checkin_date: string;
         status: string;
         condition: string;
         notes: string;
-        gears: { name?: string }[];
+        gear_id: string;
+        gears: { name: string };
       };
+
       const processedHistory: CheckInHistory[] = (historyData || []).map((item) => {
-        const row = item as SupabaseCheckInHistoryRow;
+        const row = item as CheckInHistoryRow;
         return {
           id: row.id,
-          gearName: row.gears[0]?.name || 'Unknown Gear',
+          gearName: row.gears?.name || 'Unknown Gear',
           checkinDate: new Date(row.checkin_date),
           status: row.status || 'Unknown',
           condition: row.condition || 'Not specified',
@@ -635,6 +633,9 @@ export default function CheckInGearPage() {
   useEffect(() => {
     fetchCheckInHistory();
   }, []);
+
+  // Debug function to test the query
+
 
   // Add history section render function
   const renderCheckInHistory = () => {
@@ -711,6 +712,7 @@ export default function CheckInGearPage() {
                 <QrCode className="mr-2 h-4 w-4" />
                 Scan QR Code
               </Button>
+
             </div>
           </div>
         </div>
@@ -767,7 +769,23 @@ export default function CheckInGearPage() {
                           <CardContent>
                             <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px] w-full rounded-md border">
                               <div ref={listContainerRef} className="p-4 space-y-3">
-                                {checkedOutGears.map((gear) => renderGearCard(gear))}
+                                {isLoading ? (
+                                  <div className="flex items-center justify-center py-8">
+                                    <div className="flex items-center space-x-2">
+                                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                                      <span className="text-sm text-muted-foreground">Loading your gear...</span>
+                                    </div>
+                                  </div>
+                                ) : checkedOutGears.length > 0 ? (
+                                  checkedOutGears.map((gear) => renderGearCard(gear))
+                                ) : (
+                                  <div className="flex items-center justify-center py-8">
+                                    <div className="text-center">
+                                      <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                                      <p className="text-sm text-muted-foreground">No gear checked out</p>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </ScrollArea>
                           </CardContent>

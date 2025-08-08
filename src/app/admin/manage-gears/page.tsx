@@ -153,6 +153,15 @@ export default function ManageGearsPage() {
     }
   }, [pageSize]);
 
+  // Debug selectedGear state changes
+  useEffect(() => {
+    console.log("selectedGear state changed to:", selectedGear);
+    if (selectedGear) {
+      console.log("selectedGear.name:", selectedGear.name);
+      console.log("selectedGear.id:", selectedGear.id);
+    }
+  }, [selectedGear]);
+
   useEffect(() => {
     // Check Supabase connection and authentication
     const checkSupabaseConnection = async () => {
@@ -226,6 +235,11 @@ export default function ManageGearsPage() {
         setGears([]);
         setTotal(0);
       } else {
+        console.log("Fetched gears data:", data);
+        if (data && data.length > 0) {
+          console.log("First gear sample:", data[0]);
+          console.log("First gear name:", data[0].name);
+        }
         setGears(data || []);
         setTotal(newTotal || 0);
       }
@@ -1342,37 +1356,65 @@ export default function ManageGearsPage() {
 
   // Handle gear details dialog open
   const handleOpenGearDetails = async (gear: Gear) => {
-    // If we only have basic fields, fetch the full gear details
-    if (!gear.description || !gear.purchase_date || !gear.condition) {
-      setLoading(true);
-      try {
-        const { data, error } = await apiGet<{ data: Gear | null; error: string | null }>(`/api/gears/${gear.id}`);
-        if (error) {
-          console.error("Error fetching gear details:", error);
-          toast({
-            title: "Error",
-            description: "Could not load gear details.",
-            variant: "destructive",
-          });
-          // Use what we have
-          setSelectedGear(gear);
-        } else {
-          setSelectedGear(data);
-        }
-      } catch (err) {
-        console.error("Exception when fetching gear details:", err);
+    console.log("Opening gear details for:", gear);
+    console.log("Gear name:", gear.name);
+    console.log("Gear description:", gear.description);
+    console.log("Gear purchase_date:", gear.purchase_date);
+    console.log("Gear condition:", gear.condition);
+
+    // Always fetch the full gear details to ensure we have complete data
+    setLoading(true);
+    try {
+      const response = await apiGet<{ data: Gear | null; error: string | null }>(`/api/gears/${gear.id}?t=${Date.now()}`);
+      console.log("API response:", response);
+      console.log("API response type:", typeof response);
+      console.log("API response keys:", Object.keys(response));
+      const { data, error } = response;
+      console.log("Destructured data:", data);
+      console.log("Destructured error:", error);
+      if (error) {
+        console.error("Error fetching gear details:", error);
         toast({
           title: "Error",
           description: "Could not load gear details.",
           variant: "destructive",
         });
+        // Use what we have
         setSelectedGear(gear);
-      } finally {
-        setLoading(false);
-        setIsGearDetailsOpen(true);
+      } else {
+        console.log("Fetched gear data:", data?.data);
+        console.log("Setting selectedGear to:", data?.data);
+        console.log("Data object:", data);
+        console.log("Data.data type:", typeof data?.data);
+        console.log("Data.data value:", data?.data);
+        if (data && data.data && typeof data.data === 'object') {
+          console.log("Gear data is valid, setting state");
+          setSelectedGear(data.data);
+        } else {
+          console.log("Gear data is null/undefined/invalid, using original gear");
+          console.log("Original gear:", gear);
+          setSelectedGear(gear);
+        }
+        console.log("selectedGear state should now be:", data?.data || gear);
+        console.log("Final selectedGear object:", data?.data || gear);
+        console.log("Final selectedGear name:", (data?.data || gear)?.name);
+        console.log("Final selectedGear name type:", typeof (data?.data || gear)?.name);
+        console.log("Final selectedGear name length:", (data?.data || gear)?.name?.length);
+        console.log("Final selectedGear name JSON:", JSON.stringify((data?.data || gear)?.name));
+        console.log("Final selectedGear name === null:", (data?.data || gear)?.name === null);
+        console.log("Final selectedGear name === undefined:", (data?.data || gear)?.name === undefined);
+        console.log("Final selectedGear name === '':", (data?.data || gear)?.name === '');
       }
-    } else {
+    } catch (err) {
+      console.error("Exception when fetching gear details:", err);
+      toast({
+        title: "Error",
+        description: "Could not load gear details.",
+        variant: "destructive",
+      });
       setSelectedGear(gear);
+    } finally {
+      setLoading(false);
       setIsGearDetailsOpen(true);
     }
   };
@@ -1387,6 +1429,18 @@ export default function ManageGearsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card rounded-lg p-4 border shadow-sm">
         <h1 className="text-3xl font-bold text-foreground">Manage Gears</h1>
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (gears.length > 0) {
+                console.log("Testing gear details with first gear:", gears[0]);
+                handleOpenGearDetails(gears[0]);
+              }
+            }}
+            className="text-xs sm:text-sm bg-background hover:bg-accent"
+          >
+            Test Gear Details
+          </Button>
           <Button variant="outline" onClick={handleExport} className="text-xs sm:text-sm bg-background hover:bg-accent">
             <Download className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
             <span className="hidden sm:inline">Export CSV</span>
@@ -1473,7 +1527,7 @@ export default function ManageGearsPage() {
             <div className="relative flex-1 max-w-full sm:max-w-sm">
               <Filter className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, serial, brand, or model..."
+                placeholder="Search by name, serial, description, or category..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 bg-background"
@@ -1751,15 +1805,20 @@ export default function ManageGearsPage() {
 
       {/* Gear Details Dialog */}
       <Dialog open={isGearDetailsOpen} onOpenChange={setIsGearDetailsOpen}>
-        <DialogContent className="sm:max-w-[625px] w-[95vw] max-w-full">
+        <DialogContent key={selectedGear?.id || 'no-gear'} className="sm:max-w-[625px] w-[95vw] max-w-full">
           <DialogHeader>
-            <DialogTitle>Gear Details</DialogTitle>
+            <DialogTitle>Gear Details - {selectedGear?.name || 'Loading...'}</DialogTitle>
             <DialogDescription>
-              View complete information for {selectedGear?.name}.
+              View complete information for {selectedGear?.name || 'Loading...'}.
             </DialogDescription>
           </DialogHeader>
+          {console.log("Dialog rendering with selectedGear:", selectedGear)}
           {selectedGear && (
             <div className="grid gap-6 py-4">
+              {console.log("Rendering gear details with:", selectedGear)}
+              <div className="text-sm text-red-500 mb-2">
+                Debug: Gear ID: {selectedGear.id}, Name: {selectedGear.name || 'NO NAME'}, Timestamp: {new Date().toISOString()}
+              </div>
               <div className="flex items-center gap-4">
                 <div className="w-24 h-24 rounded-md bg-muted flex items-center justify-center overflow-hidden border shadow-sm">
                   {selectedGear.image_url ? (
@@ -1773,10 +1832,13 @@ export default function ManageGearsPage() {
                   )}
                 </div>
                 <div>
-                  <h3 className="text-xl font-semibold">{selectedGear.name}</h3>
+                  <h3 className="text-xl font-semibold">{selectedGear.name || 'No Name'}</h3>
+                  <div className="text-xs text-blue-500 mb-1">
+                    Raw name value: "{selectedGear.name}" (type: {typeof selectedGear.name})
+                  </div>
                   <div className="flex items-center gap-2 mt-1">
                     {getCategoryIcon(selectedGear.category, 16)}
-                    <p className="text-sm text-muted-foreground">{selectedGear.category}</p>
+                    <p className="text-sm text-muted-foreground">{selectedGear.category || 'No Category'}</p>
                   </div>
                 </div>
               </div>

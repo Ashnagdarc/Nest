@@ -274,6 +274,49 @@ export interface Database {
             };
 
             /**
+             * Request Status History Table
+             * 
+             * Comprehensive audit trail of all status changes for gear requests.
+             * Tracks who changed what status and when for compliance and debugging.
+             */
+            request_status_history: {
+                Row: {
+                    /** Unique history entry identifier */
+                    id: string;
+                    /** ID of the request this history entry belongs to */
+                    request_id: string;
+                    /** Status that was set */
+                    status: string;
+                    /** ID of user who made the status change */
+                    changed_by: string | null;
+                    /** Optional note about the status change */
+                    note: string | null;
+                    /** Timestamp when status was changed */
+                    changed_at: string;
+                    /** Timestamp when history entry was created */
+                    created_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    request_id: string;
+                    status: string;
+                    changed_by?: string | null;
+                    note?: string | null;
+                    changed_at?: string;
+                    created_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    request_id?: string;
+                    status?: string;
+                    changed_by?: string | null;
+                    note?: string | null;
+                    changed_at?: string;
+                    created_at?: string;
+                };
+            };
+
+            /**
              * Asset Activity Log Table
              * 
              * Comprehensive audit trail of all asset-related activities
@@ -604,6 +647,13 @@ export type GearRequest = Database['public']['Tables']['gear_requests']['Row'];
 export type GearRequestInsert = Database['public']['Tables']['gear_requests']['Insert'];
 /** Request update data */
 export type GearRequestUpdate = Database['public']['Tables']['gear_requests']['Update'];
+
+/** Request status history data structure */
+export type RequestStatusHistory = Database['public']['Tables']['request_status_history']['Row'];
+/** New request status history creation data */
+export type RequestStatusHistoryInsert = Database['public']['Tables']['request_status_history']['Insert'];
+/** Request status history update data */
+export type RequestStatusHistoryUpdate = Database['public']['Tables']['request_status_history']['Update'];
 
 /** Activity log entry data structure */
 export type ActivityLog = Database['public']['Tables']['gear_activity_log']['Row'];

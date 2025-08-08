@@ -3,19 +3,24 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
     try {
+        console.log("API: Fetching gear with ID:", params.id);
         const supabase = await createSupabaseServerClient();
         const { data, error } = await supabase.from('gears').select('*').eq('id', params.id).single();
         if (error) {
+            console.error("API: Database error:", error);
             if (error.code === 'PGRST116' || error.message?.toLowerCase().includes('row not found')) {
                 return NextResponse.json({ data: null, error: 'Gear not found.' }, { status: 404 });
             }
             return NextResponse.json({ data: null, error: `Database error: ${error.message}` }, { status: 500 });
         }
         if (!data) {
+            console.log("API: No data found for gear ID:", params.id);
             return NextResponse.json({ data: null, error: 'Gear not found.' }, { status: 404 });
         }
+        console.log("API: Returning gear data:", data);
         return NextResponse.json({ data, error: null });
     } catch (error) {
+        console.error("API: Unexpected error:", error);
         return NextResponse.json({ data: null, error: 'Unexpected error. Please try again.' }, { status: 500 });
     }
 }

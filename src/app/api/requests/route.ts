@@ -20,7 +20,23 @@ export async function GET(request: NextRequest) {
         console.log('🔍 Query params:', { status, userId, page, pageSize, from, to });
 
         // Build the query - with service role key, we can bypass RLS
-        let query = supabase.from('gear_requests').select('*, profiles:user_id (full_name, email)', { count: 'exact' });
+        // Include gear details through the gear_request_gears junction table
+        let query = supabase
+            .from('gear_requests')
+            .select(`
+                *,
+                profiles:user_id (full_name, email),
+                gear_request_gears (
+                    gear_id,
+                    gears (
+                        id,
+                        name,
+                        category,
+                        description,
+                        serial_number
+                    )
+                )
+            `, { count: 'exact' });
 
         // Apply filters
         if (status && status !== 'all') {
