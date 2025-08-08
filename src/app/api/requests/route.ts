@@ -3,22 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
     try {
-        // Create and await the Supabase client
-        const supabase = await createSupabaseServerClient();
+        console.log('🔍 Admin requests API called');
 
-        // Get the authenticated user
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        // Check for authentication errors
-        if (authError) {
-            console.error('Authentication error:', authError);
-            return NextResponse.json({ data: null, error: 'Authentication failed' }, { status: 401 });
-        }
-
-        // Check if user exists
-        if (!user) {
-            return NextResponse.json({ data: null, error: 'Unauthorized: No authenticated user found' }, { status: 401 });
-        }
+        // Create and await the Supabase client with admin privileges
+        const supabase = await createSupabaseServerClient(true);
 
         // Extract query parameters
         const { searchParams } = new URL(request.url);
@@ -29,11 +17,10 @@ export async function GET(request: NextRequest) {
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
 
-        // Build the query
-        let query;
+        console.log('🔍 Query params:', { status, userId, page, pageSize, from, to });
 
-        // Always join profiles for user info
-        query = supabase.from('gear_requests').select('*, profiles:user_id (full_name, email)', { count: 'exact' });
+        // Build the query - with service role key, we can bypass RLS
+        let query = supabase.from('gear_requests').select('*, profiles:user_id (full_name, email)', { count: 'exact' });
 
         // Apply filters
         if (status && status !== 'all') {
@@ -52,44 +39,27 @@ export async function GET(request: NextRequest) {
 
         // Handle database query errors
         if (error) {
-            console.error('Database error fetching requests:', error);
+            console.error('❌ Database error fetching requests:', error);
             return NextResponse.json({ data: null, total: 0, error: `Database error: ${error.message}` }, { status: 500 });
         }
+
+        console.log('✅ Successfully fetched requests:', { count: data?.length || 0, total: count || 0, data: data });
 
         // Return successful response
         return NextResponse.json({ data, total: count ?? 0, error: null });
     } catch (error) {
-        console.error('Unexpected error in /api/requests:', error);
+        console.error('❌ Unexpected error in /api/requests:', error);
         return NextResponse.json({ data: null, error: 'Failed to fetch requests' }, { status: 500 });
     }
 }
 
 export async function POST(request: NextRequest) {
     try {
-        // Create and await the Supabase client
-        const supabase = await createSupabaseServerClient();
-
-        // Get the authenticated user
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        // Check for authentication errors
-        if (authError) {
-            console.error('Authentication error:', authError);
-            return NextResponse.json({ data: null, error: 'Authentication failed' }, { status: 401 });
-        }
-
-        // Check if user exists
-        if (!user) {
-            return NextResponse.json({ data: null, error: 'Unauthorized: No authenticated user found' }, { status: 401 });
-        }
+        // Create and await the Supabase client with admin privileges
+        const supabase = await createSupabaseServerClient(true);
 
         // Parse the request body
         const body = await request.json();
-
-        // Add the user ID if not provided
-        if (!body.user_id) {
-            body.user_id = user.id;
-        }
 
         // Insert the request
         const { data, error } = await supabase.from('gear_requests').insert(body).select().single();

@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     try {
-        const supabase = await createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient(true);
         const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 10;
         const page = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
         const userId = searchParams.get('userId');
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient(true);
         const { title, content, author_id } = await request.json();
 
         if (!title || !content || !author_id) {

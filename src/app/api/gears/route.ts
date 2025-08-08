@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient(true);
         const { searchParams } = new URL(request.url);
 
         // Extract query parameters
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient(true);
 
         // Check for admin authorization
         const { data: { user }, error: authError } = await supabase.auth.getUser();

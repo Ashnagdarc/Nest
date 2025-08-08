@@ -5,6 +5,6 @@
  */
 
 export { RequestStatusBadge } from './RequestStatusBadge';
-export { RequestFilters } from './RequestFilters';
+export { default as RequestFilters } from './RequestFilters';
 export { RequestActions } from './RequestActions';
-export { RequestTable } from './RequestTable'; 
+export { default as RequestTable } from './RequestTable'; 
