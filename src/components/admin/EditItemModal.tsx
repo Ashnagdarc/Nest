@@ -112,6 +112,7 @@ export function EditItemModal({ itemId, open, onOpenChange, onSaved }: EditItemM
                     serial_number: item.serial_number,
                     description: item.description,
                     notes: item.notes,
+                    quantity: item.quantity || 1,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', itemId);

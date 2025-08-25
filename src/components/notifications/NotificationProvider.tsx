@@ -157,8 +157,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         }
         setError(null);
         try {
-            // Use centralized API client POST endpoint for bulk update
-            const { data, error } = await apiPost<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, { userId });
+            // Use bulk update via PUT (server handles current user session)
+            const { data, error } = await apiPut<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
             if (error) {
                 setError(`Failed to mark all notifications as read: ${error}`);
                 return false;

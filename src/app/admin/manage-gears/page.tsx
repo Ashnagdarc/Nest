@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PlusCircle, Filter, Edit, Trash2, Download, Upload, CheckSquare, Wrench, Camera, Video, Mic, Speaker, Monitor, Laptop, Box, LucideIcon, Lightbulb, CheckCircle, AlertTriangle, Aperture, AirVent, Cable, Puzzle, Car, RotateCcw, X } from 'lucide-react';
+import { PlusCircle, Filter, Edit, Trash2, Download, Upload, CheckSquare, Wrench, Camera, Video, Mic, Speaker, Monitor, Laptop, Box, LucideIcon, Lightbulb, CheckCircle, AlertTriangle, Aperture, AirVent, Cable, Puzzle, Car, RotateCcw, X, Mouse, Battery, HardDrive } from 'lucide-react';
 // Import Dialog components if using for Add/Edit form
 import {
   Dialog,
@@ -46,6 +46,9 @@ const categoryIcons: Record<string, LucideIcon> = {
   audio: Speaker,
   laptop: Laptop,
   monitor: Monitor,
+  mouse: Mouse,
+  batteries: Battery,
+  storage: HardDrive,
   cables: Cable,
   lighting: Lightbulb,
   tripod: Video,
@@ -63,6 +66,9 @@ const categoryColors: Record<string, string> = {
   audio: 'bg-green-100 text-green-800',
   laptop: 'bg-indigo-100 text-indigo-800',
   monitor: 'bg-teal-100 text-teal-800',
+  mouse: 'bg-violet-100 text-violet-800',
+  batteries: 'bg-amber-100 text-amber-800',
+  storage: 'bg-stone-100 text-stone-800',
   cables: 'bg-yellow-100 text-yellow-800',
   lighting: 'bg-orange-100 text-orange-800',
   tripod: 'bg-pink-100 text-pink-800',
@@ -194,9 +200,9 @@ export default function ManageGearsPage() {
     // Set up real-time subscription
     const channel = supabase
       .channel('public:gears')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gears' }, fetchGears)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gears' }, fetchGears)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gears' }, fetchGears)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gears' }, () => fetchGears())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gears' }, () => fetchGears())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gears' }, () => fetchGears())
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
@@ -333,6 +339,7 @@ export default function ManageGearsPage() {
         description: data.description,
         serial_number: data.serial_number,
         status: data.status,
+        quantity: data.quantity || 1,
         owner_id: user.id,
         created_at: new Date().toISOString(),
         image_url: imageUrl,
@@ -1305,6 +1312,7 @@ export default function ManageGearsPage() {
         description: data.description || null,
         serial_number: data.serial_number || null,
         condition: data.condition || null,
+        quantity: data.quantity || 1,
         image_url: imageUrl
       };
 
@@ -1430,18 +1438,6 @@ export default function ManageGearsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card rounded-lg p-4 border shadow-sm">
         <h1 className="text-3xl font-bold text-foreground">Manage Gears</h1>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (gears.length > 0) {
-                console.log("Testing gear details with first gear:", gears[0]);
-                handleOpenGearDetails(gears[0]);
-              }
-            }}
-            className="text-xs sm:text-sm bg-background hover:bg-accent"
-          >
-            Test Gear Details
-          </Button>
           <Button variant="outline" onClick={handleExport} className="text-xs sm:text-sm bg-background hover:bg-accent">
             <Download className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
             <span className="hidden sm:inline">Export CSV</span>
@@ -1560,6 +1556,9 @@ export default function ManageGearsPage() {
                   <SelectItem value="Audio"><span className="inline-flex items-center gap-1">{getCategoryIcon('Audio', 14)} Audio</span></SelectItem>
                   <SelectItem value="Laptop"><span className="inline-flex items-center gap-1">{getCategoryIcon('Laptop', 14)} Laptop</span></SelectItem>
                   <SelectItem value="Monitor"><span className="inline-flex items-center gap-1">{getCategoryIcon('Monitor', 14)} Monitor</span></SelectItem>
+                  <SelectItem value="Mouse"><span className="inline-flex items-center gap-1">{getCategoryIcon('Mouse', 14)} Mouse</span></SelectItem>
+                  <SelectItem value="Batteries"><span className="inline-flex items-center gap-1">{getCategoryIcon('Batteries', 14)} Batteries</span></SelectItem>
+                  <SelectItem value="Storage"><span className="inline-flex items-center gap-1">{getCategoryIcon('Storage', 14)} Storage</span></SelectItem>
                   <SelectItem value="Cables"><span className="inline-flex items-center gap-1">{getCategoryIcon('Cables', 14)} Cables</span></SelectItem>
                   <SelectItem value="Lighting"><span className="inline-flex items-center gap-1">{getCategoryIcon('Lighting', 14)} Lighting</span></SelectItem>
                   <SelectItem value="Tripod"><span className="inline-flex items-center gap-1">{getCategoryIcon('Tripod', 14)} Tripod</span></SelectItem>
@@ -1813,13 +1812,8 @@ export default function ManageGearsPage() {
               View complete information for {selectedGear?.name || 'Loading...'}.
             </DialogDescription>
           </DialogHeader>
-          {console.log("Dialog rendering with selectedGear:", selectedGear)}
           {selectedGear && (
             <div className="grid gap-6 py-4">
-              {console.log("Rendering gear details with:", selectedGear)}
-              <div className="text-sm text-red-500 mb-2">
-                Debug: Gear ID: {selectedGear.id}, Name: {selectedGear.name || 'NO NAME'}, Timestamp: {new Date().toISOString()}
-              </div>
               <div className="flex items-center gap-4">
                 <div className="w-24 h-24 rounded-md bg-muted flex items-center justify-center overflow-hidden border shadow-sm">
                   {selectedGear.image_url ? (
@@ -1834,9 +1828,6 @@ export default function ManageGearsPage() {
                 </div>
                 <div>
                   <h3 className="text-xl font-semibold">{selectedGear.name || 'No Name'}</h3>
-                  <div className="text-xs text-blue-500 mb-1">
-                    Raw name value: "{selectedGear.name}" (type: {typeof selectedGear.name})
-                  </div>
                   <div className="flex items-center gap-2 mt-1">
                     {getCategoryIcon(selectedGear.category, 16)}
                     <p className="text-sm text-muted-foreground">{selectedGear.category || 'No Category'}</p>

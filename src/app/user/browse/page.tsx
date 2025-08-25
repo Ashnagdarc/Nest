@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import Image from 'next/image';
 import Link from 'next/link';
-import { PackagePlus, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box, LucideIcon, ArrowLeft, Filter, ChevronLeft, ChevronRight } from 'lucide-react'; // Icons for view details and request
+import { PackagePlus, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box, LucideIcon, ArrowLeft, Filter, ChevronLeft, ChevronRight, Mouse, Battery, HardDrive } from 'lucide-react'; // Icons for view details and request
 import { createClient } from '@/lib/supabase/client';
 // import { createGearNotification } from '@/lib/notifications'; // No longer used
 import { useToast } from "@/hooks/use-toast";
@@ -68,6 +68,9 @@ const categoryIcons: Record<string, LucideIcon> = {
   audio: Speaker,
   laptop: Laptop,
   monitor: Monitor,
+  mouse: Mouse,
+  batteries: Battery,
+  storage: HardDrive,
   cables: Cable,
   lighting: Lightbulb,
   tripod: Video,
@@ -95,6 +98,9 @@ const categoryColors: Record<string, string> = {
   audio: 'bg-green-100 text-green-800',
   laptop: 'bg-indigo-100 text-indigo-800',
   monitor: 'bg-teal-100 text-teal-800',
+  mouse: 'bg-violet-100 text-violet-800',
+  batteries: 'bg-amber-100 text-amber-800',
+  storage: 'bg-stone-100 text-stone-800',
   cables: 'bg-yellow-100 text-yellow-800',
   lighting: 'bg-orange-100 text-orange-800',
   tripod: 'bg-pink-100 text-pink-800',
@@ -218,9 +224,9 @@ export default function BrowseGearsPage() {
     // Set up real-time subscription (filtered events)
     const channel = supabase
       .channel('public:gears')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gears' }, fetchGears)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gears' }, fetchGears)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gears' }, fetchGears)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gears' }, () => fetchGears())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gears' }, () => fetchGears())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gears' }, () => fetchGears())
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
@@ -399,6 +405,9 @@ export default function BrowseGearsPage() {
                         <SelectItem value="Audio">Audio</SelectItem>
                         <SelectItem value="Laptop">Laptop</SelectItem>
                         <SelectItem value="Monitor">Monitor</SelectItem>
+                        <SelectItem value="Mouse">Mouse</SelectItem>
+                        <SelectItem value="Batteries">Batteries</SelectItem>
+                        <SelectItem value="Storage">Storage</SelectItem>
                         <SelectItem value="Cables">Cables</SelectItem>
                         <SelectItem value="Lighting">Lighting</SelectItem>
                         <SelectItem value="Tripod">Tripod</SelectItem>
