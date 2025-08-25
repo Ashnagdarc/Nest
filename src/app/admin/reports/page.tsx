@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart, Line } from 'recharts';
 import type { DateRange } from 'react-day-picker';
@@ -27,6 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { apiGet } from '@/lib/apiClient';
 import Image from 'next/image';
 import { subDays, format, getISOWeek, formatDistanceToNow } from 'date-fns';
@@ -124,6 +127,28 @@ export default function ReportsPage() {
     recentActivity: []
   });
   const [showHelp, setShowHelp] = useState(false);
+  const [activityType, setActivityType] = useState<'all' | 'Check-in' | 'Check-out' | 'Maintenance' | 'Request' | 'Status Change'>('all');
+  const [activityQuery, setActivityQuery] = useState('');
+
+  const filteredActivity = useMemo(() => {
+    const q = activityQuery.trim().toLowerCase();
+    return (analytics.recentActivity || []).filter(a => {
+      const typeOk = activityType === 'all' || a.type === activityType;
+      const text = `${a.userName} ${a.gearName} ${a.status} ${a.gearCategory || ''}`.toLowerCase();
+      const searchOk = q === '' || text.includes(q);
+      return typeOk && searchOk;
+    });
+  }, [analytics.recentActivity, activityType, activityQuery]);
+
+  const activityByDay = useMemo(() => {
+    const groups: Record<string, typeof filteredActivity> = {} as any;
+    filteredActivity.forEach(a => {
+      const key = new Date(a.timestamp).toDateString();
+      if (!groups[key]) groups[key] = [] as any;
+      groups[key].push(a);
+    });
+    return Object.entries(groups).sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime());
+  }, [filteredActivity]);
   const { toast } = useToast();
   const supabase = createClient();
 
@@ -623,270 +648,287 @@ export default function ReportsPage() {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          {/* Weekly Usage Trends */}
-          <Card className="overflow-hidden">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="20" x2="18" y2="10"></line>
-                    <line x1="12" y1="20" x2="12" y2="4"></line>
-                    <line x1="6" y1="20" x2="6" y2="14"></line>
-                  </svg>
-                  <CardTitle className="text-base">Weekly Usage Trends</CardTitle>
-                </div>
-              </div>
-              <CardDescription>Requests vs. Damage Reports over the selected period</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              {isLoading ? (
-                <div className="h-[300px] flex items-center justify-center bg-muted/20 p-6">
-                  <div className="flex flex-col items-center gap-2">
-                    <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <p className="text-sm text-muted-foreground">Loading chart data...</p>
-                  </div>
-                </div>
-              ) : analytics.weeklyTrends.length > 0 ? (
-                <div className="h-[300px] px-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={analytics.weeklyTrends} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                      <XAxis dataKey="weekLabel" className="text-xs" tick={{ fill: 'hsl(var(--foreground))' }} />
-                      <YAxis className="text-xs" tick={{ fill: 'hsl(var(--foreground))' }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--popover))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '0.5rem',
-                          color: 'hsl(var(--foreground))'
-                        }}
-                      />
-                      <Legend wrapperStyle={{ paddingTop: 10 }} />
-                      <Bar dataKey="requests" fill="hsl(var(--primary))" name="Requests" barSize={40} radius={[4, 4, 0, 0]} />
-                      <Line
-                        type="monotone"
-                        dataKey="damages"
-                        stroke="hsl(var(--destructive))"
-                        name="Damages"
-                        strokeWidth={2}
-                        dot={{ strokeWidth: 2, r: 4, fill: 'hsl(var(--background))' }}
-                        activeDot={{ strokeWidth: 0, r: 6, fill: 'hsl(var(--destructive))' }}
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground p-6">
-                  <p>No usage data available for the selected period</p>
-                  <Button variant="link" onClick={() => setDateRange({ from: subDays(new Date(), 90), to: new Date() })}>
-                    View Last 90 Days
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Categorized Reports per HIG: Overview, Trends, Activity */}
+        <Tabs defaultValue="overview" className="mb-6">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="trends">Trends</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
+          </TabsList>
 
-          {/* Most Popular Gears */}
-          <Card className="overflow-hidden">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="9" cy="7" r="4"></circle>
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                  </svg>
-                  <CardTitle className="text-base">Most Popular Gears</CardTitle>
-                </div>
-              </div>
-              <CardDescription>Top 5 most requested gears in the selected period</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="space-y-4">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="flex items-center justify-between">
-                      <div className="h-5 bg-muted rounded animate-pulse w-32"></div>
-                      <div className="h-6 bg-muted rounded animate-pulse w-16"></div>
+          <TabsContent value="overview">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              {/* Total Requests Card */}
+              <Card className="relative overflow-hidden">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="h-8 w-16 bg-muted rounded animate-pulse"></div>
+                  ) : (
+                    <div className="text-3xl font-bold">{analytics.totalRequests}</div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Total Damage Reports Card */}
+              <Card className="relative overflow-hidden">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Damage Reports</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="h-8 w-16 bg-muted rounded animate-pulse"></div>
+                  ) : (
+                    <div className="text-3xl font-bold">{analytics.totalDamageReports}</div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Most Popular Gear Card */}
+              <Card className="relative overflow-hidden">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Most Popular Gear</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="h-8 w-32 bg-muted rounded animate-pulse"></div>
+                  ) : analytics.popularGears.length > 0 ? (
+                    <div>
+                      <div className="text-2xl font-bold truncate">
+                        {analytics.popularGears[0].name}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {analytics.popularGears[0].count} requests
+                      </div>
                     </div>
-                  ))}
-                </div>
-              ) : analytics.popularGears.length > 0 ? (
-                <div className="space-y-4">
-                  {analytics.popularGears.map((gear, index) => (
-                    <div key={index} className="flex items-center justify-between group hover:bg-muted/50 p-2 rounded-md transition-colors">
-                      <span className="font-medium">{gear.name}</span>
-                      <Badge variant="secondary" className="group-hover:bg-background">{gear.count} requests</Badge>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <p>No gear request data available for the selected period</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Weekly Activity Report */}
-        <Card className="overflow-hidden mb-6">
-          <WeeklyActivityReport dateRange={dateRange} />
-        </Card>
-
-        {/* Recent Activity Log */}
-        <Card className="overflow-hidden">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 7.8L8 5v10l4 2.8L16 15V5l-4 2.8z" />
-                  <path d="M8 15l4 2.8" />
-                  <path d="M16 15l-4 2.8" />
-                  <path d="M12 4v3.8" />
-                  <path d="M12 15v4" />
-                </svg>
-                <CardTitle className="text-base">Recent Activity Log</CardTitle>
-              </div>
+                  ) : (
+                    <div className="text-lg font-semibold text-muted-foreground">No data</div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-            <CardDescription>Latest gear activities from the system</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="p-6 space-y-4">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-muted animate-pulse"></div>
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-muted rounded animate-pulse w-3/4"></div>
-                      <div className="h-3 bg-muted rounded animate-pulse w-1/2"></div>
+          </TabsContent>
+
+          <TabsContent value="trends">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Weekly Usage Trends */}
+              <Card className="overflow-hidden">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                      </svg>
+                      <CardTitle className="text-base">Weekly Usage Trends</CardTitle>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : analytics.recentActivity.length > 0 ? (
-              <div className="px-6 divide-y divide-border">
-                {analytics.recentActivity.map((activity) => (
-                  <div key={activity.id} className="py-4 flex items-start gap-3 hover:bg-muted/10 transition-colors">
-                    {activity.userAvatar ? (
-                      <div className="w-10 h-10 rounded-full overflow-hidden border border-border flex-shrink-0">
-                        <Image src={activity.userAvatar} alt={activity.userName} width={40} height={40} className="w-full h-full object-cover" />
-                      </div>
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
-                        {activity.userName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-
-                    <div className="flex-1">
-                      <div className="flex flex-col space-y-1">
-                        <div className="flex items-start justify-between">
-                          <p className="text-sm font-medium">
-                            <span className="font-semibold">{activity.userName}</span> {' '}
-                            <span className="text-muted-foreground">
-                              {activity.type === 'Check-out' && 'checked out'}
-                              {activity.type === 'Check-in' && 'returned'}
-                              {activity.type === 'Maintenance' && 'sent for maintenance'}
-                              {activity.type === 'Request' && 'requested'}
-                              {activity.type === 'Status Change' && 'changed status of'}
-                            </span>
-                            {' '}<span className="font-semibold">{activity.gearName}</span>
-                            {activity.gearCategory && (
-                              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs ml-1">
-                                {activity.gearCategory}
-                              </span>
-                            )}
-                          </p>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
-                            {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${activity.status === 'Completed' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                            activity.status === 'Pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                              activity.status === 'Cancelled' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
-                                'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                            }`}>
-                            <svg className="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              {activity.type === 'Check-out' && (
-                                <path d="M9 14l6-6 M15 14V8h-6" />
-                              )}
-                              {activity.type === 'Check-in' && (
-                                <path d="M15 10l-6 6 M9 10V16h6" />
-                              )}
-                              {activity.type === 'Maintenance' && (
-                                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-                              )}
-                              {activity.type === 'Request' && (
-                                <path d="M9 12h6 M12 9v6" />
-                              )}
-                              {activity.type === 'Status Change' && (
-                                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              )}
-                            </svg>
-                            {activity.status}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(activity.timestamp).toLocaleString()}
-                          </span>
-                        </div>
-
-                        {activity.notes && (
-                          <div className="mt-2 p-2 bg-muted/30 rounded text-sm">
-                            <p className="italic text-muted-foreground">{activity.notes}</p>
-                          </div>
-                        )}
-
-                        {activity.gearImage && (
-                          <div className="mt-2 flex justify-start">
-                            <div className="w-20 h-20 rounded-md overflow-hidden border border-border shadow-sm hover:shadow-md transition-shadow">
-                              <img
-                                src={activity.gearImage}
-                                alt={activity.gearName}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                              />
-                            </div>
-                          </div>
-                        )}
+                  <CardDescription>Requests vs. Damage Reports over the selected period</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {isLoading ? (
+                    <div className="h-[300px] flex items-center justify-center bg-muted/20 p-6">
+                      <div className="flex flex-col items-center gap-2">
+                        <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p className="text-sm text-muted-foreground">Loading chart data...</p>
                       </div>
                     </div>
+                  ) : analytics.weeklyTrends.length > 0 ? (
+                    <div className="h-[300px] px-2">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={analytics.weeklyTrends} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                          <XAxis dataKey="weekLabel" className="text-xs" tick={{ fill: 'hsl(var(--foreground))' }} />
+                          <YAxis className="text-xs" tick={{ fill: 'hsl(var(--foreground))' }} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: 'hsl(var(--popover))',
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '0.5rem',
+                              color: 'hsl(var(--foreground))'
+                            }}
+                          />
+                          <Legend wrapperStyle={{ paddingTop: 10 }} />
+                          <Bar dataKey="requests" fill="hsl(var(--primary))" name="Requests" barSize={40} radius={[4, 4, 0, 0]} />
+                          <Line
+                            type="monotone"
+                            dataKey="damages"
+                            stroke="hsl(var(--destructive))"
+                            name="Damages"
+                            strokeWidth={2}
+                            dot={{ strokeWidth: 2, r: 4, fill: 'hsl(var(--background))' }}
+                            activeDot={{ strokeWidth: 0, r: 6, fill: 'hsl(var(--destructive))' }}
+                          />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground p-6">
+                      <p>No usage data available for the selected period</p>
+                      <Button variant="link" onClick={() => setDateRange({ from: subDays(new Date(), 90), to: new Date() })}>
+                        View Last 90 Days
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Most Popular Gears */}
+              <Card className="overflow-hidden">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                      </svg>
+                      <CardTitle className="text-base">Most Popular Gears</CardTitle>
+                    </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center p-12 text-center">
-                <div className="max-w-md space-y-4">
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="mx-auto opacity-50">
-                    <path d="M12 7.8L8 5v10l4 2.8L16 15V5l-4 2.8z" />
-                    <path d="M8 15l4 2.8" />
-                    <path d="M16 15l-4 2.8" />
-                    <path d="M12 4v3.8" />
-                    <path d="M12 15v4" />
-                  </svg>
-                  <p className="text-muted-foreground">No activity data found in the selected date range.</p>
-                  <p className="text-sm text-muted-foreground">
-                    Try selecting a different date range or check that your activity log is properly configured.
-                  </p>
-                  <div className="flex justify-center gap-2">
-                    <Button variant="outline" onClick={() => setDateRange({ from: subDays(new Date(), 90), to: new Date() })}>
-                      View Last 90 Days
-                    </Button>
-                    <Button variant="outline" onClick={fetchData}>
-                      Refresh Data
-                    </Button>
+                  <CardDescription>Top 5 most requested gears in the selected period</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="space-y-4">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="flex items-center justify-between">
+                          <div className="h-5 bg-muted rounded animate-pulse w-32"></div>
+                          <div className="h-6 bg-muted rounded animate-pulse w-16"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : analytics.popularGears.length > 0 ? (
+                    <div className="space-y-4">
+                      {analytics.popularGears.map((gear, index) => (
+                        <div key={index} className="flex items-center justify-between group hover:bg-muted/50 p-2 rounded-md transition-colors">
+                          <span className="font-medium">{gear.name}</span>
+                          <Badge variant="secondary" className="group-hover:bg-background">{gear.count} requests</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                      <p>No gear request data available for the selected period</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="activity">
+            {/* Weekly Activity Report */}
+            <Card className="overflow-hidden mb-6">
+              <WeeklyActivityReport dateRange={dateRange} />
+            </Card>
+
+            {/* Recent Activity Log */}
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 7.8L8 5v10l4 2.8L16 15V5l-4 2.8z" />
+                      <path d="M8 15l4 2.8" />
+                      <path d="M16 15l-4 2.8" />
+                      <path d="M12 4v3.8" />
+                      <path d="M12 15v4" />
+                    </svg>
+                    <CardTitle className="text-base">Recent Activity Log</CardTitle>
                   </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                <CardDescription>Latest gear activities from the system</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                {/* Filters */}
+                <div className="p-4 flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
+                  <Select value={activityType} onValueChange={(v) => setActivityType(v as any)}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All types</SelectItem>
+                      <SelectItem value="Check-in">Check-in</SelectItem>
+                      <SelectItem value="Check-out">Check-out</SelectItem>
+                      <SelectItem value="Maintenance">Maintenance</SelectItem>
+                      <SelectItem value="Request">Request</SelectItem>
+                      <SelectItem value="Status Change">Status Change</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder="Search user, gear, status..."
+                    value={activityQuery}
+                    onChange={(e) => setActivityQuery(e.target.value)}
+                    className="sm:max-w-sm"
+                  />
+                </div>
+
+                {/* Grouped list by day */}
+                {isLoading ? (
+                  <div className="p-6 space-y-4">
+                    {[1,2,3].map(i => (
+                      <div key={i} className="h-6 bg-muted rounded animate-pulse w-40"></div>
+                    ))}
+                  </div>
+                ) : filteredActivity.length > 0 ? (
+                  <div className="px-6 pb-4">
+                    {activityByDay.map(([day, items]) => (
+                      <div key={day} className="mb-4">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">{day}</div>
+                        <div className="divide-y divide-border rounded-md border">
+                          {items.map((activity) => (
+                            <div key={activity.id} className="py-3 px-3 flex items-start gap-3">
+                              {activity.userAvatar ? (
+                                <div className="w-8 h-8 rounded-full overflow-hidden border border-border flex-shrink-0">
+                                  <Image src={activity.userAvatar} alt={activity.userName} width={32} height={32} className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+                                  {activity.userName.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-sm">
+                                    <span className="font-medium">{activity.userName}</span>{' '}
+                                    <span className="text-muted-foreground">
+                                      {activity.type === 'Check-out' && 'checked out'}
+                                      {activity.type === 'Check-in' && 'returned'}
+                                      {activity.type === 'Maintenance' && 'sent for maintenance'}
+                                      {activity.type === 'Request' && 'requested'}
+                                      {activity.type === 'Status Change' && 'changed status of'}
+                                    </span>{' '}
+                                    <span className="font-medium">{activity.gearName}</span>
+                                  </p>
+                                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                    {new Date(activity.timestamp).toLocaleTimeString()}
+                                  </span>
+                                </div>
+                                {activity.notes && (
+                                  <div className="mt-1 text-xs text-muted-foreground">{activity.notes}</div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center p-10 text-muted-foreground">No activity for filters</div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </motion.div>
     </TooltipProvider>
   );

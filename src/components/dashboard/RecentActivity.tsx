@@ -6,10 +6,11 @@
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity } from "lucide-react";
+import { Activity, ChevronDown, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "./EmptyState";
 import { useRecentActivity } from '@/hooks/user-dashboard/use-recent-activity';
+import { useState } from "react";
 
 interface RecentActivityProps {
     embedded?: boolean;
@@ -17,6 +18,7 @@ interface RecentActivityProps {
 
 export function RecentActivity({ embedded = false }: RecentActivityProps) {
     const { activities, loading, refetch } = useRecentActivity();
+    const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
     if (loading) {
         return (
@@ -60,29 +62,74 @@ export function RecentActivity({ embedded = false }: RecentActivityProps) {
                         description="Your activity will appear here as you use equipment."
                     />
                 ) : (
-                    <div className="space-y-3">
-                        {activities.map((activity, index) => (
-                            <div
-                                key={activity.id}
-                                className="flex items-center space-x-3 p-2 rounded border hover:bg-muted/50 transition-colors"
-                            >
-                                <Activity className="h-5 w-5 flex-shrink-0 text-blue-500" />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">
-                                        {activity.item}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {activity.status}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {new Date(activity.timestamp).toLocaleDateString()}
-                                    </p>
+                    <div className="space-y-4">
+                        {Object.entries(
+                            activities.reduce((acc: Record<string, typeof activities>, a) => {
+                                const day = new Date(a.timestamp).toDateString();
+                                (acc[day] ||= []).push(a);
+                                return acc;
+                            }, {})
+                        ).map(([day, dayItems]) => {
+                            const isExpanded = expandedDays.has(day);
+                            const groupedItems = Object.values(
+                                dayItems.reduce((acc: Record<string, { first: typeof dayItems[number]; count: number }>, a) => {
+                                    const key = `${a.type}-${a.gear_id || a.item}`;
+                                    if (!acc[key]) acc[key] = { first: a, count: 0 };
+                                    acc[key].count += 1;
+                                    return acc;
+                                }, {})
+                            );
+                            
+                            return (
+                                <div key={day}>
+                                    <button
+                                        onClick={() => setExpandedDays(prev => {
+                                            const newSet = new Set(prev);
+                                            if (isExpanded) {
+                                                newSet.delete(day);
+                                            } else {
+                                                newSet.add(day);
+                                            }
+                                            return newSet;
+                                        })}
+                                        className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground mb-2 hover:text-foreground transition-colors w-full text-left"
+                                    >
+                                        {isExpanded ? (
+                                            <ChevronDown className="h-3 w-3" />
+                                        ) : (
+                                            <ChevronRight className="h-3 w-3" />
+                                        )}
+                                        {day} ({groupedItems.length})
+                                    </button>
+                                    {isExpanded && (
+                                        <div className="space-y-2">
+                                            {groupedItems.map(({ first, count }) => (
+                                                <div
+                                                    key={first.id}
+                                                    className="flex items-center space-x-3 p-2 rounded border hover:bg-muted/50 transition-colors"
+                                                >
+                                                    <Activity className="h-5 w-5 flex-shrink-0 text-blue-500" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium truncate">
+                                                            {first.item}{count > 1 ? ` ×${count}` : ''}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {first.status}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {new Date(first.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </CardContent>
         </Card>
     );
-} 
+}

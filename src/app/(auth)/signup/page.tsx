@@ -18,6 +18,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { createClient } from '@/lib/supabase/client';
 import { isFileList, isFile } from '@/lib/utils/browser-safe';
+import { ThemeLogo } from "@/components/ui/theme-logo";
 
 const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]\d{3}[)])?([-]?[\s]?)(\d{3})([-]?[\s]?)(\d{4})$/
@@ -193,7 +194,7 @@ export default function SignupPage() {
           />
           <h3 className="mt-2 text-xl font-semibold text-primary">Account Created!</h3>
           <p className="text-center text-muted-foreground">
-            Welcome to Nest by Eden Oasis. Redirecting to your dashboard...
+            Welcome to Nest. Redirecting to your dashboard...
           </p>
         </DialogContent>
       </Dialog>
@@ -204,9 +205,18 @@ export default function SignupPage() {
         className="w-full max-w-lg"
       >
         <Card>
-          <CardHeader className="space-y-1 text-center">
-            <CardTitle className="text-3xl font-bold">Create an Account</CardTitle>
-            <CardDescription>Enter your information to get started</CardDescription>
+          <CardHeader className="space-y-4 text-center">
+            <div className="flex justify-center">
+              <ThemeLogo
+                width={96}
+                height={96}
+                className="w-24 h-24 rounded-lg"
+              />
+            </div>
+            <div className="space-y-1">
+              <CardTitle className="text-3xl font-bold">Create an Account</CardTitle>
+              <CardDescription>Enter your information to get started</CardDescription>
+            </div>
           </CardHeader>
 
           <CardContent>

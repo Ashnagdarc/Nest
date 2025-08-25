@@ -61,13 +61,13 @@ function WeeklyTrendsChart() {
             <CardHeader><CardTitle>Weekly Request Trends</CardTitle></CardHeader>
             <CardContent>
                 <Table>
-                    <TableHead>
+                    <TableHeader>
                         <TableRow>
-                            <TableCell>Week</TableCell>
-                            <TableCell>Total Requests</TableCell>
-                            <TableCell>Total Checkouts</TableCell>
+                            <TableHead>Week</TableHead>
+                            <TableHead>Total Requests</TableHead>
+                            <TableHead>Total Checkouts</TableHead>
                         </TableRow>
-                    </TableHead>
+                    </TableHeader>
                     <TableBody>
                         {data.map(row => (
                             <TableRow key={row.week}>
@@ -187,15 +187,15 @@ function UserActivityLeaderboard() {
             <CardHeader><CardTitle>User Activity Leaderboard</CardTitle></CardHeader>
             <CardContent>
                 <Table>
-                    <TableHead>
+                    <TableHeader>
                         <TableRow>
-                            <TableCell>User</TableCell>
-                            <TableCell>Email</TableCell>
-                            <TableCell>Requests</TableCell>
-                            <TableCell>Checkouts</TableCell>
-                            <TableCell>Returns</TableCell>
+                            <TableHead>User</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Requests</TableHead>
+                            <TableHead>Checkouts</TableHead>
+                            <TableHead>Returns</TableHead>
                         </TableRow>
-                    </TableHead>
+                    </TableHeader>
                     <TableBody>
                         {data.map(row => (
                             <TableRow key={row.user_id}>
@@ -228,13 +228,13 @@ function GearMaintenanceSummary() {
             <CardHeader><CardTitle>Gear Maintenance Summary</CardTitle></CardHeader>
             <CardContent>
                 <Table>
-                    <TableHead>
+                    <TableHeader>
                         <TableRow>
-                            <TableCell>Gear</TableCell>
-                            <TableCell>Maintenance Events</TableCell>
-                            <TableCell>Last Maintenance</TableCell>
+                            <TableHead>Gear</TableHead>
+                            <TableHead>Maintenance Events</TableHead>
+                            <TableHead>Last Maintenance</TableHead>
                         </TableRow>
-                    </TableHead>
+                    </TableHeader>
                     <TableBody>
                         {data.map(row => (
                             <TableRow key={row.gear_id}>
@@ -314,9 +314,12 @@ export default function AdminDashboardPage() {
     });
     const categories = Object.entries(categoriesMap).map(([name, count]) => ({ name, count }));
 
+    // Minimal UI toggle (can be later made into a setting)
+    const minimal = true;
+
     return (
-        <div className="min-h-screen bg-white text-black dark:bg-black dark:text-white">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-8 lg:space-y-10">
+        <div className="min-h-screen bg-background text-foreground">
+            <div className={minimal ? "container mx-auto px-4 py-6 space-y-6" : "container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-8 lg:space-y-10"}>
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6">
                     <div className="flex-1 min-w-0">
@@ -363,128 +366,100 @@ export default function AdminDashboardPage() {
                     </div>
                 ) : (
                     <>
-                        {/* Responsive Bento Grid Layout */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-6">
-                            {/* Top row: Hero cards */}
-                            <div className="sm:col-span-2 lg:col-span-3">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-                                        <Package className="w-8 h-8 sm:w-12 sm:h-12 text-blue-400 flex-shrink-0" />
-                                        <span className="text-lg sm:text-xl lg:text-2xl font-bold text-black dark:text-white truncate">Total Equipment</span>
-                                    </div>
-                                    <div className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black dark:text-white mb-2">{totalEquipment}</div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400">{availableEquipment} available</div>
+                        {/* Unified KPI Grid - All cards same size */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                            {/* Equipment Stats */}
+                            <div className="rounded-xl border p-4 bg-card">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Package className="w-4 h-4 text-primary" />
+                                    <span className="text-sm font-medium">Equipment</span>
                                 </div>
+                                <div className="text-2xl font-bold">{totalEquipment}</div>
                             </div>
-                            <div className="sm:col-span-2 lg:col-span-3">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-                                        <TrendingUp className="w-8 h-8 sm:w-12 sm:h-12 text-purple-400 flex-shrink-0" />
-                                        <span className="text-lg sm:text-xl lg:text-2xl font-bold text-black dark:text-white truncate">Utilization Rate</span>
-                                    </div>
-                                    <div className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black dark:text-white mb-2">{utilizationRate}%</div>
-                                    <div className="w-full h-2 bg-gray-200 dark:bg-gray-800 rounded-full mt-2">
-                                        <div className="h-2 bg-purple-500 rounded-full" style={{ width: `${utilizationRate}%` }} />
-                                    </div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">Equipment in use</div>
+                            
+                            <div className="rounded-xl border p-4 bg-card">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <TrendingUp className="w-4 h-4 text-primary" />
+                                    <span className="text-sm font-medium">Utilization</span>
                                 </div>
+                                <div className="text-2xl font-bold">{utilizationRate}%</div>
                             </div>
-
-                            {/* Second row: Equipment/User stats */}
-                            <div className="sm:col-span-1 lg:col-span-2">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-                                        <Package className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400 flex-shrink-0" />
-                                        <span className="text-base sm:text-lg font-bold text-black dark:text-white truncate">Checked Out</span>
-                                    </div>
-                                    <div className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-black dark:text-white mb-2">{checkedOutEquipment}</div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400">In use</div>
+                            
+                            <div className="rounded-xl border p-4 bg-card">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Package className="w-4 h-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Checked Out</span>
                                 </div>
+                                <div className="text-2xl font-bold">{checkedOutEquipment}</div>
                             </div>
-                            <div className="sm:col-span-1 lg:col-span-2">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-                                        <Wrench className="w-6 h-6 sm:w-8 sm:h-8 text-red-400 flex-shrink-0" />
-                                        <span className="text-base sm:text-lg font-bold text-black dark:text-white truncate">Under Repair</span>
-                                    </div>
-                                    <div className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-black dark:text-white mb-2">{underRepairEquipment}</div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400">Maintenance</div>
+                            
+                            <div className="rounded-xl border p-4 bg-card">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Wrench className="w-4 h-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Under Repair</span>
                                 </div>
+                                <div className="text-2xl font-bold">{underRepairEquipment}</div>
                             </div>
-                            <div className="sm:col-span-1">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-                                        <Users className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 flex-shrink-0" />
-                                        <span className="text-base sm:text-lg font-bold text-black dark:text-white truncate">Total Users</span>
-                                    </div>
-                                    <div className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-black dark:text-white mb-2">{totalUsers}</div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400">Registered</div>
+                            
+                            {/* User Stats */}
+                            <div className="rounded-xl border p-4 bg-card">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Users className="w-4 h-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Users</span>
                                 </div>
+                                <div className="text-2xl font-bold">{totalUsers}</div>
                             </div>
-                            <div className="sm:col-span-1">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-                                        <Users className="w-6 h-6 sm:w-8 sm:h-8 text-green-400 flex-shrink-0" />
-                                        <span className="text-base sm:text-lg font-bold text-black dark:text-white truncate">Active Users</span>
-                                    </div>
-                                    <div className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-black dark:text-white mb-2">{activeUsers}</div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400">Recently active</div>
+                            
+                            <div className="rounded-xl border p-4 bg-card">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Users className="w-4 h-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Active</span>
                                 </div>
+                                <div className="text-2xl font-bold">{activeUsers}</div>
                             </div>
-
-                            {/* Third row: Request stats */}
-                            <div className="sm:col-span-1">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-                                        <ClipboardList className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400 flex-shrink-0" />
-                                        <span className="text-base sm:text-lg font-bold text-black dark:text-white truncate">Pending</span>
-                                    </div>
-                                    <div className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-black dark:text-white mb-2">{pendingRequests}</div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400">Awaiting approval</div>
+                            
+                            {/* Request Stats */}
+                            <div className="rounded-xl border p-4 bg-card">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <ClipboardList className="w-4 h-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Pending</span>
                                 </div>
+                                <div className="text-2xl font-bold">{pendingRequests}</div>
                             </div>
-                            <div className="sm:col-span-1">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-                                        <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-green-400 flex-shrink-0" />
-                                        <span className="text-base sm:text-lg font-bold text-black dark:text-white truncate">Approved</span>
-                                    </div>
-                                    <div className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-black dark:text-white mb-2">{approvedRequests}</div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400">Approved</div>
+                            
+                            <div className="rounded-xl border p-4 bg-card">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Approved</span>
                                 </div>
+                                <div className="text-2xl font-bold">{approvedRequests}</div>
                             </div>
-                            <div className="sm:col-span-1">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-                                        <XCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-400 flex-shrink-0" />
-                                        <span className="text-base sm:text-lg font-bold text-black dark:text-white truncate">Rejected</span>
-                                    </div>
-                                    <div className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-black dark:text-white mb-2">{rejectedRequests}</div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400">Rejected</div>
+                            
+                            <div className="rounded-xl border p-4 bg-card">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <XCircle className="w-4 h-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Rejected</span>
                                 </div>
+                                <div className="text-2xl font-bold">{rejectedRequests}</div>
                             </div>
-                            <div className="sm:col-span-2 lg:col-span-3">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-                                        <BarChartIcon className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 flex-shrink-0" />
-                                        <span className="text-base sm:text-lg font-bold text-black dark:text-white truncate">Approval Rate</span>
-                                    </div>
-                                    <div className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-black dark:text-white mb-2">{approvalRate}%</div>
-                                    <div className="w-full h-2 bg-gray-200 dark:bg-gray-800 rounded-full mt-2">
-                                        <div className="h-2 bg-green-500 rounded-full" style={{ width: `${approvalRate}%` }} />
-                                    </div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">Request approvals</div>
+                            
+                            <div className="rounded-xl border p-4 bg-card">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <BarChartIcon className="w-4 h-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Approval Rate</span>
                                 </div>
+                                <div className="text-2xl font-bold">{approvalRate}%</div>
                             </div>
+                        </div>
 
                             {/* Quick Actions and Recent Activity */}
                             <div className="sm:col-span-2 lg:col-span-3">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="font-bold text-base sm:text-lg mb-4 text-black dark:text-white">Quick Actions</div>
-                                    <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3">
+                                <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full"}>
+                                    <div className="font-semibold text-base mb-3">Quick Actions</div>
+                                    <div className="grid grid-cols-2 gap-2">
                                         <Dialog open={addGearOpen} onOpenChange={setAddGearOpen}>
                                             <DialogTrigger asChild>
-                                                <Button className="bg-blue-500 hover:bg-blue-600 text-white text-sm sm:text-base w-full sm:w-auto">
+                                                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm w-full">
                                                     + Add Equipment
                                                 </Button>
                                             </DialogTrigger>
@@ -495,74 +470,73 @@ export default function AdminDashboardPage() {
                                                 <AddGearForm onSubmit={() => setAddGearOpen(false)} />
                                             </DialogContent>
                                         </Dialog>
-                                        <Button asChild className="bg-orange-500 hover:bg-orange-600 text-white text-sm sm:text-base w-full sm:w-auto">
+                                        <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
                                             <Link href="/admin/manage-requests">Manage Requests</Link>
                                         </Button>
-                                        <Button asChild className="bg-purple-500 hover:bg-purple-600 text-white text-sm sm:text-base w-full sm:w-auto">
+                                        <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
                                             <Link href="/admin/reports">View Reports</Link>
                                         </Button>
-                                        <Button asChild className="bg-green-500 hover:bg-green-600 text-white text-sm sm:text-base w-full sm:w-auto">
+                                        <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
                                             <Link href="/admin/manage-users">User Management</Link>
                                         </Button>
                                     </div>
                                 </div>
                             </div>
                             <div className="sm:col-span-2 lg:col-span-3">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full">
-                                    <div className="font-bold text-base sm:text-lg mb-4 text-black dark:text-white">Recent Activity</div>
-                                    <ul className="text-sm text-gray-700 dark:text-gray-300 space-y-2">
+                                <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full"}>
+                                    <div className="font-semibold text-base mb-3">Recent Activity</div>
+                                    <ul className="text-sm space-y-2">
                                         <li className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                            <div className="w-2 h-2 bg-primary rounded-full"></div>
                                             Check-in Activity – 1 day ago
                                         </li>
                                         <li className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                            <div className="w-2 h-2 bg-primary rounded-full"></div>
                                             Request Approved – 2 days ago
                                         </li>
                                         <li className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                                            <div className="w-2 h-2 bg-primary rounded-full"></div>
                                             Equipment Added – 3 days ago
                                         </li>
                                         <li className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                                            <div className="w-2 h-2 bg-primary rounded-full"></div>
                                             User Registered – 4 days ago
                                         </li>
                                     </ul>
                                 </div>
                             </div>
 
-                            {/* Equipment Categories */}
+                            {/* Equipment Categories (compact chips) */}
                             <div className="sm:col-span-2 lg:col-span-6">
-                                <div className="border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent">
-                                    <div className="font-bold text-base sm:text-lg mb-4 text-black dark:text-white">Equipment Categories</div>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4">
+                                <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent"}>
+                                    <div className="font-semibold text-base mb-3">Equipment Categories</div>
+                                    <div className="flex flex-wrap gap-2">
                                         {categories.map((cat) => (
-                                            <div key={cat.name} className="border border-gray-300 dark:border-gray-700 rounded-xl p-3 sm:p-4 bg-white dark:bg-transparent flex flex-col items-center text-center">
-                                                <span className="text-sm sm:text-base font-semibold text-black dark:text-white truncate w-full">{cat.name}</span>
-                                                <span className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-blue-500 mt-2">{cat.count}</span>
-                                            </div>
+                                            <span key={cat.name} className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm">
+                                                <span className="font-medium">{cat.name}</span>
+                                                <span className="text-primary font-bold">{cat.count}</span>
+                                            </span>
                                         ))}
                                     </div>
                                 </div>
                             </div>
-                        </div>
                         {/* Collapsible analytics views */}
-                        <Accordion type="multiple" className="mb-8">
-                            <AccordionItem value="weekly-trends">
-                                <AccordionTrigger>Weekly Request Trends</AccordionTrigger>
-                                <AccordionContent><WeeklyTrendsChart /></AccordionContent>
+                        <Accordion type="multiple" className={minimal ? "space-y-2" : "mb-8"}>
+                            <AccordionItem value="weekly-trends" className={minimal ? "border rounded-lg" : ""}>
+                                <AccordionTrigger className={minimal ? "px-4 py-3" : ""}>Weekly Request Trends</AccordionTrigger>
+                                <AccordionContent className={minimal ? "px-4 pb-4" : ""}><WeeklyTrendsChart /></AccordionContent>
                             </AccordionItem>
-                            <AccordionItem value="overdue-gear">
-                                <AccordionTrigger>Overdue Gear</AccordionTrigger>
-                                <AccordionContent><OverdueGearTable /></AccordionContent>
+                            <AccordionItem value="overdue-gear" className={minimal ? "border rounded-lg" : ""}>
+                                <AccordionTrigger className={minimal ? "px-4 py-3" : ""}>Overdue Gear</AccordionTrigger>
+                                <AccordionContent className={minimal ? "px-4 pb-4" : ""}><OverdueGearTable /></AccordionContent>
                             </AccordionItem>
-                            <AccordionItem value="user-activity">
-                                <AccordionTrigger>User Activity Leaderboard</AccordionTrigger>
-                                <AccordionContent><UserActivityLeaderboard /></AccordionContent>
+                            <AccordionItem value="user-activity" className={minimal ? "border rounded-lg" : ""}>
+                                <AccordionTrigger className={minimal ? "px-4 py-3" : ""}>User Activity Leaderboard</AccordionTrigger>
+                                <AccordionContent className={minimal ? "px-4 pb-4" : ""}><UserActivityLeaderboard /></AccordionContent>
                             </AccordionItem>
-                            <AccordionItem value="gear-maintenance">
-                                <AccordionTrigger>Gear Maintenance Summary</AccordionTrigger>
-                                <AccordionContent><GearMaintenanceSummary /></AccordionContent>
+                            <AccordionItem value="gear-maintenance" className={minimal ? "border rounded-lg" : ""}>
+                                <AccordionTrigger className={minimal ? "px-4 py-3" : ""}>Gear Maintenance Summary</AccordionTrigger>
+                                <AccordionContent className={minimal ? "px-4 pb-4" : ""}><GearMaintenanceSummary /></AccordionContent>
                             </AccordionItem>
                         </Accordion>
                     </>

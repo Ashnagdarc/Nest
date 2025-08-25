@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { AlertCircle, Menu, X } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import FlipWordsHero from "./FlipWordsHero";
+import { ThemeLogo } from "@/components/ui/theme-logo";
 
 export default function LandingPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -80,21 +81,12 @@ export default function LandingPage() {
           <div className="flex items-center justify-between h-14 sm:h-16 bg-black/80 backdrop-blur-xl border-b border-white/10">
             {/* Logo */}
             <Link href="/" className="flex items-center space-x-2 sm:space-x-3">
-              <img
-                src={logoUrl || "/Nest-logo.png"}
-                alt="Nest Logo"
-                width={28}
-                height={28}
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-contain"
+              <ThemeLogo
+                width={80}
+                height={80}
+                className="w-14 h-14 sm:w-18 sm:h-18 rounded-lg object-contain"
               />
-              <div className="flex items-center space-x-1 sm:space-x-2">
-                <span className="font-bold text-lg sm:text-xl lg:text-2xl bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">
-                  Nest
-                </span>
-                <span className="text-xs font-medium text-neutral-400 hidden sm:block">
-                  by Eden Oasis
-                </span>
-              </div>
+
             </Link>
 
             {/* Desktop Navigation */}
