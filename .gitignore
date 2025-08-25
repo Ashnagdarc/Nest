@@ -1,9 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Node dependencies
+# ===== DEPENDENCIES =====
 node_modules/
-
-# Yarn
 .pnp
 .pnp.js
 .yarn/install-state.gz
@@ -11,15 +9,25 @@ node_modules/
 .yarnrc.yml
 yarn.lock
 
-# Build output
+# ===== BUILD OUTPUT =====
 /.next/
 /out/
 /build/
-dist
-tmp
-build/
+/dist/
+/tmp/
 
-# Logs
+# ===== ENVIRONMENT VARIABLES =====
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.*.local
+
+# ===== LOGS =====
 logs/
 *.log
 npm-debug.log*
@@ -29,10 +37,11 @@ pnpm-debug.log*
 lerna-debug.log*
 *.log.*
 
-# Coverage
-/coverage
+# ===== TESTING =====
+/coverage/
+.nyc_output/
 
-# Editor files
+# ===== EDITOR & IDE =====
 .vscode/
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -42,77 +51,111 @@ lerna-debug.log*
 *.sublime-workspace
 *.swp
 *.swo
+*~
 
-# Misc
+# ===== SYSTEM FILES =====
 .DS_Store
 **/.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ===== TEMPORARY FILES =====
+*.tmp
+*.temp
+*.bak
+*.backup
+.modified
+
+# ===== SECURITY & KEYS =====
 *.pem
+*.key
+*.crt
+*.p12
+*.pfx
 
-# Local config
-.env
-.env.local
-.env.*.local
-.env.development.local
-.env.development
-.env.production
-.env.production.local
-.env.test
-.env.test.local
-
-# Next-Auth
-next-auth.session-token
-
-# TypeScript
+# ===== TYPESCRIPT =====
 *.tsbuildinfo
 **/tsconfig.tsbuildinfo
 
+# ===== NEXT.JS SPECIFIC =====
+.next/
+out/
+# Next-Auth
+.next-auth/
+
+# ===== PACKAGE MANAGERS =====
 # Turbo
-.turbo
+.turbo/
 
-# REPL history
+# ===== REPL & DEBUG =====
 .node_repl_history
+.npm
 
+# ===== SUPABASE =====
+supabase/.branches/
+supabase/.temp/
+
+# ===== CURSOR IDE =====
+.cursor/
+.cursor/mcp.json
+
+# ===== PROJECT SPECIFIC =====
+# Remove any project-specific files that shouldn't be tracked
+debug-*.js
+fix-*.js
+*_DEBUG.md
+*_FIXES.md
+*_SETUP.md
+
+# ===== MISCELLANEOUS =====
 # Docusaurus
-.docusaurus
+.docusaurus/
 
 # IDX
 .idx/
 
-# Temporary files
-*.tmp
-*~
-*.backup
-.modified
+# Cache directories
+.cache/
+.parcel-cache/
 
-# Supabase
-supabase/.branches/
-supabase/.temp/
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
-# Cursor
-.cursor/
-.cursor/mcp.json
+# Optional npm cache directory
+.npm
 
-# Project-specific
-Gearflow logo.png
+# Optional eslint cache
+.eslintcache
 
-# Next.js
-.next/
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
 
-# Env files
-.env.local
-.env.*
-!.env.example
+# Optional REPL history
+.node_repl_history
 
-# Logs
-*.log
+# Output of 'npm pack'
+*.tgz
 
-# OS
-.DS_Store
+# Yarn Integrity file
+.yarn-integrity
 
-# Build
-out/
-dist/
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
 
-# Misc
-*.bak
-*.tmp
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
