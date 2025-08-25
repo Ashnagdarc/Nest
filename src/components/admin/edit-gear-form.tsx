@@ -171,6 +171,9 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
                                         <SelectItem value="Audio">Audio</SelectItem>
                                         <SelectItem value="Laptop">Laptop</SelectItem>
                                         <SelectItem value="Monitor">Monitor</SelectItem>
+                                        <SelectItem value="Mouse">Mouse</SelectItem>
+                                        <SelectItem value="Batteries">Batteries</SelectItem>
+                                        <SelectItem value="Storage">Storage</SelectItem>
                                         <SelectItem value="Cables">Cables</SelectItem>
                                         <SelectItem value="Lighting">Lighting</SelectItem>
                                         <SelectItem value="Tripod">Tripod</SelectItem>

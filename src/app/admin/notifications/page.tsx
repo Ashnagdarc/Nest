@@ -152,7 +152,7 @@ export default function AdminNotificationsPage() {
 
   const markAllAsRead = async () => {
     try {
-      const { error } = await apiPost<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
+      const { error } = await apiPut<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
       if (error) {
         console.error('Error marking all as read:', error);
         return;
