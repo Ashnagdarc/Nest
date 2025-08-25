@@ -5,6 +5,8 @@
  * This component serves as the foundation for all interactive buttons throughout the
  * Nest by Eden Oasis application, providing consistent styling, behavior, and accessibility.
  * 
+ * Updated to follow Apple's Human Interface Guidelines for minimal, clean design
+ * 
  * Key Features:
  * - Multiple visual variants (default, destructive, outline, secondary, ghost, link)
  * - Flexible sizing options (default, small, large, icon)
@@ -15,7 +17,7 @@
  * 
  * Design System Integration:
  * - Uses CSS variables for consistent theming
- * - Follows shadcn/ui design patterns
+ * - Follows Apple HIG design patterns
  * - Supports light/dark mode automatically
  * - Consistent with Tailwind CSS utility classes
  * 
@@ -27,7 +29,7 @@
  * 
  * @fileoverview Core button component with comprehensive variant and accessibility support
  * @author Daniel Chinonso Samuel
- * @version 1.0.0
+ * @version 1.1.0
  * @since 2024-01-15
  */
 
@@ -44,10 +46,12 @@ import { cn } from "@/lib/utils"
  * This configuration ensures consistent styling across all button instances
  * while providing flexibility for different use cases.
  * 
+ * Updated to follow Apple's Human Interface Guidelines
+ * 
  * Variants:
- * - default: Primary action button with brand colors
+ * - default: Primary action button with Apple Blue colors
  * - destructive: For dangerous actions (delete, remove, etc.)
- * - outline: Secondary actions with border styling
+ * - outline: Secondary actions with subtle border styling
  * - secondary: Subtle actions with muted background
  * - ghost: Minimal styling for tertiary actions
  * - link: Text-only button that looks like a link
@@ -61,7 +65,7 @@ import { cn } from "@/lib/utils"
  * @constant {VariantPropsFunction} buttonVariants - CVA configuration function
  */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       /**
@@ -69,19 +73,20 @@ const buttonVariants = cva(
        * 
        * Each variant is designed for specific use cases and provides
        * appropriate visual hierarchy and user expectations.
+       * Updated to follow Apple's design principles
        */
       variant: {
-        /** Primary action button - most prominent styling */
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        /** Primary action button - Apple Blue styling */
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm hover:shadow-md",
         /** Destructive actions - red/danger styling for warnings */
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm hover:shadow-md",
         /** Secondary actions - subtle border with background on hover */
         outline:
-          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+          "border border-border/60 bg-background hover:bg-accent hover:text-accent-foreground hover:border-border/80",
         /** Muted secondary actions - subtle background styling */
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-sm hover:shadow-md",
         /** Minimal tertiary actions - transparent with hover background */
         ghost: "hover:bg-accent hover:text-accent-foreground",
         /** Text-only actions - styled like links */
@@ -92,16 +97,17 @@ const buttonVariants = cva(
        * 
        * Different sizes for various contexts and importance levels.
        * All sizes maintain proper touch targets for accessibility.
+       * Updated with Apple-style spacing
        */
       size: {
-        /** Standard size for most buttons - 40px height minimum */
-        default: "h-10 px-4 py-2",
-        /** Compact size for dense interfaces - 32px height minimum */
-        sm: "h-9 rounded-md px-3",
-        /** Large size for prominent actions - 44px height minimum */
-        lg: "h-11 rounded-md px-8",
-        /** Square size optimized for icons - 36px square */
-        icon: "h-10 w-10",
+        /** Standard size for most buttons - 44px height minimum (Apple HIG) */
+        default: "h-11 px-6 py-3",
+        /** Compact size for dense interfaces - 36px height minimum */
+        sm: "h-9 rounded-lg px-4 py-2",
+        /** Prominent size for primary actions - 48px height */
+        lg: "h-12 rounded-xl px-8 py-4 text-base",
+        /** Square button optimized for icon-only content */
+        icon: "h-11 w-11 rounded-xl",
       },
     },
     defaultVariants: {

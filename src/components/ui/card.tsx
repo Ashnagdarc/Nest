@@ -9,8 +9,10 @@
  * - CardContent: Main content area with consistent spacing
  * - CardFooter: Bottom section for actions
  * 
+ * Updated to follow Apple's Human Interface Guidelines for minimal, clean design
+ * 
  * @author Daniel Chinonso Samuel
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 import * as React from "react"
@@ -18,7 +20,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 /**
- * Root card container with elevation and border styling
+ * Root card container with Apple-style elevation and border styling
  */
 const Card = React.forwardRef<
   HTMLDivElement,
@@ -27,7 +29,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-xl border bg-card text-card-foreground shadow",
+      "rounded-2xl border border-border/50 bg-card text-card-foreground shadow-sm hover:shadow-md transition-all duration-200",
       className
     )}
     {...props}
@@ -36,18 +38,18 @@ const Card = React.forwardRef<
 Card.displayName = "Card"
 
 /**
- * Header section with consistent spacing and typography
+ * Header section with Apple-style spacing and typography
  */
 const CardHeader = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />
+  <div ref={ref} className={cn("flex flex-col space-y-2 p-6", className)} {...props} />
 ))
 CardHeader.displayName = "CardHeader"
 
 /**
- * Primary heading with semantic structure
+ * Primary heading with Apple-style semantic structure
  */
 const CardTitle = React.forwardRef<
   HTMLParagraphElement,
@@ -55,14 +57,14 @@ const CardTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn("font-semibold leading-none tracking-tight", className)}
+    className={cn("text-lg font-semibold leading-tight tracking-tight", className)}
     {...props}
   />
 ))
 CardTitle.displayName = "CardTitle"
 
 /**
- * Secondary text for additional context
+ * Secondary text for additional context with Apple-style typography
  */
 const CardDescription = React.forwardRef<
   HTMLParagraphElement,
@@ -70,14 +72,14 @@ const CardDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn("text-sm text-muted-foreground", className)}
+    className={cn("text-sm text-muted-foreground leading-relaxed", className)}
     {...props}
   />
 ))
 CardDescription.displayName = "CardDescription"
 
 /**
- * Main content area with proper spacing
+ * Main content area with Apple-style spacing
  */
 const CardContent = React.forwardRef<
   HTMLDivElement,
@@ -88,7 +90,7 @@ const CardContent = React.forwardRef<
 CardContent.displayName = "CardContent"
 
 /**
- * Footer section for actions and navigation
+ * Footer section for actions and navigation with Apple-style spacing
  */
 const CardFooter = React.forwardRef<
   HTMLDivElement,

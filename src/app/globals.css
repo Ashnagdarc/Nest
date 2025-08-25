@@ -11,6 +11,38 @@
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif !important;
 }
 
+/* Apple-style typography improvements */
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+  }
+  
+  p {
+    line-height: 1.6;
+    letter-spacing: 0.01em;
+  }
+  
+  /* Improved focus states for accessibility */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+    border-radius: 0.375rem;
+  }
+  
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Better selection colors */
+  ::selection {
+    background-color: hsl(var(--primary) / 0.2);
+    color: hsl(var(--foreground));
+  }
+}
+
 /* Custom styles */
 .reports-content {
   max-width: 80rem;
@@ -66,22 +98,22 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    /* White */
+    /* Pure White */
     --foreground: 240 10% 3.9%;
     /* Dark Gray */
 
     --card: 0 0% 100%;
-    /* White */
+    /* Pure White */
     --card-foreground: 240 10% 3.9%;
     /* Dark Gray */
 
     --popover: 0 0% 100%;
-    /* White */
+    /* Pure White */
     --popover-foreground: 240 10% 3.9%;
     /* Dark Gray */
 
-    --primary: 24 96% 53%;
-    /* Orange primary color */
+    --primary: 210 100% 50%;
+    /* Apple Blue - more subtle than orange */
     --primary-foreground: 0 0% 98%;
     /* White */
 
@@ -109,43 +141,43 @@
     /* Light Gray */
     --input: 240 5.9% 90%;
     /* Light Gray */
-    --ring: 24 96% 53%;
-    /* Orange primary color */
+    --ring: 210 100% 50%;
+    /* Apple Blue */
 
     --radius: 0.75rem;
 
-    --chart-1: 23 100% 50%;
-    /* Orange */
+    --chart-1: 210 100% 50%;
+    /* Apple Blue */
     --chart-2: 210 9% 47%;
     /* Gray */
     --chart-3: 215 20.2% 65.1%;
     /* Mid Gray */
     --chart-4: 0 84.2% 60.2%;
     /* Red */
-    --chart-5: 211 100% 50%;
-    /* Blue */
+    --chart-5: 142 76% 36%;
+    /* Apple Green */
 
     --sidebar-background: 240 4.8% 95.9%;
     /* Very Light Gray */
     --sidebar-foreground: 240 5.9% 10%;
     /* Darker Gray */
-    --sidebar-primary: 23 100% 50%;
-    /* Orange */
+    --sidebar-primary: 210 100% 50%;
+    /* Apple Blue */
     --sidebar-primary-foreground: 0 0% 100%;
     /* White */
-    --sidebar-accent: 23 100% 95%;
-    /* Light Orange Accent */
-    --sidebar-accent-foreground: 23 100% 40%;
-    /* Darker Orange */
+    --sidebar-accent: 210 100% 95%;
+    /* Light Blue Accent */
+    --sidebar-accent-foreground: 210 100% 40%;
+    /* Darker Blue */
     --sidebar-border: 214.3 31.8% 91.4%;
     /* Light Gray Border */
-    --sidebar-ring: 23 100% 50%;
-    /* Orange Ring */
+    --sidebar-ring: 210 100% 50%;
+    /* Apple Blue Ring */
   }
 
   .dark {
-    --background: 0 0% 0%;
-    /* Black */
+    --background: 240 10% 3.9%;
+    /* Dark Gray - not pure black */
     --foreground: 0 0% 98%;
     /* Light Gray */
 
@@ -159,14 +191,15 @@
     --popover-foreground: 0 0% 98%;
     /* Light Gray */
 
-    --primary: 24 96% 53%;
+    --primary: 210 100% 60%;
+    /* Brighter Apple Blue for dark mode */
 
     --sidebar-background: 240 10% 3.9%;
     /* Dark Gray */
     --sidebar-foreground: 0 0% 98%;
     /* Light Gray */
-    --sidebar-primary: 23 100% 50%;
-    /* Orange */
+    --sidebar-primary: 210 100% 60%;
+    /* Apple Blue */
     --sidebar-primary-foreground: 0 0% 100%;
     /* White */
     --sidebar-accent: 240 10% 10%;
@@ -175,9 +208,9 @@
     /* Light Gray */
     --sidebar-border: 240 10% 20%;
     /* Dark Border */
-    --sidebar-ring: 23 100% 50%;
-    /* Orange Ring */
-    /* Orange primary color */
+    --sidebar-ring: 210 100% 60%;
+    /* Apple Blue Ring */
+    /* Apple Blue primary color */
     --primary-foreground: 240 5.9% 10%;
     /* Darker Gray */
 
@@ -205,97 +238,19 @@
     /* Very Dark Gray */
     --input: 240 3.7% 15.9%;
     /* Very Dark Gray */
-    --ring: 24 96% 53%;
-    /* Orange primary color */
+    --ring: 210 100% 60%;
+    /* Apple Blue */
 
-    --chart-1: 23 100% 60%;
-    /* Lighter Orange */
-    --chart-2: 210 9% 60%;
-    /* Lighter Gray */
-    --chart-3: 240 5% 64.9%;
+    --chart-1: 210 100% 60%;
+    /* Apple Blue */
+    --chart-2: 210 9% 47%;
+    /* Gray */
+    --chart-3: 215 20.2% 65.1%;
     /* Mid Gray */
-    --chart-4: 0 62.8% 50.6%;
-    /* Adjusted Red */
-    --chart-5: 211 100% 60%;
-    /* Lighter Blue */
-
-    --sidebar-background: 240 5.9% 10%;
-    /* Darker Gray */
-    --sidebar-foreground: 0 0% 98%;
-    /* Light Gray */
-    --sidebar-primary: 23 100% 60%;
-    /* Lighter Orange */
-    --sidebar-primary-foreground: 23 100% 5%;
-    /* Very Dark Orange/Brown */
-    --sidebar-accent: 23 100% 20%;
-    /* Dark Orange Accent */
-    --sidebar-accent-foreground: 23 100% 70%;
-    /* Brighter Orange */
-    --sidebar-border: 240 3.7% 15.9%;
-    /* Very Dark Gray Border */
-    --sidebar-ring: 23 100% 60%;
-    /* Lighter Orange Ring */
-  }
-
-  * {
-    border-color: hsl(var(--border));
-  }
-
-  body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
-
-  /* Add styles for reports page */
-  .reports-content {
-    max-width: 80rem;
-    margin: 0 auto;
-    padding-bottom: 2rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  .reports-header {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    background-color: hsl(var(--background) / 0.95);
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
-    padding-top: 1.5rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid hsl(var(--border));
-  }
-
-  .reports-card {
-    overflow: hidden;
-    transition: all 200ms;
-
-    &:hover {
-      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-    }
-  }
-
-  .reports-table-container {
-    border-radius: 0.375rem;
-    border: 1px solid hsl(var(--border));
-    background-color: hsl(var(--background));
-    max-height: calc(100vh - 20rem);
-    overflow-y: auto;
-  }
-
-  .reports-table-header {
-    position: sticky;
-    top: 0;
-    background-color: hsl(var(--background));
-    z-index: 10;
-  }
-
-  .reports-chart-container {
-    height: 350px;
-    width: 100%;
+    --chart-4: 0 62.8% 30.6%;
+    /* Red */
+    --chart-5: 142 76% 36%;
+    /* Apple Green */
   }
 }
 
