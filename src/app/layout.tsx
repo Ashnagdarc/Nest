@@ -8,6 +8,7 @@ import { NotificationProvider } from "@/components/notifications/NotificationPro
 import { UserProfileProvider } from "@/components/providers/user-profile-provider";
 import { SupabaseErrorBoundary } from "@/components/supabase-error-boundary";
 import { Toaster } from "@/components/ui/toaster";
+import { Favicon } from "@/components/ui/theme-favicon";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -41,8 +42,8 @@ const lato = Lato({
 
 export const metadata: Metadata = {
   title: {
-    default: "Nest by Eden Oasis",
-    template: "%s | Nest by Eden Oasis"
+    default: "Nest",
+    template: "%s | Nest"
   },
   description: "Comprehensive Asset Management System - Track, request, and manage all types of assets including equipment, vehicles, technology, and office supplies.",
   keywords: [
@@ -66,21 +67,21 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: "/",
-    title: "Nest by Eden Oasis - Asset Management System",
+    title: "Nest - Asset Management System",
     description: "Streamline your organization's asset management with our comprehensive tracking and request system.",
-    siteName: "Nest by Eden Oasis",
+    siteName: "Nest",
     images: [
       {
         url: "/images/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Nest by Eden Oasis - Asset Management System"
+        alt: "Nest - Asset Management System"
       }
     ]
   },
   twitter: {
     card: "summary_large_image",
-    title: "Nest by Eden Oasis - Asset Management System",
+    title: "Nest - Asset Management System",
     description: "Comprehensive asset tracking and management solution for modern organizations.",
     images: ["/images/twitter-image.png"],
     creator: "@edenoasis"
@@ -88,8 +89,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
-      { url: "/icons/icon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/icons/icon-32x32.png", sizes: "32x32", type: "image/png" }
+      { url: "/Favicon.png?v=5", sizes: "64x64", type: "image/png" }
     ],
     apple: [
       { url: "/icons/apple-touch-icon.png", sizes: "180x180" }
@@ -143,27 +143,26 @@ export default function RootLayout({
         {/* PWA iOS meta tags for better mobile experience */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Nest by Eden Oasis" />
+        <meta name="apple-mobile-web-app-title" content="Nest" />
         {/* Prevent zoom on input focus for iOS */}
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
       </head>
-      <body className={`${lato.className} min-h-screen bg-background font-sans antialiased`}>
+      <body className={`${lato.variable} font-sans antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
-          disableTransitionOnChange={false}
+          disableTransitionOnChange
         >
-          <NotificationProvider>
-            <SupabaseErrorBoundary>
-              <UserProfileProvider>
-                <div className="container mx-auto px-4 min-h-screen flex flex-col">
-                  {children}
-                </div>
-              </UserProfileProvider>
-            </SupabaseErrorBoundary>
-            <Toaster />
-          </NotificationProvider>
+          <Favicon />
+          <UserProfileProvider>
+            <NotificationProvider>
+              <SupabaseErrorBoundary>
+                {children}
+                <Toaster />
+              </SupabaseErrorBoundary>
+            </NotificationProvider>
+          </UserProfileProvider>
         </ThemeProvider>
         <Analytics />
         <SpeedInsights />

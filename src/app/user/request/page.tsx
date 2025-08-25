@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Image from 'next/image';
-import { Send, Search } from 'lucide-react';
+import { Send, Search, CheckCircle, Clock, MapPin, Users, Calendar } from 'lucide-react';
 import { createSystemNotification } from '@/lib/notifications';
 import { createClient } from '@/lib/supabase/client';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -173,29 +173,11 @@ function RequestGearContent() {
    * form values change to prevent data loss.
    */
   useEffect(() => {
-    const subscription = form.watch((values) => {
-      try {
-        localStorage.setItem(REQUEST_FORM_DRAFT_KEY, JSON.stringify(values));
-      } catch (error) {
-        console.warn('Failed to save form draft:', error);
-      }
+    const subscription = form.watch((value) => {
+      localStorage.setItem(REQUEST_FORM_DRAFT_KEY, JSON.stringify(value));
     });
     return () => subscription.unsubscribe();
   }, [form]);
-
-  /**
-   * Clear Request Draft
-   * 
-   * Removes saved draft from localStorage after successful
-   * form submission to prevent interference with new requests.
-   */
-  const clearRequestDraft = () => {
-    try {
-      localStorage.removeItem(REQUEST_FORM_DRAFT_KEY);
-    } catch (error) {
-      console.warn('Failed to clear form draft:', error);
-    }
-  };
 
   /**
    * User Authentication Effect
@@ -400,99 +382,91 @@ function RequestGearContent() {
           .insert(gearRequestGearsData);
 
         if (junctionError) {
-          console.error('Error creating gear_request_gears relationships:', junctionError);
-          // Don't throw here as the main request was created successfully
+          console.error('Error inserting gear request gears:', junctionError);
         }
       }
 
-      // Notify admins via API trigger
-      if (requestData && requestData[0]) {
-        await fetch('/api/notifications/trigger', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'INSERT',
-            table: 'gear_requests',
-            record: requestData[0],
-          }),
+      // Get user profile for notifications
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', userId)
+        .single();
+
+      // Get gear names for display
+      const gearNames = availableGears
+        .filter(gear => data.selectedGears.includes(gear.id))
+        .map(gear => gear.name)
+        .join(', ');
+
+      // Create system notification
+      await createSystemNotification({
+        title: 'New Equipment Request',
+        message: `${userProfile?.full_name || 'User'} requested: ${gearNames}`,
+        type: 'info',
+        user_id: userId,
+        related_id: requestData?.[0]?.id || '',
+        related_type: 'gear_request'
+      });
+
+      // Send Google Chat notification
+      try {
+        await notifyGoogleChat({
+          eventType: NotificationEventType.GEAR_REQUEST_CREATED,
+          data: {
+            requestId: requestData?.[0]?.id || '',
+            userId: userId,
+            userName: userProfile?.full_name || 'Unknown User',
+            userEmail: userProfile?.email || '',
+            gearNames: gearNames,
+            reason: data.reason,
+            destination: data.destination,
+            duration: data.duration,
+            teamMembers: data.teamMembers
+          }
         });
+      } catch (notificationError) {
+        console.error('Failed to send Google Chat notification:', notificationError);
       }
 
-      // Fetch user profile for notification context
-      let userProfile = null;
-      if (userId) {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', userId)
-          .single();
-
-        if (!profileError) {
-          userProfile = profileData;
-        }
-      }
-
-      // Resolve equipment names for notification display
-      const selectedGearNames = availableGears
-        .filter(gear => data.selectedGears.includes((gear as { id: string }).id))
-        .map(gear => (gear as { name?: string }).name);
-
-      // Create system notification for administrators
-      await createSystemNotification(
-        `New Equipment Request: ${selectedGearNames.join(', ')}`,
-        `${userProfile?.full_name || 'Unknown User'} has requested equipment for ${data.reason || ''}`,
-        'gear_request',
-        [] // Empty array means notify all admins
-      );
-
-      // Create notification for the user
-      await createSystemNotification(
-        userId,
-        'Request Submitted Successfully',
-        `Your request for ${selectedGearNames.join(', ')} has been submitted and is pending approval.`
-      );
-
-      // Send external notification to Google Chat
-      await notifyGoogleChat(NotificationEventType.USER_REQUEST, {
-        userName: userProfile?.full_name || 'Unknown User',
-        userEmail: userProfile?.email || '',
-        gearNames: selectedGearNames,
-        reason: data.reason,
-        destination: data.destination,
-        duration: data.duration,
-        requestId: requestData[0]?.id || 'unknown'
-      });
-
-      // Log activity for audit trail
-      if (data.selectedGears.length > 0) {
-        await supabase.from('gear_activity_log').insert(
-          data.selectedGears.map(gearId => ({
-            gear_id: gearId,
+      // Log activity
+      try {
+        await supabase
+          .from('gear_activity_log')
+          .insert({
+            gear_id: data.selectedGears[0], // Log first gear as primary
             user_id: userId,
-            activity_type: 'request',
-            status: 'Requested',
-            notes: `Equipment requested for ${data.reason} at ${data.destination}`
-          }))
-        );
+            action: 'request_created',
+            details: JSON.stringify({
+              request_id: requestData?.[0]?.id,
+              gear_ids: data.selectedGears,
+              reason: data.reason,
+              destination: data.destination,
+              duration: data.duration
+            })
+          });
+      } catch (logError) {
+        console.error('Failed to log activity:', logError);
       }
 
-      // Success feedback and cleanup
-      toast({
-        title: "Request Submitted Successfully!",
-        description: `Your request for ${selectedGearNames.length} item(s) has been submitted and is pending approval.`,
-        variant: "default",
-      });
+      // Clear form and draft
       form.reset();
-      clearRequestDraft();
-      setTimeout(() => {
-        router.push('/user/my-requests');
-      }, 1500);
+      localStorage.removeItem(REQUEST_FORM_DRAFT_KEY);
+
+      // Success feedback
+      toast({
+        title: "Request Submitted Successfully",
+        description: `Your request for ${gearNames} has been submitted and is pending approval.`,
+      });
+
+      // Navigate to requests page
+      router.push('/user/my-requests');
 
     } catch (error) {
-      console.error('Request submission error:', error);
+      console.error('Error submitting request:', error);
       toast({
         title: "Submission Failed",
-        description: error instanceof Error ? error.message : "Failed to submit request. Please try again.",
+        description: "Failed to submit your request. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -501,20 +475,18 @@ function RequestGearContent() {
   };
 
   /**
-   * Filtered Equipment Computation
+   * Filtered Equipment List
    * 
-   * Filters available equipment based on search term across
-   * multiple fields for enhanced discoverability.
+   * Computed list of available equipment filtered by search term
+   * for improved user experience and equipment discovery.
    */
   const filteredGears = useMemo(() => {
-    if (!searchTerm.trim()) return availableGears;
-
-    const term = searchTerm.toLowerCase();
+    const term = searchTerm.toLowerCase().trim();
     return availableGears.filter(gear =>
-      (gear as { name?: string; category?: string; description?: string; serial_number?: string }).name?.toLowerCase().includes(term) ||
-      (gear as { category?: string }).category?.toLowerCase().includes(term) ||
-      (gear as { description?: string }).description?.toLowerCase().includes(term) ||
-      (gear as { serial_number?: string }).serial_number?.toLowerCase().includes(term)
+      gear.name?.toLowerCase().includes(term) ||
+      gear.category?.toLowerCase().includes(term) ||
+      gear.description?.toLowerCase().includes(term) ||
+      gear.serial_number?.toLowerCase().includes(term)
     );
   }, [availableGears, searchTerm]);
 
@@ -539,56 +511,42 @@ function RequestGearContent() {
                 <CardDescription className="text-sm sm:text-base">Choose the gear you need for your request</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 sm:space-y-6">
-                {/* Search Bar */}
+
+                {/* Search */}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search gears by name, category, description, or serial number..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 w-full min-h-[44px] text-sm sm:text-base"
+                    className="pl-10"
                   />
                 </div>
 
+                {/* Equipment List */}
                 <FormField
                   control={form.control}
                   name="selectedGears"
                   render={({ field }) => (
                     <FormItem>
-                      <ScrollArea className="h-[300px] sm:h-[400px] lg:h-[500px] w-full rounded-md border p-3 sm:p-4">
-                        <div className="space-y-3 sm:space-y-4">
-                          {filteredGears.length === 0 ? (
-                            <div className="text-center py-8 sm:py-12 text-muted-foreground">
-                              <div className="flex flex-col items-center gap-3">
-                                <Search className="h-8 w-8 opacity-50" />
-                                <p className="text-sm sm:text-base">
-                                  {searchTerm ? `No equipment found matching "${searchTerm}"` : 'No available equipment found'}
-                                </p>
-                                {searchTerm && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setSearchTerm('')}
-                                    className="mt-2"
-                                  >
-                                    Clear Search
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            filteredGears.map((gear) => {
-                              const isSelected = field.value?.includes((gear as { id: string }).id);
+                      <FormControl>
+                        <ScrollArea className="h-[400px] w-full rounded-md border">
+                          <div className="space-y-2 p-4">
+                            {filteredGears.map((gear) => {
                               const g = gear as { id: string; name?: string; image_url?: string; category?: string; status?: string; condition?: string };
+                              const isSelected = field.value?.includes(g.id);
+                              
                               return (
                                 <Card
                                   key={g.id}
-                                  className={`relative transition-all duration-200 hover:shadow-md cursor-pointer ${isSelected ? 'ring-2 ring-primary bg-primary/5' : 'hover:bg-muted/50'
-                                    }`}
+                                  className={`relative cursor-pointer transition-colors ${
+                                    isSelected 
+                                      ? 'border-primary bg-primary/5' 
+                                      : 'hover:bg-muted/50'
+                                  }`}
                                 >
-                                  <CardContent className="p-3 sm:p-4">
-                                    <div className="flex items-center gap-3 sm:gap-4">
-                                      {/* Checkbox */}
+                                  <CardContent className="p-4">
+                                    <div className="flex items-center space-x-3">
                                       <FormControl>
                                         <Checkbox
                                           checked={isSelected}
@@ -656,10 +614,10 @@ function RequestGearContent() {
                                   </CardContent>
                                 </Card>
                               );
-                            })
-                          )}
-                        </div>
-                      </ScrollArea>
+                            })}
+                          </div>
+                        </ScrollArea>
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -966,4 +924,3 @@ export default function RequestGearPage() {
     </Suspense>
   );
 }
-

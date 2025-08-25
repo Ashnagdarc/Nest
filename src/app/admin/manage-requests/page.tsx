@@ -770,7 +770,7 @@ function ManageRequestsContent() {
     return names.sort();
   }, [requests]);
 
-  const hasActiveFilters = filterStatus !== 'all' || userFilter !== 'all' || gearFilter !== 'all' || keyword || dateRange;
+  const hasActiveFilters = filterStatus !== 'all' || (userFilter && userFilter !== 'all') || (gearFilter && gearFilter !== 'all') || !!keyword || !!dateRange;
 
   const filterChips = useMemo(() => {
     const chips: { label: string; onRemove: () => void }[] = [];
@@ -981,18 +981,13 @@ function ManageRequestsContent() {
       transition={{ duration: 0.5 }}
       className="space-y-4 p-2 sm:p-6"
     >
-      {/* Enhanced header with status indicators */}
+      {/* Header with status and actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Manage Gear Requests</h1>
-            {lastRefreshTime && (
-              <p className="text-sm text-muted-foreground">
-                Last updated: {format(lastRefreshTime, 'MMM dd, yyyy HH:mm:ss')}
-              </p>
-            )}
-          </div>
-        </div>
+        <RequestHeader
+          onExportCSV={downloadRequestsCSV}
+          onExportPDF={downloadRequestsPDF}
+          lastUpdated={lastRefreshTime ? format(lastRefreshTime, 'MMM dd, yyyy HH:mm:ss') : undefined}
+        />
 
         <div className="flex gap-2">
           <TooltipProvider>
@@ -1044,9 +1039,6 @@ function ManageRequestsContent() {
           </TooltipProvider>
         </div>
       </div>
-
-      {/* Header and Export Buttons */}
-      <RequestHeader onExportCSV={downloadRequestsCSV} onExportPDF={downloadRequestsPDF} />
 
       {/* Filters */}
       <RequestFilters

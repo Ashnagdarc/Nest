@@ -1,5 +1,5 @@
 {
-    "name": "Nest by Eden Oasis - Asset Management",
+    "name": "Nest - Asset Management",
     "short_name": "Nest",
     "description": "Streamline Gear Management for Eden Oasis Realty",
     "start_url": "/",
@@ -27,13 +27,19 @@
     ],
     "icons": [
         {
-            "src": "/icons/icon-72x72.png",
+            "src": "/Favicon.png",
+            "sizes": "64x64",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/Favicon.png",
             "sizes": "72x72",
             "type": "image/png",
             "purpose": "any maskable"
         },
         {
-            "src": "/icons/icon-96x96.png",
+            "src": "/Favicon.png",
             "sizes": "96x96",
             "type": "image/png",
             "purpose": "any maskable"

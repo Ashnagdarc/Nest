@@ -71,7 +71,7 @@ const RequestFilters: React.FC<RequestFiltersProps> = ({
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 sm:flex-wrap sm:overflow-visible">
             <Input
                 placeholder="User name..."
-                value={userFilter}
+                value={userFilter === 'all' ? '' : userFilter}
                 onChange={e => setUserFilter(e.target.value)}
                 className="max-w-[120px] sm:max-w-xs flex-shrink-0"
                 list="user-names"
@@ -81,7 +81,7 @@ const RequestFilters: React.FC<RequestFiltersProps> = ({
             </datalist>
             <Input
                 placeholder="Gear..."
-                value={gearFilter}
+                value={gearFilter === 'all' ? '' : gearFilter}
                 onChange={e => setGearFilter(e.target.value)}
                 className="max-w-[100px] sm:max-w-xs flex-shrink-0"
                 list="gear-names"
@@ -97,11 +97,11 @@ const RequestFilters: React.FC<RequestFiltersProps> = ({
                 className="max-w-[120px] sm:max-w-xs flex-shrink-0"
             />
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[100px] sm:w-[140px] flex-shrink-0">
+                <SelectTrigger className="w-[120px] sm:w-[160px] flex-shrink-0">
                     <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="all">All statuses</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="processed">Processed</SelectItem>
                     <SelectItem value="Approved">Approved</SelectItem>

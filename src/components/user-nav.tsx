@@ -28,7 +28,8 @@ export function UserNav() {
                 variant: "destructive",
             });
         } else {
-            router.push("/login");
+            // Use hard navigation to avoid back-button cached pages
+            window.location.href = "/login";
         }
     };
 

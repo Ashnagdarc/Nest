@@ -212,7 +212,7 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Email Notifications</h2>
                     <p className="text-muted-foreground">
-                        Control which email notifications you receive from Nest by Eden Oasis
+                        Control which email notifications you receive from Nest
                     </p>
                 </div>
                 <div className="flex gap-2">

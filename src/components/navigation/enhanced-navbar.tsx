@@ -27,6 +27,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import { ThemeLogo } from "@/components/ui/theme-logo";
 
 interface NavItem {
     href: string;
@@ -199,7 +200,8 @@ export default function EnhancedNavbar({
     const handleLogout = async () => {
         try {
             await supabase.auth.signOut();
-            router.push('/login');
+            // Hard navigation to prevent cached content via back button
+            window.location.href = '/login';
         } catch (error) {
             console.error("Logout error:", error);
         }
@@ -216,21 +218,14 @@ export default function EnhancedNavbar({
                     {/* Logo/Brand */}
                     <Link href={variant === 'admin' ? '/admin/dashboard' : '/user/dashboard'}
                         className="flex items-center space-x-3 group">
-                        <div className="relative hidden sm:block">
-                            <img
-                                src={logoUrl}
-                                alt="Nest Logo"
-                                className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-contain transition-transform group-hover:scale-105"
+                        <div className="relative">
+                            <ThemeLogo
+                                width={96}
+                                height={96}
+                                className="w-14 h-14 sm:w-18 sm:h-18 lg:w-24 lg:h-24 rounded-lg object-contain transition-transform group-hover:scale-105"
                             />
                         </div>
-                        <div className="flex flex-col">
-                            <span className="font-bold text-lg sm:text-xl bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">
-                                Nest
-                            </span>
-                            <span className="text-xs text-muted-foreground hidden sm:block">
-                                {variant === 'admin' ? 'Admin Panel' : 'User Portal'}
-                            </span>
-                        </div>
+
                     </Link>
 
                     {/* Desktop Navigation */}
@@ -385,15 +380,11 @@ export default function EnhancedNavbar({
                             {/* Header - Fixed */}
                             <div className="flex items-center justify-between p-5 border-b border-border flex-shrink-0">
                                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                                    <Avatar className="h-12 w-12 flex-shrink-0">
-                                        <AvatarImage
-                                            src={currentUser?.avatar_url || `https://picsum.photos/seed/${currentUser?.email}/100/100`}
-                                            alt={currentUser?.full_name || 'User'}
-                                        />
-                                        <AvatarFallback>
-                                            {getInitials(currentUser?.full_name)}
-                                        </AvatarFallback>
-                                    </Avatar>
+                                    <ThemeLogo
+                                        width={40}
+                                        height={40}
+                                        className="h-10 w-10 rounded-lg flex-shrink-0"
+                                    />
                                     <div className="min-w-0 flex-1">
                                         <p className="font-semibold text-sm truncate">{currentUser?.full_name || 'User'}</p>
                                         <p className="text-xs text-muted-foreground truncate">{currentUser?.email}</p>

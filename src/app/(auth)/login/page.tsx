@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { ThemeLogo } from '@/components/ui/theme-logo';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
 
@@ -135,9 +136,18 @@ export default function LoginPage() {
         <Card className="shadow-lg rounded-lg border-border/50">
           {showSuccessAnimation ? SuccessAnimationComponent : (
             <>
-              <CardHeader className="space-y-1 text-center">
-                <CardTitle className="text-2xl font-bold text-primary">Welcome Back!</CardTitle>
-                <CardDescription>Enter your credentials to access your dashboard</CardDescription>
+              <CardHeader className="space-y-4 text-center">
+                <div className="flex justify-center">
+                  <ThemeLogo
+                    width={96}
+                    height={96}
+                    className="w-24 h-24 rounded-lg"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <CardTitle className="text-2xl font-bold text-primary">Welcome Back!</CardTitle>
+                  <CardDescription>Enter your credentials to access your dashboard</CardDescription>
+                </div>
               </CardHeader>
               <CardContent>
                 <Form {...form}>

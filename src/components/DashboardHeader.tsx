@@ -1,49 +1,39 @@
 "use client";
 
-import Link from 'next/link';
-import { NotificationBell } from '@/components/notifications/NotificationBell';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
-import { useUserProfile } from '@/components/providers/user-profile-provider';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
-import Image from 'next/image';
+import { Button } from "@/components/ui/button";
+import { ThemeLogo } from "@/components/ui/theme-logo";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export function DashboardHeader() {
-    const { profile: currentUser, isLoading: isLoadingUser } = useUserProfile();
     const router = useRouter();
+    const [isLoading, setIsLoading] = useState(false);
     const supabase = createClient();
 
     const handleLogout = async () => {
-        await supabase.auth.signOut();
-        router.push('/login');
+        setIsLoading(true);
+        try {
+            const { error } = await supabase.auth.signOut();
+            if (error) throw error;
+            window.location.href = "/login";
+        } catch (error) {
+            console.error("Logout error:", error);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
-
     return (
-        <header className="sticky top-0 z-30 w-full bg-background/95 border-b flex items-center justify-between px-4 py-2 shadow-sm">
-            <Link href="/" className="flex items-center gap-2 font-bold text-lg text-primary">
-                <Image src="/favicon.png" alt="Logo" width={28} height={28} className="h-7 w-7" />
-                <span className="hidden sm:inline">Nest by Eden Oasis</span>
-            </Link>
-            <div className="flex items-center gap-3">
-                <NotificationBell />
-                {isLoadingUser ? (
-                    <Avatar className="h-9 w-9 bg-muted rounded-full animate-pulse" />
-                ) : currentUser ? (
-                    <div className="flex items-center gap-2">
-                        <Avatar className="h-9 w-9">
-                            <AvatarImage src={currentUser.avatar_url || `https://picsum.photos/seed/${currentUser.email}/100/100`} alt={currentUser.full_name || 'User'} />
-                            <AvatarFallback>{getInitials(currentUser.full_name)}</AvatarFallback>
-                        </Avatar>
-                        <Button variant="ghost" size="sm" onClick={handleLogout} className="text-xs px-2">
-                            Logout
-                        </Button>
-                    </div>
-                ) : (
-                    <span className="text-xs text-destructive">Error</span>
-                )}
+        <header className="flex items-center justify-between p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex items-center space-x-2">
+                <ThemeLogo width={40} height={40} className="h-10 w-10" />
+                <h1 className="text-lg font-semibold">Dashboard</h1>
+            </div>
+            <div className="flex items-center space-x-2">
+                <Button variant="ghost" size="sm" onClick={handleLogout} className="text-xs px-2">
+                    Logout
+                </Button>
             </div>
         </header>
     );
