@@ -47,7 +47,7 @@ export function QuickActions() {
             description: "Report equipment problem",
             icon: <AlertTriangle className="h-5 w-5" />,
             href: "/user/report",
-            variant: "destructive"
+            variant: "ghost"
         },
         {
             label: "Calendar",
@@ -59,32 +59,34 @@ export function QuickActions() {
     ];
 
     return (
-        <Card>
-            <CardHeader className="pb-3">
-                <CardTitle className="text-md">Quick Actions</CardTitle>
+        <Card className="border-border/50">
+            <CardHeader className="pb-4">
+                <CardTitle className="text-lg font-semibold">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 w-full">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full">
                     {actions.map((action, index) => (
                         <motion.div
                             key={action.label}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.08 }}
-                            whileHover={{ scale: 1.03 }}
-                            whileTap={{ scale: 0.97 }}
+                            transition={{ delay: index * 0.05, duration: 0.3 }}
+                            whileHover={{ scale: 1.02, y: -2 }}
+                            whileTap={{ scale: 0.98 }}
                         >
                             <Button
                                 asChild
                                 variant={action.variant}
-                                className="w-full min-h-[88px] flex flex-col items-center justify-center gap-2 rounded-lg text-center break-words"
+                                className="w-full min-h-[100px] flex flex-col items-center justify-center gap-3 rounded-xl text-center break-words transition-all duration-200"
                                 aria-label={action.label}
                             >
                                 <Link href={action.href} prefetch={false} tabIndex={0}>
-                                    {action.icon}
-                                    <div className="flex flex-col w-full text-center">
-                                        <span className="text-sm font-medium break-words">{action.label}</span>
-                                        <span className="text-xs font-normal opacity-80 break-words">{action.description}</span>
+                                    <div className="flex flex-col items-center gap-2">
+                                        {action.icon}
+                                        <div className="flex flex-col w-full text-center space-y-1">
+                                            <span className="text-sm font-medium break-words">{action.label}</span>
+                                            <span className="text-xs font-normal text-muted-foreground break-words leading-relaxed">{action.description}</span>
+                                        </div>
                                     </div>
                                 </Link>
                             </Button>

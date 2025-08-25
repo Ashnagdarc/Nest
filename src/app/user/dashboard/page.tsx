@@ -36,7 +36,7 @@ interface Profile {
 
 /**
  * Main user dashboard component with real-time asset management interface.
- * Now uses optimized data fetching while maintaining the exact same design.
+ * Updated to follow Apple's Human Interface Guidelines for minimal, clean design.
  */
 export default function UserDashboardPage() {
   const { toast } = useToast();
@@ -108,8 +108,8 @@ export default function UserDashboardPage() {
       opacity: 1,
       y: 0,
       transition: {
-        delay: i * 0.15,
-        duration: 0.5,
+        delay: i * 0.1,
+        duration: 0.4,
         ease: "easeOut",
       },
     }),
@@ -120,33 +120,33 @@ export default function UserDashboardPage() {
 
   return (
     <ErrorBoundary>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-6 sm:space-y-8">
+      <div className="container mx-auto px-6 sm:px-8 lg:px-12 py-8 sm:py-12 lg:py-16 space-y-8 sm:space-y-12">
         {/* Header Section */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6"
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 sm:gap-8"
         >
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground truncate">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground truncate leading-tight">
               Welcome back, {userData?.full_name || 'User'}
             </h1>
-            <p className="text-muted-foreground mt-1 text-sm sm:text-base lg:text-lg">
+            <p className="text-muted-foreground mt-2 text-base sm:text-lg lg:text-xl leading-relaxed">
               {userData?.department ? `${userData.department} Department` : 'Dashboard'}
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch gap-3 sm:gap-4 w-full sm:w-auto">
             <Link href="/user/browse" className="w-full sm:w-auto">
-              <Button className="gap-2 w-full sm:w-auto min-h-[44px] text-sm sm:text-base">
-                <Search className="h-4 w-4" />
+              <Button className="gap-3 w-full sm:w-auto min-h-[48px] text-base">
+                <Search className="h-5 w-5" />
                 <span className="hidden xs:inline">Browse Gear</span>
                 <span className="xs:hidden">Browse</span>
               </Button>
             </Link>
             <Link href="/user/check-in" className="w-full sm:w-auto">
-              <Button variant="outline" className="gap-2 w-full sm:w-auto min-h-[44px] text-sm sm:text-base">
-                <ArrowUpDown className="h-4 w-4" />
+              <Button variant="outline" className="gap-3 w-full sm:w-auto min-h-[48px] text-base">
+                <ArrowUpDown className="h-5 w-5" />
                 <span className="hidden xs:inline">Check-in Gear</span>
                 <span className="xs:hidden">Check-in</span>
               </Button>
@@ -167,7 +167,7 @@ export default function UserDashboardPage() {
         {isDataLoading ? (
           <LoadingState variant="cards" count={3} />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {userStats.map((stat, i) => (
               <motion.div
                 key={stat.title}
@@ -177,15 +177,15 @@ export default function UserDashboardPage() {
                 variants={cardVariants}
                 className="w-full"
               >
-                <Card className="h-full hover:shadow-lg transition-shadow duration-200">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
-                    <CardTitle className="text-sm sm:text-base lg:text-lg font-semibold flex items-center gap-2 truncate">
-                      {React.createElement(stat.icon, { className: `h-5 w-5 sm:h-6 sm:w-6 ${stat.color} flex-shrink-0` })}
+                <Card className="h-full hover:shadow-lg transition-all duration-300 border-border/50">
+                  <CardHeader className="flex flex-row items-center justify-between pb-3 p-6">
+                    <CardTitle className="text-base sm:text-lg lg:text-xl font-semibold flex items-center gap-3 truncate">
+                      {React.createElement(stat.icon, { className: `h-6 w-6 sm:h-7 sm:w-7 ${stat.color} flex-shrink-0` })}
                       <span className="truncate">{stat.title}</span>
                     </CardTitle>
                     <Badge
                       className={
-                        'text-xs sm:text-sm px-2 sm:px-3 py-1 font-bold shadow-none flex-shrink-0 ' +
+                        'text-sm sm:text-base px-3 sm:px-4 py-1.5 font-bold shadow-none flex-shrink-0 rounded-lg ' +
                         (stat.title === 'Checked Out Gears' ? 'bg-blue-600 text-white' :
                           stat.title === 'Overdue Gears' ? 'bg-red-600 text-white' :
                             stat.title === 'Available Gears' ? 'bg-green-600 text-white' :
@@ -195,14 +195,14 @@ export default function UserDashboardPage() {
                       {stat.value}
                     </Badge>
                   </CardHeader>
-                  <CardContent className="p-4 sm:p-6 pt-0">
-                    <p className="text-xs sm:text-sm text-muted-foreground mb-2 line-clamp-2">{stat.description}</p>
+                  <CardContent className="p-6 pt-0">
+                    <p className="text-sm sm:text-base text-muted-foreground mb-4 line-clamp-2 leading-relaxed">{stat.description}</p>
                     {stat.value === 0 && (
-                      <div className="text-xs text-muted-foreground italic">No {stat.title.toLowerCase()}.</div>
+                      <div className="text-sm text-muted-foreground italic">No {stat.title.toLowerCase()}.</div>
                     )}
-                    <Link href={stat.link} className="text-blue-500 hover:underline text-xs sm:text-sm inline-flex items-center gap-1">
+                    <Link href={stat.link} className="text-blue-500 hover:underline text-sm sm:text-base inline-flex items-center gap-2">
                       View details
-                      <ArrowUpRight className="h-3 w-3" />
+                      <ArrowUpRight className="h-4 w-4" />
                     </Link>
                   </CardContent>
                 </Card>
