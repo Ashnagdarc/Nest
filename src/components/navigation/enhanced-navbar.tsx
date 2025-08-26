@@ -210,6 +210,11 @@ export default function EnhancedNavbar({
     const getInitials = (name: string | null = "") =>
         name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
 
+    // Exclude dashboard item from top-level desktop nav (logo already navigates there)
+    const desktopNavItems = navItems.filter(
+        (item) => !(item.href === '/user/dashboard' || item.href === '/admin/dashboard')
+    );
+
     return (
         <nav className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-background/95 backdrop-blur-xl border-b border-border/50' : 'bg-background'
             }`}>
@@ -220,17 +225,17 @@ export default function EnhancedNavbar({
                         className="flex items-center space-x-3 group">
                         <div className="relative">
                             <ThemeLogo
-                                width={96}
-                                height={96}
-                                className="w-14 h-14 sm:w-18 sm:h-18 lg:w-24 lg:h-24 rounded-lg object-contain transition-transform group-hover:scale-105"
+                                width={112}
+                                height={112}
+                                className="w-16 h-16 lg:w-20 lg:h-20 rounded-lg object-contain transition-transform group-hover:scale-105"
                             />
                         </div>
 
                     </Link>
 
-                    {/* Desktop Navigation */}
+                    {/* Desktop Navigation (without Dashboard item) */}
                     <div className="hidden lg:flex items-center space-x-1">
-                        {navItems.slice(0, 6).map((item) => (
+                        {desktopNavItems.slice(0, 6).map((item) => (
                             <Link
                                 key={item.href}
                                 href={item.href}
@@ -249,6 +254,17 @@ export default function EnhancedNavbar({
                     <div className="hidden lg:flex items-center space-x-3">
                         <ThemeToggle />
 
+                        {/* Visible Logout button */}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-10 px-3"
+                            onClick={handleLogout}
+                        >
+                            <LogOut className="h-4 w-4 mr-2" />
+                            Logout
+                        </Button>
+
                         {/* User Menu */}
                         <div className="relative">
                             <Button
@@ -257,7 +273,7 @@ export default function EnhancedNavbar({
                                 className="flex items-center space-x-2 h-10 px-3"
                                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                             >
-                                <Avatar className="h-7 w-7">
+                                <Avatar className="h-8 w-8">
                                     <AvatarImage
                                         src={currentUser?.avatar_url || `https://picsum.photos/seed/${currentUser?.email}/100/100`}
                                         alt={currentUser?.full_name || 'User'}
