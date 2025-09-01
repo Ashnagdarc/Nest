@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import Image from 'next/image';
 import Link from 'next/link';
-import { PackagePlus, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box, LucideIcon, ArrowLeft, Filter, ChevronLeft, ChevronRight, Mouse, Battery, HardDrive } from 'lucide-react'; // Icons for view details and request
+import { PackagePlus, Box, ArrowLeft, Filter, ChevronLeft, ChevronRight } from 'lucide-react'; // Icons for view details and request
+import { getCategoryIcon } from '@/lib/utils/category';
 import { createClient } from '@/lib/supabase/client';
 // import { createGearNotification } from '@/lib/notifications'; // No longer used
 import { useToast } from "@/hooks/use-toast";
@@ -55,32 +56,9 @@ interface Gear {
 /**
  * Category Icon Mapping
  * 
- * Maps equipment categories to their corresponding Lucide React icons
+ * Now using centralized category icons from @/lib/utils/category
  * for consistent visual representation across the application.
- * Provides intuitive iconography for equipment categorization.
- * 
- * @constant {Record<string, any>} categoryIcons
  */
-const categoryIcons: Record<string, LucideIcon> = {
-  camera: Camera,
-  lens: Aperture,
-  drone: AirVent,
-  audio: Speaker,
-  laptop: Laptop,
-  monitor: Monitor,
-  mouse: Mouse,
-  batteries: Battery,
-  storage: HardDrive,
-  cables: Cable,
-  lighting: Lightbulb,
-  tripod: Video,
-  accessory: Puzzle,
-  cars: Car,
-  gimbal: RotateCcw,
-  microphone: Mic,
-  computer: Monitor,
-  other: Box,
-};
 
 /**
  * Category Color Mapping
@@ -135,11 +113,7 @@ const categoryColors: Record<string, string> = {
  * const unknownIcon = getCategoryIcon(undefined); // Returns Box icon
  * ```
  */
-const getCategoryIcon = (category?: string, size = 18) => {
-  const key = (category || '').toLowerCase();
-  const Icon = categoryIcons[key] || Box;
-  return <Icon size={size} className="inline-block mr-1 align-text-bottom text-muted-foreground" />;
-};
+// Using centralized getCategoryIcon from @/lib/utils/category
 
 /**
  * Get Category Badge Class
@@ -482,7 +456,7 @@ export default function BrowseGearsPage() {
                           <CardTitle className="text-base sm:text-lg font-semibold line-clamp-2 mb-2">{gear.name}</CardTitle>
                           <CardDescription className="text-xs sm:text-sm mb-3">
                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full font-medium text-xs ${getCategoryBadgeClass(gear.category || '')}`}>
-                              {getCategoryIcon(gear.category || '', 14)}
+                              {getCategoryIcon((gear.category as 'Camera' | 'Lens' | 'Drone' | 'Audio' | 'Laptop' | 'Monitor' | 'Mouse' | 'Batteries' | 'Storage' | 'Cables' | 'Lighting' | 'Tripod' | 'Cars') || '', 14)}
                               {gear.category}
                             </span>
                           </CardDescription>

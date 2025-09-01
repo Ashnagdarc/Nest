@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PlusCircle, Filter, Edit, Trash2, Download, Upload, CheckSquare, Wrench, Camera, Video, Mic, Speaker, Monitor, Laptop, Box, LucideIcon, Lightbulb, CheckCircle, AlertTriangle, Aperture, AirVent, Cable, Puzzle, Car, RotateCcw, X, Mouse, Battery, HardDrive } from 'lucide-react';
+import { getCategoryIcon } from '@/lib/utils/category';
 // Import Dialog components if using for Add/Edit form
 import {
   Dialog,
@@ -38,27 +39,7 @@ import { gearQueries } from '@/lib/api/queries';
 import { useDebounce } from '@/hooks/useDebounce';
 import { isFileList, isFile } from '@/lib/utils/browser-safe';
 
-// Category icon and color mapping
-const categoryIcons: Record<string, LucideIcon> = {
-  camera: Camera,
-  lens: Aperture,
-  drone: AirVent,
-  audio: Speaker,
-  laptop: Laptop,
-  monitor: Monitor,
-  mouse: Mouse,
-  batteries: Battery,
-  storage: HardDrive,
-  cables: Cable,
-  lighting: Lightbulb,
-  tripod: Video,
-  accessory: Puzzle,
-  cars: Car,
-  gimbal: RotateCcw,
-  microphone: Mic,
-  computer: Monitor,
-  other: Box,
-};
+// Category color mapping (icons now centralized)
 const categoryColors: Record<string, string> = {
   camera: 'bg-blue-100 text-blue-800',
   lens: 'bg-purple-100 text-purple-800',
@@ -80,12 +61,7 @@ const categoryColors: Record<string, string> = {
   other: 'bg-gray-200 text-gray-700',
 };
 
-// Helper function to get an icon based on category
-const getCategoryIcon = (category?: string, size = 24) => {
-  const key = (category || '').toLowerCase();
-  const Icon = categoryIcons[key] || Box;
-  return <Icon size={size} className="text-muted-foreground" />;
-};
+// Helper function to get an icon based on category - now using centralized utility
 
 const getCategoryBadgeClass = (category?: string) => {
   const key = (category || '').toLowerCase();
@@ -1550,19 +1526,19 @@ export default function ManageGearsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="Camera"><span className="inline-flex items-center gap-1">{getCategoryIcon('Camera', 14)} Camera</span></SelectItem>
-                  <SelectItem value="Lens"><span className="inline-flex items-center gap-1">{getCategoryIcon('Lens', 14)} Lens</span></SelectItem>
-                  <SelectItem value="Drone"><span className="inline-flex items-center gap-1">{getCategoryIcon('Drone', 14)} Drone</span></SelectItem>
-                  <SelectItem value="Audio"><span className="inline-flex items-center gap-1">{getCategoryIcon('Audio', 14)} Audio</span></SelectItem>
-                  <SelectItem value="Laptop"><span className="inline-flex items-center gap-1">{getCategoryIcon('Laptop', 14)} Laptop</span></SelectItem>
-                  <SelectItem value="Monitor"><span className="inline-flex items-center gap-1">{getCategoryIcon('Monitor', 14)} Monitor</span></SelectItem>
-                  <SelectItem value="Mouse"><span className="inline-flex items-center gap-1">{getCategoryIcon('Mouse', 14)} Mouse</span></SelectItem>
-                  <SelectItem value="Batteries"><span className="inline-flex items-center gap-1">{getCategoryIcon('Batteries', 14)} Batteries</span></SelectItem>
-                  <SelectItem value="Storage"><span className="inline-flex items-center gap-1">{getCategoryIcon('Storage', 14)} Storage</span></SelectItem>
-                  <SelectItem value="Cables"><span className="inline-flex items-center gap-1">{getCategoryIcon('Cables', 14)} Cables</span></SelectItem>
-                  <SelectItem value="Lighting"><span className="inline-flex items-center gap-1">{getCategoryIcon('Lighting', 14)} Lighting</span></SelectItem>
-                  <SelectItem value="Tripod"><span className="inline-flex items-center gap-1">{getCategoryIcon('Tripod', 14)} Tripod</span></SelectItem>
-                  <SelectItem value="Cars"><span className="inline-flex items-center gap-1">{getCategoryIcon('Cars', 14)} Cars</span></SelectItem>
+                  <SelectItem value="Camera"><span className="inline-flex items-center gap-1">{getCategoryIcon('Camera' as const, 14)} Camera</span></SelectItem>
+                  <SelectItem value="Lens"><span className="inline-flex items-center gap-1">{getCategoryIcon('Lens' as const, 14)} Lens</span></SelectItem>
+                  <SelectItem value="Drone"><span className="inline-flex items-center gap-1">{getCategoryIcon('Drone' as const, 14)} Drone</span></SelectItem>
+                  <SelectItem value="Audio"><span className="inline-flex items-center gap-1">{getCategoryIcon('Audio' as const, 14)} Audio</span></SelectItem>
+                  <SelectItem value="Laptop"><span className="inline-flex items-center gap-1">{getCategoryIcon('Laptop' as const, 14)} Laptop</span></SelectItem>
+                  <SelectItem value="Monitor"><span className="inline-flex items-center gap-1">{getCategoryIcon('Monitor' as const, 14)} Monitor</span></SelectItem>
+                  <SelectItem value="Mouse"><span className="inline-flex items-center gap-1">{getCategoryIcon('Mouse' as const, 14)} Mouse</span></SelectItem>
+                  <SelectItem value="Batteries"><span className="inline-flex items-center gap-1">{getCategoryIcon('Batteries' as const, 14)} Batteries</span></SelectItem>
+                  <SelectItem value="Storage"><span className="inline-flex items-center gap-1">{getCategoryIcon('Storage' as const, 14)} Storage</span></SelectItem>
+                  <SelectItem value="Cables"><span className="inline-flex items-center gap-1">{getCategoryIcon('Cables' as const, 14)} Cables</span></SelectItem>
+                  <SelectItem value="Lighting"><span className="inline-flex items-center gap-1">{getCategoryIcon('Lighting' as const, 14)} Lighting</span></SelectItem>
+                  <SelectItem value="Tripod"><span className="inline-flex items-center gap-1">{getCategoryIcon('Tripod' as const, 14)} Tripod</span></SelectItem>
+                  <SelectItem value="Cars"><span className="inline-flex items-center gap-1">{getCategoryIcon('Cars' as const, 14)} Cars</span></SelectItem>
                   {/* Add more categories as needed */}
                 </SelectContent>
               </Select>

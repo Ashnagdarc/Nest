@@ -1,0 +1,18 @@
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/supabase';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+// Function to create a Supabase client for API routes (no cookie handling)
+export function createSupabaseApiClient(isAdmin = false) {
+    const key = isAdmin ? supabaseServiceRoleKey : supabaseKey;
+
+    if (!supabaseUrl || !key) {
+        console.error(`Supabase ${isAdmin ? 'Service Role' : 'Anon'} Key or URL is missing. Check environment variables.`);
+        throw new Error(`Supabase ${isAdmin ? 'Service Role' : 'Anon'} Key or URL is missing.`);
+    }
+
+    return createClient<Database>(supabaseUrl, key);
+}

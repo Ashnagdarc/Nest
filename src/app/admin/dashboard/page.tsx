@@ -17,6 +17,7 @@ import BulkActionsToolbar from '@/components/admin/analytics/BulkActionsToolbar'
 import AdvancedSearchBar from '@/components/admin/analytics/AdvancedSearchBar';
 import { useBulkSelection } from '@/hooks/analytics/useBulkSelection';
 import { useAdvancedSearch } from '@/hooks/analytics/useAdvancedSearch';
+import PageHeader from '@/components/foundation/PageHeader';
 
 // Add types for analytics views
 interface WeeklyTrendRow {
@@ -293,7 +294,7 @@ export default function AdminDashboardPage() {
 
     // Compute stats
     const totalEquipment = gears.reduce((sum, g) => sum + (g.quantity ?? 1), 0);
-    const availableEquipment = gears.reduce((sum, g) => sum + (g.available_quantity ?? 0), 0);
+    // const availableEquipment = gears.reduce((sum, g) => sum + (g.available_quantity ?? 0), 0);
     const checkedOutEquipment = gears.filter((g: Gear) => g.status === "Checked Out").length;
     const underRepairEquipment = gears.filter((g: Gear) => g.status === "Under Repair").length;
     const utilizationRate = totalEquipment > 0 ? Math.round((checkedOutEquipment / totalEquipment) * 100) : 0;
@@ -321,40 +322,31 @@ export default function AdminDashboardPage() {
         <div className="min-h-screen bg-background text-foreground">
             <div className={minimal ? "container mx-auto px-4 py-6 space-y-6" : "container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-8 lg:space-y-10"}>
                 {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6">
-                    <div className="flex-1 min-w-0">
-                        <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-extrabold bg-gradient-to-r from-[#ff6300] via-[#ff8533] to-[#ffaa66] bg-clip-text text-transparent truncate">
-                            Welcome Admin
-                        </h1>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                        <Button
-                            variant="outline"
-                            className="border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-black dark:text-white text-sm sm:text-base"
-                            onClick={() => window.location.reload()}
-                        >
-                            <RefreshCcw className="h-4 w-4 mr-2" />
-                            <span className="hidden xs:inline">Refresh</span>
-                            <span className="xs:hidden">Refresh</span>
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-black dark:text-white text-sm sm:text-base"
-                        >
-                            <BarChart3 className="h-4 w-4 mr-2" />
-                            <span className="hidden xs:inline">Reports</span>
-                            <span className="xs:hidden">Reports</span>
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-black dark:text-white text-sm sm:text-base"
-                        >
-                            <Settings className="h-4 w-4 mr-2" />
-                            <span className="hidden xs:inline">Settings</span>
-                            <span className="xs:hidden">Settings</span>
-                        </Button>
-                    </div>
-                </div>
+                <PageHeader
+                    title="Admin Dashboard"
+                    subtitle={undefined}
+                    actions={(
+                        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                            <Button
+                                variant="outline"
+                                className="text-sm sm:text-base"
+                                onClick={() => window.location.reload()}
+                                aria-label="Refresh dashboard"
+                            >
+                                <RefreshCcw className="icon-16 mr-2" />
+                                Refresh
+                            </Button>
+                            <Button variant="outline" className="text-sm sm:text-base" aria-label="Open reports">
+                                <BarChart3 className="icon-16 mr-2" />
+                                Reports
+                            </Button>
+                            <Button variant="outline" className="text-sm sm:text-base" aria-label="Open settings">
+                                <Settings className="icon-16 mr-2" />
+                                Settings
+                            </Button>
+                        </div>
+                    )}
+                />
 
                 {error && (
                     <div className="text-red-500 font-bold text-center py-4 px-4 bg-red-50 dark:bg-red-900/20 rounded-lg">{error}</div>
@@ -371,155 +363,155 @@ export default function AdminDashboardPage() {
                             {/* Equipment Stats */}
                             <div className="rounded-xl border p-4 bg-card">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <Package className="w-4 h-4 text-primary" />
+                                    <Package className="icon-16 text-primary" />
                                     <span className="text-sm font-medium">Equipment</span>
                                 </div>
                                 <div className="text-2xl font-bold">{totalEquipment}</div>
                             </div>
-                            
+
                             <div className="rounded-xl border p-4 bg-card">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <TrendingUp className="w-4 h-4 text-primary" />
+                                    <TrendingUp className="icon-16 text-primary" />
                                     <span className="text-sm font-medium">Utilization</span>
                                 </div>
                                 <div className="text-2xl font-bold">{utilizationRate}%</div>
                             </div>
-                            
+
                             <div className="rounded-xl border p-4 bg-card">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <Package className="w-4 h-4 text-muted-foreground" />
+                                    <Package className="icon-16 text-muted-foreground" />
                                     <span className="text-sm font-medium">Checked Out</span>
                                 </div>
                                 <div className="text-2xl font-bold">{checkedOutEquipment}</div>
                             </div>
-                            
+
                             <div className="rounded-xl border p-4 bg-card">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <Wrench className="w-4 h-4 text-muted-foreground" />
+                                    <Wrench className="icon-16 text-muted-foreground" />
                                     <span className="text-sm font-medium">Under Repair</span>
                                 </div>
                                 <div className="text-2xl font-bold">{underRepairEquipment}</div>
                             </div>
-                            
+
                             {/* User Stats */}
                             <div className="rounded-xl border p-4 bg-card">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <Users className="w-4 h-4 text-muted-foreground" />
+                                    <Users className="icon-16 text-muted-foreground" />
                                     <span className="text-sm font-medium">Users</span>
                                 </div>
                                 <div className="text-2xl font-bold">{totalUsers}</div>
                             </div>
-                            
+
                             <div className="rounded-xl border p-4 bg-card">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <Users className="w-4 h-4 text-muted-foreground" />
+                                    <Users className="icon-16 text-muted-foreground" />
                                     <span className="text-sm font-medium">Active</span>
                                 </div>
                                 <div className="text-2xl font-bold">{activeUsers}</div>
                             </div>
-                            
+
                             {/* Request Stats */}
                             <div className="rounded-xl border p-4 bg-card">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <ClipboardList className="w-4 h-4 text-muted-foreground" />
+                                    <ClipboardList className="icon-16 text-muted-foreground" />
                                     <span className="text-sm font-medium">Pending</span>
                                 </div>
                                 <div className="text-2xl font-bold">{pendingRequests}</div>
                             </div>
-                            
+
                             <div className="rounded-xl border p-4 bg-card">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+                                    <CheckCircle2 className="icon-16 text-muted-foreground" />
                                     <span className="text-sm font-medium">Approved</span>
                                 </div>
                                 <div className="text-2xl font-bold">{approvedRequests}</div>
                             </div>
-                            
+
                             <div className="rounded-xl border p-4 bg-card">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <XCircle className="w-4 h-4 text-muted-foreground" />
+                                    <XCircle className="icon-16 text-muted-foreground" />
                                     <span className="text-sm font-medium">Rejected</span>
                                 </div>
                                 <div className="text-2xl font-bold">{rejectedRequests}</div>
                             </div>
-                            
+
                             <div className="rounded-xl border p-4 bg-card">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <BarChartIcon className="w-4 h-4 text-muted-foreground" />
+                                    <BarChartIcon className="icon-16 text-muted-foreground" />
                                     <span className="text-sm font-medium">Approval Rate</span>
                                 </div>
                                 <div className="text-2xl font-bold">{approvalRate}%</div>
                             </div>
                         </div>
 
-                            {/* Quick Actions and Recent Activity */}
-                            <div className="sm:col-span-2 lg:col-span-3">
-                                <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full"}>
-                                    <div className="font-semibold text-base mb-3">Quick Actions</div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Dialog open={addGearOpen} onOpenChange={setAddGearOpen}>
-                                            <DialogTrigger asChild>
-                                                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm w-full">
-                                                    + Add Equipment
-                                                </Button>
-                                            </DialogTrigger>
-                                            <DialogContent className="sm:max-w-md">
-                                                <DialogHeader>
-                                                    <DialogTitle>Add New Equipment</DialogTitle>
-                                                </DialogHeader>
-                                                <AddGearForm onSubmit={() => setAddGearOpen(false)} />
-                                            </DialogContent>
-                                        </Dialog>
-                                        <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
-                                            <Link href="/admin/manage-requests">Manage Requests</Link>
-                                        </Button>
-                                        <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
-                                            <Link href="/admin/reports">View Reports</Link>
-                                        </Button>
-                                        <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
-                                            <Link href="/admin/manage-users">User Management</Link>
-                                        </Button>
-                                    </div>
+                        {/* Quick Actions and Recent Activity */}
+                        <div className="sm:col-span-2 lg:col-span-3">
+                            <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full"}>
+                                <div className="font-semibold text-base mb-3">Quick Actions</div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Dialog open={addGearOpen} onOpenChange={setAddGearOpen}>
+                                        <DialogTrigger asChild>
+                                            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm w-full">
+                                                + Add Equipment
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="sm:max-w-md">
+                                            <DialogHeader>
+                                                <DialogTitle>Add New Equipment</DialogTitle>
+                                            </DialogHeader>
+                                            <AddGearForm onSubmit={() => setAddGearOpen(false)} />
+                                        </DialogContent>
+                                    </Dialog>
+                                    <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
+                                        <Link href="/admin/manage-requests">Manage Requests</Link>
+                                    </Button>
+                                    <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
+                                        <Link href="/admin/reports">View Reports</Link>
+                                    </Button>
+                                    <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
+                                        <Link href="/admin/manage-users">User Management</Link>
+                                    </Button>
                                 </div>
                             </div>
-                            <div className="sm:col-span-2 lg:col-span-3">
-                                <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full"}>
-                                    <div className="font-semibold text-base mb-3">Recent Activity</div>
-                                    <ul className="text-sm space-y-2">
-                                        <li className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                            Check-in Activity – 1 day ago
-                                        </li>
-                                        <li className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                            Request Approved – 2 days ago
-                                        </li>
-                                        <li className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                            Equipment Added – 3 days ago
-                                        </li>
-                                        <li className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                            User Registered – 4 days ago
-                                        </li>
-                                    </ul>
-                                </div>
+                        </div>
+                        <div className="sm:col-span-2 lg:col-span-3">
+                            <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full"}>
+                                <div className="font-semibold text-base mb-3">Recent Activity</div>
+                                <ul className="text-sm space-y-2">
+                                    <li className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                                        Check-in Activity – 1 day ago
+                                    </li>
+                                    <li className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                                        Request Approved – 2 days ago
+                                    </li>
+                                    <li className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                                        Equipment Added – 3 days ago
+                                    </li>
+                                    <li className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                                        User Registered – 4 days ago
+                                    </li>
+                                </ul>
                             </div>
+                        </div>
 
-                            {/* Equipment Categories (compact chips) */}
-                            <div className="sm:col-span-2 lg:col-span-6">
-                                <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent"}>
-                                    <div className="font-semibold text-base mb-3">Equipment Categories</div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {categories.map((cat) => (
-                                            <span key={cat.name} className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm">
-                                                <span className="font-medium">{cat.name}</span>
-                                                <span className="text-primary font-bold">{cat.count}</span>
-                                            </span>
-                                        ))}
-                                    </div>
+                        {/* Equipment Categories (compact chips) */}
+                        <div className="sm:col-span-2 lg:col-span-6">
+                            <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent"}>
+                                <div className="font-semibold text-base mb-3">Equipment Categories</div>
+                                <div className="flex flex-wrap gap-2">
+                                    {categories.map((cat) => (
+                                        <span key={cat.name} className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm">
+                                            <span className="font-medium">{cat.name}</span>
+                                            <span className="text-primary font-bold">{cat.count}</span>
+                                        </span>
+                                    ))}
                                 </div>
                             </div>
+                        </div>
                         {/* Collapsible analytics views */}
                         <Accordion type="multiple" className={minimal ? "space-y-2" : "mb-8"}>
                             <AccordionItem value="weekly-trends" className={minimal ? "border rounded-lg" : ""}>

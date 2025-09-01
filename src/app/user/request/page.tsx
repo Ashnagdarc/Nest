@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Image from 'next/image';
-import { Send, Search, CheckCircle, Clock, MapPin, Users, Calendar } from 'lucide-react';
+import { Send, Search } from 'lucide-react';
 import { createSystemNotification } from '@/lib/notifications';
 import { createClient } from '@/lib/supabase/client';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -257,14 +257,14 @@ function RequestGearContent() {
             variant: "destructive",
           });
         } else {
-          setAvailableUsers((data || []).map((u: any) => ({
-            id: u.id,
+          setAvailableUsers((data || []).map((u: Partial<Profile>) => ({
+            id: String(u.id || ''),
             full_name: u.full_name ?? null,
             email: u.email ?? null,
-            role: u.role,
+            role: (u.role as 'Admin' | 'User') ?? 'User',
             department: u.department ?? null,
             avatar_url: u.avatar_url ?? null,
-            status: u.status ?? 'Active',
+            status: (u.status as 'Active' | 'Inactive' | 'Suspended') ?? 'Active',
             phone: u.phone ?? null,
             location: u.location ?? null,
             employee_id: u.employee_id ?? null,
@@ -400,30 +400,25 @@ function RequestGearContent() {
         .join(', ');
 
       // Create system notification
-      await createSystemNotification({
-        title: 'New Equipment Request',
-        message: `${userProfile?.full_name || 'User'} requested: ${gearNames}`,
-        type: 'info',
-        user_id: userId,
-        related_id: requestData?.[0]?.id || '',
-        related_type: 'gear_request'
-      });
+      await createSystemNotification(
+        'New Equipment Request',
+        `${userProfile?.full_name || 'User'} requested: ${gearNames}`,
+        'system',
+        [userId]
+      );
 
       // Send Google Chat notification
       try {
-        await notifyGoogleChat({
-          eventType: NotificationEventType.GEAR_REQUEST_CREATED,
-          data: {
-            requestId: requestData?.[0]?.id || '',
-            userId: userId,
-            userName: userProfile?.full_name || 'Unknown User',
-            userEmail: userProfile?.email || '',
-            gearNames: gearNames,
-            reason: data.reason,
-            destination: data.destination,
-            duration: data.duration,
-            teamMembers: data.teamMembers
-          }
+        await notifyGoogleChat(NotificationEventType.USER_REQUEST, {
+          requestId: requestData?.[0]?.id || '',
+          userId: userId,
+          userName: userProfile?.full_name || 'Unknown User',
+          userEmail: userProfile?.email || '',
+          gearNames: gearNames.split(',').map((s) => s.trim()),
+          reason: data.reason,
+          destination: data.destination,
+          duration: data.duration,
+          teamMembers: data.teamMembers
         });
       } catch (notificationError) {
         console.error('Failed to send Google Chat notification:', notificationError);
@@ -514,7 +509,7 @@ function RequestGearContent() {
 
                 {/* Search */}
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Search aria-hidden="true" className="absolute left-3 top-1/2 transform -translate-y-1/2 icon-16 text-muted-foreground" />
                   <Input
                     placeholder="Search gears by name, category, description, or serial number..."
                     value={searchTerm}
@@ -535,15 +530,14 @@ function RequestGearContent() {
                             {filteredGears.map((gear) => {
                               const g = gear as { id: string; name?: string; image_url?: string; category?: string; status?: string; condition?: string };
                               const isSelected = field.value?.includes(g.id);
-                              
+
                               return (
                                 <Card
                                   key={g.id}
-                                  className={`relative cursor-pointer transition-colors ${
-                                    isSelected 
-                                      ? 'border-primary bg-primary/5' 
-                                      : 'hover:bg-muted/50'
-                                  }`}
+                                  className={`relative cursor-pointer transition-colors ${isSelected
+                                    ? 'border-primary bg-primary/5'
+                                    : 'hover:bg-muted/50'
+                                    }`}
                                 >
                                   <CardContent className="p-4">
                                     <div className="flex items-center space-x-3">
@@ -776,6 +770,7 @@ function RequestGearContent() {
                                   variant="ghost"
                                   size="sm"
                                   className="h-auto p-0 px-1 text-muted-foreground hover:text-foreground"
+                                  aria-label={`Remove ${member?.full_name || member?.email || 'member'}`}
                                   onClick={() => {
                                     field.onChange(field.value.filter((id: string) => id !== memberId));
                                   }}
@@ -875,7 +870,7 @@ function RequestGearContent() {
                   </>
                 ) : (
                   <>
-                    <Send className="mr-2 h-4 w-4" />
+                    <Send className="mr-2 icon-16" />
                     Submit Request
                   </>
                 )}
