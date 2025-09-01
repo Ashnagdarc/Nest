@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, Bell, BellRing, RefreshCw, Search, Filter, Download, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { Bell, BellRing, RefreshCw, Eye, CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -21,11 +21,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from '@/components/ui/button';
-import dynamic from 'next/dynamic';
+// import dynamic from 'next/dynamic';
 import { DateRange } from "react-day-picker";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { createSystemNotification } from '@/lib/notifications';
+// import { createSystemNotification } from '@/lib/notifications';
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -35,24 +35,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useSearchParams } from 'next/navigation';
+// import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { useSuccessFeedback } from '@/hooks/use-success-feedback';
 import { apiGet } from '@/lib/apiClient';
 import { createClient } from '@/lib/supabase/client';
 import { Skeleton } from "@/components/ui/skeleton";
-import RequestHeader from '@/components/admin/requests/RequestHeader';
+// import RequestHeader from '@/components/admin/requests/RequestHeader';
 import RequestFilters from '@/components/admin/requests/RequestFilters';
-import RequestTable from '@/components/admin/requests/RequestTable';
+import RequestTable, { type GearRequest as TableGearRequest } from '@/components/admin/requests/RequestTable';
 import RequestEmptyState from '@/components/admin/requests/RequestEmptyState';
+import { LoadingState } from '@/components/ui/loading-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import PageHeader from '@/components/foundation/PageHeader';
+import FiltersBar from '@/components/foundation/FiltersBar';
+import TableToolbar from '@/components/foundation/TableToolbar';
 
-// --- Dynamically import Lottie ---
-const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
-
-// --- Import actual Lottie animation JSON ---
-import successAnimation from "@/../public/animations/success.json";
-import rejectAnimation from "@/../public/animations/reject.json";
+// Animations not used after UI refactor
 
 // --- Import the notification sound ---
 const NOTIFICATION_SOUND_URL = '/sounds/notification-bell.mp3';
@@ -217,15 +217,15 @@ function ManageRequestsContent() {
   }, [soundEnabled]);
 
   // Optimized gear name extraction function with fallback support
-  const extractGearNames = useCallback((request: any): string[] => {
+  const extractGearNames = useCallback((request: { gear_request_gears?: Array<{ gears?: { name?: string } }>; gear_ids?: string[] }): string[] => {
     const gearNames: string[] = [];
 
     // First, try to extract from gear_request_gears junction table
     if (request.gear_request_gears && Array.isArray(request.gear_request_gears)) {
       const junctionNames = request.gear_request_gears
-        .map((item: any) => item.gears?.name)
-        .filter((name: string) => name && name.trim() !== '')
-        .map((name: string) => name.trim());
+        .map((item) => item.gears?.name)
+        .filter((name): name is string => Boolean(name && name.trim() !== ''))
+        .map((name) => name.trim());
 
       if (junctionNames.length > 0) {
         gearNames.push(...junctionNames);
@@ -244,7 +244,7 @@ function ManageRequestsContent() {
   }, []);
 
   // Function to fetch gear names for requests that don't have them in the junction table
-  const fetchMissingGearNames = useCallback(async (request: any): Promise<string[]> => {
+  const fetchMissingGearNames = useCallback(async (request: { gear_ids?: string[] }): Promise<string[]> => {
     if (!request.gear_ids || !Array.isArray(request.gear_ids) || request.gear_ids.length === 0) {
       return [];
     }
@@ -397,7 +397,7 @@ function ManageRequestsContent() {
                   return { full_name: item.profiles[0].full_name };
                 }
                 if (typeof item.profiles === 'object' && 'full_name' in item.profiles) {
-                  return { full_name: (item.profiles as any).full_name };
+                  return { full_name: (item.profiles as { full_name?: string }).full_name || '' };
                 }
                 return undefined;
               })(),
@@ -406,10 +406,7 @@ function ManageRequestsContent() {
             setStatusHistory([]);
           }
         })
-        .catch((error) => {
-          console.error('Error fetching status history:', error);
-          setStatusHistory([]);
-        });
+        ;
     } else {
       setStatusHistory([]);
     }
@@ -449,7 +446,10 @@ function ManageRequestsContent() {
 
       // Play success sound if enabled
       if (soundEnabled && audioRef.current) {
-        audioRef.current.play().catch(console.error);
+        const p: unknown = audioRef.current.play();
+        if (p && typeof (p as Promise<void>).then === 'function') {
+          (p as Promise<void>).catch(() => { });
+        }
       }
 
       // Show success feedback
@@ -517,7 +517,10 @@ function ManageRequestsContent() {
 
       // Play success sound if enabled
       if (soundEnabled && audioRef.current) {
-        audioRef.current.play().catch(console.error);
+        const p: unknown = audioRef.current.play();
+        if (p && typeof (p as Promise<void>).then === 'function') {
+          (p as Promise<void>).catch(() => { });
+        }
       }
 
       // Show success feedback
@@ -982,102 +985,93 @@ function ManageRequestsContent() {
       className="space-y-4 p-2 sm:p-6"
     >
       {/* Header with status and actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <RequestHeader
-          onExportCSV={downloadRequestsCSV}
-          onExportPDF={downloadRequestsPDF}
-          lastUpdated={lastRefreshTime ? format(lastRefreshTime, 'MMM dd, yyyy HH:mm:ss') : undefined}
-        />
+      <PageHeader
+        title="Manage Gear Requests"
+        lastUpdated={lastRefreshTime ? format(lastRefreshTime, 'MMM dd, yyyy HH:mm:ss') : undefined}
+        actions={(
+          <div className="flex gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={forceRefresh}
+                    className="flex items-center gap-2"
+                    disabled={isRefreshing}
+                    aria-label="Refresh requests"
+                  >
+                    <RefreshCw className={cn("icon-16", isRefreshing && "animate-spin")} />
+                    {isRefreshing ? "Refreshing..." : "Refresh"}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Refresh the data</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
-        <div className="flex gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={forceRefresh}
-                  className="flex items-center gap-2"
-                  disabled={isRefreshing}
-                >
-                  <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-                  {isRefreshing ? "Refreshing..." : "Refresh"}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Refresh the data</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    className="flex items-center gap-2"
+                    aria-label={soundEnabled ? 'Disable notification sounds' : 'Enable notification sounds'}
+                  >
+                    {soundEnabled ? (
+                      <>
+                        <BellRing className="icon-16 text-primary" />
+                        Sound On
+                      </>
+                    ) : (
+                      <>
+                        <Bell className="icon-16" />
+                        Sound Off
+                      </>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{soundEnabled ? "Disable" : "Enable"} notification sounds</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
+      />
 
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSoundEnabled(!soundEnabled)}
-                  className="flex items-center gap-2"
-                >
-                  {soundEnabled ? (
-                    <>
-                      <BellRing className="h-4 w-4 text-primary" />
-                      Sound On
-                    </>
-                  ) : (
-                    <>
-                      <Bell className="h-4 w-4" />
-                      Sound Off
-                    </>
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{soundEnabled ? "Disable" : "Enable"} notification sounds</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      </div>
+      {/* Table Toolbar - export actions */}
+      <TableToolbar onExportCSV={downloadRequestsCSV} onExportPDF={downloadRequestsPDF} />
 
       {/* Filters */}
-      <RequestFilters
-        userFilter={userFilter}
-        setUserFilter={setUserFilter}
-        gearFilter={gearFilter}
-        setGearFilter={setGearFilter}
-        keyword={keyword}
-        setKeyword={setKeyword}
-        filterStatus={filterStatus}
-        setFilterStatus={setFilterStatus}
-        dateRange={dateRange}
-        setDateRange={setDateRange}
-        uniqueUserNames={uniqueUserNames}
-        uniqueGearNames={uniqueGearNames}
-        hasActiveFilters={hasActiveFilters}
-        filterChips={filterChips as { label: string; onRemove: () => void }[]}
-        handleClearAllFilters={handleClearAllFilters}
-      />
+      <FiltersBar>
+        <RequestFilters
+          userFilter={userFilter}
+          setUserFilter={setUserFilter}
+          gearFilter={gearFilter}
+          setGearFilter={setGearFilter}
+          keyword={keyword}
+          setKeyword={setKeyword}
+          filterStatus={filterStatus}
+          setFilterStatus={setFilterStatus}
+          dateRange={dateRange}
+          setDateRange={setDateRange}
+          uniqueUserNames={uniqueUserNames}
+          uniqueGearNames={uniqueGearNames}
+          hasActiveFilters={hasActiveFilters}
+          filterChips={filterChips as { label: string; onRemove: () => void }[]}
+          handleClearAllFilters={handleClearAllFilters}
+        />
+      </FiltersBar>
 
       {/* Table or Empty State */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="flex items-center gap-2">
-            <RefreshCw className="h-6 w-6 animate-spin" />
-            <span>Loading requests...</span>
-          </div>
-        </div>
+        <LoadingState />
       ) : fetchError ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <div className="text-center space-y-2">
-              <p className="text-destructive font-medium">{fetchError}</p>
-              <Button onClick={forceRefresh} variant="outline">
-                Try Again
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <ErrorState message={fetchError} onRetry={forceRefresh} />
       ) : filteredRequests.length === 0 ? (
         <RequestEmptyState onRefresh={fetchRequests} onClearFilters={handleClearAllFilters} hasActiveFilters={hasActiveFilters} />
       ) : (
@@ -1088,7 +1082,7 @@ function ManageRequestsContent() {
           setSelectedRequests={setSelectedRequests}
           onApprove={handleApprove}
           onReject={(id) => { setRequestToReject(id); setRejectionReason(''); }}
-          onView={(req) => { setSelectedRequest(req); setIsDetailsOpen(true); }}
+          onView={(req: TableGearRequest) => { setSelectedRequest(req as GearRequest); setIsDetailsOpen(true); }}
           isProcessing={isProcessing}
           getStatusBadge={getStatusBadge}
         />

@@ -65,7 +65,7 @@ import { cn } from "@/lib/utils"
  * @constant {VariantPropsFunction} buttonVariants - CVA configuration function
  */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium ring-offset-background transition-all motion-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       /**
@@ -77,18 +77,18 @@ const buttonVariants = cva(
        */
       variant: {
         /** Primary action button - Apple Blue styling */
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm hover:shadow-md",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/85 shadow-sm hover:shadow-md active:shadow",
         /** Destructive actions - red/danger styling for warnings */
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm hover:shadow-md",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:bg-destructive/85 shadow-sm hover:shadow-md active:shadow",
         /** Secondary actions - subtle border with background on hover */
         outline:
-          "border border-border/60 bg-background hover:bg-accent hover:text-accent-foreground hover:border-border/80",
+          "border border-border/60 bg-background hover:bg-accent hover:text-accent-foreground active:bg-accent/90 hover:border-border/80",
         /** Muted secondary actions - subtle background styling */
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-sm hover:shadow-md",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-secondary/75 shadow-sm hover:shadow-md active:shadow",
         /** Minimal tertiary actions - transparent with hover background */
-        ghost: "hover:bg-accent hover:text-accent-foreground",
+        ghost: "hover:bg-accent active:bg-accent/90 hover:text-accent-foreground",
         /** Text-only actions - styled like links */
         link: "text-primary underline-offset-4 hover:underline",
       },

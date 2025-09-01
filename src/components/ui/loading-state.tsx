@@ -16,7 +16,7 @@ export function LoadingState({
 }: LoadingStateProps) {
     if (variant === 'cards') {
         return (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div role="status" aria-live="polite" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Array(count).fill(0).map((_, i) => (
                     <div
                         key={i}
@@ -35,7 +35,7 @@ export function LoadingState({
 
     if (variant === 'table') {
         return (
-            <div className="space-y-3">
+            <div role="status" aria-live="polite" className="space-y-3">
                 {Array(count).fill(0).map((_, i) => (
                     <div
                         key={i}
@@ -53,7 +53,7 @@ export function LoadingState({
     }
 
     return (
-        <div className={cn(
+        <div role="status" aria-live="polite" className={cn(
             "flex items-center justify-center p-8",
             className
         )}>

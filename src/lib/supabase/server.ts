@@ -14,8 +14,38 @@ export async function createSupabaseServerClient(isAdmin = false) {
 
   if (!supabaseUrl || !key) {
     console.error(`Supabase ${isAdmin ? 'Service Role' : 'Anon'} Key or URL is missing. Check environment variables.`);
+    console.error('Supabase URL:', supabaseUrl ? 'Present' : 'Missing');
+    console.error('Supabase Key:', key ? 'Present' : 'Missing');
     // Handle the error appropriately, maybe throw or return a specific error state
     throw new Error(`Supabase ${isAdmin ? 'Service Role' : 'Anon'} Key or URL is missing.`);
+  }
+
+  // For API routes, we don't need cookie handling
+  if (typeof window === 'undefined' && process.env.NODE_ENV === 'development') {
+    try {
+      // Test if we're in an API route context
+      await cookies();
+    } catch (error) {
+      // If cookies() fails, we're likely in an API route context
+      console.log('[Supabase Server] Creating client without cookie handling for API route');
+      return createServerClient<Database>(
+        supabaseUrl,
+        key,
+        {
+          cookies: {
+            get(name: string) {
+              return undefined;
+            },
+            set(name: string, value: string, options: CookieOptions) {
+              // No-op for API routes
+            },
+            remove(name: string, options: CookieOptions) {
+              // No-op for API routes
+            },
+          },
+        }
+      );
+    }
   }
 
   return createServerClient<Database>(
@@ -24,14 +54,20 @@ export async function createSupabaseServerClient(isAdmin = false) {
     {
       cookies: {
         async get(name: string) {
-          const cookieStore = await cookies();
-          return cookieStore.get(name)?.value
+          try {
+            const cookieStore = await cookies();
+            return cookieStore.get(name)?.value
+          } catch (error) {
+            console.warn('[Supabase Server] Cookie get error:', error);
+            return undefined;
+          }
         },
         async set(name: string, value: string, options: CookieOptions) {
           try {
             const cookieStore = await cookies();
             cookieStore.set({ name, value, ...options })
           } catch (error) {
+            console.warn('[Supabase Server] Cookie set error:', error);
             // The `set` method was called from a Server Component.
             // This can be ignored if you have middleware refreshing
             // user sessions.
@@ -42,6 +78,7 @@ export async function createSupabaseServerClient(isAdmin = false) {
             const cookieStore = await cookies();
             cookieStore.set({ name, value: '', ...options })
           } catch (error) {
+            console.warn('[Supabase Server] Cookie remove error:', error);
             // The `delete` method was called from a Server Component.
             // This can be ignored if you have middleware refreshing
             // user sessions.

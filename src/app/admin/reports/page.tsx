@@ -33,6 +33,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { apiGet } from '@/lib/apiClient';
 import Image from 'next/image';
 import { subDays, format, getISOWeek, formatDistanceToNow } from 'date-fns';
+import PageHeader from '@/components/foundation/PageHeader';
+import FiltersBar from '@/components/foundation/FiltersBar';
+import TableToolbar from '@/components/foundation/TableToolbar';
 
 interface Gear {
   id: string;
@@ -521,55 +524,37 @@ export default function ReportsPage() {
         className="space-y-6 container mx-auto py-8"
       >
         {/* Enhanced Header with Help */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-          <div className="flex items-center gap-3">
+        <PageHeader
+          title="Reports & Analytics"
+          actions={(
             <div className="flex items-center gap-2">
-              <BarChart3 className="h-8 w-8 text-primary" />
-              <h1 className="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
+              <DatePickerWithRange dateRange={dateRange} onDateRangeChange={setDateRange} />
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    onClick={handleRefresh}
+                    disabled={isLoading}
+                    className="ml-2 h-10 w-10 p-0"
+                    aria-label="Refresh data"
+                  >
+                    {isLoading ? (
+                      <RefreshCw className="icon-16 animate-spin" />
+                    ) : (
+                      <RefreshCw className="icon-16" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Refresh data to get the latest information</p>
+                </TooltipContent>
+              </UITooltip>
+              <Button variant="ghost" size="sm" onClick={() => setShowHelp(!showHelp)} className="h-8 w-8 p-0" aria-label="Toggle help panel">
+                <HelpCircle className="icon-16" />
+              </Button>
             </div>
-            <UITooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowHelp(!showHelp)}
-                  className="h-8 w-8 p-0"
-                >
-                  <HelpCircle className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Click for help understanding these reports</p>
-              </TooltipContent>
-            </UITooltip>
-          </div>
-          <div className="flex items-center gap-2">
-            <DatePickerWithRange
-              dateRange={dateRange}
-              onDateRangeChange={setDateRange}
-            />
-            <UITooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  onClick={handleRefresh}
-                  disabled={isLoading}
-                  className="ml-2 h-10 w-10 p-0"
-                  aria-label="Refresh data"
-                >
-                  {isLoading ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Refresh data to get the latest information</p>
-              </TooltipContent>
-            </UITooltip>
-          </div>
-        </div>
+          )}
+        />
 
         {/* Help Section */}
         {showHelp && (
@@ -874,7 +859,7 @@ export default function ReportsPage() {
                 {/* Grouped list by day */}
                 {isLoading ? (
                   <div className="p-6 space-y-4">
-                    {[1,2,3].map(i => (
+                    {[1, 2, 3].map(i => (
                       <div key={i} className="h-6 bg-muted rounded animate-pulse w-40"></div>
                     ))}
                   </div>

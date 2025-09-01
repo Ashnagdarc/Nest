@@ -1,9 +1,19 @@
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseApiClient } from '@/lib/supabase/api-client';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient(true);
+        console.log('[Gears API] Starting GET request');
+
+        console.log('[Gears API] Creating Supabase client...');
+        let supabase;
+        try {
+            supabase = createSupabaseApiClient(true);
+            console.log('[Gears API] Supabase client created successfully');
+        } catch (error) {
+            console.error('[Gears API] Failed to create Supabase client:', error);
+            return NextResponse.json({ data: null, error: 'Failed to create database connection' }, { status: 500 });
+        }
         const { searchParams } = new URL(request.url);
 
         // Extract query parameters
@@ -47,8 +57,10 @@ export async function GET(request: NextRequest) {
         baseQuery = applySearch(baseQuery, search);
 
         // Get total count after filters (before pagination)
+        console.log('[Gears API] Getting total count');
         const { count: total, error: countError } = await baseQuery.range(0, 0);
         if (countError) {
+            console.error('[Gears API] Count error:', countError);
             return NextResponse.json({ data: null, error: 'Search failed. Try searching by name or serial number.' }, { status: 200 });
         }
 
@@ -72,12 +84,15 @@ export async function GET(request: NextRequest) {
         }
         dataQuery = applySearch(dataQuery, search);
         dataQuery = dataQuery.order('name').range(offset, offset + limit - 1);
+        console.log('[Gears API] Fetching data with pagination');
         const { data, error } = await dataQuery;
 
         if (error) {
+            console.error('[Gears API] Data fetch error:', error);
             return NextResponse.json({ data: null, error: 'Search failed. Try searching by name or serial number.' }, { status: 200 });
         }
 
+        console.log('[Gears API] Successfully fetched data, count:', data?.length);
         return NextResponse.json({
             data,
             total: total ?? 0,
@@ -86,13 +101,14 @@ export async function GET(request: NextRequest) {
             error: null
         });
     } catch (error) {
+        console.error('[Gears API] Unexpected error:', error);
         return NextResponse.json({ data: null, error: 'Unexpected error. Please try again.' }, { status: 200 });
     }
 }
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient(true);
+        const supabase = createSupabaseApiClient(true);
 
         // Check for admin authorization
         const { data: { user }, error: authError } = await supabase.auth.getUser();
