@@ -77,6 +77,8 @@ const requestSchema = z.object({
   selectedGears: z.array(z.string()).min(1, {
     message: "Please select at least one gear item."
   }),
+  /** Quantities keyed by selected gear id (represents gear type by name) */
+  quantities: z.record(z.string(), z.number().int().min(1).max(50)).default({}),
   /** Reason for equipment request (required selection) */
   reason: z.string().min(1, {
     message: "Please select a reason for use."
@@ -140,6 +142,7 @@ function RequestGearContent() {
     resolver: zodResolver(requestSchema),
     defaultValues: {
       selectedGears: preselectedGearId ? [preselectedGearId] : [],
+      quantities: {},
       reason: "",
       destination: "",
       duration: "",
@@ -147,6 +150,21 @@ function RequestGearContent() {
       conditionConfirmed: false,
     },
   });
+
+  // Helper: compute available units by gear name using both status and available_quantity
+  const getAvailableUnitsByName = (targetName?: string) => {
+    if (!targetName) return 0;
+    const norm = targetName.toLowerCase().trim();
+    return availableGears
+      .filter(x => (x.name || '').toLowerCase().trim() === norm)
+      .reduce((sum, x) => {
+        const statusOk = (x.status || '').toLowerCase() === 'available';
+        const qty = typeof x.available_quantity === 'number' && x.available_quantity > 0
+          ? x.available_quantity
+          : (statusOk ? 1 : 0);
+        return sum + qty;
+      }, 0);
+  };
 
   /**
    * Draft Recovery Effect
@@ -352,6 +370,23 @@ function RequestGearContent() {
     }
 
     try {
+      // Validate requested quantities against availability by gear name
+      const byIdQuantity = data.quantities || {};
+      for (const gearId of data.selectedGears) {
+        const qty = byIdQuantity[gearId] ?? 1;
+        const anchor = availableGears.find(g => g.id === gearId);
+        if (!anchor) continue;
+        const availableForName = getAvailableUnitsByName(anchor.name);
+        if (qty > Math.max(1, availableForName)) {
+          setIsLoading(false);
+          toast({
+            title: 'Not enough available units',
+            description: `Requested ${qty} × ${anchor.name}, but only ${availableForName} available.`,
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
       // Insert request into database
       const { data: requestData, error } = await supabase
         .from('gear_requests')
@@ -374,7 +409,8 @@ function RequestGearContent() {
       if (requestData && requestData[0] && data.selectedGears.length > 0) {
         const gearRequestGearsData = data.selectedGears.map(gearId => ({
           gear_request_id: requestData[0].id,
-          gear_id: gearId
+          gear_id: gearId,
+          quantity: (data.quantities && typeof data.quantities[gearId] === 'number' ? data.quantities[gearId] : 1)
         }));
 
         const { error: junctionError } = await supabase
@@ -805,6 +841,8 @@ function RequestGearContent() {
                       .filter(gear => form.watch("selectedGears")?.includes((gear as { id: string }).id))
                       .map((gear) => {
                         const g = gear as { id: string; name?: string; image_url?: string; condition?: string };
+                        const maxAvailableForName = getAvailableUnitsByName(g.name);
+                        const currentQty = (form.watch('quantities') as Record<string, number>)[g.id] ?? 1;
                         return (
                           <div key={g.id} className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg">
                             <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg border overflow-hidden bg-muted shrink-0">
@@ -823,6 +861,54 @@ function RequestGearContent() {
                               <p className="text-xs sm:text-sm text-muted-foreground">
                                 Condition: {g.condition}
                               </p>
+                              {/* Quantity selector per selected gear (by type) */}
+                              <div className="mt-2 flex items-center gap-2">
+                                <span className="text-xs sm:text-sm text-muted-foreground">Quantity</span>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    aria-label="Decrease quantity"
+                                    onClick={() => {
+                                      const current = (form.getValues().quantities as Record<string, number>)[g.id] ?? 1;
+                                      const next = Math.max(1, Number(current) - 1);
+                                      form.setValue(`quantities.${g.id}` as unknown as keyof RequestFormValues, next as unknown as RequestFormValues[keyof RequestFormValues], { shouldDirty: true, shouldValidate: true });
+                                    }}
+                                  >
+                                    −
+                                  </Button>
+                                  <Input
+                                    className="w-16 h-8"
+                                    type="number"
+                                    min={1}
+                                    max={Math.max(1, maxAvailableForName) || undefined}
+                                    step={1}
+                                    value={currentQty}
+                                    onChange={(e) => {
+                                      const raw = Number(e.target.value || 1);
+                                      const clamped = Math.max(1, Math.min(raw, Math.max(1, maxAvailableForName)));
+                                      form.setValue(`quantities.${g.id}` as unknown as keyof RequestFormValues, clamped as unknown as RequestFormValues[keyof RequestFormValues], { shouldDirty: true, shouldValidate: true });
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    aria-label="Increase quantity"
+                                    disabled={maxAvailableForName > 0 ? currentQty >= maxAvailableForName : false}
+                                    onClick={() => {
+                                      const current = (form.getValues().quantities as Record<string, number>)[g.id] ?? 1;
+                                      const ceiling = Math.max(1, maxAvailableForName);
+                                      const next = Math.min(ceiling, Number(current) + 1);
+                                      form.setValue(`quantities.${g.id}` as unknown as keyof RequestFormValues, next as unknown as RequestFormValues[keyof RequestFormValues], { shouldDirty: true, shouldValidate: true });
+                                    }}
+                                  >
+                                    +
+                                  </Button>
+                                  <span className="ml-1 text-xs text-muted-foreground">Max {Math.max(1, maxAvailableForName)}</span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         );
