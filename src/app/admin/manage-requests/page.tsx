@@ -416,58 +416,15 @@ function ManageRequestsContent() {
   const handleApprove = async (requestId: string) => {
     setIsProcessing(true);
     try {
-      // Step 1: Read request with its requested gears and quantities
-      const { data: req, error: fetchErr } = await supabase
-        .from('gear_requests')
-        .select('id, user_id, gear_ids, status, gear_request_gears:gear_request_gears(gear_id, quantity), due_date')
-        .eq('id', requestId)
-        .single();
-      if (fetchErr) throw fetchErr;
-
-      // Step 2: Allocate concrete units by gear name for each requested item
-      const allocations: string[] = [];
-      if (req?.gear_request_gears && Array.isArray(req.gear_request_gears)) {
-        for (const line of req.gear_request_gears as any[]) {
-          const { data: anchor } = await supabase
-            .from('gears')
-            .select('name')
-            .eq('id', line.gear_id)
-            .single();
-          if (!anchor?.name) continue;
-
-          const needed = Math.max(1, Number(line.quantity ?? 1));
-          const { data: units } = await supabase
-            .from('gears')
-            .select('id')
-            .eq('name', anchor.name)
-            .eq('status', 'Available')
-            .limit(needed);
-          if (units && units.length >= needed) {
-            allocations.push(...units.map(u => u.id));
-          } else {
-            throw new Error(`Not enough available units to allocate for ${anchor.name}. Needed ${needed}, found ${units?.length ?? 0}.`);
-          }
-        }
+      const resp = await fetch('/api/requests/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId }),
+      });
+      const result = await resp.json();
+      if (!resp.ok || !result?.success) {
+        throw new Error(result?.error || 'Approval failed');
       }
-
-      // Step 3: Write allocations to request.gear_ids before approval
-      const { error: updateIdsErr } = await supabase
-        .from('gear_requests')
-        .update({ gear_ids: allocations, updated_at: new Date().toISOString() })
-        .eq('id', requestId);
-      if (updateIdsErr) throw updateIdsErr;
-
-      // Step 4: Update the request status - triggers will handle gear updates
-      const { error } = await supabase
-        .from('gear_requests')
-        .update({
-          status: 'approved',
-          approved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', requestId);
-
-      if (error) throw error;
 
       // Add to status history
       await supabase
@@ -505,7 +462,7 @@ function ManageRequestsContent() {
       // Refresh the requests list
       fetchRequests();
     } catch (error) {
-      console.error('Error approving request:', error);
+      console.error('Error approving request:', error instanceof Error ? { message: error.message, stack: error.stack } : error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to approve request. Please try again.",
