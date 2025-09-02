@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
                 *,
                 profiles:user_id (full_name, email),
                 gear_request_gears (
+                    quantity,
                     gear_id,
                     gears (
                         id,

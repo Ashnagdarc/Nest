@@ -409,9 +409,10 @@ function MyRequestsContent() {
     if (!dateString) return 'N/A';
     try {
       const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'N/A';
       return format(date, 'MMM d, yyyy');
     } catch (e) {
-      return 'Invalid date';
+      return 'N/A';
     }
   };
 
@@ -643,14 +644,18 @@ function MyRequestsContent() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {req.created_at ? (
-                            <div className="flex flex-col">
-                              <span>{formatDate(req)}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {format(new Date(req.created_at), 'h:mm a')}
-                              </span>
-                            </div>
-                          ) : 'N/A'}
+                          {(() => {
+                            const created = req.created_at ? new Date(req.created_at) : null;
+                            const valid = !!created && !isNaN(created.getTime());
+                            return (
+                              <div className="flex flex-col">
+                                <span>{valid ? format(created!, 'MMM d, yyyy') : 'N/A'}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {valid ? format(created!, 'h:mm a') : ''}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className="font-normal">

@@ -51,6 +51,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import PageHeader from '@/components/foundation/PageHeader';
 import FiltersBar from '@/components/foundation/FiltersBar';
 import TableToolbar from '@/components/foundation/TableToolbar';
+import { ViewRequestModal } from '@/components/admin/ViewRequestModal';
 
 // Animations not used after UI refactor
 
@@ -126,6 +127,7 @@ interface GearRequest {
   updatedAt?: Date;
   gear_request_gears?: Array<{
     gear_id: string;
+    quantity?: number;
     gears: {
       id: string;
       name: string;
@@ -217,30 +219,25 @@ function ManageRequestsContent() {
   }, [soundEnabled]);
 
   // Optimized gear name extraction function with fallback support
-  const extractGearNames = useCallback((request: { gear_request_gears?: Array<{ gears?: { name?: string } }>; gear_ids?: string[] }): string[] => {
-    const gearNames: string[] = [];
-
-    // First, try to extract from gear_request_gears junction table
-    if (request.gear_request_gears && Array.isArray(request.gear_request_gears)) {
-      const junctionNames = request.gear_request_gears
-        .map((item) => item.gears?.name)
-        .filter((name): name is string => Boolean(name && name.trim() !== ''))
-        .map((name) => name.trim());
-
-      if (junctionNames.length > 0) {
-        gearNames.push(...junctionNames);
+  const extractGearNames = useCallback((request: { gear_request_gears?: Array<{ quantity?: number; gears?: { name?: string } }>; gear_ids?: string[] }): string[] => {
+    // Prefer junction table with quantities: aggregate by name and append "x qty"
+    if (request.gear_request_gears && Array.isArray(request.gear_request_gears) && request.gear_request_gears.length > 0) {
+      const counts: Record<string, number> = {};
+      for (const item of request.gear_request_gears) {
+        const name = (item.gears?.name || '').trim();
+        if (!name) continue;
+        const qty = Math.max(1, Number(item.quantity ?? 1));
+        counts[name] = (counts[name] || 0) + qty;
       }
+      return Object.entries(counts).map(([n, q]) => (q > 1 ? `${n} x ${q}` : n));
     }
 
-    // If no names found from junction table, try to extract from gear_ids array
-    if (gearNames.length === 0 && request.gear_ids && Array.isArray(request.gear_ids)) {
-      // For gear_ids, we'll return placeholder names since we don't have the actual names
-      // This will be handled by the API or we can fetch them separately
-      gearNames.push(...request.gear_ids.map((id: string) => `Gear ${id.slice(0, 8)}...`));
+    // Fallback to gear_ids if junction table not available
+    if (request.gear_ids && Array.isArray(request.gear_ids) && request.gear_ids.length > 0) {
+      return request.gear_ids.map((id: string) => `Gear ${id.slice(0, 8)}...`);
     }
 
-    // If still no names, return empty array
-    return gearNames;
+    return [];
   }, []);
 
   // Function to fetch gear names for requests that don't have them in the junction table
@@ -376,13 +373,7 @@ function ManageRequestsContent() {
     if (selectedRequest?.id) {
       supabase
         .from('request_status_history')
-        .select(`
-          status, 
-          changed_at, 
-          note, 
-          changed_by,
-          profiles!changed_by(full_name)
-        `)
+        .select('status, changed_at, note, changed_by')
         .eq('request_id', selectedRequest.id)
         .order('changed_at', { ascending: true })
         .then((res) => {
@@ -391,16 +382,7 @@ function ManageRequestsContent() {
               status: item.status,
               changed_at: item.changed_at,
               note: item.note,
-              profiles: (() => {
-                if (!item.profiles) return undefined;
-                if (Array.isArray(item.profiles) && item.profiles[0]?.full_name) {
-                  return { full_name: item.profiles[0].full_name };
-                }
-                if (typeof item.profiles === 'object' && 'full_name' in item.profiles) {
-                  return { full_name: (item.profiles as { full_name?: string }).full_name || '' };
-                }
-                return undefined;
-              })(),
+              profiles: undefined,
             })));
           } else {
             setStatusHistory([]);
@@ -1200,12 +1182,14 @@ function ManageRequestsContent() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Request Details Dialog */}
-      <RequestDetailsDialog
-        request={selectedRequest}
-        open={isDetailsOpen}
-        onOpenChange={setIsDetailsOpen}
-      />
+      {/* Request Details Modal (fetches full details incl. gear + quantities) */}
+      {selectedRequest?.id && (
+        <ViewRequestModal
+          requestId={selectedRequest.id}
+          open={isDetailsOpen}
+          onOpenChange={setIsDetailsOpen}
+        />
+      )}
     </motion.div>
   );
 }

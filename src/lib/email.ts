@@ -8,10 +8,12 @@ console.log('[Email Service Debug] RESEND_API_KEY ends with:', process.env.RESEN
 
 // Validate environment variable
 if (!process.env.RESEND_API_KEY) {
-    console.warn('[Email Service] RESEND_API_KEY environment variable is not set - email notifications will be skipped');
+  console.warn('[Email Service] RESEND_API_KEY environment variable is not set - email notifications will be skipped');
 }
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+// Configurable sender (set RESEND_FROM to a verified domain sender in your Email provider)
+const RESEND_FROM = process.env.RESEND_FROM || 'Nest by Eden Oasis <onboarding@resend.dev>';
 
 // Email template base styles
 const EMAIL_STYLES = `
@@ -152,22 +154,22 @@ const EMAIL_STYLES = `
 
 // Helper function to format date
 function formatDate(dateString: string): string {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 
 // Helper function to create gear list HTML
 function createGearListHTML(gears: Array<{ name: string; id?: string; condition?: string }>): string {
-    if (!gears || gears.length === 0) return '<p><em>No gear specified</em></p>';
+  if (!gears || gears.length === 0) return '<p><em>No gear specified</em></p>';
 
-    return gears.map(gear => `
+  return gears.map(gear => `
     <div class="gear-item">
       <span class="gear-name">${gear.name}</span>
       ${gear.condition ? `<span class="gear-status status-${gear.condition.toLowerCase()}">${gear.condition}</span>` : ''}
@@ -176,55 +178,53 @@ function createGearListHTML(gears: Array<{ name: string; id?: string; condition?
 }
 
 export async function sendGearRequestEmail({
-    to,
-    subject,
-    html,
+  to,
+  subject,
+  html,
 }: {
-    to: string;
-    subject: string;
-    html: string;
+  to: string;
+  subject: string;
+  html: string;
 }) {
-    // Check if Resend is properly configured
-    if (!process.env.RESEND_API_KEY) {
-        console.warn('[Email Service] RESEND_API_KEY not configured - skipping email');
-        // Don't throw error, just log and continue
-        return { success: false, error: 'Email service not configured' };
-    }
+  // Check if Resend is properly configured
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('[Email Service] RESEND_API_KEY not configured - skipping email');
+    // Don't throw error, just log and continue
+    return { success: false, error: 'Email service not configured' };
+  }
 
-    try {
-        const result = await resend.emails.send({
-            from: 'Nest by Eden Oasis <onboarding@resend.dev>',
-            to,
-            subject,
-            html,
-        });
-        console.log('[Email Service] Email sent successfully:', { to, subject });
-        return { success: true, result };
-    } catch (error: unknown) {
-        console.error('[Email Service Error]:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        return { success: false, error: `Failed to send email: ${errorMessage}` };
-    }
+  try {
+    const result = await resend.emails.send({
+      from: RESEND_FROM,
+      to,
+      subject,
+      html,
+    });
+    console.log('[Email Service] Email sent successfully:', { to, subject });
+    return { success: true, result };
+  } catch (error: unknown) {
+    console.error('[Email Service Error]:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { success: false, error: `Failed to send email: ${errorMessage}` };
+  }
 }
 
 // Enhanced approval email template
 export async function sendApprovalEmail({
-    to,
-    userName,
-    gearList,
-    dueDate,
-    requestId,
+  to,
+  userName,
+  gearList,
+  dueDate,
 }: {
-    to: string;
-    userName: string;
-    gearList: string;
-    dueDate: string;
-    requestId?: string;
+  to: string;
+  userName: string;
+  gearList: string;
+  dueDate: string;
 }) {
-    const gears = gearList.split(',').map(name => ({ name: name.trim() }));
-    const formattedDueDate = formatDate(dueDate);
+  const gears = gearList.split(',').map(name => ({ name: name.trim() }));
+  const formattedDueDate = formatDate(dueDate);
 
-    const html = `
+  const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -282,30 +282,28 @@ export async function sendApprovalEmail({
       </html>
     `;
 
-    return sendGearRequestEmail({
-        to,
-        subject: '🎉 Your Gear Request Has Been Approved - Ready for Pickup!',
-        html,
-    });
+  return sendGearRequestEmail({
+    to,
+    subject: '🎉 Your Gear Request Has Been Approved - Ready for Pickup!',
+    html,
+  });
 }
 
 // Enhanced rejection email template
 export async function sendRejectionEmail({
-    to,
-    userName,
-    gearList,
-    reason,
-    requestId,
+  to,
+  userName,
+  gearList,
+  reason,
 }: {
-    to: string;
-    userName: string;
-    gearList: string;
-    reason: string;
-    requestId?: string;
+  to: string;
+  userName: string;
+  gearList: string;
+  reason: string;
 }) {
-    const gears = gearList.split(',').map(name => ({ name: name.trim() }));
+  const gears = gearList.split(',').map(name => ({ name: name.trim() }));
 
-    const html = `
+  const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -365,32 +363,32 @@ export async function sendRejectionEmail({
       </html>
     `;
 
-    return sendGearRequestEmail({
-        to,
-        subject: '📋 Gear Request Update - Status Changed',
-        html,
-    });
+  return sendGearRequestEmail({
+    to,
+    subject: '📋 Gear Request Update - Status Changed',
+    html,
+  });
 }
 
 // New: Check-in approval email template
 export async function sendCheckinApprovalEmail({
-    to,
-    userName,
-    gearList,
-    checkinDate,
-    condition,
-    notes,
+  to,
+  userName,
+  gearList,
+  checkinDate,
+  condition,
+  notes,
 }: {
-    to: string;
-    userName: string;
-    gearList: Array<{ name: string; condition: string }>;
-    checkinDate: string;
-    condition: string;
-    notes?: string;
+  to: string;
+  userName: string;
+  gearList: Array<{ name: string; condition: string }>;
+  checkinDate: string;
+  condition: string;
+  notes?: string;
 }) {
-    const formattedCheckinDate = formatDate(checkinDate);
+  const formattedCheckinDate = formatDate(checkinDate);
 
-    const html = `
+  const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -442,30 +440,30 @@ export async function sendCheckinApprovalEmail({
       </html>
     `;
 
-    return sendGearRequestEmail({
-        to,
-        subject: '✅ Equipment Check-in Approved - Thank You!',
-        html,
-    });
+  return sendGearRequestEmail({
+    to,
+    subject: '✅ Equipment Check-in Approved - Thank You!',
+    html,
+  });
 }
 
 // New: Check-in rejection email template
 export async function sendCheckinRejectionEmail({
-    to,
-    userName,
-    gearList,
-    reason,
-    checkinDate,
+  to,
+  userName,
+  gearList,
+  reason,
+  checkinDate,
 }: {
-    to: string;
-    userName: string;
-    gearList: Array<{ name: string }>;
-    reason: string;
-    checkinDate: string;
+  to: string;
+  userName: string;
+  gearList: Array<{ name: string }>;
+  reason: string;
+  checkinDate: string;
 }) {
-    const formattedCheckinDate = formatDate(checkinDate);
+  const formattedCheckinDate = formatDate(checkinDate);
 
-    const html = `
+  const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -528,28 +526,26 @@ export async function sendCheckinRejectionEmail({
       </html>
     `;
 
-    return sendGearRequestEmail({
-        to,
-        subject: '⚠️ Equipment Check-in Update - Action Required',
-        html,
-    });
+  return sendGearRequestEmail({
+    to,
+    subject: '⚠️ Equipment Check-in Update - Action Required',
+    html,
+  });
 }
 
 // New: Request received confirmation email
 export async function sendRequestReceivedEmail({
-    to,
-    userName,
-    gearList,
-    requestId,
+  to,
+  userName,
+  gearList,
 }: {
-    to: string;
-    userName: string;
-    gearList: string;
-    requestId?: string;
+  to: string;
+  userName: string;
+  gearList: string;
 }) {
-    const gears = gearList.split(',').map(name => ({ name: name.trim() }));
+  const gears = gearList.split(',').map(name => ({ name: name.trim() }));
 
-    const html = `
+  const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -604,30 +600,30 @@ export async function sendRequestReceivedEmail({
       </html>
     `;
 
-    return sendGearRequestEmail({
-        to,
-        subject: '📝 Equipment Request Received - Under Review',
-        html,
-    });
+  return sendGearRequestEmail({
+    to,
+    subject: '📝 Equipment Request Received - Under Review',
+    html,
+  });
 }
 
 // New: Overdue equipment reminder email
 export async function sendOverdueReminderEmail({
-    to,
-    userName,
-    gearList,
-    dueDate,
-    overdueDays,
+  to,
+  userName,
+  gearList,
+  dueDate,
+  overdueDays,
 }: {
-    to: string;
-    userName: string;
-    gearList: Array<{ name: string; dueDate: string }>;
-    dueDate: string;
-    overdueDays: number;
+  to: string;
+  userName: string;
+  gearList: Array<{ name: string; dueDate: string }>;
+  dueDate: string;
+  overdueDays: number;
 }) {
-    const formattedDueDate = formatDate(dueDate);
+  const formattedDueDate = formatDate(dueDate);
 
-    const html = `
+  const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -690,29 +686,29 @@ export async function sendOverdueReminderEmail({
       </html>
     `;
 
-    return sendGearRequestEmail({
-        to,
-        subject: `⏰ Equipment Overdue - ${overdueDays} Day${overdueDays > 1 ? 's' : ''} Late`,
-        html,
-    });
+  return sendGearRequestEmail({
+    to,
+    subject: `⏰ Equipment Overdue - ${overdueDays} Day${overdueDays > 1 ? 's' : ''} Late`,
+    html,
+  });
 }
 
 // Backward compatible approval email (keeping for existing integrations)
 export async function sendApprovalEmailLegacy({
-    to,
-    userName,
-    gearList,
-    dueDate,
+  to,
+  userName,
+  gearList,
+  dueDate,
 }: {
-    to: string;
-    userName: string;
-    gearList: string;
-    dueDate: string;
+  to: string;
+  userName: string;
+  gearList: string;
+  dueDate: string;
 }) {
-    return sendGearRequestEmail({
-        to,
-        subject: 'Your Gear Request Has Been Approved',
-        html: `
+  return sendGearRequestEmail({
+    to,
+    subject: 'Your Gear Request Has Been Approved',
+    html: `
       <h2>Hi ${userName || 'there'},</h2>
       <p>Your gear request has been <b>approved</b> and is ready for pickup.</p>
       <p><b>Gear:</b> ${gearList}</p>
@@ -721,5 +717,5 @@ export async function sendApprovalEmailLegacy({
       <br/>
       <p>Thank you,<br/>Nest by Eden Oasis Team</p>
     `,
-    });
+  });
 } 

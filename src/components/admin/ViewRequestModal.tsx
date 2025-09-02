@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { apiGet } from '@/lib/apiClient';
 import {
     Dialog,
@@ -13,10 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import {
-    Calendar, User, Clock, Info, AlertTriangle,
-    Package, CheckCircle, X, Loader2
-} from 'lucide-react';
+import { Calendar, User, Clock, Loader2 } from 'lucide-react';
 
 interface ViewRequestModalProps {
     requestId: string | null;
@@ -24,12 +20,32 @@ interface ViewRequestModalProps {
     onOpenChange: (open: boolean) => void;
 }
 
+interface LineItem {
+    id?: string;
+    name: string;
+    category?: string;
+    serial_number?: string | null;
+    quantity: number;
+    status?: string;
+}
+
+interface RequestData {
+    id: string;
+    status?: string;
+    created_at: string;
+    due_date?: string | null;
+    admin_notes?: string | null;
+    profiles?: { full_name?: string; email?: string };
+    gear_ids?: string[];
+    lineItems?: LineItem[];
+    gearNames?: string[];
+}
+
 export function ViewRequestModal({ requestId, open, onOpenChange }: ViewRequestModalProps) {
-    const supabase = createClient();
     const { toast } = useToast();
     const [loading, setLoading] = useState(false);
-    const [request, setRequest] = useState<any>(null);
-    const [gearItems, setGearItems] = useState<any[]>([]);
+    const [request, setRequest] = useState<RequestData | null>(null);
+    const [gearItems, setGearItems] = useState<LineItem[]>([]);
 
     useEffect(() => {
         if (open && requestId) {
@@ -41,20 +57,25 @@ export function ViewRequestModal({ requestId, open, onOpenChange }: ViewRequestM
         setLoading(true);
         try {
             // Load the request from the API
-            const { data: requestData, error: requestError } = await apiGet<{ data: any; error: string | null }>(`/api/requests/${id}`);
+            const { data: requestData, error: requestError } = await apiGet<{ data: RequestData; error: string | null }>(`/api/requests/${id}`);
             if (requestError) throw new Error(requestError);
             setRequest(requestData);
 
             // Load gear items if there are any
-            if (requestData?.gear_ids && requestData.gear_ids.length > 0) {
-                const { data: gearData, error: gearError } = await apiGet<{ data: any[]; error: string | null }>(`/api/gears?ids=${requestData.gear_ids.join(',')}`);
+            if (Array.isArray(requestData?.lineItems) && requestData.lineItems.length > 0) {
+                // Use pre-aggregated line items from API (with quantities)
+                setGearItems(requestData.lineItems);
+            } else if (requestData?.gear_ids && requestData.gear_ids.length > 0) {
+                const idsParam = requestData.gear_ids.join(',');
+                const { data: gearData, error: gearError } = await apiGet<{ data: LineItem[]; error: string | null }>(`/api/gears?ids=${idsParam}`);
                 if (gearError) throw new Error(gearError);
-                setGearItems(gearData || []);
+                setGearItems((gearData || []).map(g => ({ ...g, quantity: 1 })));
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Failed to load request details';
             toast({
                 title: "Error loading request",
-                description: error.message,
+                description: message,
                 variant: "destructive",
             });
         } finally {
@@ -95,7 +116,7 @@ export function ViewRequestModal({ requestId, open, onOpenChange }: ViewRequestM
                 <DialogHeader>
                     <DialogTitle>Request Details</DialogTitle>
                     <DialogDescription>
-                        {requestId && requestId.substring(0, 8)}
+                        {requestId?.substring(0, 8)}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -112,7 +133,7 @@ export function ViewRequestModal({ requestId, open, onOpenChange }: ViewRequestM
                                 <span>{request.profiles?.full_name || request.profiles?.email || 'Unknown'}</span>
                             </div>
                             <div>
-                                {getStatusBadge(request.status)}
+                                {getStatusBadge(request.status || '')}
                             </div>
                         </div>
 
@@ -132,12 +153,7 @@ export function ViewRequestModal({ requestId, open, onOpenChange }: ViewRequestM
                             )}
                         </div>
 
-                        {request.purpose && (
-                            <div className="space-y-1">
-                                <h3 className="font-medium">Purpose:</h3>
-                                <p className="text-sm text-muted-foreground">{request.purpose}</p>
-                            </div>
-                        )}
+                        {/* Purpose field removed: not present on RequestData */}
 
                         <Separator />
 
@@ -146,21 +162,25 @@ export function ViewRequestModal({ requestId, open, onOpenChange }: ViewRequestM
                             {gearItems.length > 0 ? (
                                 <div className="space-y-2">
                                     {gearItems.map(item => (
-                                        <div key={item.id} className="p-2 border rounded-md flex justify-between items-center">
+                                        <div key={item.id || item.name} className="p-2 border rounded-md flex justify-between items-center">
                                             <div>
-                                                <div className="font-medium">{item.name}</div>
+                                                <div className="font-medium">{item.name}{item.quantity && item.quantity > 1 ? ` x ${item.quantity}` : ''}</div>
                                                 <div className="text-sm text-muted-foreground">
-                                                    {item.category || 'Uncategorized'} • {item.serial_number || 'No S/N'}
+                                                    {item.category || 'Uncategorized'}{typeof item.serial_number !== 'undefined' ? ` • ${item.serial_number || 'No S/N'}` : ''}
                                                 </div>
                                             </div>
-                                            {getStatusBadge(item.status)}
+                                            {item.status ? getStatusBadge(item.status) : null}
                                         </div>
                                     ))}
                                 </div>
-                            ) : (
-                                <div className="text-sm text-muted-foreground">
-                                    No equipment details available
+                            ) : request.gearNames && request.gearNames.length > 0 ? (
+                                <div className="space-y-1">
+                                    {request.gearNames.map((n, idx) => (
+                                        <div key={idx} className="text-sm">{n}</div>
+                                    ))}
                                 </div>
+                            ) : (
+                                <div className="text-sm text-muted-foreground">No equipment details available</div>
                             )}
                         </div>
 
@@ -172,9 +192,7 @@ export function ViewRequestModal({ requestId, open, onOpenChange }: ViewRequestM
                         )}
                     </div>
                 ) : (
-                    <div className="py-8 text-center text-muted-foreground">
-                        Request not found or you don't have permission to view it.
-                    </div>
+                    <div className="py-8 text-center text-muted-foreground">Request not found or you do not have permission to view it.</div>
                 )}
 
                 <DialogFooter>
