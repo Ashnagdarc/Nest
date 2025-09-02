@@ -413,12 +413,19 @@ function RequestGearContent() {
           quantity: (data.quantities && typeof data.quantities[gearId] === 'number' ? data.quantities[gearId] : 1)
         }));
 
-        const { error: junctionError } = await supabase
-          .from('gear_request_gears')
-          .insert(gearRequestGearsData);
-
-        if (junctionError) {
-          console.error('Error inserting gear request gears:', junctionError);
+        // Insert lines through server API to bypass RLS and support both schemas
+        try {
+          const resp = await fetch('/api/requests/add-lines', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: requestData[0].id, lines: gearRequestGearsData }),
+          });
+          const resJson = await resp.json();
+          if (!resp.ok || !resJson?.success) {
+            console.error('Error inserting gear request gears via API:', resJson);
+          }
+        } catch (e) {
+          console.error('Error inserting gear request gears via API:', e);
         }
 
         // Send emails (user + admins) via API if configured

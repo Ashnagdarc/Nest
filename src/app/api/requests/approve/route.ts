@@ -64,10 +64,11 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Update request gear_ids first
+        // Update request gear_ids first (preserve existing if no new allocations found)
+        const targetIds = allocations.length > 0 ? allocations : (Array.isArray(req.gear_ids) ? req.gear_ids : []);
         const { error: updIdsErr } = await supabase
             .from('gear_requests')
-            .update({ gear_ids: allocations, updated_at: new Date().toISOString() })
+            .update({ gear_ids: targetIds, updated_at: new Date().toISOString() })
             .eq('id', requestId);
         if (updIdsErr) {
             return NextResponse.json({ success: false, error: `Failed to update allocations: ${updIdsErr.message}` }, { status: 500 });
