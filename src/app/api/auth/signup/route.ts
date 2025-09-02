@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Create Supabase client with proper server-side auth
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
 
         // Attempt to sign up
         const { data, error } = await supabase.auth.signUp({

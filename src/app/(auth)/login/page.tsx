@@ -27,6 +27,7 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const supabase = useMemo(() => createClient(), []);
 
   const form = useForm<LoginFormValues>({
@@ -172,7 +173,17 @@ export default function LoginPage() {
                         <FormItem>
                           <FormLabel>Password</FormLabel>
                           <FormControl>
-                            <Input type="password" placeholder="********" {...field} />
+                            <div className="relative">
+                              <Input type={showPassword ? 'text' : 'password'} placeholder="********" {...field} />
+                              <button
+                                type="button"
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                onClick={() => setShowPassword((s) => !s)}
+                              >
+                                {showPassword ? 'Hide' : 'Show'}
+                              </button>
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>

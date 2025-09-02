@@ -50,6 +50,8 @@ export default function SignupPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const supabase = createClient();
 
   const form = useForm<SignupFormValues>({
@@ -287,7 +289,17 @@ export default function SignupPage() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" {...field} />
+                        <div className="relative">
+                          <Input type={showPassword ? 'text' : 'password'} {...field} />
+                          <button
+                            type="button"
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowPassword((s) => !s)}
+                          >
+                            {showPassword ? 'Hide' : 'Show'}
+                          </button>
+                        </div>
                       </FormControl>
                       <FormDescription>
                         Must be at least 8 characters with 1 uppercase, 1 lowercase, 1 number, and 1 special character.
@@ -304,7 +316,17 @@ export default function SignupPage() {
                     <FormItem>
                       <FormLabel>Confirm Password</FormLabel>
                       <FormControl>
-                        <Input type="password" {...field} />
+                        <div className="relative">
+                          <Input type={showConfirm ? 'text' : 'password'} {...field} />
+                          <button
+                            type="button"
+                            aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowConfirm((s) => !s)}
+                          >
+                            {showConfirm ? 'Hide' : 'Show'}
+                          </button>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -49,10 +49,10 @@ export async function POST(request: NextRequest) {
             }, { status: 500 });
         }
 
-        // Fetch user profile
+        // Fetch user profile (only needed fields)
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('*')
+            .select('id, role, status, full_name')
             .eq('id', data.user.id)
             .single();
 
