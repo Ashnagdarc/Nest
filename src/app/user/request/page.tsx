@@ -420,6 +420,17 @@ function RequestGearContent() {
         if (junctionError) {
           console.error('Error inserting gear request gears:', junctionError);
         }
+
+        // Send emails (user + admins) via API if configured
+        try {
+          await fetch('/api/requests/created', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: requestData[0].id }),
+          });
+        } catch (e) {
+          console.warn('Request created email dispatch failed:', e);
+        }
       }
 
       // Get user profile for notifications
