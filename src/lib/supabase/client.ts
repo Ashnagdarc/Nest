@@ -120,11 +120,11 @@ export const createClient = () => {
     // Return existing instance if already created (singleton pattern)
     // This prevents multiple clients and ensures consistent state management
     if (supabaseInstance) {
-        console.log('Returning existing Supabase client instance');
+
         return supabaseInstance;
     }
 
-    console.log('Creating new Supabase client instance...');
+
 
     try {
         /**
@@ -168,7 +168,7 @@ export const createClient = () => {
             }
         );
 
-        console.log('Supabase client instance created successfully');
+
         return supabaseInstance;
     } catch (error) {
         // Enhanced error logging for debugging client creation issues
