@@ -3,6 +3,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
+import { format } from 'date-fns';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -23,7 +24,45 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { apiGet } from '@/lib/apiClient';
-import type { Profile, Gear } from '@/types/supabase';
+// Types defined inline
+
+type Profile = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: 'Admin' | 'User';
+  department: string | null;
+  avatar_url: string | null;
+  status: 'Active' | 'Inactive' | 'Suspended';
+  phone: string | null;
+  location: string | null;
+  employee_id: string | null;
+  created_at: string;
+  updated_at: string;
+  last_sign_in_at: string | null;
+  is_banned: boolean;
+};
+
+type GearState = {
+  status: string;
+  available_quantity: number;
+  checked_out_to?: string | null;
+  due_date?: string | null;
+};
+
+type Gear = {
+  id: string;
+  name?: string;
+  category?: string;
+  description?: string | null;
+  serial_number?: string | null;
+  purchase_date?: string | null;
+  image_url?: string | null;
+  quantity: number;
+  created_at: string;
+  updated_at: string;
+  gear_states?: GearState[];
+};
 
 /**
  * Predefined Reason Options
@@ -151,16 +190,17 @@ function RequestGearContent() {
     },
   });
 
-  // Helper: compute available units by gear name using both status and available_quantity
+  // Helper: compute available units by gear name using gear states
   const getAvailableUnitsByName = (targetName?: string) => {
     if (!targetName) return 0;
     const norm = targetName.toLowerCase().trim();
     return availableGears
       .filter(x => (x.name || '').toLowerCase().trim() === norm)
       .reduce((sum, x) => {
-        const statusOk = (x.status || '').toLowerCase() === 'available';
-        const qty = typeof x.available_quantity === 'number' && x.available_quantity > 0
-          ? x.available_quantity
+        const latestState = x.gear_states?.[0];
+        const statusOk = latestState?.status?.toLowerCase() === 'available';
+        const qty = typeof latestState?.available_quantity === 'number' && latestState.available_quantity > 0
+          ? latestState.available_quantity
           : (statusOk ? 1 : 0);
         return sum + qty;
       }, 0);
@@ -415,12 +455,14 @@ function RequestGearContent() {
         }));
 
         // Insert lines through server API to bypass RLS and support both schemas
+        console.log('🔍 Sending gear request lines:', { requestId, lines: gearRequestGearsData });
         const resp = await fetch('/api/requests/add-lines', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ requestId, lines: gearRequestGearsData }),
         });
         const resJson = await resp.json();
+        console.log('🔍 API response:', resJson);
         if (!resp.ok || !resJson?.success) {
           console.error('Error inserting gear request gears via API:', resJson);
           throw new Error(resJson?.error || 'Failed to record requested quantities. Please try again.');
@@ -428,6 +470,7 @@ function RequestGearContent() {
 
         // Verify via API response (avoid client-side RLS on direct select)
         const insertedRows = Array.isArray(resJson?.data) ? resJson.data : [];
+        console.log('🔍 Inserted rows:', insertedRows);
         if (insertedRows.length === 0) {
           console.error('API reported success but returned no inserted rows:', resJson);
           throw new Error('Failed to verify requested quantities were saved.');
@@ -587,7 +630,7 @@ function RequestGearContent() {
                         <ScrollArea className="h-[400px] w-full rounded-md border">
                           <div className="space-y-2 p-4">
                             {filteredGears.map((gear) => {
-                              const g = gear as { id: string; name?: string; image_url?: string; category?: string; status?: string; condition?: string };
+                              const g = gear as Gear;
                               const isSelected = field.value?.includes(g.id);
 
                               return (
@@ -634,18 +677,30 @@ function RequestGearContent() {
                                           {g.category}
                                         </p>
                                         <div className="flex flex-wrap gap-1 sm:gap-2">
-                                          <Badge
-                                            variant="secondary"
-                                            className="text-xs px-2 py-0.5"
-                                          >
-                                            {g.status}
-                                          </Badge>
-                                          <Badge
-                                            variant="outline"
-                                            className="text-xs px-2 py-0.5"
-                                          >
-                                            {g.condition}
-                                          </Badge>
+                                          {g.gear_states?.[0] && (
+                                            <>
+                                              <Badge
+                                                variant="secondary"
+                                                className="text-xs px-2 py-0.5"
+                                              >
+                                                {g.gear_states[0].status}
+                                              </Badge>
+                                              <Badge
+                                                variant="outline"
+                                                className="text-xs px-2 py-0.5"
+                                              >
+                                                {g.gear_states[0].available_quantity} available
+                                              </Badge>
+                                              {g.gear_states[0].due_date && (
+                                                <Badge
+                                                  variant="outline"
+                                                  className="text-xs px-2 py-0.5"
+                                                >
+                                                  Due: {format(new Date(g.gear_states[0].due_date), 'MMM d, yyyy')}
+                                                </Badge>
+                                              )}
+                                            </>
+                                          )}
                                         </div>
                                       </div>
 
@@ -863,7 +918,7 @@ function RequestGearContent() {
                     {availableGears
                       .filter(gear => form.watch("selectedGears")?.includes((gear as { id: string }).id))
                       .map((gear) => {
-                        const g = gear as { id: string; name?: string; image_url?: string; condition?: string };
+                        const g = gear as Gear;
                         const maxAvailableForName = getAvailableUnitsByName(g.name);
                         const currentQty = (form.watch('quantities') as Record<string, number>)[g.id] ?? 1;
                         return (
@@ -881,9 +936,21 @@ function RequestGearContent() {
                               <h4 className="font-semibold text-sm sm:text-base text-foreground truncate">
                                 {g.name}
                               </h4>
-                              <p className="text-xs sm:text-sm text-muted-foreground">
-                                Condition: {g.condition}
-                              </p>
+                              {g.gear_states?.[0] && (
+                                <div className="flex flex-wrap gap-2">
+                                  <Badge variant="secondary" className="text-xs">
+                                    {g.gear_states[0].status}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {g.gear_states[0].available_quantity} available
+                                  </Badge>
+                                  {g.gear_states[0].due_date && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Due: {format(new Date(g.gear_states[0].due_date), 'MMM d, yyyy')}
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
                               {/* Quantity selector per selected gear (by type) */}
                               <div className="mt-2 flex items-center gap-2">
                                 <span className="text-xs sm:text-sm text-muted-foreground">Quantity</span>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import type { Database } from '@/types/supabase';
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
@@ -15,10 +16,26 @@ export async function GET(request: NextRequest) {
         let query = supabase
             .from('checkins')
             .select(`
-        *,
-        profiles(id, full_name, avatar_url),
-        gears(id, name, category, status, condition)
-      `, { count: 'exact' })
+                *,
+                profiles (
+                    id,
+                    full_name,
+                    avatar_url
+                ),
+                gears!inner (
+                    id,
+                    name,
+                    category,
+                    condition,
+                    quantity,
+                    gear_states!inner (
+                        status,
+                        available_quantity,
+                        checked_out_to,
+                        due_date
+                    )
+                )
+            `, { count: 'exact' })
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
@@ -104,15 +121,38 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // Update gear status to Available
-        const { error: gearError } = await supabase
+        // Get the gear's total quantity
+        const { data: gearData, error: gearError } = await supabase
             .from('gears')
-            .update({ status: 'Available' })
-            .eq('id', gear_id);
+            .select('quantity')
+            .eq('id', gear_id)
+            .single();
 
         if (gearError) {
-            console.error('Error updating gear status:', gearError);
-            // Don't fail the request if gear update fails
+            console.error('Error fetching gear quantity:', gearError);
+            return NextResponse.json(
+                { error: 'Failed to fetch gear quantity' },
+                { status: 500 }
+            );
+        }
+
+        // Insert new gear state
+        const { error: stateError } = await supabase
+            .from('gear_states')
+            .insert({
+                gear_id,
+                status: 'Available',
+                available_quantity: gearData.quantity,
+                checked_out_to: null,
+                due_date: null
+            });
+
+        if (stateError) {
+            console.error('Error updating gear state:', stateError);
+            return NextResponse.json(
+                { error: 'Failed to update gear state' },
+                { status: 500 }
+            );
         }
 
         return NextResponse.json({ checkin: data[0] });

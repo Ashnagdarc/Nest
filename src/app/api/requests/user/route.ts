@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import type { Database } from '@/types/supabase';
 
 export async function GET() {
     try {
@@ -20,19 +21,26 @@ export async function GET() {
             return NextResponse.json({ data: null, error: 'Unauthorized: No authenticated user found' }, { status: 401 });
         }
 
-        // Fetch user's requests with gear_request_gears junction table data
+        // Fetch user's requests with gear details and current states
         const { data, error } = await supabase
             .from('gear_requests')
             .select(`
                 *,
-                gear_request_gears (
+                gear_request_gears!inner (
                     quantity,
-                    gears (
+                    gears!inner (
                         id,
                         name,
                         category,
                         description,
-                        serial_number
+                        serial_number,
+                        quantity,
+                        gear_states!inner (
+                            status,
+                            available_quantity,
+                            checked_out_to,
+                            due_date
+                        )
                     )
                 )
             `)

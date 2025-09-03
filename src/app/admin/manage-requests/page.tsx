@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Bell, BellRing, RefreshCw, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { Bell, BellRing, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -27,14 +27,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 // import { createSystemNotification } from '@/lib/notifications';
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+// Removed unused dialog imports
 // import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { useSuccessFeedback } from '@/hooks/use-success-feedback';
@@ -58,57 +51,16 @@ import { ViewRequestModal } from '@/components/admin/ViewRequestModal';
 // --- Import the notification sound ---
 const NOTIFICATION_SOUND_URL = '/sounds/notification-bell.mp3';
 
-// Add a function to determine if a request has been attended to
-const isAttendedRequest = (status: string) => {
-  const attendedStatuses = ['approved', 'rejected', 'checked out', 'returned', 'overdue'];
-  return attendedStatuses.includes(status.toLowerCase());
-};
-
-// Add timeline components
-const Timeline = ({ children }: { children: React.ReactNode }) => (
-  <div className="space-y-4">
-    {children}
-  </div>
-);
-
-const TimelineItem = ({
-  status,
-  date,
-  note,
-  changedBy
-}: {
-  status: string;
-  date: Date;
-  note?: string;
-  changedBy?: string;
-}) => (
-  <div className="flex gap-4 items-start">
-    <div className="mt-1">
-      <div className={cn(
-        "h-3 w-3 rounded-full",
-        status.toLowerCase() === 'approved' ? "bg-green-500" :
-          status.toLowerCase() === 'rejected' ? "bg-red-500" :
-            status.toLowerCase() === 'checked out' ? "bg-blue-500" :
-              status.toLowerCase() === 'checked in' ? "bg-purple-500" :
-                "bg-gray-500"
-      )} />
-    </div>
-    <div className="flex-1 space-y-1">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">{status}</p>
-        <p className="text-xs text-muted-foreground">{format(date, 'PPp')}</p>
-      </div>
-      {changedBy && (
-        <p className="text-xs text-muted-foreground">by {changedBy}</p>
-      )}
-      {note && (
-        <p className="text-sm text-muted-foreground">{note}</p>
-      )}
-    </div>
-  </div>
-);
+// Removed unused timeline components
 
 // Add type definitions
+interface GearState {
+  status: string;
+  available_quantity: number;
+  checked_out_to?: string | null;
+  due_date?: string | null;
+}
+
 interface GearRequest {
   id: string;
   userName: string;
@@ -134,17 +86,10 @@ interface GearRequest {
       category: string;
       description: string | null;
       serial_number: string | null;
+      quantity: number;
+      gear_states?: GearState[];
     };
   }>;
-}
-
-interface StatusHistoryItem {
-  status: string;
-  changed_at: string;
-  note?: string;
-  profiles?: {
-    full_name: string;
-  };
 }
 
 // Performance optimization: Debounced search
@@ -181,8 +126,6 @@ function ManageRequestsContent() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [requestToReject, setRequestToReject] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
-  const [statusHistory, setStatusHistory] = useState<StatusHistoryItem[]>([]);
-
   // Filter states
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [userFilter, setUserFilter] = useState<string>('all');
@@ -219,20 +162,29 @@ function ManageRequestsContent() {
   }, [soundEnabled]);
 
   // Optimized gear name extraction function with fallback support
-  const extractGearNames = useCallback((request: { gear_request_gears?: Array<{ quantity?: number; gears?: { name?: string } }>; gear_ids?: string[] }): string[] => {
+  const extractGearNames = useCallback((request: { gear_request_gears?: Array<{ quantity?: number; gears?: { name?: string; gear_states?: GearState[] } }>; gear_ids?: string[] }): string[] => {
     console.log('🔍 extractGearNames called with:', request);
-    // Prefer junction table with quantities: aggregate by name and append "x qty"
+    // Prefer junction table with quantities: aggregate by name and append "x qty" and state info
     if (request.gear_request_gears && Array.isArray(request.gear_request_gears) && request.gear_request_gears.length > 0) {
       console.log('🔍 Using gear_request_gears junction table');
-      const counts: Record<string, number> = {};
+      const gearInfo: Record<string, { qty: number; state?: GearState }> = {};
       for (const item of request.gear_request_gears) {
         const name = (item.gears?.name || '').trim();
         if (!name) continue;
         const qty = Math.max(1, Number(item.quantity ?? 1));
-        counts[name] = (counts[name] || 0) + qty;
-        console.log('🔍 Processing item:', { name, qty, currentCount: counts[name] });
+        const state = item.gears?.gear_states?.[0];
+        if (!gearInfo[name]) {
+          gearInfo[name] = { qty, state };
+        } else {
+          gearInfo[name].qty += qty;
+        }
+        console.log('🔍 Processing item:', { name, qty, state, currentInfo: gearInfo[name] });
       }
-      const result = Object.entries(counts).map(([n, q]) => (q > 1 ? `${n} x ${q}` : n));
+      const result = Object.entries(gearInfo).map(([name, info]) => {
+        const qtyStr = info.qty > 1 ? ` x ${info.qty}` : '';
+        const stateStr = info.state ? ` (${info.state.status}, ${info.state.available_quantity} available)` : '';
+        return `${name}${qtyStr}${stateStr}`;
+      });
       console.log('🔍 Final result:', result);
       return result;
     }
@@ -375,31 +327,7 @@ function ManageRequestsContent() {
     setPage(1);
   }, [filterStatus, userFilter, gearFilter, debouncedKeyword, dateRange]);
 
-  // Fetch status history when a request is selected
-  useEffect(() => {
-    if (selectedRequest?.id) {
-      supabase
-        .from('request_status_history')
-        .select('status, changed_at, note, changed_by')
-        .eq('request_id', selectedRequest.id)
-        .order('changed_at', { ascending: true })
-        .then((res) => {
-          if (Array.isArray(res.data)) {
-            setStatusHistory(res.data.map((item) => ({
-              status: item.status,
-              changed_at: item.changed_at,
-              note: item.note,
-              profiles: undefined,
-            })));
-          } else {
-            setStatusHistory([]);
-          }
-        })
-        ;
-    } else {
-      setStatusHistory([]);
-    }
-  }, [selectedRequest?.id, supabase]);
+  // Removed unused status history effect
 
   // Handle approve request with better error handling
   const handleApprove = async (requestId: string) => {
@@ -568,143 +496,7 @@ function ManageRequestsContent() {
     );
   }, []);
 
-  // Enhanced RequestDetailsDialog with better layout
-  const RequestDetailsDialog = ({ request, open, onOpenChange }: { request: GearRequest | null, open: boolean, onOpenChange: (open: boolean) => void }) => {
-    if (!request) return null;
-
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="h-5 w-5" />
-              Request Details
-            </DialogTitle>
-            <DialogDescription>
-              Complete information about the gear request
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Request Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Requested By</span>
-                    <span className="font-medium">{request.userName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Requested On</span>
-                    <span className="font-medium">{format(request.requestDate, 'PPP p')}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Duration</span>
-                    <span className="font-medium">{request.duration}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Current Status</span>
-                    <div>{getStatusBadge(request.status)}</div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Gear Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {request.gearNames.length > 0 ? (
-                    request.gearNames.map((gear: string, index: number) => (
-                      <div key={index} className="p-3 rounded-md border bg-muted/50">
-                        <p className="font-medium text-sm">{gear}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-3 rounded-md border bg-muted/50">
-                      <p className="text-sm text-muted-foreground">No gear details available</p>
-                    </div>
-                  )}
-                  {request.reason && (
-                    <div>
-                      <span className="text-sm text-muted-foreground">Reason:</span>
-                      <p className="text-sm mt-1">{request.reason}</p>
-                    </div>
-                  )}
-                  {request.destination && (
-                    <div>
-                      <span className="text-sm text-muted-foreground">Destination:</span>
-                      <p className="text-sm mt-1">{request.destination}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Request Timeline</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Timeline>
-                    {/* Add initial request status */}
-                    <TimelineItem
-                      status="Requested"
-                      date={request.requestDate}
-                      changedBy={request.userName}
-                    />
-
-                    {/* Add status history items */}
-                    {statusHistory.map((history: StatusHistoryItem, index: number) => (
-                      <TimelineItem
-                        key={index}
-                        status={history.status}
-                        date={new Date(history.changed_at)}
-                        note={history.note}
-                        changedBy={history.profiles?.full_name}
-                      />
-                    ))}
-                  </Timeline>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          <DialogFooter>
-            {!isAttendedRequest(request.status) && (
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => {
-                    handleApprove(request.id);
-                    onOpenChange(false);
-                  }}
-                  className="bg-green-600 hover:bg-green-700"
-                  disabled={isProcessing}
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Approve Request
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => {
-                    setRequestToReject(request.id);
-                    onOpenChange(false);
-                  }}
-                  disabled={isProcessing}
-                >
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Reject Request
-                </Button>
-              </div>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  };
+  // Removed unused RequestDetailsDialog component - using ViewRequestModal instead
 
   // Computed values with memoization for performance
   const filteredRequests = useMemo(() => {
