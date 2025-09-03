@@ -31,6 +31,16 @@ interface GearRequest {
   user_id: string;
   gear_ids?: string[];
   team_members?: string;
+  gear_request_gears?: Array<{
+    quantity?: number;
+    gears?: {
+      id: string;
+      name?: string;
+      category?: string;
+      description?: string | null;
+      serial_number?: string | null;
+    };
+  }>;
 }
 
 type RealtimeGearRequestPayload = RealtimePostgresChangesPayload<{
@@ -39,10 +49,25 @@ type RealtimeGearRequestPayload = RealtimePostgresChangesPayload<{
 }>;
 
 // Extend GearRequest locally to include gears and teamMemberProfiles for UI
-type GearWithExtras = { id: string; name?: string; category?: string };
+type GearWithExtras = {
+  id: string;
+  name?: string;
+  category?: string;
+  quantity: number;
+};
 type GearRequestWithExtras = GearRequest & {
   gears?: GearWithExtras[];
   teamMemberProfiles?: unknown[];
+  gear_request_gears?: Array<{
+    quantity?: number;
+    gears?: {
+      id: string;
+      name?: string;
+      category?: string;
+      description?: string | null;
+      serial_number?: string | null;
+    };
+  }>;
 };
 
 function MyRequestsContent() {
@@ -81,22 +106,38 @@ function MyRequestsContent() {
         setLoading(false);
         return;
       }
-      // Then fetch gear details separately for each request
-      const allGearIds = Array.from(new Set(requestsData.flatMap((request: GearRequest) => request.gear_ids || [])));
-      let allGears: GearWithExtras[] = [];
-      if (allGearIds.length > 0) {
-        const { data: gearData, error: gearError } = await apiGet<{ data: any[]; error: string | null }>(`/api/gears?ids=${allGearIds.join(',')}`);
-        if (gearError) {
-          console.warn('Error fetching gears for requests:', gearError);
-        } else {
-          allGears = gearData || [];
-        }
-      }
+      console.log('🔍 Initial fetch: received requests data:', requestsData);
+      // Process requests using the gear_request_gears data directly (no need to fetch gears separately)
       const requestsWithGear = await Promise.all(
         requestsData.map(async (request) => {
-          const gears = (request.gear_ids || [])
-            .map((id: string) => (allGears as GearWithExtras[]).find(g => g.id === id))
-            .filter((g): g is GearWithExtras => !!g);
+          console.log('🔍 Initial fetch: processing request:', request.id);
+          console.log('🔍 Initial fetch: request data:', request);
+          // Use gear_request_gears data if available, otherwise fallback to gear_ids
+          let gears: GearWithExtras[] = [];
+          if (request.gear_request_gears && Array.isArray(request.gear_request_gears)) {
+            console.log('🔍 Initial fetch: using gear_request_gears data:', request.gear_request_gears);
+            gears = request.gear_request_gears
+              .filter(item => item.gears) // Only process items that have gear data
+              .map(item => ({
+                id: item.gears!.id,
+                name: item.gears!.name || 'Unnamed Gear',
+                category: item.gears!.category || '',
+                quantity: item.quantity || 1
+              }));
+            console.log('🔍 Initial fetch: processed gears:', gears);
+          } else if (request.gear_ids && Array.isArray(request.gear_ids)) {
+            console.log('🔍 Initial fetch: falling back to gear_ids:', request.gear_ids);
+            // Fallback: fetch gear details if gear_request_gears not available
+            const { data: gearData, error: gearError } = await apiGet<{ data: any[]; error: string | null }>(`/api/gears?ids=${request.gear_ids.join(',')}`);
+            if (!gearError && gearData) {
+              gears = gearData.map(g => ({
+                id: g.id,
+                name: g.name || 'Unnamed Gear',
+                category: g.category || '',
+                quantity: 1 // Default to 1 if no quantity data
+              }));
+            }
+          }
           // Fetch team member profiles if available
           let teamMemberProfiles: unknown[] = [];
           if (request.team_members) {
@@ -153,84 +194,29 @@ function MyRequestsContent() {
           return;
         }
 
-        // Set up real-time subscription for gear requests
+        // Set up real-time subscription for both gear requests and gear_request_gears
         channel = supabase
           .channel('gear_requests_changes')
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'gear_requests'
-            },
-            async (payload: RealtimeGearRequestPayload) => {
-              console.log('Real-time update received:', payload);
-
-              if (!mounted) return;
-
-              // Fetch the updated request data
-              const { data: updatedRequests } = await supabase
-                .from('gear_requests')
-                .select(`
-                  id, 
-                  created_at,
-                  reason,
-                  destination,
-                  expected_duration,
-                  status,
-                  user_id,
-                  gear_ids,
-                  team_members
-                `)
-                .eq('user_id', session.user.id)
-                .order('created_at', { ascending: false });
-
-              if (updatedRequests && mounted) {
-                // Process the requests with gear details
-                const allGearIds = Array.from(new Set(updatedRequests.flatMap((request: GearRequestWithExtras) => request.gear_ids || [])));
-                let allGears: GearWithExtras[] = [];
-                if (allGearIds.length > 0) {
-                  const { data: gearData, error: gearError } = await apiGet<{ data: any[]; error: string | null }>(`/api/gears?ids=${allGearIds.join(',')}`);
-                  if (gearError) {
-                    console.warn('Error fetching gears for requests:', gearError);
-                  } else {
-                    allGears = gearData || [];
-                  }
-                }
-                const requestsWithGear = await Promise.all(
-                  updatedRequests.map(async (request: GearRequestWithExtras) => {
-                    const gears = (request.gear_ids || [])
-                      .map((id: string) => (allGears as GearWithExtras[]).find(g => g.id === id))
-                      .filter((g): g is GearWithExtras => !!g);
-                    let teamMemberProfiles: unknown[] = [];
-                    if (request.team_members) {
-                      try {
-                        const teamMemberIds = request.team_members.split(',').filter(Boolean);
-                        if (teamMemberIds.length > 0) {
-                          const { data: profiles, error: profilesError } = await apiGet<{ data: unknown[]; error: string | null }>(`/api/users?ids=${teamMemberIds.join(',')}`);
-                          if (!profilesError) teamMemberProfiles = profiles || [];
-                        }
-                      } catch (e) {
-                        console.warn('Error fetching team member profiles:', e);
-                      }
-                    }
-                    return {
-                      ...request,
-                      gears,
-                      teamMemberProfiles
-                    };
-                  })
-                );
-
-                if (mounted) {
-                  // Update the requests and stats
-                  setRequests(requestsWithGear);
-                  const stats = calculateRequestStats(requestsWithGear);
-                  setRequestStats(stats);
-                }
-              }
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'gear_requests'
+          }, async () => {
+            console.log('🔍 Real-time update received for gear_requests');
+            if (mounted) {
+              await fetchRequests();
             }
-          )
+          })
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'gear_request_gears'
+          }, async () => {
+            console.log('🔍 Real-time update received for gear_request_gears');
+            if (mounted) {
+              await fetchRequests();
+            }
+          })
           .subscribe();
 
         return () => {
@@ -238,6 +224,7 @@ function MyRequestsContent() {
             supabase.removeChannel(channel);
           }
         };
+
       } catch (error) {
         console.error('Error setting up real-time subscription:', error);
       }
@@ -566,11 +553,22 @@ function MyRequestsContent() {
                   <Card key={req.id} className="rounded-lg shadow-sm p-3">
                     <div className="flex items-center justify-between mb-2">
                       <div className="font-semibold text-base truncate max-w-[60%]">
-                        {req.gears && req.gears.length > 0 ? req.gears.map((gear) => gear.name).join(", ") : 'No gear selected'}
+                        {req.gears && req.gears.length > 0 ? (
+                          <div className="space-y-1">
+                            {req.gears.map((gear, idx) => (
+                              <div key={gear.id ?? idx}>
+                                {gear.name || 'Unnamed Gear'}
+                                {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          'No gear selected'
+                        )}
                       </div>
                       {getStatusBadge(req.status || 'Unknown')}
                     </div>
-                    <div className="text-xs text-muted-foreground mb-1">Requested: {formatDate(req)}</div>
+                    <div className="text-xs text-muted-foreground mb-1">Requested: {formatDate(req.created_at)}</div>
                     <div className="text-xs text-muted-foreground mb-1">Duration: {formatDuration(req)}</div>
                     <div className="text-xs text-muted-foreground mb-1">Destination: {req.destination || 'N/A'}</div>
                     <div className="text-xs text-muted-foreground mb-1">Team: {formatTeamMembers(req)}</div>
@@ -630,7 +628,12 @@ function MyRequestsContent() {
                             <div className="space-y-1.5">
                               {req.gears?.map((gear, idx) => (
                                 <div key={gear.id ?? idx} className="flex items-center gap-2">
-                                  <span className="text-sm font-medium">{gear.name || 'Unnamed Gear'}</span>
+                                  <span className="text-sm font-medium">
+                                    {gear.name || 'Unnamed Gear'}
+                                    <span className="font-bold text-primary">
+                                      {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
+                                    </span>
+                                  </span>
                                   {gear.category && (
                                     <Badge variant="outline" className="text-xs">
                                       {gear.category}
@@ -782,7 +785,7 @@ function MyRequestsContent() {
                     </div>
                     <div className="grid grid-cols-3 gap-1 text-sm">
                       <span className="text-muted-foreground">Requested:</span>
-                      <span className="col-span-2">{formatDate(selectedRequest)}</span>
+                      <span className="col-span-2">{formatDate(selectedRequest.created_at)}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-1 text-sm">
                       <span className="text-muted-foreground">Duration:</span>
@@ -808,7 +811,12 @@ function MyRequestsContent() {
                       <div className="space-y-3">
                         {selectedRequest.gears?.map((gear, index) => (
                           <div key={gear.id ?? index} className={`${index > 0 ? 'pt-2 border-t border-muted' : ''}`}>
-                            <div className="font-medium">{gear.name}</div>
+                            <div className="font-medium">
+                              {gear.name}
+                              <span className="font-bold text-primary">
+                                {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
+                              </span>
+                            </div>
                             <div className="text-xs text-muted-foreground">
                               {gear.category || 'No category'} • ID: {gear.id}
                             </div>

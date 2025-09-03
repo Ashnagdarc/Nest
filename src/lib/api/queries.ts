@@ -109,7 +109,7 @@ async function executeQuery<T>(
 export const gearQueries = {
     // Get available gears with minimal required fields
     getAvailableGears: async () => {
-        return await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Available`);
+        return await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears/available`);
     },
 
     // Get gear with full details (for editing/viewing)

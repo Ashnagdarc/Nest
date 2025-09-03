@@ -208,7 +208,7 @@ export default function UserCalendarPage() {
             }
 
             // Fetch available gear first
-            const { data: gearData, error: gearError } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Available`);
+            const { data: gearData, error: gearError } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears/available`);
             if (gearError) {
                 console.error("Error fetching gear:", gearError);
                 throw new Error(`Failed to fetch gear: ${gearError}`);

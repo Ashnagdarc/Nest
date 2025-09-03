@@ -23,6 +23,7 @@ import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
 import { apiGet } from '@/lib/apiClient';
 import { isFileList, isFile } from '@/lib/utils/browser-safe';
+import QuantityFixPanel from '@/components/admin/QuantityFixPanel';
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -783,6 +784,11 @@ export default function AdminSettingsPage() {
                         </Form>
                     </CardContent>
                 </Card>
+            </motion.div>
+
+            {/* Database Maintenance */}
+            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={4}>
+                <QuantityFixPanel />
             </motion.div>
 
             {showCropper && (
