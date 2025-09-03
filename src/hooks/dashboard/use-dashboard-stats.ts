@@ -25,7 +25,15 @@ export function useDashboardStats(
         // Equipment Statistics
         const totalEquipment = gears.reduce((sum, gear) => sum + (gear.quantity ?? 1), 0)
         const availableEquipment = gears.reduce((sum, gear) => sum + (gear.available_quantity ?? 0), 0)
-        const checkedOutEquipment = gears.filter(gear => gear.status === 'Checked Out').length
+        const checkedOutEquipment = gears
+            .filter(gear => gear.status === 'Checked Out' || gear.status === 'Partially Checked Out')
+            .reduce((sum, gear) => {
+                // Calculate how many of this gear are checked out
+                const totalQuantity = gear.quantity ?? 1;
+                const availableQuantity = gear.available_quantity ?? 0;
+                const checkedOutQuantity = totalQuantity - availableQuantity;
+                return sum + Math.max(0, checkedOutQuantity);
+            }, 0);
         const underRepairEquipment = gears.filter(gear => gear.status === 'Under Repair').length
         const retiredEquipment = gears.filter(gear => gear.status === 'Retired').length
         const utilizationRate = totalEquipment > 0 ? Math.round((checkedOutEquipment / totalEquipment) * 100) : 0

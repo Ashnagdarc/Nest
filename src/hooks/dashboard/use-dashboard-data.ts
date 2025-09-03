@@ -118,19 +118,31 @@ export function useDashboardData() {
             ] = await Promise.allSettled([
                 // User stats
                 (async () => {
-                    const [checkoutsRes, availableRes] = await Promise.all([
+                    // Fetch gears with both "Checked Out" and "Partially Checked Out" statuses
+                    const [checkoutsRes, partiallyCheckedOutRes, availableRes] = await Promise.all([
                         apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Checked%20Out`),
+                        apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Partially%20Checked%20Out`),
                         apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Available&pageSize=1000`)
                     ]);
 
                     const checkouts = checkoutsRes.data || [];
+                    const partiallyCheckedOut = partiallyCheckedOutRes.data || [];
                     const available = availableRes.data || [];
                     const now = new Date();
-                    const checkedOutGears = checkouts.filter((gear: any) => gear.checked_out_to === session.user.id);
+
+                    // Combine both statuses and filter by user
+                    const allCheckedOutGears = [...checkouts, ...partiallyCheckedOut];
+                    const checkedOutGears = allCheckedOutGears.filter((gear: any) => gear.checked_out_to === session.user.id);
                     const overdueGears = checkedOutGears.filter((gear: any) => gear.due_date && new Date(gear.due_date) < now);
 
                     return {
-                        checkedOut: checkedOutGears.length,
+                        checkedOut: checkedOutGears.reduce((sum: number, g: any) => {
+                            // Calculate how many of this gear are checked out
+                            const totalQuantity = g.quantity ?? 1;
+                            const availableQuantity = g.available_quantity ?? 0;
+                            const checkedOutQuantity = totalQuantity - availableQuantity;
+                            return sum + Math.max(0, checkedOutQuantity);
+                        }, 0),
                         overdue: overdueGears.length,
                         available: available.reduce((sum: number, g: any) => sum + (g.available_quantity ?? 1), 0)
                     };

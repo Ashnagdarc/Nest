@@ -1670,7 +1670,7 @@ export default function ManageGearsPage() {
                                 ? "bg-red-100 text-red-800"
                                 : gear.status === "Under Repair"
                                   ? "bg-yellow-100 text-yellow-800"
-                                  : gear.status === "Checked Out"
+                                  : gear.status === "Checked Out" || gear.status === "Partially Checked Out"
                                     ? "bg-blue-100 text-blue-800"
                                     : "bg-gray-100 text-gray-800"
                               }`}>
@@ -1696,7 +1696,7 @@ export default function ManageGearsPage() {
                               ? "bg-red-100 text-red-800"
                               : gear.status === "Under Repair"
                                 ? "bg-yellow-100 text-yellow-800"
-                                : gear.status === "Checked Out"
+                                : gear.status === "Checked Out" || gear.status === "Partially Checked Out"
                                   ? "bg-blue-100 text-blue-800"
                                   : "bg-gray-100 text-gray-800"
                             }`}

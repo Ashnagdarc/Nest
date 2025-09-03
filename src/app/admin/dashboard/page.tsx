@@ -295,7 +295,15 @@ export default function AdminDashboardPage() {
     // Compute stats
     const totalEquipment = gears.reduce((sum, g) => sum + (g.quantity ?? 1), 0);
     // const availableEquipment = gears.reduce((sum, g) => sum + (g.available_quantity ?? 0), 0);
-    const checkedOutEquipment = gears.filter((g: Gear) => g.status === "Checked Out").length;
+    const checkedOutEquipment = gears
+        .filter((g: Gear) => g.status === "Checked Out" || g.status === "Partially Checked Out")
+        .reduce((sum, g) => {
+            // Calculate how many of this gear are checked out
+            const totalQuantity = g.quantity ?? 1;
+            const availableQuantity = g.available_quantity ?? 0;
+            const checkedOutQuantity = totalQuantity - availableQuantity;
+            return sum + Math.max(0, checkedOutQuantity);
+        }, 0);
     const underRepairEquipment = gears.filter((g: Gear) => g.status === "Under Repair").length;
     const utilizationRate = totalEquipment > 0 ? Math.round((checkedOutEquipment / totalEquipment) * 100) : 0;
 

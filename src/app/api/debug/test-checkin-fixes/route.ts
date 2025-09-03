@@ -21,7 +21,7 @@ export async function GET() {
             .from('gears')
             .select('*')
             .eq('checked_out_to', userId)
-            .in('status', ['Checked Out', 'Pending Check-in'])
+            .in('status', ['Checked Out', 'Pending Check-in', 'Partially Checked Out'])
             .order('name');
 
         // Test 2: Check for problematic gears (Available/Needs Repair with checked_out_to set)
