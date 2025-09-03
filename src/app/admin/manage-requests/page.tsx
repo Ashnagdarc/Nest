@@ -220,23 +220,30 @@ function ManageRequestsContent() {
 
   // Optimized gear name extraction function with fallback support
   const extractGearNames = useCallback((request: { gear_request_gears?: Array<{ quantity?: number; gears?: { name?: string } }>; gear_ids?: string[] }): string[] => {
+    console.log('🔍 extractGearNames called with:', request);
     // Prefer junction table with quantities: aggregate by name and append "x qty"
     if (request.gear_request_gears && Array.isArray(request.gear_request_gears) && request.gear_request_gears.length > 0) {
+      console.log('🔍 Using gear_request_gears junction table');
       const counts: Record<string, number> = {};
       for (const item of request.gear_request_gears) {
         const name = (item.gears?.name || '').trim();
         if (!name) continue;
         const qty = Math.max(1, Number(item.quantity ?? 1));
         counts[name] = (counts[name] || 0) + qty;
+        console.log('🔍 Processing item:', { name, qty, currentCount: counts[name] });
       }
-      return Object.entries(counts).map(([n, q]) => (q > 1 ? `${n} x ${q}` : n));
+      const result = Object.entries(counts).map(([n, q]) => (q > 1 ? `${n} x ${q}` : n));
+      console.log('🔍 Final result:', result);
+      return result;
     }
 
     // Fallback to gear_ids if junction table not available
     if (request.gear_ids && Array.isArray(request.gear_ids) && request.gear_ids.length > 0) {
+      console.log('🔍 Falling back to gear_ids');
       return request.gear_ids.map((id: string) => `Gear ${id.slice(0, 8)}...`);
     }
 
+    console.log('🔍 No gear data found');
     return [];
   }, []);
 

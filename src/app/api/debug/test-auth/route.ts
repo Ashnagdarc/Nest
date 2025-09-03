@@ -9,14 +9,13 @@ export async function GET() {
         const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
         if (!supabaseUrl || !supabaseKey) {
-            console.error('Missing Supabase environment variables');
             return NextResponse.json({
-                data: null,
-                error: 'Database configuration error'
+                success: false,
+                error: 'Missing environment variables'
             }, { status: 500 });
         }
 
-        // Create authenticated Supabase client using SSR approach
+        // Create authenticated Supabase client
         const cookieStore = await cookies();
         const supabase = createServerClient(supabaseUrl, supabaseKey, {
             cookies: {
@@ -32,44 +31,55 @@ export async function GET() {
             },
         });
 
-        // Verify user authentication
+        // Test authentication
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-        if (authError || !user) {
-            console.error('Authentication error:', authError);
+        if (authError) {
             return NextResponse.json({
-                data: null,
-                error: 'Authentication required'
+                success: false,
+                error: 'Authentication failed',
+                details: authError.message
             }, { status: 401 });
         }
 
-        // Execute the authenticated query (RLS policies will now work)
-        const { data, error } = await supabase
+        if (!user) {
+            return NextResponse.json({
+                success: false,
+                error: 'No user found'
+            }, { status: 401 });
+        }
+
+        // Test a simple query to verify RLS works
+        const { data, error: queryError } = await supabase
             .from('gears')
-            .select('*')
+            .select('count')
             .eq('status', 'Available')
             .gt('available_quantity', 0)
-            .order('name');
+            .limit(1);
 
-        if (error) {
-            console.error('Supabase query error:', error);
+        if (queryError) {
             return NextResponse.json({
-                data: null,
-                error: 'Database query failed'
+                success: false,
+                error: 'Query failed',
+                details: queryError.message
             }, { status: 500 });
         }
 
-        // Return successful response
         return NextResponse.json({
-            data: data || [],
-            error: null
+            success: true,
+            message: 'Authentication and query working',
+            user: {
+                id: user.id,
+                email: user.email
+            },
+            queryResult: data
         });
 
     } catch (error) {
-        console.error('Unexpected error in available gears endpoint:', error);
+        console.error('Test auth endpoint error:', error);
         return NextResponse.json({
-            data: null,
-            error: 'Internal server error'
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
         }, { status: 500 });
     }
-} 
+}

@@ -11,7 +11,7 @@ export interface GearRequest {
     userName: string;
     userEmail?: string;
     avatarUrl?: string;
-    gearNames: string[];
+    gearNames: string[]; // items like "Apple Keyboard x 2"
     requestDate: Date;
     status: string;
     updatedAt?: Date;
@@ -40,6 +40,15 @@ const RequestTable: React.FC<RequestTableProps> = ({
     if (requests.length === 0) {
         return null;
     }
+
+    const totalItems = (names: string[]) => {
+        let total = 0;
+        for (const n of names) {
+            const m = n.match(/ x (\d+)$/);
+            total += m ? Number(m[1]) : 1;
+        }
+        return total;
+    };
 
     return (
         <>
@@ -73,9 +82,12 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                 <Badge key={idx} variant="outline">{gear}</Badge>
                             ))}
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{format(req.requestDate, 'MMM d, yyyy')}</span>
-                            <span>{format(req.requestDate, 'h:mm a')}</span>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                                <span>{format(req.requestDate, 'MMM d, yyyy')}</span>
+                                <span>{format(req.requestDate, 'h:mm a')}</span>
+                            </div>
+                            <div className="font-medium">Items: {totalItems(req.gearNames)}</div>
                         </div>
                         <div className="flex gap-2 mt-1">
                             {req.status.toLowerCase() === 'pending' && (
@@ -109,7 +121,8 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                 />
                             </TableHead>
                             <TableHead>User</TableHead>
-                            <TableHead>Gear</TableHead>
+                            <TableHead>Gear (with quantities)</TableHead>
+                            <TableHead className="text-right">Items</TableHead>
                             <TableHead>Request Date</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Actions</TableHead>
@@ -148,6 +161,9 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                             <Badge key={idx} variant="outline" className="text-xs">{gear}</Badge>
                                         ))}
                                     </div>
+                                </TableCell>
+                                <TableCell className="text-right align-top">
+                                    {totalItems(req.gearNames)}
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex flex-col">

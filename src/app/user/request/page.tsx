@@ -233,7 +233,7 @@ function RequestGearContent() {
      */
     const fetchGears = async () => {
       try {
-        const { data, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears?status=Available&pageSize=1000`);
+        const { data, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears/available`);
         if (error) {
           console.error('Error fetching gears:', error);
           toast({
@@ -407,37 +407,42 @@ function RequestGearContent() {
 
       // Populate the gear_request_gears junction table
       if (requestData && requestData[0] && data.selectedGears.length > 0) {
+        const requestId = requestData[0].id as string;
         const gearRequestGearsData = data.selectedGears.map(gearId => ({
-          gear_request_id: requestData[0].id,
+          gear_request_id: requestId,
           gear_id: gearId,
           quantity: (data.quantities && typeof data.quantities[gearId] === 'number' ? data.quantities[gearId] : 1)
         }));
 
         // Insert lines through server API to bypass RLS and support both schemas
-        try {
-          const resp = await fetch('/api/requests/add-lines', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ requestId: requestData[0].id, lines: gearRequestGearsData }),
-          });
-          const resJson = await resp.json();
-          if (!resp.ok || !resJson?.success) {
-            console.error('Error inserting gear request gears via API:', resJson);
-          }
-        } catch (e) {
-          console.error('Error inserting gear request gears via API:', e);
+        const resp = await fetch('/api/requests/add-lines', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId, lines: gearRequestGearsData }),
+        });
+        const resJson = await resp.json();
+        if (!resp.ok || !resJson?.success) {
+          console.error('Error inserting gear request gears via API:', resJson);
+          throw new Error(resJson?.error || 'Failed to record requested quantities. Please try again.');
         }
 
-        // Send emails (user + admins) via API if configured
-        try {
-          await fetch('/api/requests/created', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ requestId: requestData[0].id }),
-          });
-        } catch (e) {
-          console.warn('Request created email dispatch failed:', e);
+        // Verify via API response (avoid client-side RLS on direct select)
+        const insertedRows = Array.isArray(resJson?.data) ? resJson.data : [];
+        if (insertedRows.length === 0) {
+          console.error('API reported success but returned no inserted rows:', resJson);
+          throw new Error('Failed to verify requested quantities were saved.');
         }
+      }
+
+      // Send emails (user + admins) via API if configured
+      try {
+        await fetch('/api/requests/created', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId: requestData?.[0]?.id }),
+        });
+      } catch (e) {
+        console.warn('Request created email dispatch failed:', e);
       }
 
       // Get user profile for notifications

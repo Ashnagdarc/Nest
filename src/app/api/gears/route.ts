@@ -74,6 +74,10 @@ export async function GET(request: NextRequest) {
         }
         if (status && status !== 'all') {
             dataQuery = dataQuery.eq('status', status);
+            // FIX: For Available status, also ensure available_quantity > 0
+            if (status === 'Available') {
+                dataQuery = dataQuery.gt('available_quantity', 0);
+            }
         }
         if (category && category !== 'all') {
             dataQuery = dataQuery.eq('category', category);

@@ -132,7 +132,7 @@ export function useDashboardData() {
                     return {
                         checkedOut: checkedOutGears.length,
                         overdue: overdueGears.length,
-                        available: available.reduce((sum: number, g: any) => sum + (g.available_quantity ?? 0), 0)
+                        available: available.reduce((sum: number, g: any) => sum + (g.available_quantity ?? 1), 0)
                     };
                 })(),
 
