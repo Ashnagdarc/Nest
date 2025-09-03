@@ -423,8 +423,8 @@ export default function UserCalendarPage() {
         const fetchAvailableGearWithConflicts = async () => {
             const { data: gearList, error } = await supabase
                 .from('gears')
-                .select('id, name, category, status')
-                .eq('status', 'Available');
+                .select('id, name, category, status, available_quantity')
+                .gt('available_quantity', 0);
 
             if (error) {
                 // handle error

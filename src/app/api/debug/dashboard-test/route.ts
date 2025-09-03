@@ -6,11 +6,15 @@ export async function GET(request: NextRequest) {
         const supabase = await createSupabaseServerClient();
 
         // Test both API calls that the dashboard uses
-        const [checkoutsRes, availableRes] = await Promise.all([
+        const [checkoutsRes, partiallyCheckedOutRes, availableRes] = await Promise.all([
             supabase
                 .from('gears')
                 .select('*')
                 .eq('status', 'Checked Out'),
+            supabase
+                .from('gears')
+                .select('*')
+                .eq('status', 'Partially Checked Out'),
             supabase
                 .from('gears')
                 .select('*')
@@ -20,9 +24,16 @@ export async function GET(request: NextRequest) {
 
         // Calculate what the dashboard should receive
         const checkouts = checkoutsRes.data || [];
+        const partiallyCheckedOut = partiallyCheckedOutRes.data || [];
         const available = availableRes.data || [];
 
-        const checkedOutCount = checkouts.length;
+        const checkedOutCount = [...checkouts, ...partiallyCheckedOut].reduce((sum, gear) => {
+            // Calculate how many of this gear are checked out
+            const totalQuantity = gear.quantity ?? 1;
+            const availableQuantity = gear.available_quantity ?? 0;
+            const checkedOutQuantity = totalQuantity - availableQuantity;
+            return sum + Math.max(0, checkedOutQuantity);
+        }, 0);
         const availableCount = available.length;
         const availableQuantity = available.reduce((sum, g) => sum + (g.available_quantity ?? 0), 0);
 
@@ -39,7 +50,7 @@ export async function GET(request: NextRequest) {
                     data: available.slice(0, 3) // First 3 for sample
                 },
                 summary: {
-                    totalGears: availableCount + checkouts.length,
+                    totalGears: availableCount + checkedOutCount,
                     availableGears: availableCount,
                     checkedOutGears: checkedOutCount,
                     availableQuantity: availableQuantity

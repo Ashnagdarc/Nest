@@ -103,6 +103,36 @@ const durationOptions = [
 ];
 
 /**
+ * Calculate due date from expected duration
+ * 
+ * Converts the duration string to an actual due date
+ * based on when the request is being created.
+ */
+const calculateDueDate = (duration: string): string => {
+  const now = new Date();
+
+  switch (duration) {
+    case "24hours":
+      return new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    case "48hours":
+      return new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+    case "72hours":
+      return new Date(now.getTime() + 72 * 60 * 60 * 1000).toISOString();
+    case "1 week":
+      return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    case "2 weeks":
+      return new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    case "Month":
+      return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    case "year":
+      return new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    default:
+      // Default to 1 week if duration is not recognized
+      return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  }
+};
+
+/**
  * Request Form Schema
  * 
  * Zod validation schema for equipment request form data.
@@ -436,6 +466,7 @@ function RequestGearContent() {
           reason: data.reason || '',
           destination: data.destination || '',
           expected_duration: data.duration || '',
+          due_date: calculateDueDate(data.duration || ''),
           team_members: data.teamMembers.length ? data.teamMembers.join(',') : null,
           status: 'Pending'
         })

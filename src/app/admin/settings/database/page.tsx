@@ -237,7 +237,7 @@ export default function DatabaseSettingsPage() {
 
                             // Check if this gear should appear in check-in page
                             const shouldAppearInCheckin = gear.checked_out_to === request.user_id &&
-                                (gear.status === 'Checked Out' || gear.status === 'Pending Check-in');
+                                (gear.status === 'Checked Out' || gear.status === 'Pending Check-in' || gear.status === 'Partially Checked Out');
                             console.log(`       Should appear in check-in: ${shouldAppearInCheckin}`);
                         });
                     }

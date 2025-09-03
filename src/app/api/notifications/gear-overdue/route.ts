@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
         const { data: overdueGears, error } = await supabase
             .from('gears')
             .select('id, name, due_date, checked_out_to')
-            .eq('status', 'Checked Out')
+            .in('status', ['Checked Out', 'Partially Checked Out'])
             .lt('due_date', now.toISOString());
 
         if (error) {
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
                 .from('gear_requests')
                 .update({ status: 'Overdue' })
                 .eq('user_id', userId)
-                .eq('status', 'Checked Out')
+                .in('status', ['Checked Out', 'Partially Checked Out'])
                 .lt('due_date', now.toISOString());
 
             await notifyGoogleChat(NotificationEventType.GEAR_OVERDUE, {

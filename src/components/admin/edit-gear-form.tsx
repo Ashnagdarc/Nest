@@ -26,7 +26,7 @@ const gearSchema = z.object({
     category: z.string({ required_error: "Please select a category." }),
     description: z.string().optional().nullable(),
     serial_number: z.string().min(1, { message: "Serial number is required." }),
-    status: z.enum(["Available", "Damaged", "Under Repair", "New", "Checked Out"], {
+    status: z.enum(["Available", "Damaged", "Under Repair", "New", "Checked Out", "Partially Checked Out"], {
         required_error: "Please select a status.",
     }),
     purchase_date: z.string().optional().nullable(),
@@ -243,6 +243,7 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
                                         <SelectItem value="Under Repair">Under Repair</SelectItem>
                                         <SelectItem value="New">New</SelectItem>
                                         <SelectItem value="Checked Out">Checked Out</SelectItem>
+                                        <SelectItem value="Partially Checked Out">Partially Checked Out</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 <FormMessage />

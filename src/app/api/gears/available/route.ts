@@ -53,8 +53,9 @@ export async function GET() {
 
         // Filter available gears in JavaScript
         const availableGears = (data || []).filter(gear => {
-            const latestState = gear.gear_states?.[0];
-            return latestState?.status === 'Available' && latestState.available_quantity > 0;
+            // Show any gear that has available quantity > 0, regardless of status
+            // This includes gear with status "Available", "Partially Checked Out", etc.
+            return gear.available_quantity > 0;
         });
 
         // Return successful response

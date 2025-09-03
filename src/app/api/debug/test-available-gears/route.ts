@@ -9,7 +9,6 @@ export async function GET(request: NextRequest) {
         const { data, error, count } = await supabase
             .from('gears')
             .select('*', { count: 'exact' })
-            .eq('status', 'Available')
             .gt('available_quantity', 0)
             .order('name');
 
