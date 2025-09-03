@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 
 export async function GET() {
     try {
@@ -16,39 +14,33 @@ export async function GET() {
             }, { status: 500 });
         }
 
-        // Create authenticated Supabase client using SSR approach
-        const cookieStore = await cookies();
-        const supabase = createServerClient(supabaseUrl, supabaseKey, {
-            cookies: {
-                get(name: string) {
-                    return cookieStore.get(name)?.value;
-                },
-                set() {
-                    // No-op for API routes
-                },
-                remove() {
-                    // No-op for API routes
-                },
-            },
-        });
-
-        // Verify user authentication
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !user) {
-            console.error('Authentication error:', authError);
+        // Create Supabase client with admin privileges
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (!supabaseServiceKey) {
+            console.error('Missing Supabase service role key');
             return NextResponse.json({
                 data: null,
-                error: 'Authentication required'
-            }, { status: 401 });
+                error: 'Database configuration error'
+            }, { status: 500 });
         }
+
+        // Use service role key to bypass RLS
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // Execute the authenticated query (RLS policies will now work)
         const { data, error } = await supabase
             .from('gears')
-            .select('*')
-            .eq('status', 'Available')
-            .gt('available_quantity', 0)
+            .select(`
+                *,
+                gear_states (
+                    status,
+                    available_quantity,
+                    checked_out_to,
+                    due_date
+                )
+            `)
+            .order('created_at', { ascending: false })
             .order('name');
 
         if (error) {
@@ -59,9 +51,15 @@ export async function GET() {
             }, { status: 500 });
         }
 
+        // Filter available gears in JavaScript
+        const availableGears = (data || []).filter(gear => {
+            const latestState = gear.gear_states?.[0];
+            return latestState?.status === 'Available' && latestState.available_quantity > 0;
+        });
+
         // Return successful response
         return NextResponse.json({
-            data: data || [],
+            data: availableGears,
             error: null
         });
 

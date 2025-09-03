@@ -6,20 +6,45 @@
  * @version 1.0.0
  */
 
-import { createClient } from '@/lib/supabase/client';
-import { createClientServerClient } from '@/lib/supabase/client-server';
-import type { Database } from '@/types/supabase';
 import { apiGet } from '@/lib/apiClient';
 
-type Tables = Database['public']['Tables'];
-type Gear = Tables['gears']['Row'];
-type Profile = Tables['profiles']['Row'];
+type Profile = {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+    role: 'Admin' | 'User';
+    department: string | null;
+    avatar_url: string | null;
+    status: 'Active' | 'Inactive' | 'Suspended';
+    phone: string | null;
+    location: string | null;
+    employee_id: string | null;
+    created_at: string;
+    updated_at: string;
+    last_sign_in_at: string | null;
+    is_banned: boolean;
+};
 
-// Client for browser/client-side queries
-const getClient = () => createClient();
+type GearState = {
+    status: string;
+    available_quantity: number;
+    checked_out_to?: string | null;
+    due_date?: string | null;
+};
 
-// Server client for server-side queries (client-safe version)
-const getServerClient = () => createClientServerClient();
+type Gear = {
+    id: string;
+    name: string;
+    category: string;
+    description: string | null;
+    serial_number: string | null;
+    purchase_date: string | null;
+    image_url: string | null;
+    quantity: number;
+    created_at: string;
+    updated_at: string;
+    gear_states?: GearState[];
+};
 
 /**
  * Standardized response format for all database queries
@@ -59,49 +84,7 @@ export interface FilterParams {
     userId?: string
 }
 
-/**
- * Execute query with standardized error handling and response formatting
- */
-async function executeQuery<T>(
-    queryFn: () => Promise<any>,
-    operation: string
-): Promise<QueryResult<T>> {
-    const startTime = Date.now()
-
-    try {
-        const response = await queryFn()
-        const executionTime = Date.now() - startTime
-
-        if (response.error) {
-            console.error(`Database query failed [${operation}]:`, response.error)
-            return {
-                data: null,
-                error: response.error.message || 'Database query failed',
-                meta: { executionTime }
-            }
-        }
-
-        return {
-            data: response.data,
-            error: null,
-            count: response.count,
-            meta: {
-                executionTime,
-                fromCache: false,
-                affectedRows: response.data?.length
-            }
-        }
-    } catch (error) {
-        const executionTime = Date.now() - startTime
-        console.error(`Database query exception [${operation}]:`, error)
-
-        return {
-            data: null,
-            error: error instanceof Error ? error.message : 'Unknown database error',
-            meta: { executionTime }
-        }
-    }
-}
+// Removed unused executeQuery function
 
 /**
  * Optimized gear queries with proper indexing and minimal data fetching
@@ -139,7 +122,7 @@ export const gearQueries = {
 
     // Get gear utilization stats (optimized for dashboard)
     getGearUtilizationStats: async () => {
-        return await apiGet<{ data: { category: string; status: string }[]; error: string | null }>(`/api/gears?fields=category,status`);
+        return await apiGet<{ data: { category: string; gear_states: { status: string }[] }[]; error: string | null }>(`/api/gears?fields=category,gear_states`);
     }
 };
 
@@ -148,7 +131,7 @@ export const gearQueries = {
  */
 export const profileQueries = {
     // Get user profile with minimal fields
-    getUserProfile: async (userId: string, isServer = false) => {
+    getUserProfile: async (userId: string) => {
         return await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/${userId}`);
     },
 
@@ -156,8 +139,7 @@ export const profileQueries = {
     getUsersWithPagination: async (
         page = 1,
         pageSize = 50,
-        search?: string,
-        isServer = false
+        search?: string
     ) => {
         const params = new URLSearchParams();
         params.append('page', String(page));
@@ -167,7 +149,7 @@ export const profileQueries = {
     },
 
     // Get admin users for notifications
-    getAdminUsers: async (isServer = false) => {
+    getAdminUsers: async () => {
         return await apiGet<{ data: Profile[]; error: string | null }>(`/api/users?role=admin`);
     }
 };
@@ -203,13 +185,13 @@ export const requestQueries = {
     },
 
     // Get request statistics for dashboard
-    getRequestStats: async (isServer = false) => {
+    getRequestStats: async () => {
         // Use centralized API client and RESTful endpoint
         return await apiGet<{ data: unknown[]; error: string | null }>(`/api/requests?fields=id,status,due_date,checkout_date,created_at`);
     },
 
     // Get user's own requests
-    getUserRequests: async (userId: string, isServer = false) => {
+    getUserRequests: async (userId: string) => {
         // Use centralized API client and RESTful endpoint
         return await apiGet<{ data: unknown[]; error: string | null }>(`/api/requests?userId=${userId}`);
     }
@@ -223,8 +205,7 @@ export const notificationQueries = {
     getUserNotifications: async (
         userId: string,
         page = 1,
-        pageSize = 20,
-        isServer = false
+        pageSize = 20
     ) => {
         const params = new URLSearchParams();
         params.append('userId', userId);
@@ -234,7 +215,7 @@ export const notificationQueries = {
     },
 
     // Get unread notification count
-    getUnreadCount: async (userId: string, isServer = false) => {
+    getUnreadCount: async (userId: string) => {
         const params = new URLSearchParams();
         params.append('userId', userId);
         params.append('unreadOnly', 'true');
@@ -249,14 +230,14 @@ export const notificationQueries = {
  */
 export const batchQueries = {
     // Get dashboard data in a single optimized call
-    getDashboardData: async (userId: string, isAdmin: boolean, isServer = false) => {
+    getDashboardData: async (userId: string, isAdmin: boolean) => {
         if (isAdmin) {
             const [profile, notifications, unreadCount, gearStats, requestStats] = await Promise.all([
-                profileQueries.getUserProfile(userId, isServer),
-                notificationQueries.getUserNotifications(userId, 1, 5, isServer),
-                notificationQueries.getUnreadCount(userId, isServer),
+                profileQueries.getUserProfile(userId),
+                notificationQueries.getUserNotifications(userId, 1, 5),
+                notificationQueries.getUnreadCount(userId),
                 gearQueries.getGearUtilizationStats(),
-                requestQueries.getRequestStats(isServer)
+                requestQueries.getRequestStats()
             ]);
 
             return {
@@ -268,10 +249,10 @@ export const batchQueries = {
             };
         } else {
             const [profile, notifications, unreadCount, userRequests] = await Promise.all([
-                profileQueries.getUserProfile(userId, isServer),
-                notificationQueries.getUserNotifications(userId, 1, 5, isServer),
-                notificationQueries.getUnreadCount(userId, isServer),
-                requestQueries.getUserRequests(userId, isServer)
+                profileQueries.getUserProfile(userId),
+                notificationQueries.getUserNotifications(userId, 1, 5),
+                notificationQueries.getUnreadCount(userId),
+                requestQueries.getUserRequests(userId)
             ]);
 
             return {

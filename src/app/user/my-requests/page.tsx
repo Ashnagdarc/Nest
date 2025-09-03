@@ -18,8 +18,15 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+// Removed unused import
 import { apiGet } from '@/lib/apiClient';
+
+interface GearState {
+  status: string;
+  available_quantity: number;
+  checked_out_to?: string | null;
+  due_date?: string | null;
+}
 
 interface GearRequest {
   id: string;
@@ -39,14 +46,13 @@ interface GearRequest {
       category?: string;
       description?: string | null;
       serial_number?: string | null;
+      quantity: number;
+      gear_states?: GearState[];
     };
   }>;
 }
 
-type RealtimeGearRequestPayload = RealtimePostgresChangesPayload<{
-  old: GearRequest | null;
-  new: GearRequest;
-}>;
+// Removed unused type
 
 // Extend GearRequest locally to include gears and teamMemberProfiles for UI
 type GearWithExtras = {
@@ -54,10 +60,17 @@ type GearWithExtras = {
   name?: string;
   category?: string;
   quantity: number;
+  currentState?: GearState;
 };
+interface TeamMemberProfile {
+  id?: string;
+  full_name?: string;
+  email?: string;
+}
+
 type GearRequestWithExtras = GearRequest & {
   gears?: GearWithExtras[];
-  teamMemberProfiles?: unknown[];
+  teamMemberProfiles?: TeamMemberProfile[];
   gear_request_gears?: Array<{
     quantity?: number;
     gears?: {
@@ -118,38 +131,49 @@ function MyRequestsContent() {
             console.log('🔍 Initial fetch: using gear_request_gears data:', request.gear_request_gears);
             gears = request.gear_request_gears
               .filter(item => item.gears) // Only process items that have gear data
-              .map(item => ({
-                id: item.gears!.id,
-                name: item.gears!.name || 'Unnamed Gear',
-                category: item.gears!.category || '',
-                quantity: item.quantity || 1
-              }));
+              .map(item => {
+                const gear = item.gears!;
+                const currentState = gear.gear_states?.[0];
+                return {
+                  id: gear.id,
+                  name: gear.name || 'Unnamed Gear',
+                  category: gear.category || '',
+                  quantity: item.quantity || 1,
+                  currentState: currentState ? {
+                    status: currentState.status,
+                    available_quantity: currentState.available_quantity,
+                    checked_out_to: currentState.checked_out_to,
+                    due_date: currentState.due_date
+                  } : undefined
+                };
+              });
             console.log('🔍 Initial fetch: processed gears:', gears);
           } else if (request.gear_ids && Array.isArray(request.gear_ids)) {
             console.log('🔍 Initial fetch: falling back to gear_ids:', request.gear_ids);
             // Fallback: fetch gear details if gear_request_gears not available
-            const { data: gearData, error: gearError } = await apiGet<{ data: any[]; error: string | null }>(`/api/gears?ids=${request.gear_ids.join(',')}`);
+            const { data: gearData, error: gearError } = await apiGet<{ data: GearWithExtras[]; error: string | null }>(`/api/gears?ids=${request.gear_ids.join(',')}`);
             if (!gearError && gearData) {
               gears = gearData.map(g => ({
                 id: g.id,
                 name: g.name || 'Unnamed Gear',
                 category: g.category || '',
-                quantity: 1 // Default to 1 if no quantity data
+                quantity: 1, // Default to 1 if no quantity data
+                currentState: g.currentState
               }));
             }
           }
           // Fetch team member profiles if available
-          let teamMemberProfiles: unknown[] = [];
+          let teamMemberProfiles: TeamMemberProfile[] = [];
           if (request.team_members) {
             try {
               const teamMemberIds = request.team_members.split(',').filter(Boolean);
               if (teamMemberIds.length > 0) {
                 // Fetch team member profiles from API
-                const { data: profiles, error: profilesError } = await apiGet<{ data: unknown[]; error: string | null }>(`/api/users?ids=${teamMemberIds.join(',')}`);
+                const { data: profiles, error: profilesError } = await apiGet<{ data: TeamMemberProfile[]; error: string | null }>(`/api/users?ids=${teamMemberIds.join(',')}`);
                 if (!profilesError) teamMemberProfiles = profiles || [];
               }
-            } catch (e) {
-              console.warn('Error fetching team member profiles:', e);
+            } catch (error) {
+              console.warn('Error fetching team member profiles:', error);
             }
           }
           return {
@@ -184,7 +208,7 @@ function MyRequestsContent() {
 
   useEffect(() => {
     let mounted = true;
-    let channel: any;
+    let channel: ReturnType<typeof supabase.channel>;
     const setupRealtimeSubscription = async () => {
       try {
         // Get the current session
@@ -387,7 +411,7 @@ function MyRequestsContent() {
       return 'None';
     }
 
-    return request.teamMemberProfiles.map((member: any) =>
+    return request.teamMemberProfiles.map((member: { full_name?: string; email?: string }) =>
       member.full_name || member.email || 'Unknown user'
     ).join(', ');
   };
@@ -398,7 +422,8 @@ function MyRequestsContent() {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return 'N/A';
       return format(date, 'MMM d, yyyy');
-    } catch (e) {
+    } catch (error) {
+      console.warn('Error formatting date:', error);
       return 'N/A';
     }
   };
@@ -556,9 +581,25 @@ function MyRequestsContent() {
                         {req.gears && req.gears.length > 0 ? (
                           <div className="space-y-1">
                             {req.gears.map((gear, idx) => (
-                              <div key={gear.id ?? idx}>
-                                {gear.name || 'Unnamed Gear'}
-                                {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
+                              <div key={gear.id ?? idx} className="space-y-1">
+                                <div>
+                                  {gear.name || 'Unnamed Gear'}
+                                  <span className="font-bold text-primary">
+                                    {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {gear.category && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {gear.category}
+                                    </Badge>
+                                  )}
+                                  {gear.currentState && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {gear.currentState.status} • {gear.currentState.available_quantity} available
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -628,17 +669,26 @@ function MyRequestsContent() {
                             <div className="space-y-1.5">
                               {req.gears?.map((gear, idx) => (
                                 <div key={gear.id ?? idx} className="flex items-center gap-2">
-                                  <span className="text-sm font-medium">
-                                    {gear.name || 'Unnamed Gear'}
-                                    <span className="font-bold text-primary">
-                                      {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-medium">
+                                      {gear.name || 'Unnamed Gear'}
+                                      <span className="font-bold text-primary">
+                                        {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
+                                      </span>
                                     </span>
-                                  </span>
-                                  {gear.category && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {gear.category}
-                                    </Badge>
-                                  )}
+                                    <div className="flex items-center gap-2">
+                                      {gear.category && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {gear.category}
+                                        </Badge>
+                                      )}
+                                      {gear.currentState && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          {gear.currentState.status} • {gear.currentState.available_quantity} available
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -811,14 +861,26 @@ function MyRequestsContent() {
                       <div className="space-y-3">
                         {selectedRequest.gears?.map((gear, index) => (
                           <div key={gear.id ?? index} className={`${index > 0 ? 'pt-2 border-t border-muted' : ''}`}>
-                            <div className="font-medium">
-                              {gear.name}
-                              <span className="font-bold text-primary">
-                                {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
-                              </span>
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {gear.category || 'No category'} • ID: {gear.id}
+                            <div className="space-y-1">
+                              <div className="font-medium">
+                                {gear.name}
+                                <span className="font-bold text-primary">
+                                  {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs">
+                                  {gear.category || 'No category'}
+                                </Badge>
+                                {gear.currentState && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {gear.currentState.status} • {gear.currentState.available_quantity} available
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                ID: {gear.id}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -837,7 +899,7 @@ function MyRequestsContent() {
                 <div className="bg-muted/30 rounded-lg p-3">
                   {selectedRequest.teamMemberProfiles && selectedRequest.teamMemberProfiles.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
-                      {selectedRequest.teamMemberProfiles.map((member: any) => (
+                      {selectedRequest.teamMemberProfiles.map((member: { id?: string; full_name?: string; email?: string }) => (
                         <Badge key={member.id} variant="secondary">
                           {member.full_name || member.email || 'Unknown user'}
                         </Badge>

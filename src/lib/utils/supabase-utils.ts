@@ -38,13 +38,22 @@ export async function setupRpcFunctions() {
               'category', g.category,
               'description', g.description,
               'serial_number', g.serial_number,
-              'serial', g.serial,
-              'status', g.status,
               'purchase_date', g.purchase_date,
-              'condition', g.condition,
               'created_at', g.created_at,
               'updated_at', g.updated_at,
-              'owner_id', g.owner_id
+              'quantity', g.quantity,
+              'gear_states', (
+                SELECT json_agg(json_build_object(
+                  'status', gs.status,
+                  'available_quantity', gs.available_quantity,
+                  'checked_out_to', gs.checked_out_to,
+                  'due_date', gs.due_date
+                ))
+                FROM public.gear_states gs
+                WHERE gs.gear_id = g.id
+                ORDER BY gs.created_at DESC
+                LIMIT 1
+              )
             )
             FROM public.gears g;
           $$;
@@ -93,19 +102,36 @@ export async function createGearFunctionsSQL() {
     DECLARE
       updated_gear public.gears;
     BEGIN
+      -- Update gear details
       UPDATE public.gears
       SET
         name = COALESCE(gear_data->>'name', name),
         category = COALESCE(gear_data->>'category', category),
         description = COALESCE(gear_data->>'description', description),
         serial_number = COALESCE(gear_data->>'serial_number', serial_number),
-        serial = COALESCE(gear_data->>'serial_number', serial),
-        status = COALESCE(gear_data->>'status', status),
         purchase_date = COALESCE(gear_data->>'purchase_date', purchase_date),
-        condition = COALESCE(gear_data->>'condition', condition),
+        quantity = COALESCE((gear_data->>'quantity')::integer, quantity),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = gear_id
       RETURNING * INTO updated_gear;
+
+      -- Update gear state if provided
+      IF gear_data->>'status' IS NOT NULL OR gear_data->>'available_quantity' IS NOT NULL THEN
+        INSERT INTO public.gear_states (
+          gear_id,
+          status,
+          available_quantity,
+          checked_out_to,
+          due_date
+        )
+        VALUES (
+          gear_id,
+          COALESCE(gear_data->>'status', 'Available'),
+          COALESCE((gear_data->>'available_quantity')::integer, updated_gear.quantity),
+          gear_data->>'checked_out_to',
+          (gear_data->>'due_date')::timestamp with time zone
+        );
+      END IF;
       
       RETURN updated_gear;
     END;
@@ -155,9 +181,10 @@ export async function verifyAndFixGearsTable() {
       -- First make a backup of the current table
       CREATE TABLE IF NOT EXISTS gears_backup AS SELECT * FROM gears;
 
-      -- Check for serial_number column
+      -- Check for required columns in gears table
       DO $$
       BEGIN
+        -- Check for serial_number column
         IF NOT EXISTS (
           SELECT 1
           FROM information_schema.columns
@@ -166,56 +193,9 @@ export async function verifyAndFixGearsTable() {
             AND column_name = 'serial_number'
         ) THEN
           ALTER TABLE gears ADD COLUMN serial_number TEXT;
-          -- Copy data from serial column if it exists
-          IF EXISTS (
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'gears'
-              AND column_name = 'serial'
-          ) THEN
-            UPDATE gears SET serial_number = serial WHERE serial_number IS NULL;
-          END IF;
         END IF;
-      END $$;
 
-      -- Check for serial column
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1
-          FROM information_schema.columns
-          WHERE table_schema = 'public'
-            AND table_name = 'gears'
-            AND column_name = 'serial'
-        ) THEN
-          ALTER TABLE gears ADD COLUMN serial TEXT;
-          -- Copy data from serial_number column if it exists
-          IF EXISTS (
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'gears'
-              AND column_name = 'serial_number'
-          ) THEN
-            UPDATE gears SET serial = serial_number WHERE serial IS NULL;
-          END IF;
-        END IF;
-      END $$;
-
-      -- Make sure other necessary columns exist
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1
-          FROM information_schema.columns
-          WHERE table_schema = 'public'
-            AND table_name = 'gears'
-            AND column_name = 'condition'
-        ) THEN
-          ALTER TABLE gears ADD COLUMN condition TEXT;
-        END IF;
-        
+        -- Check for purchase_date column
         IF NOT EXISTS (
           SELECT 1
           FROM information_schema.columns
@@ -225,7 +205,19 @@ export async function verifyAndFixGearsTable() {
         ) THEN
           ALTER TABLE gears ADD COLUMN purchase_date TEXT;
         END IF;
-        
+
+        -- Check for quantity column
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'gears'
+            AND column_name = 'quantity'
+        ) THEN
+          ALTER TABLE gears ADD COLUMN quantity INTEGER DEFAULT 1;
+        END IF;
+
+        -- Check for updated_at column
         IF NOT EXISTS (
           SELECT 1
           FROM information_schema.columns
@@ -234,6 +226,61 @@ export async function verifyAndFixGearsTable() {
             AND column_name = 'updated_at'
         ) THEN
           ALTER TABLE gears ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT now();
+        END IF;
+      END $$;
+
+      -- Create gear_states table if it doesn't exist
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.tables
+          WHERE table_schema = 'public'
+            AND table_name = 'gear_states'
+        ) THEN
+          CREATE TABLE public.gear_states (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            gear_id UUID NOT NULL REFERENCES public.gears(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'Available',
+            available_quantity INTEGER NOT NULL,
+            checked_out_to UUID REFERENCES auth.users(id),
+            due_date TIMESTAMP WITH TIME ZONE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+          );
+
+          -- Create index on gear_id for faster lookups
+          CREATE INDEX gear_states_gear_id_idx ON public.gear_states(gear_id);
+
+          -- Create trigger to update updated_at
+          CREATE OR REPLACE FUNCTION public.update_gear_states_updated_at()
+          RETURNS TRIGGER AS $$
+          BEGIN
+            NEW.updated_at = now();
+            RETURN NEW;
+          END;
+          $$ LANGUAGE plpgsql;
+
+          CREATE TRIGGER trigger_update_gear_states_updated_at
+            BEFORE UPDATE ON public.gear_states
+            FOR EACH ROW
+            EXECUTE FUNCTION public.update_gear_states_updated_at();
+
+          -- Migrate existing gear status data
+          INSERT INTO public.gear_states (
+            gear_id,
+            status,
+            available_quantity,
+            checked_out_to,
+            due_date
+          )
+          SELECT
+            id as gear_id,
+            COALESCE(status, 'Available') as status,
+            COALESCE(available_quantity, quantity) as available_quantity,
+            checked_out_to,
+            due_date
+          FROM public.gears;
         END IF;
       END $$;
     `;
