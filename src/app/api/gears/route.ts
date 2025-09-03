@@ -3,13 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
     try {
-        console.log('[Gears API] Starting GET request');
 
-        console.log('[Gears API] Creating Supabase client...');
+
+
         let supabase;
         try {
             supabase = createSupabaseApiClient(true);
-            console.log('[Gears API] Supabase client created successfully');
+
         } catch (error) {
             console.error('[Gears API] Failed to create Supabase client:', error);
             return NextResponse.json({ data: null, error: 'Failed to create database connection' }, { status: 500 });
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
         baseQuery = applySearch(baseQuery, search);
 
         // Get total count after filters (before pagination)
-        console.log('[Gears API] Getting total count');
+
         const { count: total, error: countError } = await baseQuery.range(0, 0);
         if (countError) {
             console.error('[Gears API] Count error:', countError);
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
         }
         dataQuery = applySearch(dataQuery, search);
         dataQuery = dataQuery.order('name').range(offset, offset + limit - 1);
-        console.log('[Gears API] Fetching data with pagination');
+
         const { data, error } = await dataQuery;
 
         if (error) {
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ data: null, error: 'Search failed. Try searching by name or serial number.' }, { status: 200 });
         }
 
-        console.log('[Gears API] Successfully fetched data, count:', data?.length);
+
         return NextResponse.json({
             data,
             total: total ?? 0,

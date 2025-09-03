@@ -1,10 +1,6 @@
 import { Resend } from 'resend';
 
-// Debug logging for environment variable
-console.log('[Email Service Debug] RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
-console.log('[Email Service Debug] RESEND_API_KEY length:', process.env.RESEND_API_KEY?.length || 0);
-console.log('[Email Service Debug] RESEND_API_KEY starts with:', process.env.RESEND_API_KEY?.substring(0, 3) || 'undefined');
-console.log('[Email Service Debug] RESEND_API_KEY ends with:', process.env.RESEND_API_KEY?.substring(-3) || 'undefined');
+
 
 // Validate environment variable
 if (!process.env.RESEND_API_KEY) {
