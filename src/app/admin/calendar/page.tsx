@@ -165,7 +165,7 @@ export default function AdminCalendarPage() {
     useEffect(() => {
         fetchEvents();
 
-        // Set up real-time subscription
+        // Set up real-time subscription (base table)
         const channel = supabase
             .channel('admin-calendar-changes')
             .on('postgres_changes', {
@@ -177,8 +177,19 @@ export default function AdminCalendarPage() {
             })
             .subscribe();
 
+        // Fallback: refetch on tab focus/visibility change and lightweight polling
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                fetchEvents();
+            }
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        const poll = setInterval(fetchEvents, 30000);
+
         return () => {
             supabase.removeChannel(channel);
+            document.removeEventListener('visibilitychange', onVisibility);
+            clearInterval(poll);
         };
     }, [supabase, fetchEvents]);
 

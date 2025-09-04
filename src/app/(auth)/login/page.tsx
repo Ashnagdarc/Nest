@@ -43,9 +43,12 @@ export default function LoginPage() {
     setShowSuccessAnimation(false);
 
     try {
+      // Sanitize email to prevent copy/paste whitespace and case issues
+      const cleanedEmail = data.email.trim().toLowerCase();
+
       // Direct client-side login
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: data.email,
+        email: cleanedEmail,
         password: data.password,
       });
 

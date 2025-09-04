@@ -59,13 +59,15 @@ export function useUpcomingEvents() {
                 throw checkoutError;
             }
 
-            // Fetch gear maintenance events
+            // Fetch gear maintenance events (excluding status change events which are not actual maintenance)
+            // Status change events are created when gear status is updated and should not appear as maintenance tasks
             let maintenanceEvents: MaintenanceEvent[] = [];
             try {
                 const { data, error } = await supabase
                     .from('gear_maintenance')
                     .select('id, gear_id, performed_at, maintenance_type, performed_by, status')
-                    .eq('performed_by', session.user.id);
+                    .eq('performed_by', session.user.id)
+                    .not('maintenance_type', 'eq', 'Status Change'); // Exclude status change events
 
                 if (error) {
                     logger.warn(`Could not fetch maintenance with performed_by: ${error.message}`, {
@@ -153,27 +155,29 @@ export function useUpcomingEvents() {
                 return [];
             });
 
-            // Process maintenance events
-            const maintenanceEventsFormatted = maintenanceEvents.map((event: MaintenanceEvent) => {
-                const eventDate = new Date(event.performed_at);
-                let status: Event["status"] = "upcoming";
+            // Process maintenance events - exclude status change events
+            const maintenanceEventsFormatted = maintenanceEvents
+                .filter((event: MaintenanceEvent) => event.maintenance_type !== 'Status Change') // Additional safeguard
+                .map((event: MaintenanceEvent) => {
+                    const eventDate = new Date(event.performed_at);
+                    let status: Event["status"] = "upcoming";
 
-                if (eventDate < now) {
-                    status = "overdue";
-                } else if (eventDate >= today && eventDate < tomorrow) {
-                    status = "today";
-                }
+                    if (eventDate < now) {
+                        status = "overdue";
+                    } else if (eventDate >= today && eventDate < tomorrow) {
+                        status = "today";
+                    }
 
-                return {
-                    id: event.id,
-                    title: `${gearDetails[event.gear_id]?.name || 'Equipment'} ${event.maintenance_type || 'Maintenance'}`,
-                    date: event.performed_at,
-                    type: "maintenance" as const,
-                    status,
-                    gear_id: event.gear_id,
-                    user_id: session.user.id
-                };
-            });
+                    return {
+                        id: event.id,
+                        title: `${gearDetails[event.gear_id]?.name || 'Equipment'} ${event.maintenance_type || 'Maintenance'}`,
+                        date: event.performed_at,
+                        type: "maintenance" as const,
+                        status,
+                        gear_id: event.gear_id,
+                        user_id: session.user.id
+                    };
+                });
 
             // Combine and sort events by date
             const allEvents = [...checkoutEvents, ...maintenanceEventsFormatted]

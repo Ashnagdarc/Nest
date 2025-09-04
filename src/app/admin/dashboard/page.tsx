@@ -19,6 +19,9 @@ import { useBulkSelection } from '@/hooks/analytics/useBulkSelection';
 import { useAdvancedSearch } from '@/hooks/analytics/useAdvancedSearch';
 import PageHeader from '@/components/foundation/PageHeader';
 
+// Import the UnifiedNotificationsPanel
+import { UnifiedNotificationsPanel } from '@/components/admin/UnifiedNotificationsPanel';
+
 // Add types for analytics views
 interface WeeklyTrendRow {
     week: string;
@@ -481,6 +484,11 @@ export default function AdminDashboardPage() {
                                     </Button>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Unified Notifications Panel */}
+                        <div className="sm:col-span-2 lg:col-span-3 mt-4">
+                            <UnifiedNotificationsPanel />
                         </div>
                         <div className="sm:col-span-2 lg:col-span-3">
                             <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full"}>
