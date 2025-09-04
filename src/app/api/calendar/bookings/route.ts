@@ -5,17 +5,33 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     try {
         const supabase = await createSupabaseServerClient();
-        
+
         // Verify authentication - RLS requires authenticated user
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
+
         if (authError || !user) {
+            console.error('Calendar API: Authentication failed:', authError);
             return NextResponse.json(
                 { error: 'Authentication required' },
                 { status: 401 }
             );
         }
-        
+
+        // Check if user is admin for calendar access
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+
+        if (profileError || !profile || profile.role !== 'Admin') {
+            console.error('Calendar API: Authorization failed:', profileError, 'Profile:', profile);
+            return NextResponse.json(
+                { error: 'Admin access required' },
+                { status: 403 }
+            );
+        }
+
         const startDate = searchParams.get('startDate');
         const endDate = searchParams.get('endDate');
         const userId = searchParams.get('userId');
@@ -37,7 +53,7 @@ export async function GET(request: NextRequest) {
         if (error) {
             console.error('Error fetching calendar bookings:', error);
             return NextResponse.json(
-                { error: 'Failed to fetch calendar bookings' },
+                { error: 'Failed to fetch calendar bookings', details: error.message },
                 { status: 500 }
             );
         }
@@ -57,17 +73,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const supabase = await createSupabaseServerClient();
-        
+
         // Verify authentication - RLS requires authenticated user
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
+
         if (authError || !user) {
             return NextResponse.json(
                 { error: 'Authentication required' },
                 { status: 401 }
             );
         }
-        
+
         const { user_id, gear_id, title, start_date, end_date, notes } = await request.json();
 
         if (!user_id || !gear_id || !title || !start_date || !end_date) {
@@ -95,7 +111,7 @@ export async function POST(request: NextRequest) {
 
         if (!availabilityResult?.available) {
             return NextResponse.json(
-                { 
+                {
                     error: availabilityResult?.error || 'Gear is not available during this time period',
                     details: availabilityResult
                 },
