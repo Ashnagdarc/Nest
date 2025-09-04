@@ -311,7 +311,7 @@ export default function AdminDashboardPage() {
     const activeUsers = users.filter((u: Profile) => u.status === "Active").length;
 
     const pendingRequests = requests.filter((r: GearRequest) => r.status === "Pending").length;
-    const approvedRequests = requests.filter((r: GearRequest) => r.status === "Approved").length;
+    const approvedRequests = requests.filter((r: GearRequest) => r.status?.toLowerCase() === "approved").length;
     const rejectedRequests = requests.filter((r: GearRequest) => r.status === "Rejected").length;
     const approvalRate = requests.length > 0 ? Math.round((approvedRequests / requests.length) * 100) : 0;
 

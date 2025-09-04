@@ -31,15 +31,7 @@ export async function GET() {
         // Execute the authenticated query (RLS policies will now work)
         const { data, error } = await supabase
             .from('gears')
-            .select(`
-                *,
-                gear_states (
-                    status,
-                    available_quantity,
-                    checked_out_to,
-                    due_date
-                )
-            `)
+            .select('*')
             .order('created_at', { ascending: false })
             .order('name');
 

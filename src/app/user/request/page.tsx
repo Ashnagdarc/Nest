@@ -43,13 +43,6 @@ type Profile = {
   is_banned: boolean;
 };
 
-type GearState = {
-  status: string;
-  available_quantity: number;
-  checked_out_to?: string | null;
-  due_date?: string | null;
-};
-
 type Gear = {
   id: string;
   name?: string;
@@ -59,9 +52,12 @@ type Gear = {
   purchase_date?: string | null;
   image_url?: string | null;
   quantity: number;
+  available_quantity: number;
+  status: string;
+  checked_out_to?: string | null;
+  due_date?: string | null;
   created_at: string;
   updated_at: string;
-  gear_states?: GearState[];
 };
 
 /**
@@ -220,19 +216,14 @@ function RequestGearContent() {
     },
   });
 
-  // Helper: compute available units by gear name using gear states
+  // Helper: compute available units by gear name
   const getAvailableUnitsByName = (targetName?: string) => {
     if (!targetName) return 0;
     const norm = targetName.toLowerCase().trim();
     return availableGears
       .filter(x => (x.name || '').toLowerCase().trim() === norm)
       .reduce((sum, x) => {
-        const latestState = x.gear_states?.[0];
-        const statusOk = latestState?.status?.toLowerCase() === 'available';
-        const qty = typeof latestState?.available_quantity === 'number' && latestState.available_quantity > 0
-          ? latestState.available_quantity
-          : (statusOk ? 1 : 0);
-        return sum + qty;
+        return sum + (x.available_quantity || 0);
       }, 0);
   };
 
@@ -708,29 +699,30 @@ function RequestGearContent() {
                                           {g.category}
                                         </p>
                                         <div className="flex flex-wrap gap-1 sm:gap-2">
-                                          {g.gear_states?.[0] && (
-                                            <>
-                                              <Badge
-                                                variant="secondary"
-                                                className="text-xs px-2 py-0.5"
-                                              >
-                                                {g.gear_states[0].status}
-                                              </Badge>
-                                              <Badge
-                                                variant="outline"
-                                                className="text-xs px-2 py-0.5"
-                                              >
-                                                {g.gear_states[0].available_quantity} available
-                                              </Badge>
-                                              {g.gear_states[0].due_date && (
-                                                <Badge
-                                                  variant="outline"
-                                                  className="text-xs px-2 py-0.5"
-                                                >
-                                                  Due: {format(new Date(g.gear_states[0].due_date), 'MMM d, yyyy')}
-                                                </Badge>
-                                              )}
-                                            </>
+                                          <Badge
+                                            variant="secondary"
+                                            className="text-xs px-2 py-0.5"
+                                          >
+                                            {g.status}
+                                          </Badge>
+                                          <Badge
+                                            variant="outline"
+                                            className={`text-xs px-2 py-0.5 ${g.available_quantity === 0
+                                              ? 'text-red-600 border-red-200'
+                                              : g.available_quantity < g.quantity
+                                                ? 'text-yellow-600 border-yellow-200'
+                                                : 'text-green-600 border-green-200'
+                                              }`}
+                                          >
+                                            {g.available_quantity} of {g.quantity} available
+                                          </Badge>
+                                          {g.due_date && g.checked_out_to && (g.status === 'Checked Out' || g.status === 'Partially Checked Out') && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-xs px-2 py-0.5 text-orange-600 border-orange-200"
+                                            >
+                                              Due: {format(new Date(g.due_date), 'MMM d, yyyy')}
+                                            </Badge>
                                           )}
                                         </div>
                                       </div>
@@ -967,21 +959,27 @@ function RequestGearContent() {
                               <h4 className="font-semibold text-sm sm:text-base text-foreground truncate">
                                 {g.name}
                               </h4>
-                              {g.gear_states?.[0] && (
-                                <div className="flex flex-wrap gap-2">
-                                  <Badge variant="secondary" className="text-xs">
-                                    {g.gear_states[0].status}
-                                  </Badge>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge variant="secondary" className="text-xs">
+                                  {g.status}
+                                </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${g.available_quantity === 0
+                                    ? 'text-red-600 border-red-200'
+                                    : g.available_quantity < g.quantity
+                                      ? 'text-yellow-600 border-yellow-200'
+                                      : 'text-green-600 border-green-200'
+                                    }`}
+                                >
+                                  {g.available_quantity} of {g.quantity} available
+                                </Badge>
+                                {g.due_date && (
                                   <Badge variant="outline" className="text-xs">
-                                    {g.gear_states[0].available_quantity} available
+                                    Due: {format(new Date(g.due_date), 'MMM d, yyyy')}
                                   </Badge>
-                                  {g.gear_states[0].due_date && (
-                                    <Badge variant="outline" className="text-xs">
-                                      Due: {format(new Date(g.gear_states[0].due_date), 'MMM d, yyyy')}
-                                    </Badge>
-                                  )}
-                                </div>
-                              )}
+                                )}
+                              </div>
                               {/* Quantity selector per selected gear (by type) */}
                               <div className="mt-2 flex items-center gap-2">
                                 <span className="text-xs sm:text-sm text-muted-foreground">Quantity</span>
