@@ -45,7 +45,15 @@ export async function GET(request: NextRequest) {
             baseQuery = supabase.from('gears').select('*', { count: 'exact' });
         }
         if (status && status !== 'all') {
-            baseQuery = baseQuery.eq('status', status);
+            // FIX: For Available status, ensure both status is Available AND available_quantity > 0
+            if (status === 'Available') {
+                baseQuery = baseQuery.eq('status', status).gt('available_quantity', 0);
+            } else {
+                baseQuery = baseQuery.eq('status', status);
+            }
+        } else if (status === 'all') {
+            // For 'all' status, still don't show items with 0 available_quantity as Available
+            baseQuery = baseQuery.not('status', 'eq', 'Available').or('status.eq.Available,available_quantity.gt.0');
         }
         if (category && category !== 'all') {
             baseQuery = baseQuery.eq('category', category);
@@ -73,11 +81,15 @@ export async function GET(request: NextRequest) {
             dataQuery = supabase.from('gears').select('*');
         }
         if (status && status !== 'all') {
-            dataQuery = dataQuery.eq('status', status);
-            // FIX: For Available status, also ensure available_quantity > 0
+            // FIX: For Available status, ensure both status is Available AND available_quantity > 0
             if (status === 'Available') {
-                dataQuery = dataQuery.gt('available_quantity', 0);
+                dataQuery = dataQuery.eq('status', status).gt('available_quantity', 0);
+            } else {
+                dataQuery = dataQuery.eq('status', status);
             }
+        } else if (status === 'all') {
+            // For 'all' status, still don't show items with 0 available_quantity as Available
+            dataQuery = dataQuery.not('status', 'eq', 'Available').or('status.eq.Available,available_quantity.gt.0');
         }
         if (category && category !== 'all') {
             dataQuery = dataQuery.eq('category', category);

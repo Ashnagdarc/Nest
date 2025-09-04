@@ -87,7 +87,9 @@ export async function POST(request: NextRequest) {
                 status: 'Approved',
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-                approved_at: new Date().toISOString()
+                approved_at: new Date().toISOString(),
+                checkout_date: new Date().toISOString(),
+                due_date: booking.end_date
             })
             .select()
             .single();
@@ -109,6 +111,92 @@ export async function POST(request: NextRequest) {
                 .from('gear_calendar_bookings')
                 .update({ request_id: gearRequest.id })
                 .eq('id', booking_id);
+
+            // Get gear details to check quantity
+            const { data: gearData, error: gearFetchError } = await supabase
+                .from('gears')
+                .select('id, name, quantity, available_quantity, status')
+                .eq('id', booking.gear_id)
+                .single();
+
+            if (gearFetchError) {
+                console.error('Error fetching gear details:', gearFetchError);
+                // Log error for debugging
+                await supabase.from('request_status_history').insert({
+                    request_id: gearRequest.id,
+                    status: 'ERROR',
+                    changed_at: new Date().toISOString(),
+                    note: `Failed to fetch gear details for calendar booking approval: ${gearFetchError.message}`
+                });
+            } else {
+                // Check if gear is under maintenance or otherwise unavailable
+                if (gearData.status === 'Under Repair') {
+                    return NextResponse.json(
+                        { error: 'This gear is currently under maintenance and cannot be booked.' },
+                        { status: 400 }
+                    );
+                }
+
+                // Check if gear is already fully booked for this period
+                const { data: availabilityCheck, error: availabilityError } = await supabase.rpc('check_gear_availability', {
+                    p_gear_id: booking.gear_id,
+                    p_start_date: booking.start_date,
+                    p_end_date: booking.end_date
+                });
+
+                if (availabilityError) {
+                    console.error('Error checking gear availability:', availabilityError);
+                } else if (availabilityCheck && !availabilityCheck.is_available) {
+                    return NextResponse.json(
+                        {
+                            error: `This gear is not available for the requested period. 
+                                   Available: ${availabilityCheck.available_quantity} of ${availabilityCheck.total_quantity} units. 
+                                   Status: ${availabilityCheck.current_status}. 
+                                   Conflicting bookings: ${availabilityCheck.conflicting_bookings}`
+                        },
+                        { status: 400 }
+                    );
+                }
+                // Calculate new available quantity
+                const currentQuantity = gearData.quantity || 1;
+                const availableQuantity = gearData.available_quantity !== null ? gearData.available_quantity : currentQuantity;
+                const newAvailableQuantity = Math.max(0, availableQuantity - 1);
+
+                // Determine status based on available quantity
+                const newStatus = newAvailableQuantity > 0 ? 'Partially Checked Out' : 'Checked Out';
+
+                console.log(`Updating gear ${gearData.name} (${booking.gear_id}) from status ${gearData.status} to ${newStatus}`);
+
+                // Update gear status and quantities using a direct SQL query to bypass any problematic triggers
+                const { error: gearUpdateError } = await supabase.rpc('update_gear_checkout_status', {
+                    p_gear_id: booking.gear_id,
+                    p_status: newStatus,
+                    p_checked_out_to: booking.user_id,
+                    p_current_request_id: gearRequest.id,
+                    p_last_checkout_date: new Date().toISOString(),
+                    p_due_date: booking.end_date,
+                    p_available_quantity: newAvailableQuantity
+                });
+
+                if (gearUpdateError) {
+                    console.error('Error updating gear status:', gearUpdateError);
+                    // Log error for debugging
+                    await supabase.from('request_status_history').insert({
+                        request_id: gearRequest.id,
+                        status: 'ERROR',
+                        changed_at: new Date().toISOString(),
+                        note: `Failed to update gear status for calendar booking approval: ${gearUpdateError.message}`
+                    });
+                } else {
+                    // Log successful status change
+                    await supabase.from('request_status_history').insert({
+                        request_id: gearRequest.id,
+                        status: newStatus,
+                        changed_at: new Date().toISOString(),
+                        note: `Gear status updated from ${gearData.status} to ${newStatus} via calendar booking approval`
+                    });
+                }
+            }
         }
 
         // Send notification to user about approval
