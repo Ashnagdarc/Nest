@@ -102,6 +102,7 @@ export default function AdminCalendarPage() {
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
     const [adminNotes, setAdminNotes] = useState("");
     const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
+    const [authError, setAuthError] = useState<string | null>(null);
     const supabase = useMemo(() => createClient(), []);
 
     const fetchEvents = useCallback(async () => {
@@ -111,7 +112,10 @@ export default function AdminCalendarPage() {
             const { data: { user }, error: userError } = await supabase.auth.getUser();
             // Admin calendar page user authentication
 
-            if (userError || !user) throw new Error('Not authenticated');
+            if (userError || !user) {
+                console.error('Authentication error:', userError);
+                throw new Error('Not authenticated');
+            }
 
             // Check if user is admin
             const { data: profile, error: profileError } = await supabase
@@ -123,14 +127,24 @@ export default function AdminCalendarPage() {
             // Admin calendar page profile loading
 
             if (profileError || !profile || profile.role !== 'Admin') {
+                console.error('Authorization error:', profileError, 'Profile:', profile);
                 throw new Error('Not authorized');
             }
 
             // Fetch calendar bookings using secure API endpoint
-            const response = await fetch('/api/calendar/bookings?startDate=2020-01-01&endDate=2030-12-31');
+            const response = await fetch('/api/calendar/bookings?startDate=2020-01-01&endDate=2030-12-31', {
+                credentials: 'include', // Include cookies for authentication
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
             if (!response.ok) {
-                throw new Error('Failed to fetch calendar bookings');
+                const errorText = await response.text();
+                console.error('API response error:', response.status, errorText);
+                throw new Error(`Failed to fetch calendar bookings: ${response.status}`);
             }
+
             const bookingsResponse = await response.json();
             const bookingsData = bookingsResponse.bookings || [];
 
@@ -162,9 +176,22 @@ export default function AdminCalendarPage() {
             setEvents(calendarEvents);
         } catch (error) {
             console.error('Error fetching calendar data (detailed):', error);
+
+            if (error instanceof Error) {
+                if (error.message.includes('Not authenticated')) {
+                    setAuthError('Authentication failed. Please log in again.');
+                } else if (error.message.includes('Not authorized')) {
+                    setAuthError('Access denied. Admin privileges required.');
+                } else {
+                    setAuthError('Failed to load calendar data. Please refresh the page.');
+                }
+            } else {
+                setAuthError('An unexpected error occurred.');
+            }
+
             toast({
                 title: "Error",
-                description: "Failed to load calendar data. Please refresh the page.",
+                description: error instanceof Error ? error.message : "Failed to load calendar data. Please refresh the page.",
                 variant: "destructive",
             });
         } finally {
@@ -173,7 +200,10 @@ export default function AdminCalendarPage() {
     }, [supabase]);
 
     useEffect(() => {
-        fetchEvents();
+        // Only fetch events if there's no auth error
+        if (!authError) {
+            fetchEvents();
+        }
 
         // Set up real-time subscription (base table)
         const channel = supabase
@@ -183,25 +213,31 @@ export default function AdminCalendarPage() {
                 schema: 'public',
                 table: 'gear_calendar_bookings'
             }, () => {
-                fetchEvents();
+                if (!authError) {
+                    fetchEvents();
+                }
             })
             .subscribe();
 
         // Fallback: refetch on tab focus/visibility change and lightweight polling
         const onVisibility = () => {
-            if (document.visibilityState === 'visible') {
+            if (document.visibilityState === 'visible' && !authError) {
                 fetchEvents();
             }
         };
         document.addEventListener('visibilitychange', onVisibility);
-        const poll = setInterval(fetchEvents, 30000);
+        const poll = setInterval(() => {
+            if (!authError) {
+                fetchEvents();
+            }
+        }, 30000);
 
         return () => {
             supabase.removeChannel(channel);
             document.removeEventListener('visibilitychange', onVisibility);
             clearInterval(poll);
         };
-    }, [supabase]);
+    }, [supabase, authError, fetchEvents]);
 
     // Get unique gear and user names for filters
     const uniqueGearNames = useMemo(() =>
@@ -404,6 +440,35 @@ export default function AdminCalendarPage() {
                                 </div>
                                 <h3 className="text-sm font-medium text-foreground mb-2">Loading Calendar</h3>
                                 <p className="text-sm text-muted-foreground">Fetching reservation data...</p>
+                            </div>
+                        </div>
+                    ) : authError ? (
+                        <div className="flex items-center justify-center h-64 bg-muted/30 rounded-xl border border-dashed">
+                            <div className="text-center max-w-md">
+                                <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+                                    <AlertCircle className="h-6 w-6 text-destructive" />
+                                </div>
+                                <h3 className="text-sm font-medium text-foreground mb-2">Authentication Error</h3>
+                                <p className="text-sm text-muted-foreground mb-4">{authError}</p>
+                                <div className="flex gap-2 justify-center">
+                                    <Button
+                                        onClick={() => {
+                                            setAuthError(null);
+                                            fetchEvents();
+                                        }}
+                                        variant="outline"
+                                        size="sm"
+                                    >
+                                        Retry
+                                    </Button>
+                                    <Button
+                                        onClick={() => window.location.href = '/login'}
+                                        variant="default"
+                                        size="sm"
+                                    >
+                                        Go to Login
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     ) : (
