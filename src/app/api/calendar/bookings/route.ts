@@ -42,7 +42,9 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        return NextResponse.json(data || []);
+        return NextResponse.json({
+            bookings: data || []
+        });
     } catch (error) {
         console.error('Unexpected error fetching calendar bookings:', error);
         return NextResponse.json(

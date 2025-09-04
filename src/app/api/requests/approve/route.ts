@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         }
 
         const lines: Array<{ gear_id: string; quantity: number }> = Array.isArray(req.gear_request_gears)
-            ? (req.gear_request_gears as any[]).map(l => ({ gear_id: l.gear_id as string, quantity: Math.max(1, Number(l.quantity ?? 1)) }))
+            ? req.gear_request_gears.map((l: { gear_id: string; quantity?: number }) => ({ gear_id: l.gear_id, quantity: Math.max(1, Number(l.quantity ?? 1)) }))
             : [];
 
         if (lines.length === 0) {
@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
                 .update({
                     available_quantity: upd.newAvailable,
                     status: upd.newStatus,
+                    checked_out_to: req.user_id,
                     current_request_id: requestId,
                     last_checkout_date: new Date().toISOString(),
                     due_date: calculatedDueDate,

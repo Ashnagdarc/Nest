@@ -30,7 +30,7 @@ interface RequestItem {
     user_id: string;
     profiles?: {
         full_name: string;
-    };
+    } | null;
 }
 
 export function UnifiedNotificationsPanel() {
@@ -54,7 +54,8 @@ export function UnifiedNotificationsPanel() {
                 });
                 
                 if (response.ok) {
-                    const allBookings: BookingItem[] = await response.json();
+                    const responseData = await response.json();
+                    const allBookings: BookingItem[] = responseData.bookings || [];
                     // Filter for pending bookings only
                     bookings = allBookings.filter((booking) => booking.status === 'Pending')
                         .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
@@ -66,26 +67,31 @@ export function UnifiedNotificationsPanel() {
             }
 
             // Fetch pending gear requests
-            const { data: requests, error: requestsError } = await supabase
+            const { data: requestsData } = await supabase
                 .from('gear_requests')
                 .select(`
-                    id,
-                    reason,
-                    created_at,
+                    id, 
+                    reason, 
+                    created_at, 
                     user_id,
-                    profiles!gear_requests_user_id_fkey (
+                    profiles!gear_requests_user_id_fkey(
                         full_name
                     )
                 `)
-                .eq('status', 'pending')
+                .eq('status', 'Pending')
                 .order('created_at', { ascending: false });
 
-            if (requestsError) {
-                console.error('Error fetching gear requests:', requestsError);
-            }
+            // Transform the data to match our interface
+            const requests: RequestItem[] = (requestsData || []).map(item => ({
+                id: item.id,
+                reason: item.reason,
+                created_at: item.created_at,
+                user_id: item.user_id,
+                profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles
+            }));
 
             setPendingBookings(bookings || []);
-            setPendingRequests((requests as unknown as RequestItem[]) || []);
+            setPendingRequests(requests || []);
             setIsLoading(false);
         }
 
@@ -106,7 +112,7 @@ export function UnifiedNotificationsPanel() {
                 event: '*',
                 schema: 'public',
                 table: 'gear_requests',
-                filter: 'status=eq.pending'
+                filter: 'status=eq.Pending'
             }, fetchNotifications)
             .subscribe();
 

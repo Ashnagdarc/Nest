@@ -21,6 +21,7 @@ import PageHeader from '@/components/foundation/PageHeader';
 
 // Import the UnifiedNotificationsPanel
 import { UnifiedNotificationsPanel } from '@/components/admin/UnifiedNotificationsPanel';
+import { RecentActivity } from '@/components/admin/RecentActivity';
 
 // Add types for analytics views
 interface WeeklyTrendRow {
@@ -298,16 +299,10 @@ export default function AdminDashboardPage() {
     // Compute stats
     const totalEquipment = gears.reduce((sum, g) => sum + (g.quantity ?? 1), 0);
     // const availableEquipment = gears.reduce((sum, g) => sum + (g.available_quantity ?? 0), 0);
-    const checkedOutEquipment = gears
-        .filter((g: Gear) => g.status === "Checked Out" || g.status === "Partially Checked Out")
-        .reduce((sum, g) => {
-            // Calculate how many of this gear are checked out
-            const totalQuantity = g.quantity ?? 1;
-            const availableQuantity = g.available_quantity ?? 0;
-            const checkedOutQuantity = totalQuantity - availableQuantity;
-            return sum + Math.max(0, checkedOutQuantity);
-        }, 0);
-    const underRepairEquipment = gears.filter((g: Gear) => g.status === "Under Repair").length;
+    // Note: status and available_quantity are in gear_states table, not gears table
+    // For now, we'll use a simplified calculation based on quantity
+    const checkedOutEquipment = 0; // TODO: Implement proper gear state tracking
+    const underRepairEquipment = 0; // TODO: Implement proper gear state tracking
     const utilizationRate = totalEquipment > 0 ? Math.round((checkedOutEquipment / totalEquipment) * 100) : 0;
 
     const totalUsers = users.length;
@@ -491,27 +486,7 @@ export default function AdminDashboardPage() {
                             <UnifiedNotificationsPanel />
                         </div>
                         <div className="sm:col-span-2 lg:col-span-3">
-                            <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full"}>
-                                <div className="font-semibold text-base mb-3">Recent Activity</div>
-                                <ul className="text-sm space-y-2">
-                                    <li className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                        Check-in Activity – 1 day ago
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                        Request Approved – 2 days ago
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                        Equipment Added – 3 days ago
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                        User Registered – 4 days ago
-                                    </li>
-                                </ul>
-                            </div>
+                            <RecentActivity />
                         </div>
 
                         {/* Equipment Categories (compact chips) */}

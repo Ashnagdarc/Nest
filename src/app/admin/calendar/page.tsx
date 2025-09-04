@@ -131,12 +131,13 @@ export default function AdminCalendarPage() {
             if (!response.ok) {
                 throw new Error('Failed to fetch calendar bookings');
             }
-            const bookingsData = await response.json();
+            const bookingsResponse = await response.json();
+            const bookingsData = bookingsResponse.bookings || [];
 
             // Admin calendar page bookings data loaded
 
             // Process bookings into calendar events
-            const calendarEvents = (bookingsData || []).map((booking: BookingData): CalendarEvent => ({
+            const calendarEvents = bookingsData.map((booking: BookingData): CalendarEvent => ({
                 id: booking.id,
                 title: `${booking.gear_name || 'Gear'} - ${booking.user_full_name || 'Unknown User'}`,
                 start: new Date(booking.start_date),

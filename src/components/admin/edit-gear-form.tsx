@@ -48,8 +48,7 @@ interface EditGearFormProps {
         category?: string;
         description?: string | null;
         serial_number?: string;
-        serial?: string; // Legacy field
-        status?: "Available" | "Damaged" | "Under Repair" | "New" | "Checked Out" | "Partially Checked Out";
+        status?: string;
         purchase_date?: string | null;
         condition?: string | null;
         image_url?: string | null;
