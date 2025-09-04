@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Calendar, momentLocalizer, Views, SlotInfo } from "react-big-calendar";
+import { Calendar, momentLocalizer, SlotInfo } from "react-big-calendar";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { createClient } from '@/lib/supabase/client';
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Check, Loader2, CalendarDays, Clock, AlertCircle, Package } from "lucide-react";
 import { format } from "date-fns";
 import { Textarea } from "@/components/ui/textarea";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -18,6 +19,7 @@ import { logError as loggerError, logInfo as loggerInfo } from '@/lib/logger';
 import ReactSelect from "react-select";
 import { useIsMobile } from '@/hooks/use-mobile';
 import { apiGet } from '@/lib/apiClient';
+import { cn } from '@/lib/utils';
 
 const localizer = momentLocalizer(moment);
 
@@ -404,15 +406,7 @@ export default function UserCalendarPage() {
     }, [supabase]);
 
 
-    // Handle gear selection/deselection
-    const handleGearSelection = (gearId: string) => {
-        setSelectedGears(prev => {
-            if (prev.includes(gearId)) {
-                return prev.filter(id => id !== gearId);
-            }
-            return [...prev, gearId];
-        });
-    };
+
 
     // Handle booking submission
     const handleBookingSubmit = async () => {
@@ -785,7 +779,7 @@ export default function UserCalendarPage() {
                                             onView={(view) => setViewMode(view as 'month' | 'week' | 'day')}
                                             eventPropGetter={eventStyleGetter}
                                             popup
-                                            tooltipAccessor={(event: any) =>
+                                            tooltipAccessor={(event: CalendarEvent) =>
                                                 `${event.title}\nStatus: ${event.resource.status}\n${event.resource.reason ? `Reason: ${event.resource.reason}` : ''}`
                                             }
                                             className="rounded-xl"
@@ -908,7 +902,7 @@ export default function UserCalendarPage() {
                                         }}
                                         placeholder="Search and select equipment..."
                                         className="w-full"
-                                        isOptionDisabled={(option, _selectValue) => !!option.isDisabled}
+                                        isOptionDisabled={(option) => !!option.isDisabled}
                                         formatOptionLabel={(option) => (
                                             <div className="flex items-center gap-3 py-1">
                                                 <div className={cn(
