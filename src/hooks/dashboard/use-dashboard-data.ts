@@ -118,16 +118,18 @@ export function useDashboardData() {
             ] = await Promise.allSettled([
                 // User stats
                 (async () => {
-                    // Fetch gears with both "Checked Out" and "Partially Checked Out" statuses
-                    const [checkoutsRes, partiallyCheckedOutRes, availableRes] = await Promise.all([
+                    // Fetch gears with different statuses
+                    const [checkoutsRes, partiallyCheckedOutRes, availableRes, allGearsRes] = await Promise.all([
                         apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Checked%20Out`),
                         apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Partially%20Checked%20Out`),
-                        apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Available&pageSize=1000`)
+                        apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Available&pageSize=1000`),
+                        apiGet<{ data: any[]; error: string | null }>(`/api/gears?pageSize=1000`)
                     ]);
 
                     const checkouts = checkoutsRes.data || [];
                     const partiallyCheckedOut = partiallyCheckedOutRes.data || [];
                     const available = availableRes.data || [];
+                    const allGears = allGearsRes.data || [];
                     const now = new Date();
 
                     // Combine both statuses and filter by user
@@ -144,7 +146,7 @@ export function useDashboardData() {
                             return sum + Math.max(0, checkedOutQuantity);
                         }, 0),
                         overdue: overdueGears.length,
-                        available: available.reduce((sum: number, g: any) => sum + (g.available_quantity ?? 1), 0)
+                        available: allGears.reduce((sum: number, g: any) => sum + Math.max(0, g.available_quantity ?? 0), 0)
                     };
                 })(),
 

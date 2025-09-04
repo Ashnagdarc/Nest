@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
+const calculateDueDate = (duration: string): string => {
+    const now = new Date();
+    const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()));
+
+    let dueDate: Date;
+
+    switch (duration) {
+        case "24hours": dueDate = new Date(utcNow.getTime() + 24 * 60 * 60 * 1000); break;
+        case "48hours": dueDate = new Date(utcNow.getTime() + 48 * 60 * 60 * 1000); break;
+        case "72hours": dueDate = new Date(utcNow.getTime() + 72 * 60 * 60 * 1000); break;
+        case "1 week": dueDate = new Date(utcNow.getTime() + 7 * 24 * 60 * 60 * 1000); break;
+        case "2 weeks": dueDate = new Date(utcNow.getTime() + 14 * 24 * 60 * 60 * 1000); break;
+        case "Month": dueDate = new Date(utcNow.getTime() + 30 * 24 * 60 * 60 * 1000); break;
+        case "year": dueDate = new Date(utcNow.getTime() + 365 * 24 * 60 * 60 * 1000); break;
+        default: dueDate = new Date(utcNow.getTime() + 7 * 24 * 60 * 60 * 1000); break;
+    }
+    return dueDate.toISOString();
+};
+
 export async function POST(request: NextRequest) {
     try {
         const { requestId } = await request.json();
@@ -13,7 +32,7 @@ export async function POST(request: NextRequest) {
         // Load request with lines
         const { data: req, error: reqErr } = await supabase
             .from('gear_requests')
-            .select('id, user_id, status, due_date, gear_request_gears(gear_id, quantity)')
+            .select('id, user_id, status, due_date, expected_duration, gear_request_gears(gear_id, quantity)')
             .eq('id', requestId)
             .single();
         if (reqErr || !req) {
@@ -51,6 +70,9 @@ export async function POST(request: NextRequest) {
             updates.push({ gear_id: g.id, newAvailable, newStatus });
         }
 
+        // Calculate due date based on expected duration at approval time
+        const calculatedDueDate = calculateDueDate(req.expected_duration || '1 week');
+
         // Apply updates
         for (const upd of updates) {
             const { error: uErr } = await supabase
@@ -60,7 +82,7 @@ export async function POST(request: NextRequest) {
                     status: upd.newStatus,
                     current_request_id: requestId,
                     last_checkout_date: new Date().toISOString(),
-                    due_date: req.due_date ?? null,
+                    due_date: calculatedDueDate,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', upd.gear_id);
@@ -81,7 +103,13 @@ export async function POST(request: NextRequest) {
 
         const { error: approveErr } = await supabase
             .from('gear_requests')
-            .update({ status: 'approved', approved_at: new Date().toISOString(), checkout_date: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .update({
+                status: 'approved',
+                approved_at: new Date().toISOString(),
+                checkout_date: new Date().toISOString(),
+                due_date: calculatedDueDate,
+                updated_at: new Date().toISOString()
+            })
             .eq('id', requestId);
         if (approveErr) {
             return NextResponse.json({ success: false, error: `Failed to approve request: ${approveErr.message}` }, { status: 500 });
