@@ -23,7 +23,7 @@ type Notification = {
     created_at: string;
     link?: string;
     category?: string;
-    metadata?: Record<string, unknown>;
+    metadata?: Record<string, any>;
 };
 
 type NotificationContextType = {
@@ -133,7 +133,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         setError(null);
         try {
             // Use centralized API client PUT endpoint
-            const { error } = await apiPut<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });
+            const { data, error } = await apiPut<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });
             if (error) {
                 setError(`Failed to mark notification as read: ${error}`);
                 return false;
@@ -158,7 +158,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         setError(null);
         try {
             // Use bulk update via PUT (server handles current user session)
-            const { error } = await apiPut<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
+            const { data, error } = await apiPut<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
             if (error) {
                 setError(`Failed to mark all notifications as read: ${error}`);
                 return false;

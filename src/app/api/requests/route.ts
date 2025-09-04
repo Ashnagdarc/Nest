@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import type { Database } from '@/types/supabase';
 
@@ -6,8 +7,21 @@ export async function GET(request: NextRequest) {
     try {
         console.log('🔍 Admin requests API called');
 
-        // Create and await the Supabase client with admin privileges
-        const supabase = await createSupabaseServerClient(true);
+        // Create direct Supabase client with service role key to bypass RLS
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+        
+        if (!supabaseUrl || !supabaseServiceKey) {
+            console.error('Missing Supabase environment variables');
+            return NextResponse.json({ data: null, error: 'Server configuration error' }, { status: 500 });
+        }
+        
+        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        });
 
         // Extract query parameters
         const { searchParams } = new URL(request.url);
@@ -22,6 +36,8 @@ export async function GET(request: NextRequest) {
 
         // Build the query - with service role key, we can bypass RLS
         // Include gear details, states, and user profiles
+        // Use LEFT JOIN to include requests even without gear associations
+        // Explicitly bypass RLS for service role queries
         let query = supabase
             .from('gear_requests')
             .select(`
@@ -31,16 +47,16 @@ export async function GET(request: NextRequest) {
                     full_name,
                     email
                 ),
-                gear_request_gears!inner (
+                gear_request_gears (
                     quantity,
-                    gears!inner (
+                    gears (
                         id,
                         name,
                         category,
                         description,
                         serial_number,
                         quantity,
-                        gear_states!inner (
+                        gear_states (
                             status,
                             available_quantity,
                             checked_out_to,
@@ -176,4 +192,4 @@ export async function POST(request: NextRequest) {
         console.error('Unexpected error creating request:', error);
         return NextResponse.json({ data: null, error: 'Failed to create request' }, { status: 500 });
     }
-} 
+}

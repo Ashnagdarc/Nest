@@ -326,6 +326,8 @@ function RequestGearContent() {
         const { data, error } = await supabase
           .from('profiles')
           .select('id, email, full_name, role')
+          .eq('status', 'Active')
+          .is('deleted_at', null)
           .order('full_name');
 
         if (error) {

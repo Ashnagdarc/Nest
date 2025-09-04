@@ -82,8 +82,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
   useEffect(() => {
     const subscription = form.watch((values) => {
       // Don't persist File objects (image)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { image_url, ...rest } = values;
+      const { image_url: _, ...rest } = values;
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(rest));
     });
     return () => subscription.unsubscribe();

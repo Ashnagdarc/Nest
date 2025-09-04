@@ -11,30 +11,34 @@ import { Button } from "@/components/ui/button";
 import { Check, Loader2, CalendarDays, Clock, AlertCircle, Package } from "lucide-react";
 import { format } from "date-fns";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { logError as loggerError, logInfo as loggerInfo } from '@/lib/logger';
-import ReactSelect, { MultiValue } from "react-select";
+import ReactSelect from "react-select";
 import { useIsMobile } from '@/hooks/use-mobile';
 import { apiGet } from '@/lib/apiClient';
 
 const localizer = momentLocalizer(moment);
 
-interface CalendarBooking {
+interface BookingData {
     id: string;
     gear_id: string;
     user_id: string;
-    title: string;
+    gear_name?: string;
+    gear_category?: string;
     start_date: string;
     end_date: string;
     status: string;
     reason: string;
     notes?: string;
     is_all_day: boolean;
+    user_full_name?: string;
+    user_email?: string;
+    user_role?: string;
     color?: string;
+    approver_full_name?: string;
+    approved_at?: string;
 }
 
 interface Gear {
@@ -142,60 +146,7 @@ const eventStyleGetter = (event: CalendarEvent) => {
     };
 };
 
-// Custom toolbar to show current date range and navigation
-const CustomToolbar = ({ label, onNavigate, onView }: any) => {
-    return (
-        <div className="flex flex-wrap items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-                <Button
-                    variant="outline" size="sm"
-                    onClick={() => onNavigate('TODAY')}
-                >
-                    Today
-                </Button>
-                <Button
-                    variant="outline" size="sm"
-                    onClick={() => onNavigate('PREV')}
-                >
-                    Back
-                </Button>
-                <Button
-                    variant="outline" size="sm"
-                    onClick={() => onNavigate('NEXT')}
-                >
-                    Next
-                </Button>
-            </div>
-            <h2 className="text-lg font-semibold">{label}</h2>
-            <div className="flex space-x-2">
-                <Button
-                    variant={Views.MONTH === 'month' ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => onView(Views.MONTH)}
-                >
-                    Month
-                </Button>
-                <Button
-                    variant={Views.WEEK === 'week' ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => onView(Views.WEEK)}
-                >
-                    Week
-                </Button>
-                <Button
-                    variant={Views.DAY === 'day' ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => onView(Views.DAY)}
-                >
-                    Day
-                </Button>
-            </div>
-        </div>
-    );
-};
 
-// Add this helper to detect dark mode
-const isDarkMode = typeof window !== 'undefined' && (document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches);
 
 export default function UserCalendarPage() {
     const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -267,7 +218,8 @@ export default function UserCalendarPage() {
                 throw new Error(`Failed to fetch bookings: ${errorText}`);
             }
 
-            const bookingsData = await response.json();
+            const bookingsResponse = await response.json();
+            const bookingsData = bookingsResponse.bookings || [];
 
             loggerInfo('Bookings fetched successfully', 'fetchEvents', {
                 count: bookingsData?.length || 0,
@@ -275,7 +227,7 @@ export default function UserCalendarPage() {
             });
 
             // Process bookings into events
-            const calendarEvents = (bookingsData || []).map((booking: any) => {
+            const calendarEvents = bookingsData.map((booking: BookingData) => {
                 const isOwnBooking = booking.user_id === currentUserId;
                 return {
                     id: booking.id,
@@ -334,7 +286,7 @@ export default function UserCalendarPage() {
     };
 
     // Handle event selection - show reservation details
-    const handleSelectEvent = (event: any) => {
+    const handleSelectEvent = (event: CalendarEvent) => {
         setSelectedEvent(event);
     };
 
