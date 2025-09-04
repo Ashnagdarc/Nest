@@ -11,7 +11,7 @@ import {
     loadSoundPreferences,
     playLoginNotificationSound
 } from '@/lib/soundUtils';
-import { apiGet, apiPut, apiPost } from '@/lib/apiClient';
+import { apiGet, apiPut } from '@/lib/apiClient';
 
 // Simplified notification type matching our new DB schema
 type Notification = {
@@ -23,7 +23,7 @@ type Notification = {
     created_at: string;
     link?: string;
     category?: string;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
 };
 
 type NotificationContextType = {
@@ -91,7 +91,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const fetchNotifications = useCallback(async () => {
         if (!userId) {
-            console.log('No user ID available');
+            // No user ID available
             return;
         }
 
@@ -99,7 +99,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         setError(null);
 
         try {
-            console.log('Fetching notifications for user:', userId);
+            // Fetching notifications for user
             // Use centralized API client and RESTful endpoint
             const { data, error } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications?userId=${userId}`);
             if (error) {
@@ -133,7 +133,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         setError(null);
         try {
             // Use centralized API client PUT endpoint
-            const { data, error } = await apiPut<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });
+            const { error } = await apiPut<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });
             if (error) {
                 setError(`Failed to mark notification as read: ${error}`);
                 return false;
@@ -158,7 +158,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         setError(null);
         try {
             // Use bulk update via PUT (server handles current user session)
-            const { data, error } = await apiPut<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
+            const { error } = await apiPut<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
             if (error) {
                 setError(`Failed to mark all notifications as read: ${error}`);
                 return false;
@@ -196,7 +196,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             .channel('notifications')
             .on('postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-                (payload: { new: unknown }) => {
+                (payload: { new: Notification }) => {
                     // Reset notification state for new notification
                     resetNotificationState(payload.new.id);
 
@@ -235,4 +235,4 @@ export function useNotifications() {
         throw new Error('useNotifications must be used within a NotificationProvider');
     }
     return context;
-} 
+}

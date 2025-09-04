@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
 import Image from "next/image";
-import { isFileList, isFile, getFirstFile } from "@/lib/utils/browser-safe";
+import { isFileList, isFile } from "@/lib/utils/browser-safe";
 
 const gearSchema = z.object({
     name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -31,7 +31,7 @@ const gearSchema = z.object({
     }),
     purchase_date: z.string().optional().nullable(),
     condition: z.string().optional().nullable(),
-    image_url: z.any().optional().transform(val => {
+    image_url: z.unknown().optional().transform(val => {
         if (isFileList(val) && val.length > 0) return val[0];
         if (isFile(val)) return val;
         return undefined;
@@ -42,13 +42,25 @@ const gearSchema = z.object({
 type GearFormValues = z.infer<typeof gearSchema>;
 
 interface EditGearFormProps {
-    gear: any;
+    gear: {
+        id?: string;
+        name?: string;
+        category?: string;
+        description?: string | null;
+        serial_number?: string;
+        serial?: string; // Legacy field
+        status?: "Available" | "Damaged" | "Under Repair" | "New" | "Checked Out" | "Partially Checked Out";
+        purchase_date?: string | null;
+        condition?: string | null;
+        image_url?: string | null;
+        quantity?: number;
+    };
     onSubmit: (data: GearFormValues) => void;
     isSubmitting: boolean;
 }
 
 export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearFormProps) {
-    console.log("EditGearForm received gear:", gear); // Debug log
+    // Debug: EditGearForm received gear
     const [imagePreview, setImagePreview] = useState<string | null>(gear?.image_url || null);
     const LOCAL_STORAGE_KEY = gear?.id ? `edit-gear-form-draft-${gear.id}` : undefined;
 
@@ -83,6 +95,7 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
         if (!LOCAL_STORAGE_KEY) return;
         const subscription = form.watch((values) => {
             // Don't persist File objects (image_url)
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const { image_url, ...rest } = values;
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(rest));
         });
@@ -97,7 +110,7 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
     // Update form when gear changes
     useEffect(() => {
         if (gear) {
-            console.log("Resetting form with gear:", gear); // Debug log
+            // Debug: Resetting form with gear data
             form.reset({
                 name: gear.name || "",
                 category: gear.category || "",
@@ -129,7 +142,7 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
     };
 
     const handleFormSubmit = (data: GearFormValues) => {
-        console.log("Form submitted with values:", data); // Debug log
+        // Debug: Form submitted with values
         onSubmit(data);
         clearDraft();
     };
@@ -333,4 +346,4 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
             </div>
         </Form>
     );
-} 
+}

@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog"; // Import for close button
-import { isFileList, getFirstFile } from "@/lib/utils/browser-safe";
+import { isFileList } from "@/lib/utils/browser-safe";
 
 const gearSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -31,7 +31,7 @@ const gearSchema = z.object({
   status: z.enum(["Available", "Damaged", "Under Repair", "New"], {
     required_error: "Please select an initial status.",
   }),
-  image_url: z.any().optional().transform(val => {
+  image_url: z.unknown().optional().transform(val => {
     if (isFileList(val) && val.length > 0) return val[0];
     return undefined;
   }),
@@ -82,6 +82,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
   useEffect(() => {
     const subscription = form.watch((values) => {
       // Don't persist File objects (image)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { image_url, ...rest } = values;
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(rest));
     });
@@ -93,7 +94,7 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
 
   const handleFormSubmit = async (data: GearFormValues) => {
     setIsLoading(true);
-    console.log("Form data submitted:", data);
+    // Debug: Form data submission
 
     // TODO: Add actual API call to save the gear data
     // Simulate API call delay

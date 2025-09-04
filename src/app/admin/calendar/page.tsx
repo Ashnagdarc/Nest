@@ -14,15 +14,36 @@ import { Badge } from "@/components/ui/badge";
 import { Box, Loader2, CheckCircle2, XCircle, AlertCircle, Calendar as CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { logError as loggerError } from '@/lib/logger';
+
 
 const localizer = momentLocalizer(moment);
 
-interface CalendarBooking {
+interface CalendarEvent {
+    id: string;
+    title: string;
+    start: Date;
+    end: Date;
+    allDay: boolean;
+    resource: {
+        status: string;
+        gearId: string;
+        gearName: string;
+        gearCategory: string;
+        userId: string;
+        userName: string;
+        userEmail: string;
+        reason: string;
+        notes?: string;
+        color?: string;
+        approvedAt?: string;
+        approvedBy?: string;
+    };
+}
+
+interface BookingData {
     id: string;
     gear_id: string;
     user_id: string;
-    title: string;
     start_date: string;
     end_date: string;
     status: string;
@@ -31,21 +52,15 @@ interface CalendarBooking {
     is_all_day: boolean;
     color?: string;
     approved_at?: string;
-    approved_by?: string;
-}
-
-interface Gear {
-    id: string;
-    name: string;
-    category: string;
-}
-
-interface GearData {
-    name: string;
+    gear_name: string;
+    gear_category: string;
+    user_full_name: string;
+    user_email: string;
+    approver_full_name?: string;
 }
 
 // Custom event styling
-const eventStyleGetter = (event: any) => {
+const eventStyleGetter = (event: CalendarEvent) => {
     const status = event.resource?.status?.toLowerCase() || '';
     const style: React.CSSProperties = {
         borderRadius: '4px',
@@ -77,29 +92,26 @@ const eventStyleGetter = (event: any) => {
     return { style };
 };
 
-// Type predicate for string filtering
-const isNonEmptyString = (value: unknown): value is string => {
-    return typeof value === 'string' && value.length > 0;
-};
+
 
 export default function AdminCalendarPage() {
-    const [events, setEvents] = useState<any[]>([]);
+    const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [gearFilter, setGearFilter] = useState("__all__");
     const [userFilter, setUserFilter] = useState("__all__");
-    const [selectedEvent, setSelectedEvent] = useState<any>(null);
+    const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
     const [adminNotes, setAdminNotes] = useState("");
     const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
 
     const fetchEvents = useCallback(async () => {
         setIsLoading(true);
         try {
             // Get current user for admin check
             const { data: { user }, error: userError } = await supabase.auth.getUser();
-            console.log('AdminCalendarPage: user', user, 'userError', userError);
+            // Admin calendar page user authentication
 
-            if (!user) throw new Error('Not authenticated');
+            if (userError || !user) throw new Error('Not authenticated');
 
             // Check if user is admin
             const { data: profile, error: profileError } = await supabase
@@ -108,26 +120,23 @@ export default function AdminCalendarPage() {
                 .eq('id', user.id)
                 .single();
 
-            console.log('AdminCalendarPage: profile', profile, 'profileError', profileError);
+            // Admin calendar page profile loading
 
-            if (!profile || profile.role !== 'Admin') {
+            if (profileError || !profile || profile.role !== 'Admin') {
                 throw new Error('Not authorized');
             }
 
-            // Fetch calendar bookings
-            const { data: bookingsData, error: bookingsError } = await supabase
-                .from('gear_calendar_bookings_with_profiles')
-                .select('*')
-                .order('start_date');
-
-            console.log('AdminCalendarPage: bookingsData', bookingsData, 'bookingsError', bookingsError);
-
-            if (bookingsError) {
-                throw bookingsError;
+            // Fetch calendar bookings using secure API endpoint
+            const response = await fetch('/api/calendar/bookings?startDate=2020-01-01&endDate=2030-12-31');
+            if (!response.ok) {
+                throw new Error('Failed to fetch calendar bookings');
             }
+            const bookingsData = await response.json();
+
+            // Admin calendar page bookings data loaded
 
             // Process bookings into calendar events
-            const calendarEvents = (bookingsData || []).map((booking: any) => ({
+            const calendarEvents = (bookingsData || []).map((booking: BookingData): CalendarEvent => ({
                 id: booking.id,
                 title: `${booking.gear_name || 'Gear'} - ${booking.user_full_name || 'Unknown User'}`,
                 start: new Date(booking.start_date),
@@ -191,7 +200,7 @@ export default function AdminCalendarPage() {
             document.removeEventListener('visibilitychange', onVisibility);
             clearInterval(poll);
         };
-    }, [supabase, fetchEvents]);
+    }, [supabase]);
 
     // Get unique gear and user names for filters
     const uniqueGearNames = useMemo(() =>
@@ -214,15 +223,15 @@ export default function AdminCalendarPage() {
 
     // Filter events
     const filteredEvents = useMemo(() => {
-        return events.filter(e => {
-            const gearMatch = gearFilter === "__all__" || e.resource.gearName === gearFilter;
-            const userMatch = userFilter === "__all__" || e.resource.userName === userFilter;
+        return events.filter(event => {
+            const gearMatch = gearFilter === "__all__" || event.resource.gearName === gearFilter;
+            const userMatch = userFilter === "__all__" || event.resource.userName === userFilter;
             return gearMatch && userMatch;
         });
     }, [events, gearFilter, userFilter]);
 
     // Handle event click
-    const handleSelectEvent = useCallback((event: any) => {
+    const handleSelectEvent = useCallback((event: CalendarEvent) => {
         setSelectedEvent(event);
         setAdminNotes("");
     }, []);
@@ -263,13 +272,13 @@ export default function AdminCalendarPage() {
             const { data: userProfile } = await supabase
                 .from('profiles')
                 .select('full_name, email')
-                .eq('id', selectedEvent.user_id)
+                .eq('id', selectedEvent.resource.userId)
                 .single();
             // Fetch gear name
             const { data: gearData } = await supabase
                 .from('gears')
                 .select('name')
-                .eq('id', selectedEvent.resource.gear_id)
+                .eq('id', selectedEvent.resource.gearId)
                 .single();
             // Send Google Chat notification for booking action
             await fetch('/api/notifications/google-chat', {
@@ -283,7 +292,7 @@ export default function AdminCalendarPage() {
                         userName: userProfile?.full_name || 'Unknown User',
                         userEmail: userProfile?.email || 'Unknown Email',
                         gearName: gearData?.name || 'Unknown Gear',
-                        bookingDate: selectedEvent.resource.date,
+                        bookingDate: format(selectedEvent.start, 'PPP'),
                         notes: adminNotes,
                     }
                 })
@@ -409,7 +418,7 @@ export default function AdminCalendarPage() {
                                     onSelectEvent={handleSelectEvent}
                                     eventPropGetter={eventStyleGetter}
                                     popup
-                                    tooltipAccessor={(event: any) =>
+                                    tooltipAccessor={(event: CalendarEvent) =>
                                         `${event.title}\nStatus: ${event.resource.status}\n${event.resource.reason ? `Reason: ${event.resource.reason}` : ''}`
                                     }
                                     className="rounded-xl"
@@ -485,7 +494,7 @@ export default function AdminCalendarPage() {
                                         {selectedEvent.resource.status === 'Pending' && <AlertCircle className="h-3 w-3 mr-1" />}
                                         {selectedEvent.resource.status}
                                     </Badge>
-                                    {selectedEvent.resource.approvedBy && (
+                                    {selectedEvent.resource.approvedBy && selectedEvent.resource.approvedAt && (
                                         <p className="text-sm text-muted-foreground mt-2">
                                             Approved by {selectedEvent.resource.approvedBy} on {format(new Date(selectedEvent.resource.approvedAt), 'PPp')}
                                         </p>
@@ -502,11 +511,11 @@ export default function AdminCalendarPage() {
                                 <div className="pl-6 bg-muted/30 rounded-lg p-3 space-y-2">
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm font-medium">Start:</span>
-                                        <span className="text-sm">{format(selectedEvent.start, 'PPP pp')}</span>
+                                        <span className="text-sm">{format(selectedEvent.start, 'PPP p')}</span>
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm font-medium">End:</span>
-                                        <span className="text-sm">{format(selectedEvent.end, 'PPP pp')}</span>
+                                        <span className="text-sm">{format(selectedEvent.end, 'PPP p')}</span>
                                     </div>
                                 </div>
                             </div>
@@ -591,4 +600,4 @@ export default function AdminCalendarPage() {
             </Dialog>
         </div>
     );
-} 
+}
