@@ -4,33 +4,43 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     try {
+        console.log('[Calendar API] Starting request processing...');
+
         const supabase = await createSupabaseServerClient();
+        console.log('[Calendar API] Supabase client created successfully');
 
         // Verify authentication - RLS requires authenticated user
         const { data: { user }, error: authError } = await supabase.auth.getUser();
+        console.log('[Calendar API] Auth check result:', { hasUser: !!user, error: authError });
 
         if (authError || !user) {
             console.error('Calendar API: Authentication failed:', authError);
             return NextResponse.json(
-                { error: 'Authentication required' },
+                { error: 'Authentication required', details: authError?.message },
                 { status: 401 }
             );
         }
 
+        console.log('[Calendar API] User authenticated:', { userId: user.id, email: user.email });
+
         // Check if user is admin for calendar access
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, full_name, email')
             .eq('id', user.id)
             .single();
+
+        console.log('[Calendar API] Profile check result:', { profile, error: profileError });
 
         if (profileError || !profile || profile.role !== 'Admin') {
             console.error('Calendar API: Authorization failed:', profileError, 'Profile:', profile);
             return NextResponse.json(
-                { error: 'Admin access required' },
+                { error: 'Admin access required', details: profileError?.message },
                 { status: 403 }
             );
         }
+
+        console.log('[Calendar API] User authorized as admin:', { role: profile.role, name: profile.full_name });
 
         const startDate = searchParams.get('startDate');
         const endDate = searchParams.get('endDate');
@@ -42,12 +52,25 @@ export async function GET(request: NextRequest) {
         const defaultStartDate = startDate || '1900-01-01';
         const defaultEndDate = endDate || '2100-12-31';
 
+        console.log('[Calendar API] Calling database function with params:', {
+            startDate: defaultStartDate,
+            endDate: defaultEndDate,
+            userId,
+            gearId
+        });
+
         // Use the secure function that applies RLS logic
         const { data, error } = await supabase.rpc('get_calendar_bookings_with_profiles', {
             start_date_param: defaultStartDate,
             end_date_param: defaultEndDate,
             user_id_param: userId || null,
             gear_id_param: gearId || null
+        });
+
+        console.log('[Calendar API] Database function result:', {
+            hasData: !!data,
+            dataCount: data ? data.length : 0,
+            error: error?.message
         });
 
         if (error) {
@@ -57,6 +80,8 @@ export async function GET(request: NextRequest) {
                 { status: 500 }
             );
         }
+
+        console.log('[Calendar API] Successfully fetched bookings:', data?.length || 0);
 
         return NextResponse.json({
             bookings: data || []
