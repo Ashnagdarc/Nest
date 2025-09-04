@@ -61,8 +61,35 @@ interface GearOption {
     unitNumber?: number; // Unit number for multi-quantity items
 }
 
+interface EventResource {
+    id?: string;
+    status?: string;
+    isOwnBooking?: boolean;
+    color?: string;
+    gearName?: string;
+    gearCategory?: string;
+    userName?: string;
+    userEmail?: string;
+    reason?: string;
+    notes?: string;
+    canCancel?: boolean;
+    canApprove?: boolean;
+    canReject?: boolean;
+    approvedBy?: string;
+    approvedAt?: string;
+}
+
+interface CalendarEvent {
+    id: string;
+    title: string;
+    start: Date;
+    end: Date;
+    allDay: boolean;
+    resource?: EventResource;
+}
+
 // Custom event styling with better visual feedback
-const eventStyleGetter = (event: any) => {
+const eventStyleGetter = (event: CalendarEvent) => {
     const status = event.resource?.status?.toLowerCase() || '';
     const isOwnBooking = event.resource?.isOwnBooking;
 
@@ -171,7 +198,7 @@ const CustomToolbar = ({ label, onNavigate, onView }: any) => {
 const isDarkMode = typeof window !== 'undefined' && (document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches);
 
 export default function UserCalendarPage() {
-    const [events, setEvents] = useState<any[]>([]);
+    const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [selectedGears, setSelectedGears] = useState<string[]>([]);
     const [availableGear, setAvailableGear] = useState<Gear[]>([]);
     const [selectedGearOptions, setSelectedGearOptions] = useState<GearOption[]>([]);
@@ -185,7 +212,7 @@ export default function UserCalendarPage() {
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
-    const [selectedEvent, setSelectedEvent] = useState<any>(null);
+    const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
     const [availableGearOptions, setAvailableGearOptions] = useState<GearOption[]>([]);
     const [adminNotes, setAdminNotes] = useState<string>('');
     const [isApproving, setIsApproving] = useState<boolean>(false);
@@ -221,22 +248,26 @@ export default function UserCalendarPage() {
             }
             setAvailableGear(gearData || []);
 
-            // Then fetch calendar bookings
-            const { data: bookingsData, error: bookingsError } = await supabase
-                .from('gear_calendar_bookings_with_profiles')
-                .select('*')
-                .order('start_date');
+            // Then fetch calendar bookings using secure API endpoint
+            const response = await fetch('/api/calendar/bookings', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
 
-            if (bookingsError) {
-                loggerError(bookingsError, 'fetchEvents', {
+            if (!response.ok) {
+                const errorText = await response.text();
+                loggerError(new Error(`API Error: ${response.status} - ${errorText}`), 'fetchEvents', {
                     userId: currentUserId,
-                    error: bookingsError.message,
-                    hint: bookingsError.hint,
-                    details: bookingsError.details
+                    status: response.status,
+                    error: errorText
                 });
-                console.error("Error fetching bookings:", bookingsError);
-                throw bookingsError;
+                console.error("Error fetching bookings:", errorText);
+                throw new Error(`Failed to fetch bookings: ${errorText}`);
             }
+
+            const bookingsData = await response.json();
 
             loggerInfo('Bookings fetched successfully', 'fetchEvents', {
                 count: bookingsData?.length || 0,
@@ -418,7 +449,7 @@ export default function UserCalendarPage() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [supabase, fetchEvents]);
+    }, [supabase]);
 
 
     // Handle gear selection/deselection
@@ -639,7 +670,7 @@ export default function UserCalendarPage() {
         };
 
         checkConflicts();
-    }, [selectedDates.start, selectedDates.end, availableGear]);
+    }, [selectedDates.start, selectedDates.end, availableGearOptions]);
 
     // Filter events for the selected day (mobile)
     const mobileDayEvents = events.filter(e => {
@@ -1142,14 +1173,14 @@ export default function UserCalendarPage() {
                         <div className="space-y-6">
                             <div className="p-4 rounded-lg bg-muted/50">
                                 <h4 className="text-sm font-medium mb-2">Gear Information</h4>
-                                <p className="text-lg font-semibold">{selectedEvent.resource.gearName}</p>
-                                <p className="text-sm text-muted-foreground">{selectedEvent.resource.gearCategory}</p>
+                                <p className="text-lg font-semibold">{selectedEvent.resource?.gearName || 'Unknown Gear'}</p>
+                                <p className="text-sm text-muted-foreground">{selectedEvent.resource?.gearCategory || 'Unknown Category'}</p>
                             </div>
 
-                            {!selectedEvent.resource.isOwnBooking && (
+                            {!selectedEvent.resource?.isOwnBooking && (
                                 <div className="p-4 rounded-lg bg-muted/50">
                                     <h4 className="text-sm font-medium mb-2">Booked By</h4>
-                                    <p className="text-lg font-semibold">{selectedEvent.resource.userName}</p>
+                                    <p className="text-lg font-semibold">{selectedEvent.resource?.userName || 'Unknown User'}</p>
                                 </div>
                             )}
 
@@ -1157,13 +1188,13 @@ export default function UserCalendarPage() {
                                 <h4 className="text-sm font-medium mb-2">Status</h4>
                                 <Badge variant="outline" className={cn(
                                     "text-base py-1.5",
-                                    selectedEvent.resource.status === 'Approved' && "bg-green-100 text-green-800",
-                                    selectedEvent.resource.status === 'Pending' && "bg-amber-100 text-amber-800",
-                                    selectedEvent.resource.status === 'Rejected' && "bg-red-100 text-red-800"
+                                    selectedEvent.resource?.status === 'Approved' && "bg-green-100 text-green-800",
+                                    selectedEvent.resource?.status === 'Pending' && "bg-amber-100 text-amber-800",
+                                    selectedEvent.resource?.status === 'Rejected' && "bg-red-100 text-red-800"
                                 )}>
-                                    {selectedEvent.resource.status}
+                                    {selectedEvent.resource?.status || 'Unknown'}
                                 </Badge>
-                                {selectedEvent.resource.approvedBy && (
+                                {selectedEvent.resource?.approvedBy && (
                                     <p className="text-sm text-muted-foreground mt-2">
                                         Approved by {selectedEvent.resource.approvedBy}
                                         {selectedEvent.resource.approvedAt && ` on ${format(new Date(selectedEvent.resource.approvedAt), 'PPp')}`}

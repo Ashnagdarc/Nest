@@ -14,6 +14,7 @@ interface BookingItem {
     end_date: string;
     user_id: string;
     gear_id: string;
+    status: string;
     gears?: {
         name: string;
     };
@@ -42,25 +43,49 @@ export function UnifiedNotificationsPanel() {
         async function fetchNotifications() {
             setIsLoading(true);
 
-            // Fetch pending calendar bookings using the same view as admin calendar (avoids cross-table RLS issues)
-            const { data: bookings, error: bookingsError } = await supabase
-                .from('gear_calendar_bookings_with_profiles')
-                .select('id, title, start_date, end_date, user_id, gear_id, gear_name, gear_category, user_full_name, user_email, status, created_at')
-                .eq('status', 'Pending')
-                .order('created_at', { ascending: false });
-            if (bookingsError) {
-                console.warn('UnifiedNotificationsPanel: bookingsError', bookingsError);
+            // Fetch pending calendar bookings using secure API endpoint
+            let bookings: BookingItem[] = [];
+            try {
+                const response = await fetch('/api/calendar/bookings', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                if (response.ok) {
+                    const allBookings: BookingItem[] = await response.json();
+                    // Filter for pending bookings only
+                    bookings = allBookings.filter((booking) => booking.status === 'Pending')
+                        .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+                } else {
+                    console.error('Failed to fetch calendar bookings');
+                }
+            } catch (error) {
+                console.error('Error fetching calendar bookings:', error);
             }
 
             // Fetch pending gear requests
-            const { data: requests } = await supabase
+            const { data: requests, error: requestsError } = await supabase
                 .from('gear_requests')
-                .select('id, reason, created_at, user_id, profiles(full_name)')
+                .select(`
+                    id,
+                    reason,
+                    created_at,
+                    user_id,
+                    profiles!gear_requests_user_id_fkey (
+                        full_name
+                    )
+                `)
                 .eq('status', 'pending')
                 .order('created_at', { ascending: false });
 
+            if (requestsError) {
+                console.error('Error fetching gear requests:', requestsError);
+            }
+
             setPendingBookings(bookings || []);
-            setPendingRequests(requests || []);
+            setPendingRequests((requests as unknown as RequestItem[]) || []);
             setIsLoading(false);
         }
 
@@ -132,9 +157,9 @@ export function UnifiedNotificationsPanel() {
                                     <div key={booking.id} className="border rounded-lg p-3">
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <h4 className="font-medium">{(booking as any).gear_name || 'Gear'}</h4>
+                                                <h4 className="font-medium">{booking.gears?.name || 'Gear'}</h4>
                                                 <p className="text-sm text-muted-foreground">
-                                                    By {(booking as any).user_full_name || 'Unknown User'}
+                                                    By {booking.profiles?.full_name || 'Unknown User'}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground mt-1">
                                                     {new Date(booking.start_date).toLocaleDateString()} - {new Date(booking.end_date).toLocaleDateString()}

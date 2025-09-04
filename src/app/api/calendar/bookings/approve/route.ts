@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
     try {
@@ -199,8 +199,9 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Send notification to user about approval
-        await supabase
+        // Send notification to user about approval using admin client
+        const adminClient = await createSupabaseAdminClient();
+        await adminClient
             .from('notifications')
             .insert({
                 user_id: booking.user_id,
@@ -324,8 +325,9 @@ export async function PUT(request: NextRequest) {
             );
         }
 
-        // Send notification to user about rejection
-        await supabase
+        // Send notification to user about rejection using admin client
+        const adminClient = await createSupabaseAdminClient();
+        await adminClient
             .from('notifications')
             .insert({
                 user_id: booking.user_id,

@@ -100,6 +100,10 @@ supabase/.temp/
 .cursor/
 .cursor/mcp.json
 
+# ===== MCP CONFIGURATION =====
+mcp-config-read-write.json
+mcp-config*.json
+
 # ===== PROJECT SPECIFIC =====
 # Remove any project-specific files that shouldn't be tracked
 debug-*.js

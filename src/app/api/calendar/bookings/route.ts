@@ -4,39 +4,35 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     try {
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
+        
+        // Verify authentication - RLS requires authenticated user
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError || !user) {
+            return NextResponse.json(
+                { error: 'Authentication required' },
+                { status: 401 }
+            );
+        }
+        
         const startDate = searchParams.get('startDate');
         const endDate = searchParams.get('endDate');
         const userId = searchParams.get('userId');
         const gearId = searchParams.get('gearId');
 
-        if (!startDate || !endDate) {
-            return NextResponse.json(
-                { error: 'Start date and end date are required' },
-                { status: 400 }
-            );
-        }
+        // If no date range is specified, use a wide range to get all bookings
+        // This allows the calendar to fetch all existing bookings
+        const defaultStartDate = startDate || '1900-01-01';
+        const defaultEndDate = endDate || '2100-12-31';
 
-        let query = supabase
-            .from('gear_calendar_bookings')
-            .select(`
-        *,
-        profiles(id, full_name, avatar_url, email),
-        gears(id, name, category, status)
-      `)
-            .gte('start_date', startDate)
-            .lte('end_date', endDate);
-
-        // Apply filters if provided
-        if (userId) {
-            query = query.eq('user_id', userId);
-        }
-
-        if (gearId) {
-            query = query.eq('gear_id', gearId);
-        }
-
-        const { data, error } = await query;
+        // Use the secure function that applies RLS logic
+        const { data, error } = await supabase.rpc('get_calendar_bookings_with_profiles', {
+            start_date_param: defaultStartDate,
+            end_date_param: defaultEndDate,
+            user_id_param: userId || null,
+            gear_id_param: gearId || null
+        });
 
         if (error) {
             console.error('Error fetching calendar bookings:', error);
@@ -46,9 +42,7 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        return NextResponse.json({
-            bookings: data || []
-        });
+        return NextResponse.json(data || []);
     } catch (error) {
         console.error('Unexpected error fetching calendar bookings:', error);
         return NextResponse.json(
@@ -60,7 +54,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
+        
+        // Verify authentication - RLS requires authenticated user
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError || !user) {
+            return NextResponse.json(
+                { error: 'Authentication required' },
+                { status: 401 }
+            );
+        }
+        
         const { user_id, gear_id, title, start_date, end_date, notes } = await request.json();
 
         if (!user_id || !gear_id || !title || !start_date || !end_date) {
@@ -70,24 +75,28 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check for booking conflicts
-        const { data: conflicts, error: conflictError } = await supabase
-            .from('gear_calendar_bookings')
-            .select('id')
-            .eq('gear_id', gear_id)
-            .or(`start_date.lte.${end_date},end_date.gte.${start_date}`);
+        // Check gear availability using the new comprehensive function
+        const { data: availabilityResult, error: availabilityError } = await supabase
+            .rpc('check_gear_availability', {
+                p_gear_id: gear_id,
+                p_start_date: start_date,
+                p_end_date: end_date
+            });
 
-        if (conflictError) {
-            console.error('Error checking for booking conflicts:', conflictError);
+        if (availabilityError) {
+            console.error('Error checking gear availability:', availabilityError);
             return NextResponse.json(
-                { error: 'Failed to check for booking conflicts' },
+                { error: 'Failed to check gear availability' },
                 { status: 500 }
             );
         }
 
-        if (conflicts && conflicts.length > 0) {
+        if (!availabilityResult?.available) {
             return NextResponse.json(
-                { error: 'Booking conflict: The gear is already booked during this time period' },
+                { 
+                    error: availabilityResult?.error || 'Gear is not available during this time period',
+                    details: availabilityResult
+                },
                 { status: 409 }
             );
         }
@@ -121,4 +130,4 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
-} 
+}
