@@ -20,13 +20,32 @@ export async function createSupabaseServerClient(isAdmin = false) {
     throw new Error(`Supabase ${isAdmin ? 'Service Role' : 'Anon'} Key or URL is missing.`);
   }
 
-  // For API routes, we don't need cookie handling
-  if (typeof window === 'undefined' && process.env.NODE_ENV === 'development') {
+  // For API routes, we need to handle cookies properly
+  if (typeof window === 'undefined') {
     try {
       // Test if we're in an API route context
-      await cookies();
+      const cookieStore = await cookies();
+
+      // Create client with proper cookie handling for API routes
+      return createServerClient<Database>(
+        supabaseUrl,
+        key,
+        {
+          cookies: {
+            get(name: string) {
+              return cookieStore.get(name)?.value;
+            },
+            set(name: string, value: string, options: CookieOptions) {
+              cookieStore.set({ name, value, ...options });
+            },
+            remove(name: string, options: CookieOptions) {
+              cookieStore.set({ name, value: '', ...options });
+            },
+          },
+        }
+      );
     } catch (error) {
-      // If cookies() fails, we're likely in an API route context
+      // If cookies() fails, we're likely in an API route context without cookie access
       console.log('[Supabase Server] Creating client without cookie handling for API route');
       return createServerClient<Database>(
         supabaseUrl,

@@ -108,14 +108,22 @@ export default function AdminCalendarPage() {
     const fetchEvents = useCallback(async () => {
         setIsLoading(true);
         try {
+            console.log('[Calendar Page] Starting authentication check...');
+
             // Get current user for admin check
             const { data: { user }, error: userError } = await supabase.auth.getUser();
-            // Admin calendar page user authentication
+            console.log('[Calendar Page] Auth check result:', {
+                hasUser: !!user,
+                userId: user?.id,
+                error: userError?.message
+            });
 
             if (userError || !user) {
                 console.error('Authentication error:', userError);
                 throw new Error('Not authenticated');
             }
+
+            console.log('[Calendar Page] User authenticated, checking profile...');
 
             // Check if user is admin
             const { data: profile, error: profileError } = await supabase
@@ -124,12 +132,22 @@ export default function AdminCalendarPage() {
                 .eq('id', user.id)
                 .single();
 
-            // Admin calendar page profile loading
+            console.log('[Calendar Page] Profile check result:', {
+                profile,
+                error: profileError?.message
+            });
 
             if (profileError || !profile || profile.role !== 'Admin') {
                 console.error('Authorization error:', profileError, 'Profile:', profile);
                 throw new Error('Not authorized');
             }
+
+            console.log('[Calendar Page] User authorized as admin:', {
+                role: profile.role,
+                name: profile.full_name
+            });
+
+            console.log('[Calendar Page] Fetching calendar data from API...');
 
             // Fetch calendar bookings using secure API endpoint
             const response = await fetch('/api/calendar/bookings?startDate=2020-01-01&endDate=2030-12-31', {
@@ -139,6 +157,8 @@ export default function AdminCalendarPage() {
                 }
             });
 
+            console.log('[Calendar Page] API response status:', response.status, response.statusText);
+
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('API response error:', response.status, errorText);
@@ -146,6 +166,11 @@ export default function AdminCalendarPage() {
             }
 
             const bookingsResponse = await response.json();
+            console.log('[Calendar Page] API response data:', {
+                hasBookings: !!bookingsResponse.bookings,
+                count: bookingsResponse.bookings?.length || 0
+            });
+
             const bookingsData = bookingsResponse.bookings || [];
 
             // Admin calendar page bookings data loaded
