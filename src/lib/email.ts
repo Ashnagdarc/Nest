@@ -604,6 +604,435 @@ export async function sendRequestReceivedEmail({
 }
 
 // New: Overdue equipment reminder email
+// Calendar reservation email templates
+export async function sendReservationCreatedEmail({
+  to,
+  userName,
+  gearName,
+  startDate,
+  endDate,
+  reason,
+}: {
+  to: string;
+  userName: string;
+  gearName: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+}) {
+  try {
+    const html = `
+      ${EMAIL_STYLES}
+      <div class="email-container">
+        <div class="email-header">
+          <h1>📅 Reservation Created</h1>
+          <p class="subtitle">Your equipment reservation is pending admin approval</p>
+        </div>
+        <div class="email-body">
+          <h2>Hello ${userName}!</h2>
+          <p>Your calendar reservation has been successfully created and is now pending admin approval.</p>
+          
+          <div class="gear-details">
+            <h3 style="margin-top: 0; color: #2d3748;">Reservation Details</h3>
+            <div class="gear-item">
+              <span class="gear-name">Equipment:</span>
+              <span>${gearName}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Start Date:</span>
+              <span>${formatDate(startDate)}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">End Date:</span>
+              <span>${formatDate(endDate)}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Reason:</span>
+              <span>${reason}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Status:</span>
+              <span class="gear-status status-pending">Pending Approval</span>
+            </div>
+          </div>
+
+          <div class="info-note">
+            <p><strong>What happens next?</strong></p>
+            <p>An administrator will review your reservation request. You'll receive an email notification once it's approved or if any changes are needed.</p>
+          </div>
+        </div>
+        <div class="email-footer">
+          <p>Nest by Eden Oasis Equipment Management</p>
+        </div>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: RESEND_FROM,
+      to,
+      subject: `📅 Reservation Created: ${gearName}`,
+      html,
+    });
+
+    if (error) {
+      console.error('[Email Error] Reservation created:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('[Email Error] Reservation created:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function sendReservationApprovedEmail({
+  to,
+  userName,
+  gearName,
+  startDate,
+  endDate,
+  adminNotes,
+}: {
+  to: string;
+  userName: string;
+  gearName: string;
+  startDate: string;
+  endDate: string;
+  adminNotes?: string;
+}) {
+  try {
+    const html = `
+      ${EMAIL_STYLES}
+      <div class="email-container">
+        <div class="email-header">
+          <h1>✅ Reservation Approved!</h1>
+          <p class="subtitle">Your equipment is ready for check-out</p>
+        </div>
+        <div class="email-body">
+          <h2>Great news, ${userName}!</h2>
+          <p>Your calendar reservation has been <strong>approved</strong> and is now available for check-out.</p>
+          
+          <div class="gear-details">
+            <h3 style="margin-top: 0; color: #2d3748;">Approved Reservation</h3>
+            <div class="gear-item">
+              <span class="gear-name">Equipment:</span>
+              <span>${gearName}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Start Date:</span>
+              <span>${formatDate(startDate)}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">End Date:</span>
+              <span>${formatDate(endDate)}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Status:</span>
+              <span class="gear-status status-approved">Approved</span>
+            </div>
+          </div>
+
+          ${adminNotes ? `
+            <div class="info-note">
+              <p><strong>Admin Notes:</strong></p>
+              <p>${adminNotes}</p>
+            </div>
+          ` : ''}
+
+          <div class="success-note">
+            <p><strong>Next Steps:</strong></p>
+            <p>Visit the check-in page to collect your approved equipment. Make sure to return it by the end date to avoid any late fees.</p>
+          </div>
+        </div>
+        <div class="email-footer">
+          <p>Nest by Eden Oasis Equipment Management</p>
+        </div>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: RESEND_FROM,
+      to,
+      subject: `✅ Reservation Approved: ${gearName}`,
+      html,
+    });
+
+    if (error) {
+      console.error('[Email Error] Reservation approved:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('[Email Error] Reservation approved:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function sendReservationRejectedEmail({
+  to,
+  userName,
+  gearName,
+  startDate,
+  endDate,
+  reason,
+}: {
+  to: string;
+  userName: string;
+  gearName: string;
+  startDate: string;
+  endDate: string;
+  reason?: string;
+}) {
+  try {
+    const html = `
+      ${EMAIL_STYLES}
+      <div class="email-container">
+        <div class="email-header">
+          <h1>❌ Reservation Update</h1>
+          <p class="subtitle">Your reservation request needs attention</p>
+        </div>
+        <div class="email-body">
+          <h2>Hello ${userName},</h2>
+          <p>Unfortunately, your calendar reservation request could not be approved at this time.</p>
+          
+          <div class="gear-details">
+            <h3 style="margin-top: 0; color: #2d3748;">Reservation Details</h3>
+            <div class="gear-item">
+              <span class="gear-name">Equipment:</span>
+              <span>${gearName}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Start Date:</span>
+              <span>${formatDate(startDate)}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">End Date:</span>
+              <span>${formatDate(endDate)}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Status:</span>
+              <span class="gear-status status-rejected">Rejected</span>
+            </div>
+          </div>
+
+          ${reason ? `
+            <div class="important-note">
+              <p><strong>Reason:</strong></p>
+              <p>${reason}</p>
+            </div>
+          ` : ''}
+
+          <div class="info-note">
+            <p><strong>What you can do:</strong></p>
+            <p>Please contact an administrator for more details, or try booking different dates when the equipment might be available.</p>
+          </div>
+        </div>
+        <div class="email-footer">
+          <p>Nest by Eden Oasis Equipment Management</p>
+        </div>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: RESEND_FROM,
+      to,
+      subject: `❌ Reservation Update: ${gearName}`,
+      html,
+    });
+
+    if (error) {
+      console.error('[Email Error] Reservation rejected:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('[Email Error] Reservation rejected:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function sendReservationCancelledEmail({
+  to,
+  userName,
+  gearName,
+  startDate,
+  endDate,
+  cancelledBy,
+}: {
+  to: string;
+  userName: string;
+  gearName: string;
+  startDate: string;
+  endDate: string;
+  cancelledBy: 'user' | 'admin';
+}) {
+  try {
+    const isUserCancelled = cancelledBy === 'user';
+    const title = isUserCancelled ? 'Reservation Cancelled' : 'Reservation Cancelled by Admin';
+    const message = isUserCancelled
+      ? 'Your reservation has been successfully cancelled.'
+      : 'Your reservation has been cancelled by an administrator.';
+
+    const html = `
+      ${EMAIL_STYLES}
+      <div class="email-container">
+        <div class="email-header">
+          <h1>🚫 ${title}</h1>
+          <p class="subtitle">Reservation update notification</p>
+        </div>
+        <div class="email-body">
+          <h2>Hello ${userName},</h2>
+          <p>${message}</p>
+          
+          <div class="gear-details">
+            <h3 style="margin-top: 0; color: #2d3748;">Cancelled Reservation</h3>
+            <div class="gear-item">
+              <span class="gear-name">Equipment:</span>
+              <span>${gearName}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Start Date:</span>
+              <span>${formatDate(startDate)}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">End Date:</span>
+              <span>${formatDate(endDate)}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Status:</span>
+              <span class="gear-status status-rejected">Cancelled</span>
+            </div>
+          </div>
+
+          ${!isUserCancelled ? `
+            <div class="important-note">
+              <p><strong>Admin Cancellation:</strong></p>
+              <p>This reservation was cancelled by an administrator. Please contact admin for more details if needed.</p>
+            </div>
+          ` : `
+            <div class="info-note">
+              <p><strong>Cancellation Confirmed:</strong></p>
+              <p>Your reservation has been removed from the calendar. You can create a new reservation anytime.</p>
+            </div>
+          `}
+        </div>
+        <div class="email-footer">
+          <p>Nest by Eden Oasis Equipment Management</p>
+        </div>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: RESEND_FROM,
+      to,
+      subject: `🚫 ${title}: ${gearName}`,
+      html,
+    });
+
+    if (error) {
+      console.error('[Email Error] Reservation cancelled:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('[Email Error] Reservation cancelled:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function sendReservationReminderEmail({
+  to,
+  userName,
+  gearName,
+  startDate,
+  endDate,
+  daysUntilStart,
+}: {
+  to: string;
+  userName: string;
+  gearName: string;
+  startDate: string;
+  endDate: string;
+  daysUntilStart: number;
+}) {
+  try {
+    const isToday = daysUntilStart === 0;
+    const isTomorrow = daysUntilStart === 1;
+
+    let reminderText = '';
+    if (isToday) {
+      reminderText = 'Your reservation starts today!';
+    } else if (isTomorrow) {
+      reminderText = 'Your reservation starts tomorrow!';
+    } else {
+      reminderText = `Your reservation starts in ${daysUntilStart} days.`;
+    }
+
+    const html = `
+      ${EMAIL_STYLES}
+      <div class="email-container">
+        <div class="email-header">
+          <h1>⏰ Reservation Reminder</h1>
+          <p class="subtitle">${reminderText}</p>
+        </div>
+        <div class="email-body">
+          <h2>Hello ${userName}!</h2>
+          <p>This is a friendly reminder about your upcoming equipment reservation.</p>
+          
+          <div class="gear-details">
+            <h3 style="margin-top: 0; color: #2d3748;">Upcoming Reservation</h3>
+            <div class="gear-item">
+              <span class="gear-name">Equipment:</span>
+              <span>${gearName}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Start Date:</span>
+              <span>${formatDate(startDate)}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">End Date:</span>
+              <span>${formatDate(endDate)}</span>
+            </div>
+            <div class="gear-item">
+              <span class="gear-name">Status:</span>
+              <span class="gear-status status-approved">Approved</span>
+            </div>
+          </div>
+
+          <div class="success-note">
+            <p><strong>Ready to collect?</strong></p>
+            <p>${isToday ? 'You can collect your equipment today!' : 'Make sure you\'re ready to collect your equipment on the start date.'} Visit the check-in page or contact an administrator.</p>
+          </div>
+        </div>
+        <div class="email-footer">
+          <p>Nest by Eden Oasis Equipment Management</p>
+        </div>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: RESEND_FROM,
+      to,
+      subject: `⏰ Reservation Reminder: ${gearName} ${isToday ? '(Today!)' : isTomorrow ? '(Tomorrow)' : `(${daysUntilStart} days)`}`,
+      html,
+    });
+
+    if (error) {
+      console.error('[Email Error] Reservation reminder:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('[Email Error] Reservation reminder:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 export async function sendOverdueReminderEmail({
   to,
   userName,

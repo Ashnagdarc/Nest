@@ -8,9 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import moment from "moment";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Check, Box, Loader2, CalendarDays, Clock, AlertCircle } from "lucide-react";
+import { Check, Loader2, CalendarDays, Clock, AlertCircle, Package } from "lucide-react";
 import { format } from "date-fns";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -19,7 +17,6 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { logError as loggerError, logInfo as loggerInfo } from '@/lib/logger';
-import { Checkbox } from "@/components/ui/checkbox";
 import ReactSelect, { MultiValue } from "react-select";
 import { useIsMobile } from '@/hooks/use-mobile';
 import { apiGet } from '@/lib/apiClient';
@@ -57,6 +54,11 @@ interface GearOption {
     label: string;
     isDisabled?: boolean;
     conflict?: boolean;
+    category?: string;
+    availableQuantity?: number;
+    totalQuantity?: number;
+    gearId?: string; // Original gear ID for booking
+    unitNumber?: number; // Unit number for multi-quantity items
 }
 
 // Custom event styling with better visual feedback
@@ -181,9 +183,12 @@ export default function UserCalendarPage() {
         end: undefined,
     });
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
     const [selectedEvent, setSelectedEvent] = useState<any>(null);
     const [availableGearOptions, setAvailableGearOptions] = useState<GearOption[]>([]);
+    const [adminNotes, setAdminNotes] = useState<string>('');
+    const [isApproving, setIsApproving] = useState<boolean>(false);
     const isMobile = useIsMobile();
     const [mobileSelectedDay, setMobileSelectedDay] = useState<Date>(new Date());
 
@@ -205,6 +210,7 @@ export default function UserCalendarPage() {
                     .single();
                 console.log("User role:", profile?.role);
                 setCurrentUserId(user.id);
+                setCurrentUserRole(profile?.role || null);
             }
 
             // Fetch available gear first
@@ -274,6 +280,126 @@ export default function UserCalendarPage() {
         }
     }, [supabase, currentUserId]);
 
+    // Handle slot selection - check for conflicts and show appropriate modal
+    const handleSelectSlot = (slotInfo: SlotInfo) => {
+        // Check if there are any existing reservations in this time slot
+        const conflictingEvents = events.filter(event => {
+            const eventStart = new Date(event.start);
+            const eventEnd = new Date(event.end);
+            const slotStart = new Date(slotInfo.start);
+            const slotEnd = new Date(slotInfo.end);
+
+            // Check for time overlap
+            return (slotStart < eventEnd && slotEnd > eventStart);
+        });
+
+        if (conflictingEvents.length > 0) {
+            // Show existing reservation modal
+            setSelectedEvent(conflictingEvents[0]); // Show the first conflicting event
+        } else {
+            // Show booking creation modal
+            setSelectedSlot(slotInfo);
+        }
+    };
+
+    // Handle event selection - show reservation details
+    const handleSelectEvent = (event: any) => {
+        setSelectedEvent(event);
+    };
+
+    // Handle reservation cancellation
+    const handleCancelReservation = async (bookingId: string) => {
+        if (!currentUserId) return;
+
+        setIsApproving(true);
+        try {
+            const response = await fetch(`/api/calendar/bookings/${bookingId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to cancel reservation');
+            }
+
+            toast({
+                title: "Reservation Cancelled",
+                description: "Your reservation has been successfully cancelled."
+            });
+
+            // Refresh events to remove cancelled reservation
+            await fetchEvents();
+
+            // Close dialog
+            setSelectedEvent(null);
+
+        } catch (error) {
+            console.error('Error cancelling reservation:', error);
+            toast({
+                title: "Error",
+                description: "Failed to cancel reservation",
+                variant: "destructive"
+            });
+        } finally {
+            setIsApproving(false);
+        }
+    };
+
+    // Handle booking approval (admin only)
+    const handleApproveBooking = async (bookingId: string, approve: boolean) => {
+        if (currentUserRole !== 'Admin') return;
+
+        setIsApproving(true);
+        try {
+            const endpoint = approve
+                ? '/api/calendar/bookings/approve'
+                : '/api/calendar/bookings/approve';
+
+            const method = approve ? 'POST' : 'PUT';
+
+            const response = await fetch(endpoint, {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    booking_id: bookingId,
+                    admin_notes: adminNotes
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to process booking');
+            }
+
+            const result = await response.json();
+
+            toast({
+                title: approve ? "Booking Approved" : "Booking Rejected",
+                description: result.message
+            });
+
+            // Refresh events to show updated status
+            await fetchEvents();
+
+            // Close dialog and reset
+            setSelectedEvent(null);
+            setAdminNotes('');
+
+        } catch (error) {
+            console.error('Error processing booking:', error);
+            toast({
+                title: "Error",
+                description: `Failed to ${approve ? 'approve' : 'reject'} booking`,
+                variant: "destructive"
+            });
+        } finally {
+            setIsApproving(false);
+        }
+    };
+
     useEffect(() => {
         fetchEvents();
 
@@ -294,23 +420,6 @@ export default function UserCalendarPage() {
         };
     }, [supabase, fetchEvents]);
 
-    // Handle slot selection (clicking on calendar)
-    const handleSelectSlot = useCallback((slotInfo: SlotInfo) => {
-        console.log("Calendar slot selected:", slotInfo);
-        console.log("Current available gear:", availableGear);
-        setSelectedSlot(slotInfo);
-        setSelectedGears([]);
-        setBookingReason("");
-        setSelectedDates({
-            start: slotInfo.start,
-            end: slotInfo.end
-        });
-    }, [availableGear]);
-
-    // Handle showing event details when clicked
-    const handleSelectEvent = useCallback((event: any) => {
-        setSelectedEvent(event);
-    }, []);
 
     // Handle gear selection/deselection
     const handleGearSelection = (gearId: string) => {
@@ -372,7 +481,7 @@ export default function UserCalendarPage() {
             const durationInDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
             // Use the helper function to handle the reservation
-            const { data: requestData, error: requestError } = await supabase
+            const { error: requestError } = await supabase
                 .rpc('handle_gear_reservation', {
                     p_gear_ids: selectedGears,
                     p_user_id: currentUserId,
@@ -384,9 +493,29 @@ export default function UserCalendarPage() {
 
             if (requestError) throw requestError;
 
+            // Send email notification for reservation creation
+            try {
+                const response = await fetch('/api/notifications/reservation-created', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        gearIds: selectedGears,
+                        startDate: startDate.toISOString(),
+                        endDate: endDate.toISOString(),
+                        reason: bookingReason
+                    })
+                });
+
+                if (!response.ok) {
+                    console.warn('Failed to send reservation creation email');
+                }
+            } catch (emailError) {
+                console.warn('Error sending reservation creation email:', emailError);
+            }
+
             toast({
-                title: "Booking Requests Submitted",
-                description: `Your reservation requests for ${selectedGears.length} gear(s) have been submitted for approval.`
+                title: "Calendar Reservation Created",
+                description: `Your reservation for ${selectedGears.length} gear(s) has been added to the calendar and is pending admin approval.`
             });
 
             // Reset form state
@@ -416,49 +545,101 @@ export default function UserCalendarPage() {
         }
     };
 
-    // Add this useEffect to dynamically check conflicts but show all available gear
+    // Enhanced gear fetching with quantity display
     useEffect(() => {
-        if (!selectedDates.start || !selectedDates.end) return;
+        const fetchAvailableGear = async () => {
+            try {
+                const { data: gearList, error } = await supabase
+                    .from('gears')
+                    .select('id, name, category, status, quantity, available_quantity')
+                    .gt('available_quantity', 0)
+                    .order('category', { ascending: true })
+                    .order('name', { ascending: true });
 
-        const fetchAvailableGearWithConflicts = async () => {
-            const { data: gearList, error } = await supabase
-                .from('gears')
-                .select('id, name, category, status, available_quantity')
-                .gt('available_quantity', 0);
+                if (error) {
+                    console.error('Error fetching available gear:', error);
+                    return;
+                }
 
-            if (error) {
-                // handle error
-                return;
+                // Create gear options - individual units for items with quantity > 1
+                const gearOptions: GearOption[] = [];
+
+                gearList.forEach((gear: any) => {
+                    if (gear.quantity > 1 && gear.available_quantity > 0) {
+                        // Create individual options for each available unit
+                        for (let i = 1; i <= gear.available_quantity; i++) {
+                            gearOptions.push({
+                                value: `${gear.id}_${i}`, // Unique identifier for each unit
+                                label: `${gear.name} #${i} (${gear.category})`,
+                                isDisabled: false,
+                                conflict: false,
+                                category: gear.category,
+                                availableQuantity: 1, // Each individual unit
+                                totalQuantity: gear.quantity,
+                                gearId: gear.id, // Original gear ID for booking
+                                unitNumber: i
+                            });
+                        }
+                    } else if (gear.available_quantity > 0) {
+                        // Single item or single available unit
+                        gearOptions.push({
+                            value: gear.id,
+                            label: `${gear.name} (${gear.category})`,
+                            isDisabled: false,
+                            conflict: false,
+                            category: gear.category,
+                            availableQuantity: gear.available_quantity,
+                            totalQuantity: gear.quantity,
+                            gearId: gear.id
+                        });
+                    }
+                });
+
+                setAvailableGear(gearList);
+                setAvailableGearOptions(gearOptions);
+            } catch (error) {
+                console.error('Error in fetchAvailableGear:', error);
             }
-
-            // Check for conflicts for each gear
-            const gearOptions = await Promise.all(
-                gearList.map(async function (gear: any) {
-                    if (!selectedDates.start || !selectedDates.end) return {
-                        value: gear.id,
-                        label: `${gear.name} (${gear.category})`,
-                        isDisabled: true,
-                        conflict: false
-                    };
-                    const { data: hasConflict } = await supabase.rpc('check_gear_booking_conflict', {
-                        p_gear_id: gear.id,
-                        p_start_date: selectedDates.start.toISOString(),
-                        p_end_date: selectedDates.end.toISOString()
-                    });
-                    return {
-                        value: gear.id,
-                        label: `${gear.name} (${gear.category})`,
-                        isDisabled: !!hasConflict,
-                        conflict: !!hasConflict
-                    };
-                })
-            );
-            setAvailableGear(gearList); // still used elsewhere if needed
-            setAvailableGearOptions(gearOptions);
         };
 
-        fetchAvailableGearWithConflicts();
-    }, [selectedDates.start, selectedDates.end]);
+        fetchAvailableGear();
+    }, []); // Fetch on component mount
+
+    // Separate effect for conflict checking when dates are selected
+    useEffect(() => {
+        if (!selectedDates.start || !selectedDates.end || availableGearOptions.length === 0) return;
+
+        const checkConflicts = async () => {
+            try {
+                const updatedOptions = await Promise.all(
+                    availableGearOptions.map(async (option) => {
+                        // Use the original gear ID for conflict checking
+                        const gearIdForCheck = option.gearId || option.value;
+                        const { data: hasConflict } = await supabase.rpc('check_gear_booking_conflict', {
+                            p_gear_id: gearIdForCheck,
+                            p_start_date: selectedDates.start!.toISOString(),
+                            p_end_date: selectedDates.end!.toISOString()
+                        });
+
+                        return {
+                            ...option,
+                            isDisabled: !!hasConflict,
+                            conflict: !!hasConflict,
+                            label: hasConflict
+                                ? `${option.label.split(' (')[0]} - Unavailable for selected dates`
+                                : option.label // Keep original label
+                        };
+                    })
+                );
+
+                setAvailableGearOptions(updatedOptions);
+            } catch (error) {
+                console.error('Error checking conflicts:', error);
+            }
+        };
+
+        checkConflicts();
+    }, [selectedDates.start, selectedDates.end, availableGear]);
 
     // Filter events for the selected day (mobile)
     const mobileDayEvents = events.filter(e => {
@@ -473,15 +654,21 @@ export default function UserCalendarPage() {
 
     return (
         <div className="container mx-auto py-8 px-0 md:px-4 lg:px-6">
-            <Card className="w-full max-w-full">
-                <CardHeader>
-                    <CardTitle className="text-2xl font-bold flex items-center gap-2">
-                        <CalendarDays className="h-6 w-6" />
-                        Gear Reservation Calendar
-                    </CardTitle>
-                    <CardDescription className="text-lg">
-                        View existing reservations and make new booking requests. Click on any time slot to book gear.
-                    </CardDescription>
+            <Card className="w-full max-w-full border-0 shadow-sm bg-card/50 backdrop-blur-sm">
+                <CardHeader className="pb-6">
+                    <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                            <CalendarDays className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                            <CardTitle className="text-2xl font-semibold tracking-tight text-foreground">
+                                Equipment Calendar
+                            </CardTitle>
+                            <CardDescription className="text-base text-muted-foreground leading-relaxed mt-1">
+                                View existing reservations and book equipment for your projects. Click any date to create a new booking.
+                            </CardDescription>
+                        </div>
+                    </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center sm:gap-4 mt-4">
                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2">
                             <Button
@@ -522,11 +709,16 @@ export default function UserCalendarPage() {
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-6 pb-6">
                     {isLoading ? (
-                        <div className="flex items-center justify-center py-20">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
-                            <p>Loading calendar data...</p>
+                        <div className="flex items-center justify-center h-64 bg-muted/30 rounded-xl border border-dashed">
+                            <div className="text-center">
+                                <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                </div>
+                                <h3 className="text-sm font-medium text-foreground mb-2">Loading Calendar</h3>
+                                <p className="text-sm text-muted-foreground">Fetching your reservations and available equipment...</p>
+                            </div>
                         </div>
                     ) : (
                         <>
@@ -558,31 +750,35 @@ export default function UserCalendarPage() {
                                             <div className="text-center text-muted-foreground py-8">No bookings for this day.</div>
                                         ) : (
                                             mobileDayEvents.map(event => (
-                                                <Card key={event.id} className="w-full max-w-full">
-                                                    <CardContent className="py-3 px-4 flex flex-col gap-1 w-full max-w-full">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-semibold text-base">{event.title}</span>
-                                                            <Badge variant="outline" className={
-                                                                event.resource.status === 'Approved' ? 'bg-green-100 text-green-800 border-green-200' :
-                                                                    event.resource.status === 'Pending' ? 'bg-amber-100 text-amber-800 border-amber-200' :
-                                                                        event.resource.status === 'Rejected' ? 'bg-red-100 text-red-800 border-red-200' : ''
-                                                            }>
+                                                <Card key={event.id} className="w-full max-w-full bg-muted/30 border shadow-sm hover:shadow-md transition-shadow">
+                                                    <CardContent className="p-4 flex flex-col gap-3 w-full max-w-full">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <span className="font-semibold text-base text-foreground">{event.title}</span>
+                                                            <Badge variant="outline" className={cn(
+                                                                "text-xs font-medium",
+                                                                event.resource.status === 'Approved' && 'bg-green-50 text-green-700 border-green-200',
+                                                                event.resource.status === 'Pending' && 'bg-amber-50 text-amber-700 border-amber-200',
+                                                                event.resource.status === 'Rejected' && 'bg-red-50 text-red-700 border-red-200'
+                                                            )}>
                                                                 {event.resource.status}
                                                             </Badge>
                                                         </div>
-                                                        <div className="text-xs text-muted-foreground">
+                                                        <div className="flex items-center text-sm text-muted-foreground">
+                                                            <Clock className="h-4 w-4 mr-2 text-primary/60" />
                                                             {format(new Date(event.start), 'p')} - {format(new Date(event.end), 'p')}
                                                         </div>
                                                         {event.resource.reason && (
-                                                            <div className="text-xs text-muted-foreground">{event.resource.reason}</div>
+                                                            <div className="bg-muted/50 rounded-lg p-3 border">
+                                                                <p className="text-sm text-muted-foreground leading-relaxed">{event.resource.reason}</p>
+                                                            </div>
                                                         )}
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            className="self-end mt-2"
+                                                            className="self-end mt-2 h-8 px-3 text-xs font-medium hover:bg-primary/10 hover:text-primary"
                                                             onClick={() => setSelectedEvent(event)}
                                                         >
-                                                            Details
+                                                            View Details
                                                         </Button>
                                                     </CardContent>
                                                 </Card>
@@ -591,9 +787,9 @@ export default function UserCalendarPage() {
                                     </div>
                                 </div>
                             ) : (
-                                // Desktop: full calendar grid
-                                <div className="mt-4 w-full max-w-full">
-                                    <div className="h-[400px] md:h-[600px] bg-white dark:bg-gray-900 rounded-lg border border-input shadow-sm overflow-hidden w-full max-w-full">
+                                // Desktop: enhanced full calendar grid
+                                <div className="w-full max-w-full">
+                                    <div className="h-[400px] md:h-[600px] bg-background rounded-xl border shadow-sm overflow-hidden w-full max-w-full">
                                         <Calendar
                                             localizer={localizer}
                                             events={events}
@@ -609,7 +805,10 @@ export default function UserCalendarPage() {
                                             tooltipAccessor={(event: any) =>
                                                 `${event.title}\nStatus: ${event.resource.status}\n${event.resource.reason ? `Reason: ${event.resource.reason}` : ''}`
                                             }
-                                            className="rounded-lg"
+                                            className="rounded-xl"
+                                            components={{
+                                                toolbar: () => null, // Hide default toolbar since we have custom one
+                                            }}
                                         />
                                     </div>
                                 </div>
@@ -619,133 +818,316 @@ export default function UserCalendarPage() {
                 </CardContent>
             </Card>
 
-            {/* Booking Dialog */}
+            {/* Enhanced Booking Dialog */}
             <Dialog open={!!selectedSlot} onOpenChange={(open) => !open && setSelectedSlot(null)}>
-                <DialogContent className="w-full max-w-[95vw] p-1 sm:max-w-[600px] sm:p-6">
-                    <DialogHeader>
-                        <DialogTitle className="text-xl">Book Gear</DialogTitle>
-                        <DialogDescription className="text-base">
-                            Create new gear reservation requests. Select multiple gear items if needed.
-                        </DialogDescription>
-                    </DialogHeader>
+                <DialogContent className="w-full max-w-[95vw] max-h-[90vh] overflow-y-auto p-0 sm:max-w-[700px]">
+                    {/* Header with improved typography */}
+                    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b px-6 py-4">
+                        <DialogHeader className="space-y-1">
+                            <DialogTitle className="text-2xl font-semibold tracking-tight text-foreground">
+                                Book Equipment
+                            </DialogTitle>
+                            <DialogDescription className="text-base text-muted-foreground leading-relaxed">
+                                Reserve equipment for your project. Select multiple items and specify your requirements.
+                            </DialogDescription>
+                        </DialogHeader>
+                    </div>
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-1 py-2">
-                        <div className="space-y-3">
-                            <div className="space-y-1">
-                                <h4 className="font-medium text-sm">Selected Time Period</h4>
-                                <div className="flex flex-col space-y-1 w-full responsive-calendar-wrapper overflow-x-auto max-w-full">
-                                    <span className="text-sm text-muted-foreground">Start</span>
-                                    <CalendarComponent
-                                        mode="single"
-                                        selected={selectedDates.start}
-                                        onSelect={(date) => setSelectedDates(dates => ({ ...dates, start: date }))}
-                                        className="rounded-md border w-full responsive-calendar"
-                                    />
+                    <div className="px-6 py-6 space-y-8">
+                        {/* Date Selection Section */}
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <CalendarDays className="h-4 w-4 text-primary" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-foreground">Booking Period</h3>
+                                    <p className="text-sm text-muted-foreground">Select your start date</p>
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <h4 className="font-medium text-sm">Available Gear</h4>
-                                {availableGear.length > 0 ? (
-                                    <div className="p-2 sm:p-4 rounded-lg border bg-card w-full">
-                                        <ReactSelect<GearOption, true>
-                                            isMulti
-                                            options={availableGearOptions}
-                                            value={selectedGearOptions}
-                                            onChange={(selected: MultiValue<GearOption>) => {
-                                                const selectedArray = Array.from(selected);
-                                                setSelectedGearOptions(selectedArray);
-                                                setSelectedGears(selectedArray.map(item => item.value));
-                                            }}
-                                            placeholder="Select gear items..."
-                                            className="w-full max-w-full"
-                                            isOptionDisabled={(option, _selectValue) => !!option.isDisabled}
-                                            formatOptionLabel={(option) => (
-                                                <span title={option.isDisabled ? 'Already booked for this period' : ''} style={option.isDisabled ? { color: isDarkMode ? '#888' : '#aaa' } : {}}>
-                                                    {option.label}
-                                                </span>
-                                            )}
-                                            styles={{
-                                                menu: (provided) => ({
-                                                    ...provided,
-                                                    backgroundColor: isDarkMode ? '#18181b' : '#fff',
-                                                    color: isDarkMode ? '#f4f4f5' : '#222',
-                                                }),
-                                                option: (provided, state) => ({
-                                                    ...provided,
-                                                    backgroundColor: state.isSelected
-                                                        ? (isDarkMode ? '#27272a' : '#e0e7ff')
-                                                        : state.isFocused
-                                                            ? (isDarkMode ? '#27272a' : '#f1f5f9')
-                                                            : isDarkMode ? '#18181b' : '#fff',
-                                                    color: state.isDisabled
-                                                        ? (isDarkMode ? '#888' : '#aaa')
-                                                        : (isDarkMode ? '#f4f4f5' : '#222'),
-                                                    cursor: state.isDisabled ? 'not-allowed' : 'pointer',
-                                                    opacity: state.isDisabled ? 0.7 : 1,
-                                                }),
-                                                control: (provided, state) => ({
-                                                    ...provided,
-                                                    backgroundColor: isDarkMode ? '#18181b' : '#fff',
-                                                    borderColor: state.isFocused ? (isDarkMode ? '#6366f1' : '#6366f1') : (isDarkMode ? '#27272a' : '#e5e7eb'),
-                                                    boxShadow: state.isFocused ? (isDarkMode ? '0 0 0 2px #6366f1' : '0 0 0 2px #6366f1') : 'none',
-                                                }),
-                                                multiValue: (provided) => ({
-                                                    ...provided,
-                                                    backgroundColor: isDarkMode ? '#27272a' : '#e0e7ff',
-                                                    color: isDarkMode ? '#f4f4f5' : '#222',
-                                                }),
-                                                singleValue: (provided) => ({
-                                                    ...provided,
-                                                    color: isDarkMode ? '#f4f4f5' : '#222',
-                                                }),
-                                                input: (provided) => ({
-                                                    ...provided,
-                                                    color: isDarkMode ? '#f4f4f5' : '#222',
-                                                }),
-                                                placeholder: (provided) => ({
-                                                    ...provided,
-                                                    color: isDarkMode ? '#888' : '#888',
-                                                }),
-                                            }}
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center justify-center p-4 rounded-lg border border-dashed w-full">
-                                        <div className="text-center">
-                                            <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground/70" />
-                                            <p className="mt-2 text-sm text-muted-foreground">No gear available for this time period</p>
-                                        </div>
-                                    </div>
-                                )}
+                            <div className="bg-muted/30 rounded-xl p-4 border">
+                                <CalendarComponent
+                                    mode="single"
+                                    selected={selectedDates.start}
+                                    onSelect={(date) => {
+                                        if (date) {
+                                            // Set end date to the same day by default (can be extended later)
+                                            const endDate = new Date(date);
+                                            endDate.setHours(23, 59, 59, 999); // End of the selected day
+                                            setSelectedDates({ start: date, end: endDate });
+                                        } else {
+                                            setSelectedDates({ start: undefined, end: undefined });
+                                        }
+                                    }}
+                                    className="rounded-lg w-full"
+                                    classNames={{
+                                        months: "flex w-full flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 justify-center",
+                                        month: "space-y-4 w-full flex flex-col",
+                                        caption: "flex justify-center pt-1 relative items-center",
+                                        caption_label: "text-sm font-medium",
+                                        nav: "space-x-1 flex items-center",
+                                        nav_button: cn(
+                                            "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors",
+                                            "h-8 w-8 bg-transparent p-0 opacity-50 hover:opacity-100",
+                                            "hover:bg-accent hover:text-accent-foreground",
+                                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        ),
+                                        table: "w-full border-collapse space-y-1",
+                                        head_row: "flex w-full",
+                                        head_cell: "text-muted-foreground rounded-md w-full font-normal text-[0.8rem] flex-1 text-center",
+                                        row: "flex w-full mt-2",
+                                        cell: "text-center text-sm p-0 relative flex-1 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                                        day: cn(
+                                            "inline-flex items-center justify-center rounded-md text-sm font-normal transition-colors",
+                                            "h-9 w-full p-0",
+                                            "hover:bg-accent hover:text-accent-foreground",
+                                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                            "data-[selected]:bg-primary data-[selected]:text-primary-foreground data-[selected]:hover:bg-primary data-[selected]:hover:text-primary-foreground"
+                                        ),
+                                        day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                                        day_today: "bg-accent text-accent-foreground font-semibold",
+                                        day_outside: "text-muted-foreground opacity-50",
+                                        day_disabled: "text-muted-foreground opacity-50 cursor-not-allowed",
+                                        day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
+                                        day_hidden: "invisible",
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Enhanced Gear Selection Section */}
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <Package className="h-4 w-4 text-primary" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-foreground">Available Equipment</h3>
+                                    <p className="text-sm text-muted-foreground">
+                                        {availableGear.length > 0 ? `${availableGear.length} items available` : 'No equipment available'}
+                                    </p>
+                                </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <h4 className="font-medium text-sm">Booking Details</h4>
-                                <div className="space-y-2">
-                                    <Textarea
-                                        placeholder="Describe the purpose of your booking..."
-                                        value={bookingReason}
-                                        onChange={(e) => setBookingReason(e.target.value)}
-                                        className="min-h-[80px] resize-none w-full"
+                            {availableGear.length > 0 ? (
+                                <div className="bg-muted/30 rounded-xl p-4 border space-y-4">
+                                    {/* Enhanced Multi-Select with better styling */}
+                                    <ReactSelect<GearOption, true>
+                                        isMulti
+                                        options={availableGearOptions}
+                                        value={selectedGearOptions}
+                                        onChange={(selected: MultiValue<GearOption>) => {
+                                            const selectedArray = Array.from(selected);
+                                            setSelectedGearOptions(selectedArray);
+                                            // For individual units, use the original gear ID; for single items, use the value
+                                            setSelectedGears(selectedArray.map(item => item.gearId || item.value));
+                                        }}
+                                        placeholder="Search and select equipment..."
+                                        className="w-full"
+                                        isOptionDisabled={(option, _selectValue) => !!option.isDisabled}
+                                        formatOptionLabel={(option) => (
+                                            <div className="flex items-center gap-3 py-1">
+                                                <div className={cn(
+                                                    "w-2 h-2 rounded-full",
+                                                    option.isDisabled ? "bg-red-400" : "bg-primary/60"
+                                                )}></div>
+                                                <div className="flex-1">
+                                                    <span className={cn(
+                                                        "font-medium text-sm block",
+                                                        option.isDisabled && "opacity-50"
+                                                    )}>
+                                                        {option.label.split(' (')[0]}
+                                                    </span>
+                                                    <span className={cn(
+                                                        "text-xs text-muted-foreground",
+                                                        option.isDisabled && "opacity-50"
+                                                    )}>
+                                                        {option.unitNumber
+                                                            ? `Individual unit • ${option.category}`
+                                                            : option.availableQuantity && option.totalQuantity && option.availableQuantity > 1
+                                                                ? `${option.availableQuantity} available • ${option.category}`
+                                                                : option.category
+                                                        }
+                                                    </span>
+                                                </div>
+                                                {option.isDisabled && (
+                                                    <Badge variant="secondary" className="ml-auto text-xs bg-red-50 text-red-700 border-red-200">
+                                                        Unavailable
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        )}
+                                        styles={{
+                                            control: (provided, state) => ({
+                                                ...provided,
+                                                backgroundColor: 'hsl(var(--background))',
+                                                borderColor: state.isFocused ? 'hsl(var(--primary))' : 'hsl(var(--border))',
+                                                borderWidth: '1px',
+                                                borderRadius: '0.75rem',
+                                                boxShadow: state.isFocused ? '0 0 0 2px hsl(var(--primary) / 0.2)' : 'none',
+                                                minHeight: '44px',
+                                                padding: '4px',
+                                                fontSize: '14px',
+                                                transition: 'all 0.2s ease',
+                                                '&:hover': {
+                                                    borderColor: 'hsl(var(--primary) / 0.8)',
+                                                }
+                                            }),
+                                            menu: (provided) => ({
+                                                ...provided,
+                                                backgroundColor: 'hsl(var(--popover))',
+                                                border: '1px solid hsl(var(--border))',
+                                                borderRadius: '0.75rem',
+                                                boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                                                padding: '4px',
+                                                zIndex: 50,
+                                            }),
+                                            option: (provided, state) => ({
+                                                ...provided,
+                                                backgroundColor: state.isSelected
+                                                    ? 'hsl(var(--primary))'
+                                                    : state.isFocused
+                                                        ? 'hsl(var(--accent))'
+                                                        : 'transparent',
+                                                color: state.isSelected
+                                                    ? 'hsl(var(--primary-foreground))'
+                                                    : 'hsl(var(--foreground))',
+                                                borderRadius: '0.5rem',
+                                                margin: '2px 0',
+                                                cursor: state.isDisabled ? 'not-allowed' : 'pointer',
+                                                padding: '8px 12px',
+                                                fontSize: '14px',
+                                                fontWeight: '500',
+                                            }),
+                                            multiValue: (provided) => ({
+                                                ...provided,
+                                                backgroundColor: 'hsl(var(--primary) / 0.1)',
+                                                borderRadius: '0.5rem',
+                                                border: '1px solid hsl(var(--primary) / 0.2)',
+                                                margin: '2px',
+                                            }),
+                                            multiValueLabel: (provided) => ({
+                                                ...provided,
+                                                color: 'hsl(var(--primary))',
+                                                fontWeight: '500',
+                                                fontSize: '13px',
+                                                padding: '4px 8px',
+                                            }),
+                                            multiValueRemove: (provided) => ({
+                                                ...provided,
+                                                color: 'hsl(var(--primary))',
+                                                borderRadius: '0 0.5rem 0.5rem 0',
+                                                '&:hover': {
+                                                    backgroundColor: 'hsl(var(--primary) / 0.2)',
+                                                    color: 'hsl(var(--primary))',
+                                                }
+                                            }),
+                                            placeholder: (provided) => ({
+                                                ...provided,
+                                                color: 'hsl(var(--muted-foreground))',
+                                                fontSize: '14px',
+                                            }),
+                                            input: (provided) => ({
+                                                ...provided,
+                                                color: 'hsl(var(--foreground))',
+                                            }),
+                                        }}
                                     />
+
+                                    {/* Selected Items Preview */}
+                                    {selectedGearOptions.length > 0 && (
+                                        <div className="space-y-2">
+                                            <h4 className="text-sm font-medium text-foreground">Selected Items ({selectedGearOptions.length})</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedGearOptions.map((option) => (
+                                                    <Badge
+                                                        key={option.value}
+                                                        variant="secondary"
+                                                        className="bg-primary/10 text-primary border-primary/20 px-3 py-1"
+                                                    >
+                                                        {option.label}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="bg-muted/30 rounded-xl p-8 border border-dashed text-center">
+                                    <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                                        <AlertCircle className="h-6 w-6 text-muted-foreground" />
+                                    </div>
+                                    <h4 className="text-sm font-medium text-foreground mb-2">No Equipment Available</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                        All equipment is currently booked for this time period. Please try a different date.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Enhanced Booking Details Section */}
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <Clock className="h-4 w-4 text-primary" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-foreground">Project Details</h3>
+                                    <p className="text-sm text-muted-foreground">Tell us about your project</p>
+                                </div>
+                            </div>
+
+                            <div className="bg-muted/30 rounded-xl p-4 border">
+                                <Textarea
+                                    placeholder="Describe your project, shooting requirements, or specific needs for this equipment..."
+                                    value={bookingReason}
+                                    onChange={(e) => setBookingReason(e.target.value)}
+                                    className="min-h-[100px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm leading-relaxed placeholder:text-muted-foreground/70"
+                                />
+                                <div className="flex justify-between items-center mt-3 pt-3 border-t">
+                                    <span className="text-xs text-muted-foreground">
+                                        {bookingReason.length}/500 characters
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        Required field
+                                    </span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:gap-4 w-full">
-                        <Button variant="outline" className="w-full sm:w-auto" onClick={() => setSelectedSlot(null)}>
-                            Cancel
-                        </Button>
-                        <Button
-                            onClick={handleBookingSubmit}
-                            disabled={selectedGears.length === 0 || !bookingReason.trim()}
-                            className="w-full sm:w-auto min-w-[120px]"
-                        >
-                            {selectedGears.length > 0 ? `Request (${selectedGears.length})` : 'Submit Request'}
-                        </Button>
-                    </DialogFooter>
+                    {/* Enhanced Footer */}
+                    <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t px-6 py-4">
+                        <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+                            <Button
+                                variant="outline"
+                                className="w-full sm:w-auto px-6 h-11 font-medium"
+                                onClick={() => setSelectedSlot(null)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleBookingSubmit}
+                                disabled={selectedGears.length === 0 || !bookingReason.trim()}
+                                className={cn(
+                                    "w-full sm:w-auto px-8 h-11 font-medium shadow-sm",
+                                    "bg-primary hover:bg-primary/90 text-primary-foreground",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                                    "transition-all duration-200"
+                                )}
+                            >
+                                {selectedGears.length > 0 ? (
+                                    <span className="flex items-center gap-2">
+                                        <Check className="h-4 w-4" />
+                                        Submit Request ({selectedGears.length} {selectedGears.length === 1 ? 'item' : 'items'})
+                                    </span>
+                                ) : (
+                                    'Submit Request'
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </div>
                 </DialogContent>
             </Dialog>
 
@@ -814,6 +1196,115 @@ export default function UserCalendarPage() {
                                 <div className="p-4 rounded-lg bg-muted/50">
                                     <h4 className="text-sm font-medium mb-2">Admin Notes</h4>
                                     <p className="text-muted-foreground">{selectedEvent.resource.notes}</p>
+                                </div>
+                            )}
+
+                            {/* User Cancellation Controls */}
+                            {selectedEvent.resource.isOwnBooking && selectedEvent.resource.status === 'Pending' && (
+                                <div className="border-t pt-6 space-y-4">
+                                    <h4 className="text-lg font-semibold">Your Reservation</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                        This reservation is pending admin approval. You can cancel it if needed.
+                                    </p>
+
+                                    <Button
+                                        onClick={() => handleCancelReservation(selectedEvent.id)}
+                                        disabled={isApproving}
+                                        variant="destructive"
+                                        className="w-full"
+                                    >
+                                        {isApproving ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Cancelling...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <AlertCircle className="mr-2 h-4 w-4" />
+                                                Cancel Reservation
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            )}
+
+                            {/* Admin Approval Controls */}
+                            {currentUserRole === 'Admin' && selectedEvent.resource.status === 'Pending' && (
+                                <div className="border-t pt-6 space-y-4">
+                                    <h4 className="text-lg font-semibold">Admin Actions</h4>
+
+                                    <div className="space-y-3">
+                                        <label className="text-sm font-medium">Admin Notes (Optional)</label>
+                                        <Textarea
+                                            value={adminNotes}
+                                            onChange={(e) => setAdminNotes(e.target.value)}
+                                            placeholder="Add notes about this booking decision..."
+                                            className="min-h-[80px]"
+                                        />
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        <Button
+                                            onClick={() => handleApproveBooking(selectedEvent.id, true)}
+                                            disabled={isApproving}
+                                            className="flex-1 bg-green-600 hover:bg-green-700"
+                                        >
+                                            {isApproving ? (
+                                                <>
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                    Processing...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Check className="mr-2 h-4 w-4" />
+                                                    Approve Booking
+                                                </>
+                                            )}
+                                        </Button>
+
+                                        <Button
+                                            onClick={() => handleApproveBooking(selectedEvent.id, false)}
+                                            disabled={isApproving}
+                                            variant="destructive"
+                                            className="flex-1"
+                                        >
+                                            {isApproving ? (
+                                                <>
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                    Processing...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <AlertCircle className="mr-2 h-4 w-4" />
+                                                    Reject Booking
+                                                </>
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Admin Cancellation for Any Reservation */}
+                            {currentUserRole === 'Admin' && selectedEvent.resource.status === 'Pending' && !selectedEvent.resource.isOwnBooking && (
+                                <div className="border-t pt-4 space-y-3">
+                                    <Button
+                                        onClick={() => handleCancelReservation(selectedEvent.id)}
+                                        disabled={isApproving}
+                                        variant="outline"
+                                        className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                                    >
+                                        {isApproving ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Cancelling...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <AlertCircle className="mr-2 h-4 w-4" />
+                                                Cancel User's Reservation
+                                            </>
+                                        )}
+                                    </Button>
                                 </div>
                             )}
                         </div>
