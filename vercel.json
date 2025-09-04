@@ -3,6 +3,14 @@
         {
             "path": "/api/notifications/gear-overdue",
             "schedule": "0 8 * * *"
+        },
+        {
+            "path": "/api/notifications/reservation-reminders",
+            "schedule": "0 9 * * *"
+        },
+        {
+            "path": "/api/notifications/reservation-due-reminders",
+            "schedule": "0 17 * * *"
         }
     ]
 }

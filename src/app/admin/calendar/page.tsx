@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Box, Loader2, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Box, Loader2, CheckCircle2, XCircle, AlertCircle, Calendar as CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { logError as loggerError } from '@/lib/logger';
@@ -294,79 +294,100 @@ export default function AdminCalendarPage() {
     };
 
     return (
-        <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Gear Reservation Calendar</CardTitle>
-                    <CardDescription>
-                        Manage and approve gear reservations. Click on a booking to view details and take action.
-                    </CardDescription>
-                    <div className="flex flex-wrap gap-4 mt-4">
-                        <div className="flex gap-2">
+        <div className="container mx-auto py-8 px-0 md:px-4 lg:px-6">
+            <Card className="w-full max-w-full border-0 shadow-sm bg-card/50 backdrop-blur-sm">
+                <CardHeader className="pb-6">
+                    <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                            <CalendarIcon className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                            <CardTitle className="text-2xl font-semibold tracking-tight text-foreground">
+                                Admin Reservation Calendar
+                            </CardTitle>
+                            <CardDescription className="text-base text-muted-foreground leading-relaxed mt-1">
+                                Manage and approve gear reservations. Click on a booking to view details and take action.
+                            </CardDescription>
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center sm:gap-4 mt-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2">
                             <Button
                                 variant={viewMode === 'month' ? 'default' : 'outline'}
                                 onClick={() => setViewMode('month')}
+                                className="min-w-[90px] py-2 px-3 text-sm"
                             >
+                                <CalendarIcon className="h-4 w-4 mr-2" />
                                 Month
                             </Button>
                             <Button
                                 variant={viewMode === 'week' ? 'default' : 'outline'}
                                 onClick={() => setViewMode('week')}
+                                className="min-w-[90px] py-2 px-3 text-sm"
                             >
+                                <CalendarIcon className="h-4 w-4 mr-2" />
                                 Week
                             </Button>
                             <Button
                                 variant={viewMode === 'day' ? 'default' : 'outline'}
                                 onClick={() => setViewMode('day')}
+                                className="min-w-[90px] py-2 px-3 text-sm"
                             >
+                                <CalendarIcon className="h-4 w-4 mr-2" />
                                 Day
                             </Button>
                         </div>
-                        <Select value={gearFilter} onValueChange={setGearFilter}>
-                            <SelectTrigger className="w-[200px]">
-                                <SelectValue placeholder="Filter by Gear" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__all__">All Gear</SelectItem>
-                                {uniqueGearNames.map((name) => (
-                                    <SelectItem key={name} value={name}>{name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Select value={userFilter} onValueChange={setUserFilter}>
-                            <SelectTrigger className="w-[200px]">
-                                <SelectValue placeholder="Filter by User" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__all__">All Users</SelectItem>
-                                {uniqueUserNames.map((name) => (
-                                    <SelectItem key={name} value={name}>{name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2">
+                            <Select value={gearFilter} onValueChange={setGearFilter}>
+                                <SelectTrigger className="w-[180px] h-9 text-sm">
+                                    <SelectValue placeholder="Filter by Gear" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All Gear</SelectItem>
+                                    {uniqueGearNames.map((name) => (
+                                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select value={userFilter} onValueChange={setUserFilter}>
+                                <SelectTrigger className="w-[180px] h-9 text-sm">
+                                    <SelectValue placeholder="Filter by User" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All Users</SelectItem>
+                                    {uniqueUserNames.map((name) => (
+                                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2 mt-4">
+                        <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200 py-1 px-2 text-xs sm:text-sm">
+                            <CheckCircle2 className="h-3 w-3 text-green-500 mr-1" /> Approved
+                        </Badge>
+                        <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200 py-1 px-2 text-xs sm:text-sm">
+                            <AlertCircle className="h-3 w-3 text-amber-500 mr-1" /> Pending
+                        </Badge>
+                        <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200 py-1 px-2 text-xs sm:text-sm">
+                            <XCircle className="h-3 w-3 text-red-500 mr-1" /> Rejected
+                        </Badge>
                     </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-6 pb-6">
                     {isLoading ? (
-                        <div className="flex items-center justify-center py-20">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
-                            <p>Loading calendar data...</p>
+                        <div className="flex items-center justify-center h-64 bg-muted/30 rounded-xl border border-dashed">
+                            <div className="text-center">
+                                <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                </div>
+                                <h3 className="text-sm font-medium text-foreground mb-2">Loading Calendar</h3>
+                                <p className="text-sm text-muted-foreground">Fetching reservation data...</p>
+                            </div>
                         </div>
                     ) : (
-                        <>
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-                                    <Box className="h-3 w-3 text-blue-500 mr-1" /> Approved
-                                </Badge>
-                                <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-200">
-                                    <Box className="h-3 w-3 text-gray-500 mr-1" /> Pending
-                                </Badge>
-                                <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200">
-                                    <Box className="h-3 w-3 text-red-500 mr-1" /> Rejected
-                                </Badge>
-                            </div>
-
-                            <div className="h-[600px] bg-white dark:bg-gray-900 rounded-md border border-input">
+                        <div className="w-full max-w-full">
+                            <div className="h-[400px] md:h-[600px] bg-background rounded-xl border shadow-sm overflow-hidden w-full max-w-full">
                                 <Calendar
                                     localizer={localizer}
                                     events={filteredEvents}
@@ -380,99 +401,179 @@ export default function AdminCalendarPage() {
                                     tooltipAccessor={(event: any) =>
                                         `${event.title}\nStatus: ${event.resource.status}\n${event.resource.reason ? `Reason: ${event.resource.reason}` : ''}`
                                     }
-                                    style={{ height: 600 }}
+                                    className="rounded-xl"
+                                    components={{
+                                        toolbar: () => null, // Hide default toolbar since we have custom one
+                                    }}
                                 />
                             </div>
-                        </>
+                        </div>
                     )}
                 </CardContent>
             </Card>
 
-            {/* Booking Details Dialog */}
+            {/* Enhanced Booking Details Dialog */}
             <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
-                <DialogContent className="sm:max-w-[500px]">
-                    <DialogHeader>
-                        <DialogTitle>Booking Details</DialogTitle>
-                        <DialogDescription>
-                            Review and manage this gear reservation request
-                        </DialogDescription>
+                <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-hidden flex flex-col">
+                    <DialogHeader className="flex-shrink-0 pb-4 border-b border-border/50">
+                        <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                                <CalendarIcon className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-lg font-semibold">
+                                    Reservation Details
+                                </DialogTitle>
+                                <DialogDescription className="text-sm text-muted-foreground">
+                                    Review and manage this gear reservation request
+                                </DialogDescription>
+                            </div>
+                        </div>
                     </DialogHeader>
 
                     {selectedEvent && (
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="text-sm font-medium">Gear</h4>
-                                <p>{selectedEvent.resource.gearName}</p>
-                                <p className="text-sm text-muted-foreground">{selectedEvent.resource.gearCategory}</p>
+                        <div className="flex-1 overflow-y-auto py-4 space-y-6">
+                            {/* Equipment Section */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Box className="h-4 w-4 text-muted-foreground" />
+                                    <h4 className="text-sm font-semibold text-foreground">Equipment</h4>
+                                </div>
+                                <div className="pl-6 space-y-1">
+                                    <p className="font-medium text-foreground">{selectedEvent.resource.gearName}</p>
+                                    <p className="text-sm text-muted-foreground">{selectedEvent.resource.gearCategory}</p>
+                                </div>
                             </div>
-                            <div>
-                                <h4 className="text-sm font-medium">User</h4>
-                                <p>{selectedEvent.resource.userName}</p>
-                                <p className="text-sm text-muted-foreground">{selectedEvent.resource.userEmail}</p>
+
+                            {/* User Section */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Box className="h-4 w-4 text-muted-foreground" />
+                                    <h4 className="text-sm font-semibold text-foreground">Requested By</h4>
+                                </div>
+                                <div className="pl-6 space-y-1">
+                                    <p className="font-medium text-foreground">{selectedEvent.resource.userName}</p>
+                                    <p className="text-sm text-muted-foreground">{selectedEvent.resource.userEmail}</p>
+                                </div>
                             </div>
-                            <div>
-                                <h4 className="text-sm font-medium">Status</h4>
-                                <Badge variant="outline" className={
-                                    selectedEvent.resource.status === 'Approved' ? 'bg-blue-100 text-blue-800' :
-                                        selectedEvent.resource.status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                                            'bg-gray-100 text-gray-800'
-                                }>
-                                    {selectedEvent.resource.status}
-                                </Badge>
-                                {selectedEvent.resource.approvedBy && (
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        by {selectedEvent.resource.approvedBy} at {format(new Date(selectedEvent.resource.approvedAt), 'PPp')}
+
+                            {/* Status Section */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                                    <h4 className="text-sm font-semibold text-foreground">Status</h4>
+                                </div>
+                                <div className="pl-6">
+                                    <Badge variant="outline" className={
+                                        selectedEvent.resource.status === 'Approved' ? 'bg-green-100 text-green-800 border-green-200' :
+                                            selectedEvent.resource.status === 'Rejected' ? 'bg-red-100 text-red-800 border-red-200' :
+                                                'bg-amber-100 text-amber-800 border-amber-200'
+                                    }>
+                                        {selectedEvent.resource.status === 'Approved' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                                        {selectedEvent.resource.status === 'Rejected' && <XCircle className="h-3 w-3 mr-1" />}
+                                        {selectedEvent.resource.status === 'Pending' && <AlertCircle className="h-3 w-3 mr-1" />}
+                                        {selectedEvent.resource.status}
+                                    </Badge>
+                                    {selectedEvent.resource.approvedBy && (
+                                        <p className="text-sm text-muted-foreground mt-2">
+                                            Approved by {selectedEvent.resource.approvedBy} on {format(new Date(selectedEvent.resource.approvedAt), 'PPp')}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Dates Section */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                                    <h4 className="text-sm font-semibold text-foreground">Reservation Period</h4>
+                                </div>
+                                <div className="pl-6 bg-muted/30 rounded-lg p-3 space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm font-medium">Start:</span>
+                                        <span className="text-sm">{format(selectedEvent.start, 'PPP pp')}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm font-medium">End:</span>
+                                        <span className="text-sm">{format(selectedEvent.end, 'PPP pp')}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Reason Section */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                                    <h4 className="text-sm font-semibold text-foreground">Purpose</h4>
+                                </div>
+                                <div className="pl-6">
+                                    <p className="text-sm text-muted-foreground leading-relaxed">
+                                        {selectedEvent.resource.reason || 'No reason provided'}
                                     </p>
-                                )}
+                                </div>
                             </div>
-                            <div>
-                                <h4 className="text-sm font-medium">Dates</h4>
-                                <p>From: {format(selectedEvent.start, 'PPP pp')}</p>
-                                <p>To: {format(selectedEvent.end, 'PPP pp')}</p>
-                            </div>
-                            <div>
-                                <h4 className="text-sm font-medium">Reason</h4>
-                                <p>{selectedEvent.resource.reason || 'No reason provided'}</p>
-                            </div>
+
+                            {/* Admin Notes Section */}
                             {selectedEvent.resource.notes && (
-                                <div>
-                                    <h4 className="text-sm font-medium">Admin Notes</h4>
-                                    <p>{selectedEvent.resource.notes}</p>
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2">
+                                        <Box className="h-4 w-4 text-muted-foreground" />
+                                        <h4 className="text-sm font-semibold text-foreground">Admin Notes</h4>
+                                    </div>
+                                    <div className="pl-6 bg-muted/30 rounded-lg p-3">
+                                        <p className="text-sm text-muted-foreground leading-relaxed">
+                                            {selectedEvent.resource.notes}
+                                        </p>
+                                    </div>
                                 </div>
                             )}
+
+                            {/* Admin Actions Section */}
                             {selectedEvent.resource.status === 'Pending' && (
-                                <div>
-                                    <h4 className="text-sm font-medium">Add Notes (Optional)</h4>
-                                    <Textarea
-                                        value={adminNotes}
-                                        onChange={(e) => setAdminNotes(e.target.value)}
-                                        placeholder="Add any notes about this booking"
-                                        className="mt-2"
-                                    />
+                                <div className="space-y-3 border-t pt-4">
+                                    <h4 className="text-sm font-semibold text-foreground">Admin Actions</h4>
+                                    <div className="space-y-3">
+                                        <label className="text-sm font-medium">Admin Notes (Optional)</label>
+                                        <Textarea
+                                            value={adminNotes}
+                                            onChange={(e) => setAdminNotes(e.target.value)}
+                                            placeholder="Add any notes about this booking decision..."
+                                            className="min-h-[80px] resize-none border-input/50 focus:border-primary/50 bg-background/50"
+                                            rows={3}
+                                        />
+                                    </div>
                                 </div>
                             )}
                         </div>
                     )}
 
-                    <DialogFooter className="mt-6">
-                        {selectedEvent?.resource.status === 'Pending' && (
-                            <div className="flex gap-2 w-full">
+                    <DialogFooter className="flex-shrink-0 pt-4 border-t border-border/50 mt-6">
+                        {selectedEvent?.resource.status === 'Pending' ? (
+                            <div className="flex gap-3 w-full">
                                 <Button
                                     variant="outline"
-                                    className="flex-1"
+                                    className="flex-1 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
                                     onClick={() => handleBookingAction('Rejected')}
                                 >
                                     <XCircle className="h-4 w-4 mr-2" />
-                                    Reject
+                                    Reject Reservation
                                 </Button>
                                 <Button
-                                    className="flex-1"
+                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white"
                                     onClick={() => handleBookingAction('Approved')}
                                 >
                                     <CheckCircle2 className="h-4 w-4 mr-2" />
-                                    Approve
+                                    Approve Reservation
                                 </Button>
                             </div>
+                        ) : (
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => setSelectedEvent(null)}
+                            >
+                                Close
+                            </Button>
                         )}
                     </DialogFooter>
                 </DialogContent>
