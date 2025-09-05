@@ -32,7 +32,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { apiGet } from '@/lib/apiClient';
-import { handleDatabaseError, openDatabaseSetupPage } from '@/lib/utils/database-setup';
 import { Gear } from '@/types/supabase';
 import { Pagination } from '@/components/ui/Pagination';
 import { gearQueries } from '@/lib/api/queries';
@@ -268,7 +267,7 @@ export default function ManageGearsPage() {
       if (data.image_url instanceof File) {
         const fileExt = data.image_url.name.split('.')?.pop();
         const filePath = `gears/${gearId}/${Date.now()}.${fileExt}`;
-        // Upload to the correct bucket: 'gear_images' (not 'gears')
+        // Upload to the gear_images bucket
         const { error: uploadError, data: uploadData } = await supabase.storage
           .from('gear_images')
           .upload(filePath, data.image_url, { upsert: true });
@@ -418,7 +417,7 @@ export default function ManageGearsPage() {
       if (updates.image_url instanceof File) {
         const fileExt = updates.image_url.name.split('.')?.pop();
         const filePath = `gears/${gear.id}/${Date.now()}.${fileExt}`;
-        // Upload to the correct bucket: 'gear_images' (not 'gears')
+        // Upload to the gear_images bucket
         const { error: uploadError, data: uploadData } = await supabase.storage
           .from('gear_images')
           .upload(filePath, updates.image_url, { upsert: true });
@@ -974,54 +973,20 @@ export default function ManageGearsPage() {
     setMaintenanceRecords([]);
 
     try {
-      console.log("Attempting to fetch maintenance records for gear:", gearId);
-
-      // First check if the table exists
-      try {
-        // Try a direct query to gear_maintenance
-        const { data, error } = await supabase
-          .from('gear_maintenance')
-          .select('*')
-          .eq('gear_id', gearId)
-          .order('date', { ascending: false });
-
-        if (!error) {
-          console.log(`Fetched ${data?.length || 0} maintenance records`);
-          setMaintenanceRecords(data || []);
-          return;
-        }
-
-        // If error, the table might not exist
-        console.log("Could not query maintenance records:", error.message);
-      } catch (e) {
-        console.log("Exception querying maintenance records:", e);
-      }
-
-      // Check if the gear_maintenance table exists
-      const { error: checkError } = await supabase
-        .rpc('check_table_exists', { table_name: 'gear_maintenance' });
-
-      if (checkError) {
-        console.log("Could not check if maintenance table exists:", checkError.message);
-        return; // Don't show an error to the user, just leave records empty
-      }
-
-      // Table exists but we had an error earlier, try one more time
-      const { data: retryData, error: retryError } = await supabase
+      const { data, error } = await supabase
         .from('gear_maintenance')
         .select('*')
         .eq('gear_id', gearId)
         .order('date', { ascending: false });
 
-      if (retryError) {
-        console.log("Retry failed when fetching maintenance records:", retryError.message);
-      } else {
-        console.log(`Fetched ${retryData?.length || 0} maintenance records on retry`);
-        setMaintenanceRecords(retryData || []);
+      if (error) {
+        console.error("Error fetching maintenance records:", error);
+        return;
       }
+
+      setMaintenanceRecords(data || []);
     } catch (err: unknown) {
-      // For any uncaught errors, just log them without showing a toast
-      console.log("Exception in maintenance records fetch:", err.message || "Unknown error");
+      console.error("Exception in maintenance records fetch:", err);
     } finally {
       setLoadingMaintenance(false);
     }
@@ -1031,40 +996,7 @@ export default function ManageGearsPage() {
   const handleOpenMaintenance = (gear: Gear) => {
     setSelectedGear(gear);
     setMaintenanceModalOpen(true);
-
-    // Create the function needed to check table existence
-    try {
-      supabase.rpc('check_table_exists', { table_name: 'test' })
-        .then(({ error }: { error: any }) => {
-          // If the function doesn't exist, create it
-          if (error && error.message.includes('does not exist')) {
-            console.log("Creating check_table_exists function");
-            supabase.rpc('create_table_check_function')
-              .catch(() => {
-                // Create the function manually if the RPC call fails
-                supabase.sql`
-                  CREATE OR REPLACE FUNCTION check_table_exists(table_name text)
-                  RETURNS boolean
-                  LANGUAGE plpgsql
-                  AS $$
-                  BEGIN
-                    RETURN EXISTS (
-                      SELECT FROM information_schema.tables 
-                      WHERE table_schema = 'public'
-                      AND table_name = $1
-                    );
-                  END;
-                  $$;
-                `.catch((e: any) => console.log("Couldn't create helper function:", e.message));
-              });
-          }
-          // After ensuring the function exists or handling its absence, fetch records
-          fetchMaintenanceRecords(gear.id);
-        });
-    } catch (e: any) {
-      // If we can't create the helper function, just try fetching records directly
-      fetchMaintenanceRecords(gear.id);
-    }
+    fetchMaintenanceRecords(gear.id);
   };
   const handleCloseMaintenance = () => {
     setMaintenanceModalOpen(false);
@@ -1073,7 +1005,11 @@ export default function ManageGearsPage() {
   };
 
   // Maintenance form logic
-  const handleAddMaintenance = async (values: any) => {
+  const handleAddMaintenance = async (values: {
+    status: string;
+    description: string;
+    date: string;
+  }) => {
     setLoadingMaintenance(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -1092,51 +1028,19 @@ export default function ManageGearsPage() {
         ]);
 
       if (error) {
-        console.log("Error adding maintenance:", error.message);
-        console.log("Full error:", JSON.stringify(error, null, 2));
-
-        // Use our utility to handle database errors
-        const result = handleDatabaseError(error, 'gear_maintenance');
-
-        if (result.isMissingTable) {
-          // Show a button to navigate to the database setup page
-          toast({
-            title: 'Database Setup Required',
-            description: "The maintenance records table needs to be created. Go to Database Setup to fix this issue.",
-            variant: 'destructive',
-            action: (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={openDatabaseSetupPage}
-              >
-                Go to Setup
-              </Button>
-            )
-          });
-
-          return; // Exit early since we can't add the maintenance record
-        }
+        console.error("Error adding maintenance:", error);
+        toast({
+          title: 'Error',
+          description: "Failed to add maintenance record. Please try again.",
+          variant: 'destructive'
+        });
+        return;
       } else {
         toast({
           title: 'Maintenance Logged',
           description: 'Maintenance event added successfully.',
           variant: 'default'
         });
-
-        // Try to add the maintenance record to the local state to avoid refresh
-        setMaintenanceRecords(prev => [
-          {
-            id: Date.now(), // Temporary ID
-            gear_id: selectedGear?.id,
-            status: values.status,
-            description: values.description,
-            date: values.date,
-            performed_by: user?.id || null,
-            created_at: new Date().toISOString()
-          },
-          ...prev
-        ]);
 
         // Reset form with current timestamp
         maintenanceForm.reset({
@@ -1145,37 +1049,42 @@ export default function ManageGearsPage() {
           date: new Date().toISOString().slice(0, 16)
         });
 
-        // Force fetch maintenance records again
+        // Refresh maintenance records to show the new entry
         await fetchMaintenanceRecords(selectedGear?.id || '');
 
         // Refresh the gears data to get the updated status
         fetchGears();
 
-        // Send Google Chat notification for maintenance
-        const { data: adminProfile } = await supabase
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', user?.id)
-          .single();
-        // Send Google Chat notification for maintenance
-        await fetch('/api/notifications/google-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            eventType: 'ADMIN_MAINTENANCE',
-            payload: {
-              adminName: adminProfile?.full_name || 'Unknown Admin',
-              adminEmail: adminProfile?.email || 'Unknown Email',
-              gearName: selectedGear?.name,
-              maintenanceStatus: values.status,
-              maintenanceDate: values.date,
-              description: values.description,
-            }
-          })
-        });
+        // Send Google Chat notification for maintenance (non-blocking)
+        try {
+          const { data: adminProfile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', user?.id)
+            .single();
+
+          await fetch('/api/notifications/google-chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              eventType: 'ADMIN_MAINTENANCE',
+              payload: {
+                adminName: adminProfile?.full_name || 'Unknown Admin',
+                adminEmail: adminProfile?.email || 'Unknown Email',
+                gearName: selectedGear?.name,
+                maintenanceStatus: values.status,
+                maintenanceDate: values.date,
+                description: values.description,
+              }
+            })
+          });
+        } catch (notificationError) {
+          console.warn('Failed to send Google Chat notification:', notificationError);
+          // Don't show error to user as this is non-critical
+        }
       }
     } catch (err: unknown) {
-      console.log("Exception adding maintenance:", err.message || "Unknown error");
+      console.error("Exception adding maintenance:", err);
       toast({
         title: 'System Error',
         description: "Could not process maintenance record",
@@ -1254,7 +1163,7 @@ export default function ManageGearsPage() {
             console.log("Uploading gear image to", filePath);
 
             const { error: uploadError, data: uploadData } = await supabase.storage
-              .from('gears')
+              .from('gear_images')
               .upload(filePath, imageFile, { upsert: true });
 
             if (uploadError) {
@@ -1267,7 +1176,7 @@ export default function ManageGearsPage() {
             } else {
               // Get the public URL for the uploaded image
               const { data: urlData } = supabase.storage
-                .from('gears')
+                .from('gear_images')
                 .getPublicUrl(uploadData.path);
 
               imageUrl = urlData?.publicUrl || null;

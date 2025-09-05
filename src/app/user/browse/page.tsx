@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import { createClient } from '@/lib/supabase/client';
 // import { createGearNotification } from '@/lib/notifications'; // No longer used
 import { useToast } from "@/hooks/use-toast";
 import { apiGet } from '@/lib/apiClient';
+import { useDebounce } from '@/hooks/useDebounce';
 
 /**
  * Equipment Interface
@@ -182,7 +183,9 @@ export default function BrowseGearsPage() {
   const [gears, setGears] = useState<Gear[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('Available');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [categories, setCategories] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 300);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
@@ -193,19 +196,29 @@ export default function BrowseGearsPage() {
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const scrollPositionRef = useRef<number>(0);
 
+  const stableFetchGears = useCallback(fetchGears, [page, pageSize, filterStatus, filterCategory, debouncedSearch]);
+
   useEffect(() => {
-    fetchGears();
-    // Set up real-time subscription (filtered events)
+    stableFetchGears();
+  }, [stableFetchGears]);
+
+  useEffect(() => {
+    // fetch distinct categories once
+    (async () => {
+      const { data } = await supabase.from('gears').select('category').not('category', 'is', null).neq('category', '').order('category');
+      const distinct = Array.from(new Set((data || []).map((d: any) => d.category)));
+      setCategories(distinct);
+    })();
+
+    // stable realtime subscription
     const channel = supabase
       .channel('public:gears')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gears' }, () => fetchGears())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gears' }, () => fetchGears())
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gears' }, () => fetchGears())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gears' }, () => stableFetchGears())
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [page, pageSize, filterStatus, filterCategory, searchTerm]);
+  }, [stableFetchGears]);
 
   async function fetchGears() {
     // Preserve scroll position before fetching
@@ -219,7 +232,7 @@ export default function BrowseGearsPage() {
         category: filterCategory,
         page: String(page),
         pageSize: String(pageSize),
-        search: searchTerm,
+        search: debouncedSearch,
       });
       const { data, total: apiTotal, error } = await apiGet<{ data: Gear[]; total: number; error: string | null }>(`/api/gears?${params.toString()}`);
       if (error) {
@@ -373,20 +386,9 @@ export default function BrowseGearsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Categories</SelectItem>
-                        <SelectItem value="Camera">Camera</SelectItem>
-                        <SelectItem value="Lens">Lens</SelectItem>
-                        <SelectItem value="Drone">Drone</SelectItem>
-                        <SelectItem value="Audio">Audio</SelectItem>
-                        <SelectItem value="Laptop">Laptop</SelectItem>
-                        <SelectItem value="Monitor">Monitor</SelectItem>
-                        <SelectItem value="Mouse">Mouse</SelectItem>
-                        <SelectItem value="Batteries">Batteries</SelectItem>
-                        <SelectItem value="Storage">Storage</SelectItem>
-                        <SelectItem value="Cables">Cables</SelectItem>
-                        <SelectItem value="Lighting">Lighting</SelectItem>
-                        <SelectItem value="Tripod">Tripod</SelectItem>
-                        <SelectItem value="Accessory">Accessory</SelectItem>
-                        <SelectItem value="Cars">Cars</SelectItem>
+                        {categories.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -422,7 +424,7 @@ export default function BrowseGearsPage() {
                 <motion.div key={gear.id} variants={itemVariants}>
                   <Card className="overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex flex-col h-full group">
                     <CardHeader className="p-0">
-                      <div className="w-full h-40 sm:h-48 lg:h-52 relative bg-muted overflow-hidden">
+                      <div className="w-full h-40 sm:h-48 lg:h-52 relative bg-card border overflow-hidden">
                         {gear.image_url ? (
                           <Image
                             src={gear.image_url}
@@ -440,11 +442,14 @@ export default function BrowseGearsPage() {
                         <div className="absolute top-2 right-2">
                           <Badge variant={
                             gear.status === 'Available' ? 'default' :
-                              gear.status === 'Booked' ? 'secondary' :
-                                gear.status === 'Damaged' ? 'destructive' :
-                                  gear.status === 'New' ? 'outline' :
-                                    'secondary'
-                          } className={`capitalize text-xs font-medium ${gear.status === 'Available' ? 'bg-green-500 text-white' : ''}`}>
+                              gear.status === 'Partially Available' ? 'secondary' :
+                                gear.status === 'Booked' ? 'secondary' :
+                                  gear.status === 'Damaged' ? 'destructive' :
+                                    gear.status === 'New' ? 'outline' :
+                                      'secondary'
+                          } className={`capitalize text-xs font-medium ${gear.status === 'Available' ? 'bg-green-500 text-white' :
+                            gear.status === 'Partially Available' ? 'bg-yellow-500 text-white' : ''
+                            }`}>
                             {gear.status}
                           </Badge>
                         </div>
@@ -468,7 +473,7 @@ export default function BrowseGearsPage() {
                       <Link href={`/user/request?gearId=${gear.id}`} aria-label={`Request ${gear.name}`} className="w-full">
                         <Button
                           size="sm"
-                          disabled={gear.status !== 'Available'}
+                          disabled={gear.status !== 'Available' && gear.status !== 'Partially Available'}
                           aria-label={`Request ${gear.name}`}
                           className="w-full min-h-[44px] text-sm sm:text-base"
                         >

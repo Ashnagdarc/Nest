@@ -24,6 +24,7 @@ import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
 import { apiGet } from '@/lib/apiClient';
 import { isFileList, isFile } from '@/lib/utils/browser-safe';
 import QuantityFixPanel from '@/components/admin/QuantityFixPanel';
+import SystemOverview from '@/components/admin/SystemOverview';
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -51,12 +52,22 @@ const brandingSchema = z.object({
     logo: z.any().optional(),
 });
 
-// Assuming app settings are stored in a table like 'app_settings' with key-value pairs
-// or a single row in a dedicated settings table. Here we use a simplified object schema.
+// Enhanced app settings schema with comprehensive options
 const appSettingsSchema = z.object({
+    // Existing settings
     emailNotifications: z.boolean(),
     autoApproveRequests: z.boolean(),
     maxCheckoutDuration: z.number().min(1, "Must be at least 1 day"),
+
+    // New enhanced settings
+    maintenanceMode: z.boolean(),
+    requireAdminApproval: z.boolean(),
+    sessionTimeout: z.number().min(5, "Must be at least 5 minutes").max(480, "Must be at most 8 hours"),
+    enableTwoFactor: z.boolean(),
+    passwordMinLength: z.number().min(6, "Must be at least 6 characters").max(32, "Must be at most 32 characters"),
+    enableAuditLogs: z.boolean(),
+    backupFrequency: z.enum(['daily', 'weekly', 'monthly']),
+    maxFileSize: z.number().min(1, "Must be at least 1MB").max(100, "Must be at most 100MB"),
 });
 
 
@@ -151,7 +162,19 @@ export default function AdminSettingsPage() {
     const brandingForm = useForm<BrandingFormValues>({ resolver: zodResolver(brandingSchema), defaultValues: { logo: undefined } });
     const appSettingsForm = useForm<AppSettingsFormValues>({
         resolver: zodResolver(appSettingsSchema),
-        defaultValues: { emailNotifications: true, autoApproveRequests: false, maxCheckoutDuration: 7 },
+        defaultValues: {
+            emailNotifications: true,
+            autoApproveRequests: false,
+            maxCheckoutDuration: 7,
+            maintenanceMode: false,
+            requireAdminApproval: true,
+            sessionTimeout: 120,
+            enableTwoFactor: false,
+            passwordMinLength: 8,
+            enableAuditLogs: true,
+            backupFrequency: 'weekly',
+            maxFileSize: 10
+        },
     });
 
 
@@ -228,8 +251,16 @@ export default function AdminSettingsPage() {
                     settingsData.forEach((setting: AppSetting) => {
                         if (setting.key === 'logoUrl') settings.logoUrl = setting.value ?? undefined;
                         if (setting.key === 'emailNotifications') settings.emailNotifications = setting.value === 'true';
-                        if (setting.key === 'autoApproveRequests') settings.autoApproveRequests = setting.value === 'true';
-                        if (setting.key === 'maxCheckoutDuration') settings.maxCheckoutDuration = parseInt(setting.value || '7', 10);
+                        if (setting.key === 'auto_approve_requests') settings.autoApproveRequests = setting.value === 'true';
+                        if (setting.key === 'max_request_duration_days') settings.maxCheckoutDuration = parseInt(setting.value || '7', 10);
+                        if (setting.key === 'maintenance_mode') settings.maintenanceMode = setting.value === 'true';
+                        if (setting.key === 'require_admin_approval') settings.requireAdminApproval = setting.value === 'true';
+                        if (setting.key === 'session_timeout') settings.sessionTimeout = parseInt(setting.value || '120', 10);
+                        if (setting.key === 'enable_two_factor') settings.enableTwoFactor = setting.value === 'true';
+                        if (setting.key === 'password_min_length') settings.passwordMinLength = parseInt(setting.value || '8', 10);
+                        if (setting.key === 'enable_audit_logs') settings.enableAuditLogs = setting.value === 'true';
+                        if (setting.key === 'backup_frequency') settings.backupFrequency = setting.value as 'daily' | 'weekly' | 'monthly';
+                        if (setting.key === 'max_file_size') settings.maxFileSize = parseInt(setting.value || '10', 10);
                     });
 
                     setCurrentLogoUrl(settings.logoUrl);
@@ -237,6 +268,14 @@ export default function AdminSettingsPage() {
                         emailNotifications: settings.emailNotifications ?? true,
                         autoApproveRequests: settings.autoApproveRequests ?? false,
                         maxCheckoutDuration: settings.maxCheckoutDuration ?? 7,
+                        maintenanceMode: settings.maintenanceMode ?? false,
+                        requireAdminApproval: settings.requireAdminApproval ?? true,
+                        sessionTimeout: settings.sessionTimeout ?? 120,
+                        enableTwoFactor: settings.enableTwoFactor ?? false,
+                        passwordMinLength: settings.passwordMinLength ?? 8,
+                        enableAuditLogs: settings.enableAuditLogs ?? true,
+                        backupFrequency: settings.backupFrequency ?? 'weekly',
+                        maxFileSize: settings.maxFileSize ?? 10,
                     });
                     console.log("AdminSettings: App settings form reset with fetched values.");
                 } else {
@@ -500,8 +539,16 @@ export default function AdminSettingsPage() {
         // Use Promise.all to save multiple settings concurrently
         const savePromises = [
             saveSetting('emailNotifications', data.emailNotifications),
-            saveSetting('autoApproveRequests', data.autoApproveRequests),
-            saveSetting('maxCheckoutDuration', data.maxCheckoutDuration),
+            saveSetting('auto_approve_requests', data.autoApproveRequests),
+            saveSetting('max_request_duration_days', data.maxCheckoutDuration),
+            saveSetting('maintenance_mode', data.maintenanceMode),
+            saveSetting('require_admin_approval', data.requireAdminApproval),
+            saveSetting('session_timeout', data.sessionTimeout),
+            saveSetting('enable_two_factor', data.enableTwoFactor),
+            saveSetting('password_min_length', data.passwordMinLength),
+            saveSetting('enable_audit_logs', data.enableAuditLogs),
+            saveSetting('backup_frequency', data.backupFrequency),
+            saveSetting('max_file_size', data.maxFileSize),
         ];
 
         try {
@@ -537,8 +584,13 @@ export default function AdminSettingsPage() {
         >
             <h1 className="text-2xl md:text-3xl font-bold text-foreground">Admin Settings</h1>
 
-            {/* Admin Profile Settings */}
+            {/* System Overview */}
             <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={0}>
+                <SystemOverview />
+            </motion.div>
+
+            {/* Admin Profile Settings */}
+            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={1}>
                 <Card className="overflow-hidden">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><User className="h-5 w-5 text-primary flex-shrink-0" /> Admin Profile</CardTitle>
@@ -605,7 +657,7 @@ export default function AdminSettingsPage() {
             </motion.div>
 
             {/* Admin Password Settings */}
-            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={1}>
+            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={2}>
                 <Card className="overflow-hidden">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><Lock className="h-5 w-5 text-primary flex-shrink-0" /> Change Password</CardTitle>
@@ -644,7 +696,7 @@ export default function AdminSettingsPage() {
             </motion.div>
 
             {/* Branding Settings */}
-            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={2}>
+            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={3}>
                 <Card className="overflow-hidden">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><ImageIcon className="h-5 w-5 text-primary flex-shrink-0" /> Branding</CardTitle>
@@ -704,12 +756,12 @@ export default function AdminSettingsPage() {
             </motion.div>
 
 
-            {/* App Settings (General, Notifications) */}
-            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={3}>
+            {/* App Settings (General, Notifications, Security, System) */}
+            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={4}>
                 <Card className="overflow-hidden">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><Settings className="h-5 w-5 text-primary flex-shrink-0" /> Application Settings</CardTitle>
-                        <CardDescription className="text-sm">Configure general application behavior and notifications.</CardDescription>
+                        <CardDescription className="text-sm">Configure general application behavior, security, and system settings.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Form {...appSettingsForm}>
@@ -726,6 +778,23 @@ export default function AdminSettingsPage() {
                                                     <FormLabel className="text-sm">Auto-Approve Requests</FormLabel>
                                                     <FormDescription className="text-xs sm:text-sm">
                                                         Automatically approve gear requests upon submission.
+                                                    </FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={appSettingsForm.control}
+                                        name="requireAdminApproval"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
+                                                <div className="space-y-0.5 pr-2">
+                                                    <FormLabel className="text-sm">Require Admin Approval</FormLabel>
+                                                    <FormDescription className="text-xs sm:text-sm">
+                                                        Require admin approval for all gear requests.
                                                     </FormDescription>
                                                 </div>
                                                 <FormControl>
@@ -774,6 +843,138 @@ export default function AdminSettingsPage() {
                                     />
                                 </div>
 
+                                <div className="space-y-4 p-3 sm:p-4 border rounded-md">
+                                    <h3 className="font-medium text-base md:text-lg flex items-center gap-2"><Lock className="h-4 w-4 flex-shrink-0" /> Security</h3>
+                                    <Separator className="my-2" />
+                                    <FormField
+                                        control={appSettingsForm.control}
+                                        name="enableTwoFactor"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
+                                                <div className="space-y-0.5 pr-2">
+                                                    <FormLabel className="text-sm">Enable Two-Factor Authentication</FormLabel>
+                                                    <FormDescription className="text-xs sm:text-sm">
+                                                        Require 2FA for all admin accounts.
+                                                    </FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={appSettingsForm.control}
+                                        name="passwordMinLength"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-sm">Minimum Password Length</FormLabel>
+                                                <FormControl>
+                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="6" max="32" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 8)} />
+                                                </FormControl>
+                                                <FormDescription className="text-xs sm:text-sm">
+                                                    Minimum number of characters required for passwords.
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={appSettingsForm.control}
+                                        name="sessionTimeout"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-sm">Session Timeout (Minutes)</FormLabel>
+                                                <FormControl>
+                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="5" max="480" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 120)} />
+                                                </FormControl>
+                                                <FormDescription className="text-xs sm:text-sm">
+                                                    How long users stay logged in before requiring re-authentication.
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={appSettingsForm.control}
+                                        name="enableAuditLogs"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
+                                                <div className="space-y-0.5 pr-2">
+                                                    <FormLabel className="text-sm">Enable Audit Logs</FormLabel>
+                                                    <FormDescription className="text-xs sm:text-sm">
+                                                        Log all admin actions for security and compliance.
+                                                    </FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+
+                                <div className="space-y-4 p-3 sm:p-4 border rounded-md">
+                                    <h3 className="font-medium text-base md:text-lg flex items-center gap-2"><Settings className="h-4 w-4 flex-shrink-0" /> System</h3>
+                                    <Separator className="my-2" />
+                                    <FormField
+                                        control={appSettingsForm.control}
+                                        name="maintenanceMode"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
+                                                <div className="space-y-0.5 pr-2">
+                                                    <FormLabel className="text-sm">Maintenance Mode</FormLabel>
+                                                    <FormDescription className="text-xs sm:text-sm">
+                                                        Temporarily disable the application for maintenance.
+                                                    </FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={appSettingsForm.control}
+                                        name="backupFrequency"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-sm">Backup Frequency</FormLabel>
+                                                <FormControl>
+                                                    <select
+                                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        {...field}
+                                                    >
+                                                        <option value="daily">Daily</option>
+                                                        <option value="weekly">Weekly</option>
+                                                        <option value="monthly">Monthly</option>
+                                                    </select>
+                                                </FormControl>
+                                                <FormDescription className="text-xs sm:text-sm">
+                                                    How often to create automated backups.
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={appSettingsForm.control}
+                                        name="maxFileSize"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-sm">Maximum File Upload Size (MB)</FormLabel>
+                                                <FormControl>
+                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="1" max="100" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 10)} />
+                                                </FormControl>
+                                                <FormDescription className="text-xs sm:text-sm">
+                                                    Maximum size for file uploads (images, documents, etc.).
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+
                                 <div className="flex justify-end pt-2">
                                     <Button type="submit" disabled={isAppSettingsLoading}>
                                         <Save className="mr-2 h-4 w-4 flex-shrink-0" />
@@ -787,7 +988,7 @@ export default function AdminSettingsPage() {
             </motion.div>
 
             {/* Database Maintenance */}
-            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={4}>
+            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={5}>
                 <QuantityFixPanel />
             </motion.div>
 

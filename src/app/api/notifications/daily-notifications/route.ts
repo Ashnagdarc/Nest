@@ -177,12 +177,12 @@ async function handleGearOverdue() {
             // Log notification for idempotency
             await supabase.from('notifications').insert({
                 user_id: userId,
-                type: 'overdue',
+                type: 'Overdue',
                 title: 'Overdue Gear Notification',
                 message: `Overdue gear: ${userGearMap[userId].gearNames.join(', ')}`,
                 is_read: false,
                 created_at: earliestDue.toISOString().split('T')[0],
-                category: 'system',
+                category: 'System',
             });
 
             notificationsSent++;

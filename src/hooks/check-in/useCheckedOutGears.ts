@@ -46,13 +46,13 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
             console.log('Fetching checked out gears for user:', userId);
 
             // Use direct Supabase query to get gears that the user should see in check-in
-            // Include gears with status "Checked Out", "Pending Check-in", and "Partially Checked Out" that belong to the user
+            // Include gears with status "Checked Out", "Pending Check-in", "Partially Available" that belong to the user
             // Exclude gears with status "Available" or "Needs Repair" even if checked_out_to is set
             const { data: gears, error } = await supabase
                 .from('gears')
                 .select('*')
                 .eq('checked_out_to', userId)
-                .in('status', ['Checked Out', 'Pending Check-in', 'Partially Checked Out'])
+                .in('status', ['Checked Out', 'Pending Check-in', 'Partially Available'])
                 .order('name');
 
             if (error) {

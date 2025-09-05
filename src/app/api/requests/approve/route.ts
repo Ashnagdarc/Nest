@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/supabase';
 
 const calculateDueDate = (duration: string): string => {
     const now = new Date();
@@ -14,7 +15,7 @@ const calculateDueDate = (duration: string): string => {
         case "1 week": dueDate = new Date(utcNow.getTime() + 7 * 24 * 60 * 60 * 1000); break;
         case "2 weeks": dueDate = new Date(utcNow.getTime() + 14 * 24 * 60 * 60 * 1000); break;
         case "Month": dueDate = new Date(utcNow.getTime() + 30 * 24 * 60 * 60 * 1000); break;
-        case "year": dueDate = new Date(utcNow.getTime() + 365 * 24 * 60 * 60 * 1000); break;
+        case "1year": dueDate = new Date(utcNow.getTime() + 365 * 24 * 60 * 60 * 1000); break;
         default: dueDate = new Date(utcNow.getTime() + 7 * 24 * 60 * 60 * 1000); break;
     }
     return dueDate.toISOString();
@@ -23,28 +24,59 @@ const calculateDueDate = (duration: string): string => {
 export async function POST(request: NextRequest) {
     try {
         const { requestId } = await request.json();
+        console.log('🔍 Approving request:', requestId);
+
         if (!requestId) {
             return NextResponse.json({ success: false, error: 'requestId is required' }, { status: 400 });
         }
 
-        const supabase = await createSupabaseServerClient(true);
+        // Create direct Supabase client with service role key to bypass RLS
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-        // Load request with lines
+        if (!supabaseUrl || !supabaseServiceKey) {
+            console.error('Missing Supabase environment variables');
+            return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
+        }
+
+        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        });
+
+        // Load request first
         const { data: req, error: reqErr } = await supabase
             .from('gear_requests')
-            .select('id, user_id, status, due_date, expected_duration, gear_request_gears(gear_id, quantity)')
+            .select('id, user_id, status, due_date, expected_duration')
             .eq('id', requestId)
-            .single();
+            .maybeSingle();
         if (reqErr || !req) {
+            console.error('🔍 Request not found:', reqErr);
             return NextResponse.json({ success: false, error: `Request not found: ${reqErr?.message || ''}` }, { status: 404 });
         }
 
-        if ((req.status || '').toLowerCase() === 'approved') {
+        console.log('🔍 Request found:', req);
+
+        // Then load gear request gears separately
+        const { data: gearRequestGears, error: gearErr } = await supabase
+            .from('gear_request_gears')
+            .select('gear_id, quantity')
+            .eq('gear_request_id', requestId);
+        if (gearErr) {
+            console.error('🔍 Failed to load gear data:', gearErr);
+            return NextResponse.json({ success: false, error: `Failed to load gear data: ${gearErr.message}` }, { status: 500 });
+        }
+
+        console.log('🔍 Gear request gears:', gearRequestGears);
+
+        if (req.status === 'Approved') {
             return NextResponse.json({ success: true, data: { message: 'Already approved' } });
         }
 
-        const lines: Array<{ gear_id: string; quantity: number }> = Array.isArray(req.gear_request_gears)
-            ? req.gear_request_gears.map((l: { gear_id: string; quantity?: number }) => ({ gear_id: l.gear_id, quantity: Math.max(1, Number(l.quantity ?? 1)) }))
+        const lines: Array<{ gear_id: string; quantity: number }> = Array.isArray(gearRequestGears)
+            ? gearRequestGears.map((l: { gear_id: string; quantity?: number }) => ({ gear_id: l.gear_id, quantity: Math.max(1, Number(l.quantity ?? 1)) }))
             : [];
 
         if (lines.length === 0) {
@@ -52,21 +84,28 @@ export async function POST(request: NextRequest) {
         }
 
         // Validate availability and collect updates
+        console.log('🔍 Processing lines:', lines);
         const updates: Array<{ gear_id: string; newAvailable: number; newStatus: string }> = [];
         for (const line of lines) {
             const { data: g, error: gErr } = await supabase
                 .from('gears')
                 .select('id, name, available_quantity, quantity, status')
                 .eq('id', line.gear_id)
-                .single();
+                .maybeSingle();
             if (gErr || !g) {
                 return NextResponse.json({ success: false, error: `Gear not found for line` }, { status: 400 });
             }
-            if ((g.available_quantity ?? 0) < line.quantity) {
-                return NextResponse.json({ success: false, error: `Not enough available units for ${g.name}. Requested ${line.quantity}, available ${g.available_quantity}.` }, { status: 409 });
+            const baseAvailable = typeof g.available_quantity === 'number' && !Number.isNaN(g.available_quantity)
+                ? g.available_quantity
+                : (typeof g.quantity === 'number' ? g.quantity : 0);
+            if (baseAvailable < line.quantity) {
+                return NextResponse.json({ success: false, error: `Not enough available units for ${g.name}. Requested ${line.quantity}, available ${baseAvailable}.` }, { status: 409 });
             }
-            const newAvailable = Math.max(0, (g.available_quantity ?? 0) - line.quantity);
-            const newStatus = newAvailable > 0 ? 'Partially Checked Out' : 'Checked Out';
+            const newAvailable = Math.max(0, baseAvailable - line.quantity);
+            // Use proper status progression: Available -> Partially Available -> Checked Out
+            const newStatus = newAvailable === baseAvailable ? 'Available' :
+                newAvailable > 0 ? 'Partially Available' : 'Checked Out';
+            console.log(`🔍 Gear ${g.name}: ${baseAvailable} available, requesting ${line.quantity}, new available: ${newAvailable}, new status: ${newStatus}`);
             updates.push({ gear_id: g.id, newAvailable, newStatus });
         }
 
@@ -92,22 +131,15 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Update request with involved gear ids and approve
+        // Note: gear_ids field doesn't exist in gear_requests table
+        // Gear-to-request associations are handled by gear_request_gears junction table
         const distinctGearIds = Array.from(new Set(lines.map(l => l.gear_id)));
-        const { error: updIdsErr } = await supabase
-            .from('gear_requests')
-            .update({ gear_ids: distinctGearIds, updated_at: new Date().toISOString() })
-            .eq('id', requestId);
-        if (updIdsErr) {
-            return NextResponse.json({ success: false, error: `Failed to update request gear_ids: ${updIdsErr.message}` }, { status: 500 });
-        }
 
         const { error: approveErr } = await supabase
             .from('gear_requests')
             .update({
-                status: 'approved',
+                status: 'Approved',
                 approved_at: new Date().toISOString(),
-                checkout_date: new Date().toISOString(),
                 due_date: calculatedDueDate,
                 updated_at: new Date().toISOString()
             })
@@ -116,14 +148,13 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: `Failed to approve request: ${approveErr.message}` }, { status: 500 });
         }
 
-        // Status history entry (best effort)
-        await supabase
-            .from('request_status_history')
-            .insert({ request_id: requestId, status: 'approved', changed_at: new Date().toISOString(), note: 'Request approved by admin (quantity-based).' });
+        // Status history table not present; relying on gear_requests.approved_at/updated_at fields
 
+        console.log('🔍 Request approved successfully:', { updated: updates.length, gear_ids: distinctGearIds });
         return NextResponse.json({ success: true, data: { updated: updates.length, gear_ids: distinctGearIds } });
     } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('🔍 Error in approve API:', msg);
         return NextResponse.json({ success: false, error: msg }, { status: 500 });
     }
 }

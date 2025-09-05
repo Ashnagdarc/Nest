@@ -69,19 +69,28 @@ export default function UserHistoryPage() {
 
         console.log("Authenticated user:", user.id);
 
-        // Fetch both activity log and check-ins
-        const [activityResponse, checkinsResponse] = await Promise.all([
+        // Fetch gear requests and check-ins from existing tables
+        const [requestsResponse, checkinsResponse] = await Promise.all([
           supabase
-            .from('gear_activity_log')
+            .from('gear_requests')
             .select(`
               id,
-              activity_type,
               status,
-              notes,
-              details,
+              reason,
+              destination,
               created_at,
-              gear_id,
-              gear:gears(*)
+              updated_at,
+              approved_at,
+              admin_notes,
+              gear_request_gears(
+                gear_id,
+                quantity,
+                gears(
+                  id,
+                  name,
+                  category
+                )
+              )
             `)
             .eq('user_id', user.id)
             .order('created_at', { ascending: false }),
@@ -95,60 +104,59 @@ export default function UserHistoryPage() {
               condition,
               notes,
               gear_id,
-              gear:gears(*)
+              gears(
+                id,
+                name,
+                category
+              )
             `)
             .eq('user_id', user.id)
             .order('checkin_date', { ascending: false })
         ]);
 
-        const activityError = activityResponse.error;
+        const requestsError = requestsResponse.error;
         const checkinsError = checkinsResponse.error;
-        const activityData = activityResponse.data || [];
+        const requestsData = requestsResponse.data || [];
         const checkinsData = checkinsResponse.data || [];
 
-        if (activityError) {
-          console.error("Error fetching activity log:", {
-            error: activityError,
-            message: activityError.message,
-            details: activityError.details,
-            hint: activityError.hint,
-            code: activityError.code,
-            status: activityError.status,
-            name: activityError?.name,
-            stack: activityError?.stack
-          });
+        if (requestsError) {
+          console.error("Error fetching gear requests:", requestsError);
         }
 
         if (checkinsError) {
-          console.error("Error fetching check-ins:", {
-            error: checkinsError,
-            message: checkinsError.message
-          });
+          console.error("Error fetching check-ins:", checkinsError);
         }
 
-        // Process activity data
-        const activityItems = activityData.map((activity: any) => ({
-          id: activity.id,
-          activityType: activity.activity_type,
-          gearName: activity.gear?.name || `Gear ${activity.gear_id?.slice(0, 8) || 'Unknown'}`,
-          date: new Date(activity.created_at),
-          status: activity.status || 'Unknown',
-          details: formatActivityDetails(activity)
-        }));
+        // Process gear requests data
+        const requestItems = requestsData.map((request: any) => {
+          const gearNames = request.gear_request_gears?.map((grg: any) => 
+            grg.gears?.name || `Gear ${grg.gear_id?.slice(0, 8) || 'Unknown'}`
+          ).join(', ') || 'Unknown Gear';
+
+          return {
+            id: request.id,
+            activityType: 'Request' as const,
+            gearName: gearNames,
+            date: new Date(request.created_at),
+            status: request.status,
+            details: request.reason || 'Gear requested'
+          };
+        });
 
         // Process check-ins data
         const checkinItems = checkinsData.map((checkin: any) => ({
           id: checkin.id,
           activityType: 'Check-in' as const,
-          gearName: checkin.gear?.name || `Gear ${checkin.gear_id?.slice(0, 8) || 'Unknown'}`,
+          gearName: checkin.gears?.name || `Gear ${checkin.gear_id?.slice(0, 8) || 'Unknown'}`,
           date: new Date(checkin.checkin_date),
           status: checkin.condition || checkin.status || 'Unknown',
           details: checkin.notes || 'Gear checked in'
         }));
 
         // Combine and sort all history items
-        const combinedHistory = [...activityItems, ...checkinItems]
+        const combinedHistory = [...requestItems, ...checkinItems]
           .sort((a, b) => b.date.getTime() - a.date.getTime());
+
 
         setHistory(combinedHistory);
       } catch (error) {
@@ -170,10 +178,10 @@ export default function UserHistoryPage() {
     fetchHistory();
 
     // Set up real-time subscriptions for both tables
-    const gearActivityChannel = supabase
-      .channel('gear_activity_changes')
+    const gearRequestsChannel = supabase
+      .channel('gear_requests_changes')
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'gear_activity_log' },
+        { event: '*', schema: 'public', table: 'gear_requests' },
         () => fetchHistory()
       )
       .subscribe();
@@ -187,33 +195,11 @@ export default function UserHistoryPage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(gearActivityChannel);
+      supabase.removeChannel(gearRequestsChannel);
       supabase.removeChannel(checkinsChannel);
     };
   }, [toast]);
 
-  const formatActivityDetails = (activity: any): string => {
-    switch (activity.activity_type) {
-      case 'Request':
-        return activity.notes || 'Gear requested';
-      case 'Check-in':
-        return activity.notes || 'Gear checked in';
-      case 'Check-out':
-        return activity.notes || 'Gear checked out';
-      case 'Maintenance':
-        return activity.notes || 'Maintenance performed';
-      case 'Status Change':
-        if (activity.details) {
-          const details = typeof activity.details === 'string'
-            ? JSON.parse(activity.details)
-            : activity.details;
-          return `Status changed from ${details.old_status} to ${details.new_status}`;
-        }
-        return 'Status updated';
-      default:
-        return activity.notes || 'No additional details';
-    }
-  };
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -300,8 +286,8 @@ export default function UserHistoryPage() {
 
   const filteredHistory = history.filter(item =>
     activeTab === "all" ||
-    (activeTab === "check-ins" && item.activityType === "Check-in") ||
-    (activeTab === "requests" && item.activityType === "Request") ||
+    (activeTab === "check-in" && item.activityType === "Check-in") ||
+    (activeTab === "request" && item.activityType === "Request") ||
     (activeTab === "maintenance" && item.activityType === "Maintenance")
   );
 
@@ -328,26 +314,38 @@ export default function UserHistoryPage() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="container mx-auto py-6 space-y-6 max-w-7xl"
+      className="container mx-auto py-8 space-y-8 max-w-7xl"
     >
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
         <h1 className="text-3xl font-bold tracking-tight">Activity History</h1>
-        <p className="text-muted-foreground">Track your gear requests, check-ins, and other activities.</p>
+        <p className="text-muted-foreground text-lg">Track your gear requests, check-ins, and other activities.</p>
       </div>
 
-      <Card>
-        <CardHeader className="space-y-1">
-          <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+      <Card className="border-2">
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
             <div>
-              <CardTitle>Gear Activity Log</CardTitle>
-              <CardDescription>Your past requests and check-ins.</CardDescription>
+              <CardTitle className="text-2xl">Gear Activity Log</CardTitle>
+              <CardDescription className="text-base mt-2">Your past requests and check-ins.</CardDescription>
             </div>
             <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="request">Requests</TabsTrigger>
-                <TabsTrigger value="check-in">Check-ins</TabsTrigger>
-                <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="all" className="flex items-center gap-2">
+                  <History className="h-4 w-4" />
+                  All
+                </TabsTrigger>
+                <TabsTrigger value="request" className="flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  Requests
+                </TabsTrigger>
+                <TabsTrigger value="check-in" className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  Check-ins
+                </TabsTrigger>
+                <TabsTrigger value="maintenance" className="flex items-center gap-2">
+                  <Wrench className="h-4 w-4" />
+                  Maintenance
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -400,14 +398,19 @@ export default function UserHistoryPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="text-center py-10"
+              className="text-center py-16"
             >
-              <History className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-semibold mb-2">No Activity Found</h3>
-              <p className="text-muted-foreground mb-4">You haven't performed any gear-related activities yet.</p>
-              <Button asChild>
+              <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-6">
+                <History className="h-10 w-10 text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3">No Activity Found</h3>
+              <p className="text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
+                You haven't performed any gear-related activities yet. Start by requesting some equipment.
+              </p>
+              <Button asChild size="lg" className="px-8">
                 <a href="/user/browse">
-                  <span>Browse Available Gear</span>
+                  <Package className="mr-2 h-4 w-4" />
+                  Browse Available Gear
                 </a>
               </Button>
             </motion.div>

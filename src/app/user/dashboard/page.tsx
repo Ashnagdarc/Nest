@@ -5,7 +5,7 @@
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PackageCheck, Clock, Box, Search, ArrowUpDown, ArrowUpRight, Activity, Megaphone } from 'lucide-react';
+import { PackageCheck, Clock, Box, Search, ArrowUpDown, ArrowUpRight, Activity, Megaphone, Bell } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -208,20 +208,40 @@ export default function UserDashboardPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8">
           {/* Left Column */}
           <div className="space-y-6 sm:space-y-8">
-            {/* Available Gears */}
+            {/* Notifications */}
             <Card>
-              <CardHeader>
+              <CardHeader className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
-                  <Box className="h-5 w-5" />
-                  Available Equipment
+                  <Bell className="h-5 w-5" />
+                  Notifications
                 </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => { window.location.href = '/user/notifications'; }}>View all</Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await fetch('/api/notifications/mark-read', { method: 'PUT', credentials: 'include' });
+                        if (typeof window !== 'undefined') {
+                          // optimistic refresh
+                          setTimeout(() => refetch?.(), 100);
+                        }
+                      } catch (e) {
+                        console.error('Mark all as read failed', e);
+                      }
+                    }}
+                  >
+                    Mark all as read
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {isDataLoading ? (
                   <div className="space-y-3">
                     {[...Array(3)].map((_, i) => (
                       <div key={i} className="flex items-center space-x-3">
-                        <div className="h-10 w-10 bg-gray-200 rounded animate-pulse" />
+                        <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
                         <div className="flex-1 space-y-2">
                           <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
                           <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
@@ -230,25 +250,58 @@ export default function UserDashboardPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {dashboardData?.gears?.slice(0, 5).map((gear) => (
-                      <div key={gear.id} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-50">
-                        <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <Box className="h-5 w-5 text-blue-600" />
+                  (() => {
+                    const all = dashboardData?.notifications || [];
+                    const unread = all.filter(n => !n.is_read);
+                    const read = all.filter(n => n.is_read);
+                    return (
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100">Unread</h4>
+                          <div className="space-y-3">
+                            {unread.slice(0, 5).map((n) => (
+                              <div key={n.id} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                <div className="h-8 w-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                                  <Bell className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                </div>
+                                <div className="flex-1">
+                                  <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">{n.title || n.type}</h4>
+                                  <p className="text-xs text-gray-600 dark:text-gray-300">{n.message}</p>
+                                </div>
+                                <Badge className="text-xs">New</Badge>
+                              </div>
+                            ))}
+                            {unread.length === 0 && (
+                              <p className="text-gray-500 text-sm">No unread notifications</p>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <h4 className="font-medium text-sm">{gear.name}</h4>
-                          <p className="text-xs text-gray-500">{gear.category} • Qty: {gear.quantity}</p>
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100">Read</h4>
+                          <div className="space-y-3">
+                            {read.slice(0, Math.max(0, 5 - Math.min(unread.length, 5))).map((n) => (
+                              <div key={n.id} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                <div className="h-8 w-8 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">
+                                  <Bell className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                </div>
+                                <div className="flex-1">
+                                  <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">{n.title || n.type}</h4>
+                                  <p className="text-xs text-gray-600 dark:text-gray-300">{n.message}</p>
+                                </div>
+                                <Badge variant="secondary" className="text-xs">Read</Badge>
+                              </div>
+                            ))}
+                            {read.length === 0 && (
+                              <p className="text-gray-500 text-sm">No read notifications</p>
+                            )}
+                          </div>
                         </div>
-                        <Badge variant="secondary" className="text-xs">
-                          {gear.current_state.status}
-                        </Badge>
+                        {all.length === 0 && (
+                          <p className="text-gray-500 text-sm">No notifications</p>
+                        )}
                       </div>
-                    ))}
-                    {(!dashboardData?.gears || dashboardData.gears.length === 0) && (
-                      <p className="text-gray-500 text-sm">No equipment available</p>
-                    )}
-                  </div>
+                    );
+                  })()
                 )}
               </CardContent>
             </Card>
@@ -279,20 +332,34 @@ export default function UserDashboardPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {dashboardData?.recent_activity?.slice(0, 5).map((activity) => (
-                      <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-50">
-                        <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                          <Activity className="h-4 w-4 text-green-600" />
+                    {dashboardData?.recent_activity?.slice(0, 5).map((activity) => {
+                      const when = new Date(activity.timestamp);
+                      const rel = Intl.RelativeTimeFormat ? (() => {
+                        const diff = (when.getTime() - Date.now()) / 1000;
+                        const abs = Math.abs(diff);
+                        if (abs < 60) return `${Math.round(abs)}s ago`;
+                        if (abs < 3600) return `${Math.round(abs / 60)}m ago`;
+                        if (abs < 86400) return `${Math.round(abs / 3600)}h ago`;
+                        return `${when.toLocaleDateString()}`;
+                      })() : when.toLocaleString();
+                      const text = activity.type === 'request'
+                        ? `Request ${activity.action} • ${activity.item}`
+                        : `${activity.action} • ${activity.item}`;
+                      return (
+                        <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
+                          <div className="h-8 w-8 rounded-full flex items-center justify-center bg-primary/15">
+                            <Activity className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-foreground">{text}</p>
+                            <p className="text-xs text-muted-foreground">{rel}</p>
+                          </div>
+                          <Badge variant="secondary" className="text-xs">
+                            {activity.status}
+                          </Badge>
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{activity.description}</p>
-                          <p className="text-xs text-gray-500">{activity.timestamp}</p>
-                        </div>
-                        <Badge variant="outline" className="text-xs">
-                          {activity.status}
-                        </Badge>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {(!dashboardData?.recent_activity || dashboardData.recent_activity.length === 0) && (
                       <p className="text-gray-500 text-sm">No recent activity</p>
                     )}

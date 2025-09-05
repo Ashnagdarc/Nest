@@ -47,10 +47,9 @@ export async function createGearNotification(
             user_id: userId,
             title,
             message,
-            type: 'gear',
+            type: 'System',
             is_read: false,
-            created_at: new Date().toISOString(),
-            category: 'equipment'
+            created_at: new Date().toISOString()
         });
 
     if (error) {
@@ -88,10 +87,9 @@ export async function createProfileNotification(
             user_id: userId,
             title,
             message,
-            type: 'profile',
+            type: 'System',
             is_read: false,
-            created_at: new Date().toISOString(),
-            category: 'system'
+            created_at: new Date().toISOString()
         });
 
     if (error) {
@@ -125,7 +123,7 @@ export async function createSystemNotification(
             const userId = userIdOrTitle;
             title = messageOrMessage;
             message = typeOrType;
-            type = 'system';
+            type = 'System';
             targetUserIds = [userId];
         }
 
@@ -161,10 +159,9 @@ export async function createSystemNotification(
             user_id: userId,
             title,
             message,
-            type,
+            type: 'System', // Use valid type from constraint
             is_read: false,
-            created_at: new Date().toISOString(),
-            category: 'system'
+            created_at: new Date().toISOString()
         }));
 
         const { error } = await supabase

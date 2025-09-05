@@ -164,18 +164,17 @@ export function useUnifiedDashboard() {
             setLoading(true);
             setError(null);
 
-            // Try the rebuild API first (uses correct table structure)
+            // Use the unified API (uses correct calculation logic)
             let response;
             try {
-                response = await apiGet<{ data: UnifiedDashboardData; error: string | null }>('/api/dashboard/rebuild');
-            } catch (rebuildError) {
-                console.warn('Rebuild API failed, trying unified API:', rebuildError);
+                response = await apiGet<{ data: UnifiedDashboardData; error: string | null }>('/api/dashboard/unified');
+            } catch (unifiedError) {
+                console.warn('Unified API failed, trying simple API:', unifiedError);
                 try {
-                    response = await apiGet<{ data: UnifiedDashboardData; error: string | null }>('/api/dashboard/unified');
-                } catch (unifiedError) {
-                    console.warn('Unified API failed, trying simple API:', unifiedError);
-                    // Fallback to simple API
                     response = await apiGet<{ data: UnifiedDashboardData; error: string | null }>('/api/dashboard/simple');
+                } catch (simpleError) {
+                    console.warn('Simple API also failed:', simpleError);
+                    throw simpleError;
                 }
             }
 

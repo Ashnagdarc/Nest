@@ -27,9 +27,9 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Get user activity data
+        // Get user activity data from checkins table (serves as activity log)
         const { data: userActivity, error: userError } = await supabase
-            .from('gear_activity_log')
+            .from('checkins')
             .select(`
         id,
         action,

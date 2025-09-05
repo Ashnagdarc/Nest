@@ -8,7 +8,19 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const from = searchParams.get('from');
         const to = searchParams.get('to');
-        let query = supabase.from('gear_activity_log').select('*');
+        let query = supabase.from('checkins').select(`
+            *,
+            profiles!inner (
+                id,
+                full_name,
+                avatar_url
+            ),
+            gears!inner (
+                id,
+                name,
+                category
+            )
+        `);
         if (from) query = query.gte('created_at', from);
         if (to) query = query.lte('created_at', to);
         const { data, error } = await query.order('created_at', { ascending: false });

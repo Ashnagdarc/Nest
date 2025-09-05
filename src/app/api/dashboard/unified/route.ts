@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
         const [
             gearsResult,
             requestsResult,
+            gearRequestGearsResult,
             checkinsResult,
             notificationsResult,
             usersResult
@@ -63,6 +64,12 @@ export async function GET(request: NextRequest) {
                         department
                     )
                 `)
+                .order('created_at', { ascending: false }),
+
+            // Get gear request gears (junction table)
+            supabase
+                .from('gear_request_gears')
+                .select('id, gear_request_id, gear_id, quantity, created_at, updated_at')
                 .order('created_at', { ascending: false }),
 
             // Get recent checkins
@@ -121,6 +128,7 @@ export async function GET(request: NextRequest) {
         // Handle errors
         if (gearsResult.error) throw gearsResult.error;
         if (requestsResult.error) throw requestsResult.error;
+        if (gearRequestGearsResult.error) throw gearRequestGearsResult.error;
         if (checkinsResult.error) throw checkinsResult.error;
         if (notificationsResult.error) throw notificationsResult.error;
         if (usersResult.error) throw usersResult.error;
@@ -128,6 +136,7 @@ export async function GET(request: NextRequest) {
         // Process and combine data
         const gears = gearsResult.data || [];
         const requests = requestsResult.data || [];
+        const gearRequestGears = gearRequestGearsResult.data || [];
         const checkins = checkinsResult.data || [];
         const notifications = notificationsResult.data || [];
         const users = usersResult.data || [];
@@ -151,9 +160,9 @@ export async function GET(request: NextRequest) {
             // Equipment stats - calculate from actual data
             total_equipment: gears.reduce((sum, gear) => sum + gear.quantity, 0),
 
-            // Calculate checked out equipment from approved requests
+            // Calculate checked out equipment from approved requests (current user only)
             checked_out_equipment: requests
-                .filter(req => req.status === 'Approved' && req.due_date && new Date(req.due_date) > new Date())
+                .filter(req => req.user_id === user.id && req.status === 'Approved' && req.due_date && new Date(req.due_date) > new Date())
                 .reduce((sum, req) => {
                     const requestGears = gearRequestGears.filter(grg => grg.gear_request_id === req.id);
                     return sum + requestGears.reduce((gearSum, grg) => gearSum + grg.quantity, 0);
@@ -171,31 +180,31 @@ export async function GET(request: NextRequest) {
             under_repair_equipment: checkins.filter(checkin => checkin.condition === 'Damaged' && checkin.status === 'Completed').length,
             retired_equipment: 0, // Will be calculated from checkins later
 
-            // Request stats
-            total_requests: requests.length,
-            pending_requests: requests.filter(req => req.status === 'Pending').length,
-            approved_requests: requests.filter(req => req.status === 'Approved').length,
-            rejected_requests: requests.filter(req => req.status === 'Rejected').length,
-            completed_requests: requests.filter(req => req.status === 'Completed').length,
+            // Request stats (current user only)
+            total_requests: requests.filter(req => req.user_id === user.id).length,
+            pending_requests: requests.filter(req => req.user_id === user.id && req.status === 'Pending').length,
+            approved_requests: requests.filter(req => req.user_id === user.id && req.status === 'Approved').length,
+            rejected_requests: requests.filter(req => req.user_id === user.id && req.status === 'Rejected').length,
+            completed_requests: requests.filter(req => req.user_id === user.id && req.status === 'Completed').length,
 
             // User stats (admin only)
             total_users: users.length,
             active_users: users.filter(user => user.status === 'Active').length,
             admin_users: users.filter(user => user.role === 'Admin').length,
 
-            // Checkin stats
-            total_checkins: checkins.length,
-            pending_checkins: checkins.filter(checkin => checkin.status === 'Pending').length,
-            completed_checkins: checkins.filter(checkin => checkin.status === 'Completed').length,
+            // Checkin stats (current user only)
+            total_checkins: checkins.filter(checkin => checkin.user_id === user.id).length,
+            pending_checkins: checkins.filter(checkin => checkin.user_id === user.id && checkin.status === 'Pending').length,
+            completed_checkins: checkins.filter(checkin => checkin.user_id === user.id && checkin.status === 'Completed').length,
 
             // Notification stats
             unread_notifications: notifications.filter(notif => !notif.is_read).length,
             total_notifications: notifications.length
         };
 
-        // Get recent activity (combine requests and checkins)
+        // Get recent activity (combine requests and checkins) - current user only
         const recentActivity = [
-            ...requests.slice(0, 10).map(req => ({
+            ...requests.filter(req => req.user_id === user.id).slice(0, 10).map(req => ({
                 id: req.id,
                 type: 'request',
                 action: `Request ${req.status.toLowerCase()}`,
@@ -208,7 +217,7 @@ export async function GET(request: NextRequest) {
                     expected_duration: req.expected_duration
                 }
             })),
-            ...checkins.slice(0, 10).map(checkin => ({
+            ...checkins.filter(checkin => checkin.user_id === user.id).slice(0, 10).map(checkin => ({
                 id: checkin.id,
                 type: 'checkin',
                 action: checkin.action,

@@ -105,6 +105,11 @@ function MyRequestsContent() {
     rejected: 0,
     completed: 0
   });
+
+  // keep stats in sync with requests
+  useEffect(() => {
+    setRequestStats(calculateRequestStats(requests as any));
+  }, [requests]);
   const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null);
 
 
@@ -494,8 +499,8 @@ function MyRequestsContent() {
 
 
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        {/* Summary Cards (minimal: Pending, Approved) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
           <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800 rounded-lg shadow-sm w-full max-w-full">
             <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
               <Package className="h-6 w-6 text-blue-400 dark:text-blue-300 flex-shrink-0" />
@@ -523,24 +528,7 @@ function MyRequestsContent() {
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 border-red-200 dark:border-red-800 rounded-lg shadow-sm w-full max-w-full">
-            <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
-              <XCircle className="h-6 w-6 text-red-400 dark:text-red-300 flex-shrink-0" />
-              <div className="flex flex-col items-start justify-center">
-                <div className="text-base sm:text-2xl font-bold text-red-600 dark:text-red-400">{requestStats.rejected}</div>
-                <div className="text-xs sm:text-sm text-red-700 dark:text-red-300">Rejected</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800 rounded-lg shadow-sm w-full max-w-full">
-            <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
-              <BarChart3 className="h-6 w-6 text-purple-400 dark:text-purple-300 flex-shrink-0" />
-              <div className="flex flex-col items-start justify-center">
-                <div className="text-base sm:text-2xl font-bold text-purple-600 dark:text-purple-400">{requestStats.completed}</div>
-                <div className="text-xs sm:text-sm text-purple-700 dark:text-purple-300">Completed</div>
-              </div>
-            </CardContent>
-          </Card>
+
         </div>
 
         <Card>
@@ -599,7 +587,7 @@ function MyRequestsContent() {
                                   <div>
                                     {gear.name || 'Unnamed Gear'}
                                     <span className="font-bold text-primary">
-                                      {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
+                                      x {gear.quantity}
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-2">
@@ -675,9 +663,7 @@ function MyRequestsContent() {
                                 {req.gears.map((gear, idx) => (
                                   <div key={gear.id ?? idx} className="flex items-center gap-1">
                                     <span>{gear.name || 'Unnamed Gear'}</span>
-                                    {gear.quantity > 1 && (
-                                      <span className="font-bold text-primary">x {gear.quantity}</span>
-                                    )}
+                                    <span className="font-bold text-primary">x {gear.quantity}</span>
                                   </div>
                                 ))}
                               </div>
@@ -835,7 +821,7 @@ function MyRequestsContent() {
                                 <div className="font-medium">
                                   {gear.name}
                                   <span className="font-bold text-primary">
-                                    {gear.quantity > 1 ? ` x ${gear.quantity}` : ''}
+                                    x {gear.quantity}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2">

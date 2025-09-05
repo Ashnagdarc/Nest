@@ -4,7 +4,7 @@ import type { Database } from '@/types/supabase'
 export type Gear = Database['public']['Tables']['gears']['Row']
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type GearRequest = Database['public']['Tables']['gear_requests']['Row']
-export type ActivityLog = Database['public']['Tables']['gear_activity_log']['Row']
+export type ActivityLog = Database['public']['Tables']['checkins']['Row'] // Using checkins table as activity log
 export type Notification = Database['public']['Tables']['notifications']['Row']
 
 /**

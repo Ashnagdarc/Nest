@@ -275,7 +275,7 @@ export default function CheckInGearPage() {
             user_id: userId,
             gear_id: gearId,
             request_id: gear.current_request_id,
-            checkin_date: new Date().toISOString(),
+            action: 'Check In',
             status: 'Pending Admin Approval',
             condition: isDamaged ? 'Damaged' : 'Good',
             damage_notes: isDamaged ? damageDescription : null,
@@ -287,28 +287,7 @@ export default function CheckInGearPage() {
           throw new Error(`Failed to create check-in record: ${checkinError.message}`);
         }
 
-        // Log the check-in activity
-        const { error: activityError } = await supabase.rpc(
-          'log_gear_activity',
-          {
-            p_user_id: userId,
-            p_gear_id: gearId,
-            p_request_id: gear.current_request_id,
-            p_activity_type: 'Check-in',
-            p_status: 'Pending Admin Approval',
-            p_notes: isDamaged ? damageDescription : checkinNotes,
-            p_details: JSON.stringify({
-              condition: isDamaged ? 'Damaged' : 'Good',
-              damage_notes: isDamaged ? damageDescription : null,
-              checkin_notes: checkinNotes
-            })
-          }
-        );
-
-        if (activityError) {
-          console.error("Error logging check-in activity:", activityError);
-          throw new Error(`Failed to log check-in activity: ${activityError.message}`);
-        }
+        // Note: Activity logging removed - the checkins table serves as the audit trail
 
         // Update gear status to "Pending Check-in"
         const { error: gearUpdateError } = await supabase
@@ -448,7 +427,8 @@ export default function CheckInGearPage() {
   // Update the gear card rendering
   const renderGearCard = (gear: ProcessedGear) => {
     const isOverdueDate = gear.due_date && new Date(gear.due_date) < new Date();
-    const dueDate = gear.due_date ? format(new Date(gear.due_date), 'PP') : 'No due date';
+    const dueDate = gear.due_date ? format(new Date(gear.due_date), 'MMM d, yyyy') : 'No due date';
+    const isSelected = selectedGears.includes(gear.id);
 
     return (
       <motion.div
@@ -456,62 +436,81 @@ export default function CheckInGearPage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         className={cn(
-          "group relative flex flex-col rounded-lg border p-4 transition-all hover:bg-accent/5",
-          selectedGears.includes(gear.id) && "border-primary bg-primary/5 shadow-sm"
+          "group relative rounded-xl border-2 p-6 transition-all duration-200",
+          isSelected
+            ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
+            : "border-border hover:border-primary/50 hover:shadow-md bg-card"
         )}
       >
         <div className="flex items-start gap-4">
-          <Checkbox
-            id={`gear-${gear.id}`}
-            checked={selectedGears.includes(gear.id)}
-            onCheckedChange={(checked) => {
-              if (checked) {
-                setSelectedGears(prev => [...prev, gear.id]);
-              } else {
-                setSelectedGears(prev => prev.filter(id => id !== gear.id));
-              }
-            }}
-            className={cn(
-              "mt-1",
-              selectedGears.includes(gear.id) && "border-primary"
-            )}
-          />
-          <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border">
+          <div className="flex-shrink-0">
+            <Checkbox
+              id={`gear-${gear.id}`}
+              checked={isSelected}
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  setSelectedGears(prev => [...prev, gear.id]);
+                } else {
+                  setSelectedGears(prev => prev.filter(id => id !== gear.id));
+                }
+              }}
+              className="h-5 w-5"
+            />
+          </div>
+
+          <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border-2 bg-muted/50">
             {gear.image_url ? (
               <Image
                 src={gear.image_url}
                 alt={gear.name}
                 fill
                 className="object-cover"
-                sizes="64px"
+                sizes="80px"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center bg-muted">
-                <Package className="h-8 w-8 text-muted-foreground" />
+              <div className="flex h-full w-full items-center justify-center">
+                <Package className="h-10 w-10 text-muted-foreground" />
               </div>
             )}
           </div>
-          <div className="flex-1 min-w-0">
-            <Label
-              htmlFor={`gear-${gear.id}`}
-              className="text-base font-medium cursor-pointer truncate block"
+
+          <div className="flex-1 min-w-0 space-y-3">
+            <div
+              className="flex-1 cursor-pointer"
+              onClick={() => {
+                if (isSelected) {
+                  setSelectedGears(prev => prev.filter(id => id !== gear.id));
+                } else {
+                  setSelectedGears(prev => [...prev, gear.id]);
+                }
+              }}
             >
-              {gear.name}
-            </Label>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted-foreground truncate">
+              <Label
+                htmlFor={`gear-${gear.id}`}
+                className="text-lg font-semibold cursor-pointer block leading-tight"
+              >
+                {gear.name}
+              </Label>
+              <p className="text-sm text-muted-foreground mt-1">
                 {gear.category}
-              </span>
-              <div className="flex items-center gap-2">
-                <Badge variant={isOverdueDate ? "destructive" : "secondary"} className="text-xs">
-                  Due: {dueDate}
-                </Badge>
-                {isOverdueDate && (
-                  <Badge variant="destructive" className="text-xs">
-                    Overdue
-                  </Badge>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Badge
+                variant={isOverdueDate ? "destructive" : "secondary"}
+                className={cn(
+                  "text-xs font-medium px-3 py-1",
+                  isOverdueDate && "bg-destructive/10 text-destructive border-destructive/20"
                 )}
-              </div>
+              >
+                Due: {dueDate}
+              </Badge>
+              {isOverdueDate && (
+                <Badge variant="destructive" className="text-xs font-medium px-3 py-1">
+                  Overdue
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -695,9 +694,9 @@ export default function CheckInGearPage() {
       transition={{ duration: 0.5 }}
       className="min-h-screen bg-background"
     >
-      {/* Header Section */}
-      <div className="border-b">
-        <div className="container max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      {/* Header Section - Apple HIG inspired */}
+      <div className="border-b bg-card/50 backdrop-blur-sm">
+        <div className="container max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Check-in Gear</h1>
@@ -718,15 +717,21 @@ export default function CheckInGearPage() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="container max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <Tabs defaultValue="check-in" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="check-in">Check-in Gear</TabsTrigger>
-            <TabsTrigger value="history">Check-in History</TabsTrigger>
+      {/* Main Content - Apple HIG inspired layout */}
+      <div className="container max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <Tabs defaultValue="check-in" className="space-y-8">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="check-in" className="flex items-center gap-2">
+              <PackageCheck className="h-4 w-4" />
+              Check-in Gear
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              History
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="check-in">
+          <TabsContent value="check-in" className="space-y-8">
             {/* Success Animation Screen */}
             {SuccessAnimationComponent}
 
@@ -734,91 +739,88 @@ export default function CheckInGearPage() {
             {!showSuccessAnimation && (
               <>
                 {checkedOutGears.length === 0 ? (
-                  <Card className="flex flex-col items-center justify-center py-16 px-4 text-center">
-                    <PackageCheck className="h-16 w-16 text-muted-foreground mb-4" />
-                    <CardTitle className="text-xl mb-3">No Gear to Check-in</CardTitle>
-                    <CardDescription className="max-w-md mb-8">You currently have no gear checked out. Browse our available equipment and request some gear to get started.</CardDescription>
-                    <Button size="lg" asChild><a href="/user/browse">Browse Available Gear</a></Button>
-                  </Card>
+                  <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+                    <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mb-6">
+                      <PackageCheck className="h-10 w-10 text-muted-foreground" />
+                    </div>
+                    <h2 className="text-2xl font-semibold mb-3">No Gear to Check-in</h2>
+                    <p className="text-muted-foreground max-w-md mb-8 leading-relaxed">
+                      You currently have no gear checked out. Browse our available equipment and request some gear to get started.
+                    </p>
+                    <Button size="lg" asChild className="px-8">
+                      <a href="/user/browse">Browse Available Gear</a>
+                    </Button>
+                  </div>
                 ) : (
-                  <form onSubmit={handleCheckinSubmit}>
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                      {/* Left Column - Gear Selection */}
-                      <div className="lg:col-span-5 space-y-4">
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                              <CardTitle>Select Items</CardTitle>
-                              <Badge variant="outline" className="ml-2">
-                                {selectedGears.length} of {checkedOutGears.length}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              {checkedOutGears.length > 0 && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setSelectedGears(checkedOutGears.map(g => g.id))}
-                                  className="text-xs"
-                                >
-                                  Select All
-                                </Button>
-                              )}
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px] w-full rounded-md border">
-                              <div ref={listContainerRef} className="p-4 space-y-3">
-                                {isLoading ? (
-                                  <div className="flex items-center justify-center py-8">
-                                    <div className="flex items-center space-x-2">
-                                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                                      <span className="text-sm text-muted-foreground">Loading your gear...</span>
-                                    </div>
-                                  </div>
-                                ) : checkedOutGears.length > 0 ? (
-                                  checkedOutGears.map((gear) => renderGearCard(gear))
-                                ) : (
-                                  <div className="flex items-center justify-center py-8">
-                                    <div className="text-center">
-                                      <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                                      <p className="text-sm text-muted-foreground">No gear checked out</p>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </ScrollArea>
-                          </CardContent>
-                        </Card>
+                  <form onSubmit={handleCheckinSubmit} className="space-y-8">
+                    {/* Gear Selection Section */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h2 className="text-xl font-semibold">Select Items to Return</h2>
+                          <p className="text-muted-foreground mt-1">Choose the equipment you're returning</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="px-3 py-1">
+                            {selectedGears.length} of {checkedOutGears.length} selected
+                          </Badge>
+                          {checkedOutGears.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedGears(checkedOutGears.map(g => g.id))}
+                              className="text-sm"
+                            >
+                              Select All
+                            </Button>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Right Column - Check-in Details */}
-                      <div className="lg:col-span-7 space-y-6">
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>Check-in Details</CardTitle>
-                            <CardDescription>Report condition and add any notes</CardDescription>
-                          </CardHeader>
-                          <CardContent className="space-y-6">
-                            {/* Damage Report Section */}
-                            <div className="rounded-lg border p-4 bg-card">
+                      <div className="grid gap-4">
+                        {isLoading ? (
+                          <div className="flex items-center justify-center py-12">
+                            <div className="flex items-center space-x-3">
+                              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent"></div>
+                              <span className="text-muted-foreground">Loading your gear...</span>
+                            </div>
+                          </div>
+                        ) : (
+                          checkedOutGears.map((gear) => renderGearCard(gear))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Check-in Details Section */}
+                    {selectedGears.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        <div>
+                          <h2 className="text-xl font-semibold mb-2">Return Details</h2>
+                          <p className="text-muted-foreground">Report the condition and add any notes</p>
+                        </div>
+
+                        <div className="space-y-6">
+                          {/* Damage Report Section */}
+                          <Card className="border-2">
+                            <CardContent className="p-6">
                               <div className="flex items-start space-x-4">
-                                <div className="flex h-6 w-6 shrink-0 items-center justify-center">
-                                  <Checkbox
-                                    id="isDamaged"
-                                    checked={isDamaged}
-                                    onCheckedChange={(checked) => setIsDamaged(checked === true)}
-                                  />
-                                </div>
-                                <div className="flex-1">
-                                  <Label
-                                    htmlFor="isDamaged"
-                                    className="text-base font-medium cursor-pointer"
-                                  >
-                                    Report Damage
+                                <Checkbox
+                                  id="isDamaged"
+                                  checked={isDamaged}
+                                  onCheckedChange={(checked) => setIsDamaged(checked === true)}
+                                  className="mt-1"
+                                />
+                                <div className="flex-1 space-y-2">
+                                  <Label htmlFor="isDamaged" className="text-base font-medium cursor-pointer">
+                                    Report Damage or Issues
                                   </Label>
-                                  <p className="text-sm text-muted-foreground mt-1">
-                                    Check this if any selected items are damaged or need maintenance
+                                  <p className="text-sm text-muted-foreground">
+                                    Check this if any selected items are damaged, malfunctioning, or need maintenance
                                   </p>
                                 </div>
                               </div>
@@ -829,14 +831,14 @@ export default function CheckInGearPage() {
                                   animate={{ opacity: 1, height: 'auto' }}
                                   exit={{ opacity: 0, height: 0 }}
                                   transition={{ duration: 0.2 }}
-                                  className="mt-4"
+                                  className="mt-6"
                                 >
-                                  <div className="rounded-lg border p-4 bg-destructive/5">
-                                    <Label htmlFor="damageDescription" className="text-base font-medium flex items-center gap-2">
+                                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+                                    <Label htmlFor="damageDescription" className="text-base font-medium flex items-center gap-2 mb-2">
                                       <AlertCircle className="h-4 w-4 text-destructive" />
                                       Damage Report <span className="text-destructive">*</span>
                                     </Label>
-                                    <p className="text-sm text-muted-foreground mt-1 mb-3">
+                                    <p className="text-sm text-muted-foreground mb-4">
                                       Please provide specific details about any damage or maintenance needs
                                     </p>
                                     <Textarea
@@ -844,66 +846,72 @@ export default function CheckInGearPage() {
                                       value={damageDescription}
                                       onChange={(e) => setDamageDescription(e.target.value)}
                                       placeholder="Describe the damage or maintenance needs in detail..."
-                                      className="min-h-[120px] bg-background"
+                                      className="min-h-[120px] bg-background border-destructive/20 focus:border-destructive"
                                       required={isDamaged}
                                     />
                                   </div>
                                 </motion.div>
                               )}
-                            </div>
+                            </CardContent>
+                          </Card>
 
-                            {/* Notes Section */}
-                            <div className="rounded-lg border p-4 bg-card">
-                              <Label htmlFor="checkinNotes" className="text-base font-medium">
-                                Check-in Notes <span className="text-muted-foreground text-sm">(Optional)</span>
-                              </Label>
-                              <p className="text-sm text-muted-foreground mt-1 mb-3">
-                                Add any additional notes about the return condition or usage
-                              </p>
-                              <Textarea
-                                id="checkinNotes"
-                                value={checkinNotes}
-                                onChange={(e) => setCheckinNotes(e.target.value)}
-                                placeholder="Add any additional notes about the return..."
-                                className="min-h-[100px]"
-                              />
-                            </div>
+                          {/* Notes Section */}
+                          <Card>
+                            <CardContent className="p-6">
+                              <div className="space-y-3">
+                                <Label htmlFor="checkinNotes" className="text-base font-medium">
+                                  Additional Notes
+                                  <span className="text-muted-foreground text-sm font-normal ml-1">(Optional)</span>
+                                </Label>
+                                <p className="text-sm text-muted-foreground">
+                                  Add any additional notes about the return condition or usage
+                                </p>
+                                <Textarea
+                                  id="checkinNotes"
+                                  value={checkinNotes}
+                                  onChange={(e) => setCheckinNotes(e.target.value)}
+                                  placeholder="Add any additional notes about the return..."
+                                  className="min-h-[100px]"
+                                />
+                              </div>
+                            </CardContent>
+                          </Card>
 
-                            {/* Overdue Warning */}
-                            {checkedOutGears.some(gear => selectedGears.includes(gear.id) && isOverdue(gear.due_date)) && (
-                              <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertTitle>Overdue Items</AlertTitle>
-                                <AlertDescription>
-                                  One or more selected items are past their due date. Please check for any wear and tear.
-                                </AlertDescription>
-                              </Alert>
-                            )}
+                          {/* Overdue Warning */}
+                          {checkedOutGears.some(gear => selectedGears.includes(gear.id) && isOverdue(gear.due_date)) && (
+                            <Alert variant="destructive" className="border-destructive/50">
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertTitle>Overdue Items</AlertTitle>
+                              <AlertDescription>
+                                One or more selected items are past their due date. Please check for any wear and tear.
+                              </AlertDescription>
+                            </Alert>
+                          )}
 
-                            {/* Submit Button */}
-                            <div className="flex justify-end gap-4 mt-6">
-                              <Button
-                                type="submit"
-                                disabled={selectedGears.length === 0 || isSubmitting || (isDamaged && !damageDescription.trim())}
-                                className="w-full sm:w-auto"
-                              >
-                                {isSubmitting ? (
-                                  <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Checking in...
-                                  </>
-                                ) : (
-                                  <>
-                                    <CheckCircle className="mr-2 h-4 w-4" />
-                                    Check In Selected Gear
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    </div>
+                          {/* Submit Button */}
+                          <div className="flex justify-end pt-4">
+                            <Button
+                              type="submit"
+                              disabled={selectedGears.length === 0 || isSubmitting || (isDamaged && !damageDescription.trim())}
+                              size="lg"
+                              className="px-8"
+                            >
+                              {isSubmitting ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Checking in...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="mr-2 h-4 w-4" />
+                                  Check In Selected Gear
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
                   </form>
                 )}
               </>

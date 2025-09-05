@@ -237,6 +237,7 @@ async function pollTableChanges(
                 break;
 
             case 'gear_activity_log':
+                // REMOVED: gear_activity_log table doesn't exist - using checkins table instead
                 const activitiesResponse = await fetchActivities({ limit: 50 });
                 data = activitiesResponse.activities;
                 break;
@@ -397,7 +398,11 @@ export function subscribeToTable(
                     if (error && error.message &&
                         !(error.message.includes("Subscribed to PostgreSQL") && error.status === "ok") &&
                         !(error.message.includes("postgres_changes") && error.status === "ok")) {
-                        logger.error(error, `Realtime error for ${tableName}`);
+
+                        // Skip logging empty objects or meaningless errors
+                        if (error.message && error.message.trim() !== '' && error.message !== '{}') {
+                            logger.error(new Error(error.message), `Realtime error for ${tableName}`);
+                        }
 
                         if (subscription) {
                             subscription.isActive = false;

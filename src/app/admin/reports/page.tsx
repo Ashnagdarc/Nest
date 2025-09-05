@@ -11,10 +11,7 @@ import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 import type { DateRange } from 'react-day-picker';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from "@/hooks/use-toast";
-import { createClient } from '@/lib/supabase/client';
-import { WeeklyActivityReport } from "@/components/reports/WeeklyActivityReport";
-import { subscribeToTable, unsubscribeFromTable, RealtimeSubscription } from '@/lib/utils/realtime-utils';
-import logger from '@/lib/logger';
+import { SimpleReport } from "@/components/reports/SimpleReport";
 import {
   HelpCircle,
   BarChart3,
@@ -30,8 +27,6 @@ import {
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { apiGet } from '@/lib/apiClient';
-import Image from 'next/image';
 import { subDays, format, getISOWeek, formatDistanceToNow } from 'date-fns';
 import PageHeader from '@/components/foundation/PageHeader';
 import FiltersBar from '@/components/foundation/FiltersBar';
@@ -153,109 +148,11 @@ export default function ReportsPage() {
     return Object.entries(groups).sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime());
   }, [filteredActivity]);
   const { toast } = useToast();
-  const supabase = createClient();
+  // Note: Supabase client removed - now using API for data fetching
 
-  async function fetchPopularGears(): Promise<PopularGear[]> {
-    try {
-      if (!dateRange?.from || !dateRange?.to) {
-        throw new Error('Invalid date range');
-      }
+  // Note: fetchPopularGears function removed - now handled by API
 
-      // Use the new view to get all gear requests with their gears
-      const { data: requestData, error: queryError } = await supabase
-        .from('gear_requests_with_gears')
-        .select('*')
-        .gte('request_created_at', dateRange.from.toISOString())
-        .lte('request_created_at', dateRange.to.toISOString());
-
-      if (queryError) {
-        console.error('Query Error Details:', queryError);
-        throw new Error(`Failed to query gear_requests_with_gears: ${queryError.message}`);
-      }
-
-      if (!Array.isArray(requestData)) {
-        throw new Error('Invalid response format: expected an array of gear requests with gears');
-      }
-
-      // Aggregate gear usage by gear_id
-      const gearUsage = new Map<string, { name: string; fullName: string; count: number }>();
-      requestData.forEach(row => {
-        const key = row.gear_id;
-        const name = row.gear_name || 'Unknown Gear';
-        const fullName = row.gear_name || 'Unknown Gear';
-        const existing = gearUsage.get(key) || { name, fullName, count: 0 };
-        gearUsage.set(key, { ...existing, count: existing.count + 1 });
-      });
-
-      return Array.from(gearUsage.values())
-        .sort((a, b) => b.count - a.count)
-        .map(item => ({
-          name: item.name,
-          fullName: item.fullName,
-          count: item.count
-        }));
-    } catch (error) {
-      console.error('Error fetching popular gears:', error);
-      return [];
-    }
-  }
-
-  // Add weekly trends fetching logic
-  async function fetchWeeklyTrends(): Promise<WeeklyTrend[]> {
-    try {
-      console.log('Fetching weekly trends for date range:', {
-        from: dateRange?.from?.toISOString() || '',
-        to: dateRange?.to?.toISOString() || ''
-      });
-
-      // Use centralized API client for requests
-      const { data: requestsData, error: requestsError } = await apiGet<{ data: RequestData[]; error: string | null }>(`/api/requests?from=${dateRange?.from?.toISOString() || ''}&to=${dateRange?.to?.toISOString() || ''}`);
-      if (requestsError) throw new Error(requestsError);
-
-      // Use existing Supabase for damages (not migrated here)
-      const damagesResult = await supabase
-        .from('gear_maintenance')
-        .select('created_at')
-        .eq('maintenance_type', 'Damage Report')
-        .gte('created_at', dateRange?.from?.toISOString() || '')
-        .lte('created_at', dateRange?.to?.toISOString() || '');
-      if (damagesResult.error) throw damagesResult.error;
-
-      const weeklyData: Record<string, { requests: number; damages: number }> = {};
-
-      // Process request data
-      (requestsData || []).forEach((request: RequestData) => {
-        const date = new Date(request.created_at);
-        const weekKey = `${format(date, 'yyyy')}-${getISOWeek(date)}`;
-        if (!weeklyData[weekKey]) {
-          weeklyData[weekKey] = { requests: 0, damages: 0 };
-        }
-        weeklyData[weekKey].requests++;
-      });
-
-      // Process damage reports data
-      damagesResult.data?.forEach((damage: RequestData) => {
-        const date = new Date(damage.created_at);
-        const weekKey = `${format(date, 'yyyy')}-${getISOWeek(date)}`;
-        if (!weeklyData[weekKey]) {
-          weeklyData[weekKey] = { requests: 0, damages: 0 };
-        }
-        weeklyData[weekKey].damages++;
-      });
-
-      return Object.entries(weeklyData)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([week, data]) => ({
-          week,
-          weekLabel: `Week ${week.split('-')[1]}`,
-          requests: data.requests,
-          damages: data.damages
-        }));
-    } catch (err) {
-      console.error('Error fetching weekly trends:', err);
-      throw err; // Propagate the error for better handling in fetchData
-    }
-  }
+  // Note: fetchWeeklyTrends function removed - now handled by API
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -264,180 +161,38 @@ export default function ReportsPage() {
     try {
       console.log('Fetching analytics data...');
 
-      // Get total requests count using API client
-      const { data: requestsData, error: requestsError } = await supabase
-        .from('gear_requests')
-        .select('*')
-        .gte('created_at', dateRange?.from?.toISOString() || '')
-        .lte('created_at', dateRange?.to?.toISOString() || '');
+      // Use the new analytics API
+      const response = await fetch(`/api/admin/analytics?from=${dateRange?.from?.toISOString() || ''}&to=${dateRange?.to?.toISOString() || ''}`);
 
-      if (requestsError) throw requestsError;
-
-      // Get total damage reports count
-      const { data: damageData, error: damageError } = await supabase
-        .from('gear_maintenance')
-        .select('id', { count: 'exact' })
-        .eq('maintenance_type', 'Damage Report')
-        .gte('created_at', dateRange?.from?.toISOString() || '')
-        .lte('created_at', dateRange?.to?.toISOString() || '');
-      if (damageError) throw damageError;
-
-      // Get popular gears
-      let popularGears: PopularGear[] = [];
-      try {
-        popularGears = await fetchPopularGears();
-      } catch (gearError) {
-        console.error('Error fetching popular gears:', gearError);
-        // Continue without popular gears data
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
       }
 
-      // Get weekly trends
-      const weeklyTrends = await fetchWeeklyTrends();
+      const result = await response.json();
 
-      // Get recent activity log data
-      let recentActivity: ActivityLogEntry[] = [];
-      try {
-        console.log('Fetching activity log data from database...');
-
-        // First check if the gear_activity_log table exists and has data
-        const { count, error: countError } = await supabase
-          .from('gear_activity_log')
-          .select('*', { count: 'exact', head: true });
-
-        if (countError) {
-          console.error('Error checking gear_activity_log table:', countError);
-          throw countError;
-        }
-
-        console.log(`Found ${count} total entries in gear_activity_log table`);
-
-        if (count && count > 0) {
-          // First, fetch just the activity log data without joins
-          const { data: activityData, error: activityError } = await supabase
-            .from('gear_activity_log')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(15);
-
-          if (activityError) {
-            console.error('Error fetching activity log data:', activityError);
-            throw activityError;
-          }
-
-          if (!activityData || activityData.length === 0) {
-            console.log('No activity log entries found in the selected date range');
-            return;
-          }
-
-          console.log('Successfully fetched activity log data:', activityData.length, 'entries');
-          console.log('First entry sample:', JSON.stringify(activityData[0], null, 2));
-
-          // Get the gear IDs and user IDs
-          const gearIds = activityData
-            .map((activity: ActivityData) => activity.gear_id)
-            .filter((id: string | undefined): id is string => id !== null && id !== undefined);
-
-          const userIds = activityData
-            .map((activity: ActivityData) => activity.user_id)
-            .filter((id: string | undefined): id is string => id !== null && id !== undefined);
-
-          // Fetch gear details for activity log
-          const { data: gearsData, error: gearsError } = await supabase
-            .from('gears')
-            .select('id, name, category, image_url')
-            .in('id', gearIds);
-
-          if (gearsError) {
-            throw new Error(`Failed to fetch gear details: ${gearsError.message}`);
-          }
-
-          // Fetch user details separately
-          const { data: profilesData, error: profilesError } = await supabase
-            .from('profiles')
-            .select('id, full_name, avatar_url')
-            .in('id', userIds);
-
-          if (profilesError) {
-            console.error('Error fetching profile details:', profilesError);
-            // Continue with what we have - don't throw
-          }
-
-          // Create lookup maps for fast access
-          const gearMap = new Map<string, GearData>();
-          if (gearsData) {
-            gearsData.forEach((gear: GearData) => {
-              gearMap.set(gear.id, gear);
-            });
-          }
-
-          const userMap = new Map<string, ProfileData>();
-          if (profilesData) {
-            profilesData.forEach((profile: ProfileData) => {
-              userMap.set(profile.id, profile);
-            });
-          }
-
-          // Create a function to generate avatar URL if not available
-          const getAvatarUrl = (name: string) => {
-            // Generate a deterministic color based on the name
-            const colors = ['0D8ABC', 'E03A3F', '32A852', '7047EB', 'F9A826', '2E86C1', 'CB4335', '28B463', '8E44AD', 'D68910'];
-            const hash = name.split('').reduce((a, b) => {
-              a = ((a << 5) - a) + b.charCodeAt(0);
-              return a & a;
-            }, 0);
-            const colorIndex = Math.abs(hash) % colors.length;
-            const color = colors[colorIndex];
-
-            return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=${color}&color=fff`;
-          };
-
-          // Map the activity data with gear and user details
-          recentActivity = activityData.map((activity: ActivityData) => {
-            const gear = activity.gear_id ? gearMap.get(activity.gear_id) : undefined;
-            const user = activity.user_id ? userMap.get(activity.user_id) : undefined;
-
-            const gearName = gear?.name || 'Unknown Gear';
-            const userName = user?.full_name || 'Unknown User';
-
-            return {
-              id: activity.id,
-              type: activity.activity_type,
-              timestamp: activity.created_at,
-              status: activity.status || 'Unknown',
-              gearName: gearName,
-              gearCategory: gear?.category,
-              gearImage: gear?.image_url,
-              userName: userName,
-              userAvatar: user?.avatar_url || getAvatarUrl(userName),
-              notes: activity.notes,
-              details: activity.details
-            };
-          });
-
-          console.log('Successfully processed activity data with gear and user details');
-        } else {
-          console.log('No activity log entries found in the database');
-        }
-      } catch (activityError) {
-        console.error('Error in activity log processing:', activityError);
-        // Continue without activity log data
+      if (result.error) {
+        throw new Error(result.error);
       }
 
-      // Update analytics state
-      setAnalytics({
-        totalRequests: requestsData?.length || 0,
-        totalDamageReports: damageData?.length || 0,
-        popularGears,
-        weeklyTrends,
-        recentActivity
-      });
+      if (!result.data) {
+        throw new Error('No data received from analytics API');
+      }
+
+      // Validate that we have the expected data structure
+      if (typeof result.data.totalRequests !== 'number' ||
+        typeof result.data.totalDamageReports !== 'number') {
+        throw new Error('Invalid data structure received from analytics API');
+      }
+
+      // Update analytics state with the API response
+      setAnalytics(result.data);
 
       console.log('Analytics data updated successfully with the following data:',
-        `- Total Requests: ${requestsData?.length || 0}`,
-        `- Total Damage Reports: ${damageData?.length || 0}`,
-        `- Popular Gears: ${popularGears.length}`,
-        `- Weekly Trends: ${weeklyTrends.length}`,
-        `- Recent Activity: ${recentActivity.length}`
+        `- Total Requests: ${result.data.totalRequests}`,
+        `- Total Damage Reports: ${result.data.totalDamageReports}`,
+        `- Popular Gears: ${result.data.popularGears.length}`,
+        `- Weekly Trends: ${result.data.weeklyTrends.length}`,
+        `- Recent Activity: ${result.data.recentActivity.length}`
       );
 
       // Show success toast if this was a manual refresh
@@ -450,7 +205,7 @@ export default function ReportsPage() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError('Failed to load analytics data: ' + errorMessage);
-      console.error('Error loading analytics:', err);
+      console.error('Error loading analytics:', errorMessage);
 
       toast({
         title: "Error loading data",
@@ -474,46 +229,12 @@ export default function ReportsPage() {
     fetchData();
   }, [dateRange]);
 
-  // Add a subscription for real-time updates
-  useEffect(() => {
-    // Create subscriptions for all relevant tables
-    const subscriptions: RealtimeSubscription[] = [];
-
-    try {
-      // Subscribe to gear requests changes
-      const requestsSub = subscribeToTable('gear_requests', '*', () => {
-        logger.info('Gear requests changed, refreshing data...', 'Reports');
-        fetchData();
-      });
-      if (requestsSub) subscriptions.push(requestsSub);
-
-      // Subscribe to gear maintenance/damage changes
-      const maintenanceSub = subscribeToTable('gear_maintenance', '*', () => {
-        logger.info('Gear maintenance changed, refreshing data...', 'Reports');
-        fetchData();
-      });
-      if (maintenanceSub) subscriptions.push(maintenanceSub);
-
-      // Subscribe to gear activity log changes
-      const activityLogSub = subscribeToTable('gear_activity_log', '*', () => {
-        logger.info('Activity log changed, refreshing data...', 'Reports');
-        fetchData();
-      });
-      if (activityLogSub) subscriptions.push(activityLogSub);
-    } catch (error) {
-      logger.error(error, 'Error setting up realtime subscriptions for reports page');
-      toast({
-        title: "Realtime updates unavailable",
-        description: "You'll need to refresh manually to see the latest data.",
-        variant: "destructive"
-      });
-    }
-
-    // Return cleanup function
-    return () => {
-      subscriptions.forEach(unsubscribeFromTable);
-    };
-  }, []);
+  // Note: Realtime subscriptions disabled to prevent errors
+  // Users can manually refresh data using the refresh button
+  // useEffect(() => {
+  //   // Realtime subscriptions temporarily disabled due to table access issues
+  //   // This prevents the "[object Object]" errors from realtime client
+  // }, []);
 
   return (
     <TooltipProvider>
@@ -627,7 +348,9 @@ export default function ReportsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="text-lg font-semibold text-muted-foreground">No data</div>
+                <div className="text-lg font-semibold text-muted-foreground">
+                  {analytics.totalRequests === 0 ? 'No requests yet' : 'No popular gear data'}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -794,7 +517,12 @@ export default function ReportsPage() {
                     <div className="space-y-4">
                       {analytics.popularGears.map((gear, index) => (
                         <div key={index} className="flex items-center justify-between group hover:bg-muted/50 p-2 rounded-md transition-colors">
-                          <span className="font-medium">{gear.name}</span>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{gear.name}</span>
+                            {gear.category && (
+                              <span className="text-xs text-muted-foreground">{gear.category}</span>
+                            )}
+                          </div>
                           <Badge variant="secondary" className="group-hover:bg-background">{gear.count} requests</Badge>
                         </div>
                       ))}
@@ -810,9 +538,9 @@ export default function ReportsPage() {
           </TabsContent>
 
           <TabsContent value="activity">
-            {/* Weekly Activity Report */}
+            {/* Simple Report */}
             <Card className="overflow-hidden mb-6">
-              <WeeklyActivityReport dateRange={dateRange} />
+              <SimpleReport dateRange={dateRange} />
             </Card>
 
             {/* Recent Activity Log */}
@@ -871,34 +599,39 @@ export default function ReportsPage() {
                         <div className="divide-y divide-border rounded-md border">
                           {items.map((activity) => (
                             <div key={activity.id} className="py-3 px-3 flex items-start gap-3">
-                              {activity.userAvatar ? (
-                                <div className="w-8 h-8 rounded-full overflow-hidden border border-border flex-shrink-0">
-                                  <Image src={activity.userAvatar} alt={activity.userName} width={32} height={32} className="w-full h-full object-cover" />
-                                </div>
-                              ) : (
-                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
-                                  {activity.userName.charAt(0).toUpperCase()}
-                                </div>
-                              )}
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+                                {activity.userName.charAt(0).toUpperCase()}
+                              </div>
                               <div className="flex-1">
                                 <div className="flex items-center justify-between gap-2">
-                                  <p className="text-sm">
-                                    <span className="font-medium">{activity.userName}</span>{' '}
-                                    <span className="text-muted-foreground">
-                                      {activity.type === 'Check-out' && 'checked out'}
-                                      {activity.type === 'Check-in' && 'returned'}
-                                      {activity.type === 'Maintenance' && 'sent for maintenance'}
-                                      {activity.type === 'Request' && 'requested'}
-                                      {activity.type === 'Status Change' && 'changed status of'}
-                                    </span>{' '}
-                                    <span className="font-medium">{activity.gearName}</span>
-                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm">
+                                      <span className="font-medium">{activity.userName}</span>{' '}
+                                      <span className="text-muted-foreground">
+                                        {activity.notes || `${activity.type.toLowerCase()} ${activity.gearName}`}
+                                      </span>
+                                    </p>
+                                    {activity.status && activity.status !== 'Unknown' && (
+                                      <Badge
+                                        variant={
+                                          activity.status === 'approved' ? 'default' :
+                                            activity.status === 'rejected' ? 'destructive' :
+                                              activity.status === 'pending' ? 'secondary' : 'outline'
+                                        }
+                                        className="text-xs"
+                                      >
+                                        {activity.status}
+                                      </Badge>
+                                    )}
+                                  </div>
                                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                                     {new Date(activity.timestamp).toLocaleTimeString()}
                                   </span>
                                 </div>
-                                {activity.notes && (
-                                  <div className="mt-1 text-xs text-muted-foreground">{activity.notes}</div>
+                                {activity.gearCategory && (
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    Category: {activity.gearCategory}
+                                  </div>
                                 )}
                               </div>
                             </div>

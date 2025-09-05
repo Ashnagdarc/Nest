@@ -1,506 +1,675 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { motion } from 'framer-motion';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { apiGet } from "@/lib/apiClient";
-import {
-    RefreshCcw, BarChart3, Settings, Package, TrendingUp, Wrench, Users, ClipboardList, CheckCircle2, XCircle, BarChart3 as BarChartIcon
-} from "lucide-react";
-import type { Gear, Profile, GearRequest } from "@/types/dashboard";
-import Link from "next/link";
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import AddGearForm from "@/components/admin/add-gear-form";
+import {
+    Package,
+    Users,
+    Clock,
+    AlertTriangle,
+    Bell,
+    Activity,
+    Settings,
+    BarChart3,
+    Plus,
+    ArrowUpRight,
+    RefreshCcw,
+    CheckCircle2
+} from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Table, TableHead, TableRow, TableCell, TableBody, TableHeader } from '@/components/ui/table';
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
-import BulkActionsToolbar from '@/components/admin/analytics/BulkActionsToolbar';
-import AdvancedSearchBar from '@/components/admin/analytics/AdvancedSearchBar';
-import { useBulkSelection } from '@/hooks/analytics/useBulkSelection';
-import { useAdvancedSearch } from '@/hooks/analytics/useAdvancedSearch';
-import PageHeader from '@/components/foundation/PageHeader';
+import { LoadingState } from "@/components/ui/loading-state";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { logError } from '@/lib/logger';
+import { useToast } from "@/hooks/use-toast";
 import { useUnifiedDashboard } from '@/hooks/dashboard/use-unified-dashboard';
+import React from 'react';
+import AddGearForm from "@/components/admin/add-gear-form";
 
-// Import the UnifiedNotificationsPanel
-import { UnifiedNotificationsPanel } from '@/components/admin/UnifiedNotificationsPanel';
-import { RecentActivity } from '@/components/admin/RecentActivity';
-
-// Add types for analytics views
-interface WeeklyTrendRow {
-    week: string;
-    total_requests: number;
-    total_checkouts: number;
-}
-interface OverdueGearRow {
-    request_id: string;
-    gear_name: string;
-    full_name: string;
-    email: string;
-    due_date: string;
-}
-interface UserActivityRow {
-    user_id: string;
-    full_name: string;
-    email: string;
-    total_requests: number;
-    total_checkouts: number;
-    total_returns: number;
-}
-interface GearMaintenanceRow {
-    gear_id: string;
-    gear_name: string;
-    maintenance_events: number;
-    last_maintenance: string;
+// Types for dashboard data
+interface DashboardStats {
+    total_equipment: number;
+    available_equipment: number;
+    checked_out_equipment: number;
+    total_users: number;
+    active_users: number;
+    pending_requests: number;
+    approved_requests: number;
+    rejected_requests: number;
+    pending_checkins: number;
+    total_notifications: number;
+    unread_notifications: number;
 }
 
-function WeeklyTrendsChart() {
-    const [data, setData] = useState<WeeklyTrendRow[]>([]);
-    const supabase = createClient();
-    useEffect(() => {
-        supabase
-            .from('weekly_request_trends')
-            .select('*')
-            .order('week', { ascending: true })
-            .then(({ data }) => setData(data || []));
-    }, []);
-    return (
-        <Card className="mb-6">
-            <CardHeader><CardTitle>Weekly Request Trends</CardTitle></CardHeader>
-            <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Week</TableHead>
-                            <TableHead>Total Requests</TableHead>
-                            <TableHead>Total Checkouts</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {data.map(row => (
-                            <TableRow key={row.week}>
-                                <TableCell>{row.week?.slice(0, 10)}</TableCell>
-                                <TableCell>{row.total_requests}</TableCell>
-                                <TableCell>{row.total_checkouts}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </CardContent>
-        </Card>
-    );
+interface PendingItem {
+    id: string;
+    type: 'request' | 'checkin' | 'notification';
+    title: string;
+    description: string;
+    user_name: string;
+    created_at: string;
+    status: string;
+    priority: 'high' | 'medium' | 'low';
 }
 
-function OverdueGearTable() {
-    const [data, setData] = useState<OverdueGearRow[]>([]);
-    const [search, setSearch] = useState('');
-    const { data: dashboardData } = useUnifiedDashboard();
-
-    useEffect(() => {
-        if (dashboardData?.overdue_items) {
-            const overdueData = dashboardData.overdue_items.map(item => ({
-                request_id: item.gear_id,
-                gear_name: item.gear_name,
-                full_name: 'Unknown User', // Will be populated with actual user name
-                email: 'unknown@example.com',
-                due_date: item.due_date
-            }));
-            setData(overdueData);
-        }
-    }, [dashboardData]);
-    // Advanced search
-    const filteredData = useAdvancedSearch(
-        data,
-        { query: search },
-        ['gear_name', 'full_name', 'email']
-    );
-    // Bulk selection
-    const selectionData = filteredData.map(row => ({ ...row, id: row.request_id }));
-    const {
-        selectedIds,
-        isSelected,
-        toggleSelect,
-        selectAll,
-        deselectAll,
-        allSelected,
-        someSelected
-    } = useBulkSelection(selectionData);
-    // Bulk action handler
-    function handleBulkAction(action: string) {
-        if (action === 'remind') {
-            // TODO: Implement reminder logic
-            alert(`Send reminder to: ${selectedIds.join(', ')}`);
-        } else if (action === 'export') {
-            // TODO: Implement export logic
-            alert(`Exporting: ${selectedIds.join(', ')}`);
-        }
-    }
-    return (
-        <Card className="mb-6">
-            <CardHeader><CardTitle>Overdue Gear</CardTitle></CardHeader>
-            <CardContent>
-                <AdvancedSearchBar value={search} onChange={setSearch} placeholder="Search gear, user, or email..." />
-                <BulkActionsToolbar
-                    selectedIds={selectedIds}
-                    actions={[{ label: 'Send Reminder', value: 'remind' }, { label: 'Export', value: 'export' }]}
-                    onAction={handleBulkAction}
-                />
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>
-                                <input
-                                    type="checkbox"
-                                    checked={allSelected}
-                                    ref={el => { if (el) el.indeterminate = someSelected; }}
-                                    onChange={e => e.target.checked ? selectAll() : deselectAll()}
-                                    aria-label="Select all"
-                                />
-                            </TableHead>
-                            <TableHead>Gear</TableHead>
-                            <TableHead>User</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Due Date</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {selectionData.map(row => (
-                            <TableRow key={row.request_id} className={isSelected(row.id) ? 'bg-orange-50 dark:bg-orange-900/10' : ''}>
-                                <TableCell>
-                                    <input
-                                        type="checkbox"
-                                        checked={isSelected(row.id)}
-                                        onChange={() => toggleSelect(row.id)}
-                                        aria-label={`Select row for ${row.gear_name}`}
-                                    />
-                                </TableCell>
-                                <TableCell>{row.gear_name}</TableCell>
-                                <TableCell>{row.full_name}</TableCell>
-                                <TableCell>{row.email}</TableCell>
-                                <TableCell>{row.due_date}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </CardContent>
-        </Card>
-    );
+interface RecentActivity {
+    id: string;
+    type: string;
+    action: string;
+    item: string;
+    user_name: string;
+    timestamp: string;
+    status: string;
 }
 
-function UserActivityLeaderboard() {
-    const [data, setData] = useState<UserActivityRow[]>([]);
-    const supabase = createClient();
-    useEffect(() => {
-        supabase
-            .from('user_activity_summary')
-            .select('*')
-            .order('total_requests', { ascending: false })
-            .then(({ data }) => setData(data || []));
-    }, []);
-    return (
-        <Card className="mb-6">
-            <CardHeader><CardTitle>User Activity Leaderboard</CardTitle></CardHeader>
-            <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>User</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Requests</TableHead>
-                            <TableHead>Checkouts</TableHead>
-                            <TableHead>Returns</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {data.map(row => (
-                            <TableRow key={row.user_id}>
-                                <TableCell>{row.full_name}</TableCell>
-                                <TableCell>{row.email}</TableCell>
-                                <TableCell>{row.total_requests}</TableCell>
-                                <TableCell>{row.total_checkouts}</TableCell>
-                                <TableCell>{row.total_returns}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </CardContent>
-        </Card>
-    );
-}
-
-function GearMaintenanceSummary() {
-    const [data, setData] = useState<GearMaintenanceRow[]>([]);
-    const supabase = createClient();
-    useEffect(() => {
-        supabase
-            .from('gear_maintenance_summary')
-            .select('*')
-            .order('last_maintenance', { ascending: false })
-            .then(({ data }) => setData(data || []));
-    }, []);
-    return (
-        <Card className="mb-6">
-            <CardHeader><CardTitle>Gear Maintenance Summary</CardTitle></CardHeader>
-            <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Gear</TableHead>
-                            <TableHead>Maintenance Events</TableHead>
-                            <TableHead>Last Maintenance</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {data.map(row => (
-                            <TableRow key={row.gear_id}>
-                                <TableCell>{row.gear_name}</TableCell>
-                                <TableCell>{row.maintenance_events}</TableCell>
-                                <TableCell>{row.last_maintenance}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </CardContent>
-        </Card>
-    );
-}
-
+/**
+ * Simplified Admin Dashboard following Apple's Human Interface Guidelines
+ * Clean, focused design with clear priorities and easy navigation
+ */
 export default function AdminDashboardPage() {
+    const { toast } = useToast();
+    const supabase = createClient();
     const [addGearOpen, setAddGearOpen] = useState(false);
+    const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+    const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
 
-    // Use unified dashboard hook for all data
-    const { data: dashboardData, loading, error, refetch } = useUnifiedDashboard();
+    // Use unified dashboard data
+    const { data: dashboardData, loading: isLoading, error: dashboardError, refetch } = useUnifiedDashboard();
 
-    // Extract data from unified response
-    const gears = dashboardData?.gears || [];
-    const users = dashboardData?.users || [];
-    const requests = dashboardData?.requests || [];
-    const stats = dashboardData?.stats;
+    // Fetch pending items that need admin attention
+    useEffect(() => {
+        const fetchPendingItems = async () => {
+            try {
+                console.log('🔍 Fetching pending items...');
 
-    // Use stats from unified API instead of computing locally
-    const totalEquipment = stats?.total_equipment || 0;
-    const checkedOutEquipment = stats?.checked_out_equipment || 0;
-    const underRepairEquipment = stats?.under_repair_equipment || 0; // TODO: Implement proper gear state tracking
-    const utilizationRate = totalEquipment > 0 ? Math.round((checkedOutEquipment / totalEquipment) * 100) : 0;
+                let requests: any[] = [];
+                let checkins: any[] = [];
+                let notifications: any[] = [];
 
-    const totalUsers = stats?.total_users || 0;
-    const activeUsers = stats?.active_users || 0;
+                // Fetch pending gear requests (with individual error handling)
+                try {
+                    const { data: requestsData, error: requestsError } = await supabase
+                        .from('gear_requests')
+                        .select('id, created_at, status, reason, destination, user_id')
+                        .eq('status', 'Pending')
+                        .order('created_at', { ascending: false })
+                        .limit(5);
 
-    const pendingRequests = stats?.pending_requests || 0;
-    const approvedRequests = stats?.approved_requests || 0;
-    const rejectedRequests = stats?.rejected_requests || 0;
-    const approvalRate = requests.length > 0 ? Math.round((approvedRequests / requests.length) * 100) : 0;
+                    if (requestsError) {
+                        console.error('Error fetching pending requests:', requestsError);
+                    } else {
+                        requests = requestsData || [];
+                    }
+                } catch (error) {
+                    console.error('Exception fetching pending requests:', error);
+                }
 
-    // Compute categories
-    const categoriesMap: Record<string, number> = {};
-    gears.forEach((g: Gear) => {
-        if (!g.category) return;
-        categoriesMap[g.category] = (categoriesMap[g.category] || 0) + 1;
-    });
-    const categories = Object.entries(categoriesMap).map(([name, count]) => ({ name, count }));
+                // Fetch pending check-ins (with individual error handling)
+                try {
+                    const { data: checkinsData, error: checkinsError } = await supabase
+                        .from('checkins')
+                        .select('id, created_at, status, notes, user_id, gear_id')
+                        .eq('status', 'Pending Admin Approval')
+                        .order('created_at', { ascending: false })
+                        .limit(5);
 
-    // Minimal UI toggle (can be later made into a setting)
-    const minimal = true;
+                    if (checkinsError) {
+                        console.error('Error fetching pending check-ins:', checkinsError);
+                    } else {
+                        checkins = checkinsData || [];
+                    }
+                } catch (error) {
+                    console.error('Exception fetching pending check-ins:', error);
+                }
+
+                // Fetch unread notifications (with individual error handling)
+                try {
+                    const { data: notificationsData, error: notificationsError } = await supabase
+                        .from('notifications')
+                        .select('id, created_at, title, message, type, user_id')
+                        .eq('is_read', false)
+                        .order('created_at', { ascending: false })
+                        .limit(5);
+
+                    if (notificationsError) {
+                        console.error('Error fetching unread notifications:', notificationsError);
+                    } else {
+                        notifications = notificationsData || [];
+                    }
+                } catch (error) {
+                    console.error('Exception fetching unread notifications:', error);
+                }
+
+                // Transform data with fallbacks
+                const pendingRequests: PendingItem[] = (requests || []).map(item => ({
+                    id: item.id,
+                    type: 'request',
+                    title: `Request: ${item.reason || 'Gear Request'}`,
+                    description: `Destination: ${item.destination || 'Not specified'}`,
+                    user_name: `User ${item.user_id?.slice(0, 8) || 'Unknown'}`,
+                    created_at: item.created_at,
+                    status: item.status,
+                    priority: 'high'
+                }));
+
+                const pendingCheckins: PendingItem[] = (checkins || []).map(item => ({
+                    id: item.id,
+                    type: 'checkin',
+                    title: `Check-in: Gear ${item.gear_id?.slice(0, 8) || 'Unknown'}`,
+                    description: item.notes || 'No notes provided',
+                    user_name: `User ${item.user_id?.slice(0, 8) || 'Unknown'}`,
+                    created_at: item.created_at,
+                    status: item.status,
+                    priority: 'high'
+                }));
+
+                const pendingNotifications: PendingItem[] = (notifications || []).map(item => ({
+                    id: item.id,
+                    type: 'notification',
+                    title: item.title,
+                    description: item.message,
+                    user_name: `User ${item.user_id?.slice(0, 8) || 'Unknown'}`,
+                    created_at: item.created_at,
+                    status: item.type,
+                    priority: 'medium'
+                }));
+
+                console.log('🔍 Pending items fetched:', {
+                    requests: pendingRequests.length,
+                    checkins: pendingCheckins.length,
+                    notifications: pendingNotifications.length,
+                    total: pendingRequests.length + pendingCheckins.length + pendingNotifications.length
+                });
+
+                console.log('🔍 Raw data:', {
+                    requestsData: requests,
+                    checkinsData: checkins,
+                    notificationsData: notifications
+                });
+
+                // Combine and deduplicate items
+                const allItems = [...pendingRequests, ...pendingCheckins, ...pendingNotifications];
+
+                // Deduplicate by id and type
+                const uniqueItems = allItems.filter((item, index, self) =>
+                    index === self.findIndex(t => t.id === item.id && t.type === item.type)
+                );
+
+                console.log('🔍 Deduplicated items:', {
+                    before: allItems.length,
+                    after: uniqueItems.length
+                });
+
+                setPendingItems(uniqueItems);
+            } catch (error) {
+                // Only log if it's a real error, not an empty object
+                if (error && (typeof error === 'string' || error instanceof Error || (typeof error === 'object' && Object.keys(error).length > 0))) {
+                    logError(error, 'fetchPendingItems');
+                }
+            }
+        };
+
+        fetchPendingItems();
+    }, []); // Remove supabase dependency to prevent multiple runs
+
+    // Fetch recent activity
+    useEffect(() => {
+        const fetchRecentActivity = async () => {
+            try {
+                // Simplified query without joins
+                const { data: activities, error } = await supabase
+                    .from('checkins')
+                    .select('id, action, created_at, status, user_id, gear_id')
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+
+                if (error) {
+                    console.error('Error fetching recent activity:', error);
+                    // Don't throw, just log and continue
+                }
+
+                const transformedActivities: RecentActivity[] = (activities || []).map(item => ({
+                    id: item.id,
+                    type: 'checkin',
+                    action: item.action,
+                    item: `Gear ${item.gear_id?.slice(0, 8) || 'Unknown'}`,
+                    user_name: `User ${item.user_id?.slice(0, 8) || 'Unknown'}`,
+                    timestamp: item.created_at,
+                    status: item.status
+                }));
+
+                setRecentActivity(transformedActivities);
+            } catch (error) {
+                // Only log if it's a real error, not an empty object
+                if (error && (typeof error === 'string' || error instanceof Error || (typeof error === 'object' && Object.keys(error).length > 0))) {
+                    logError(error, 'fetchRecentActivity');
+                }
+            }
+        };
+
+        fetchRecentActivity();
+    }, [supabase]);
+
+    // Transform dashboard data into simplified stats
+    const stats: DashboardStats = {
+        total_equipment: dashboardData?.stats?.total_equipment || 0,
+        available_equipment: dashboardData?.stats?.available_equipment || 0,
+        checked_out_equipment: dashboardData?.stats?.checked_out_equipment || 0,
+        total_users: dashboardData?.stats?.total_users || 0,
+        active_users: dashboardData?.stats?.active_users || 0,
+        pending_requests: dashboardData?.stats?.pending_requests || 0,
+        approved_requests: dashboardData?.stats?.approved_requests || 0,
+        rejected_requests: dashboardData?.stats?.rejected_requests || 0,
+        pending_checkins: pendingItems.filter(item => item.type === 'checkin').length,
+        total_notifications: dashboardData?.notifications?.length || 0,
+        unread_notifications: pendingItems.filter(item => item.type === 'notification').length,
+    };
+
+    // Main dashboard stats (3 key metrics like user dashboard)
+    const mainStats = [
+        {
+            title: 'Equipment',
+            value: stats.total_equipment,
+            icon: Package,
+            color: 'text-blue-500',
+            bgColor: 'bg-blue-500/10',
+            link: '/admin/manage-gears',
+            description: `${stats.available_equipment} available, ${stats.checked_out_equipment} checked out`
+        },
+        {
+            title: 'Users',
+            value: stats.total_users,
+            icon: Users,
+            color: 'text-green-500',
+            bgColor: 'bg-green-500/10',
+            link: '/admin/manage-users',
+            description: `${stats.active_users} active users`
+        },
+        {
+            title: 'Pending Actions',
+            value: stats.pending_checkins + stats.pending_requests,
+            icon: Clock,
+            color: 'text-orange-500',
+            bgColor: 'bg-orange-500/10',
+            link: '/admin/manage-requests',
+            description: `${stats.pending_checkins} check-ins, ${stats.pending_requests} requests`
+        },
+    ];
+
+    const cardVariants = {
+        hidden: { opacity: 0, y: 20 },
+        visible: (i: number) => ({
+            opacity: 1,
+            y: 0,
+            transition: {
+                delay: i * 0.1,
+                duration: 0.4,
+                ease: "easeOut",
+            },
+        }),
+    };
+
+    const getPriorityColor = (priority: string) => {
+        switch (priority) {
+            case 'high': return 'bg-red-100 text-red-800 border-red-200';
+            case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+            case 'low': return 'bg-green-100 text-green-800 border-green-200';
+            default: return 'bg-gray-100 text-gray-800 border-gray-200';
+        }
+    };
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'Pending Admin Approval': return 'bg-orange-100 text-orange-800';
+            case 'Completed': return 'bg-green-100 text-green-800';
+            case 'System': return 'bg-blue-100 text-blue-800';
+            case 'Request': return 'bg-purple-100 text-purple-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
+
+    const formatTimeAgo = (timestamp: string) => {
+        const now = new Date();
+        const time = new Date(timestamp);
+        const diffInSeconds = Math.floor((now.getTime() - time.getTime()) / 1000);
+
+        if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+        return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    };
 
     return (
-        <div className="min-h-screen bg-background text-foreground">
-            <div className={minimal ? "container mx-auto px-4 py-6 space-y-6" : "container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-8 lg:space-y-10"}>
-                {/* Header */}
-                <PageHeader
-                    title="Admin Dashboard"
-                    subtitle={undefined}
-                    actions={(
-                        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                            <Button
-                                variant="outline"
-                                className="text-sm sm:text-base"
-                                onClick={() => window.location.reload()}
-                                aria-label="Refresh dashboard"
-                            >
-                                <RefreshCcw className="icon-16 mr-2" />
-                                Refresh
-                            </Button>
-                            <Button variant="outline" className="text-sm sm:text-base" aria-label="Open reports">
-                                <BarChart3 className="icon-16 mr-2" />
-                                Reports
-                            </Button>
-                            <Button variant="outline" className="text-sm sm:text-base" aria-label="Open settings">
-                                <Settings className="icon-16 mr-2" />
-                                Settings
-                            </Button>
-                        </div>
-                    )}
-                />
-
-                {error && (
-                    <div className="text-red-500 font-bold text-center py-4 px-4 bg-red-50 dark:bg-red-900/20 rounded-lg">{error}</div>
-                )}
-
-                {loading ? (
-                    <div className="flex justify-center items-center py-20">
-                        <div className="animate-spin h-12 w-12 border-4 border-orange-500 border-t-transparent rounded-full"></div>
+        <ErrorBoundary>
+            <div className="container mx-auto px-6 sm:px-8 lg:px-12 py-8 sm:py-12 lg:py-16 space-y-8 sm:space-y-12">
+                {/* Header Section */}
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 sm:gap-8"
+                >
+                    <div className="flex-1 min-w-0">
+                        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground truncate leading-tight">
+                            Admin Dashboard
+                        </h1>
+                        <p className="text-muted-foreground mt-2 text-base sm:text-lg lg:text-xl leading-relaxed">
+                            Manage equipment, users, and system operations
+                        </p>
                     </div>
-                ) : (
-                    <>
-                        {/* Unified KPI Grid - All cards same size */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-                            {/* Equipment Stats */}
-                            <div className="rounded-xl border p-4 bg-card">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Package className="icon-16 text-primary" />
-                                    <span className="text-sm font-medium">Equipment</span>
-                                </div>
-                                <div className="text-2xl font-bold">{totalEquipment}</div>
-                            </div>
+                    <div className="flex flex-col sm:flex-row items-stretch gap-3 sm:gap-4 w-full sm:w-auto">
+                        <Button
+                            variant="outline"
+                            className="gap-3 w-full sm:w-auto min-h-[48px] text-base"
+                            onClick={() => refetch()}
+                        >
+                            <RefreshCcw className="h-5 w-5" />
+                            <span className="hidden xs:inline">Refresh</span>
+                        </Button>
+                        <Link href="/admin/reports" className="w-full sm:w-auto">
+                            <Button variant="outline" className="gap-3 w-full sm:w-auto min-h-[48px] text-base">
+                                <BarChart3 className="h-5 w-5" />
+                                <span className="hidden xs:inline">Reports</span>
+                            </Button>
+                        </Link>
+                        <Link href="/admin/settings" className="w-full sm:w-auto">
+                            <Button variant="outline" className="gap-3 w-full sm:w-auto min-h-[48px] text-base">
+                                <Settings className="h-5 w-5" />
+                                <span className="hidden xs:inline">Settings</span>
+                            </Button>
+                        </Link>
+                    </div>
+                </motion.div>
 
-                            <div className="rounded-xl border p-4 bg-card">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <TrendingUp className="icon-16 text-primary" />
-                                    <span className="text-sm font-medium">Utilization</span>
-                                </div>
-                                <div className="text-2xl font-bold">{utilizationRate}%</div>
-                            </div>
-
-                            <div className="rounded-xl border p-4 bg-card">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Package className="icon-16 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Checked Out</span>
-                                </div>
-                                <div className="text-2xl font-bold">{checkedOutEquipment}</div>
-                            </div>
-
-                            <div className="rounded-xl border p-4 bg-card">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Wrench className="icon-16 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Under Repair</span>
-                                </div>
-                                <div className="text-2xl font-bold">{underRepairEquipment}</div>
-                            </div>
-
-                            {/* User Stats */}
-                            <div className="rounded-xl border p-4 bg-card">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Users className="icon-16 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Users</span>
-                                </div>
-                                <div className="text-2xl font-bold">{totalUsers}</div>
-                            </div>
-
-                            <div className="rounded-xl border p-4 bg-card">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Users className="icon-16 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Active</span>
-                                </div>
-                                <div className="text-2xl font-bold">{activeUsers}</div>
-                            </div>
-
-                            {/* Request Stats */}
-                            <div className="rounded-xl border p-4 bg-card">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <ClipboardList className="icon-16 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Pending</span>
-                                </div>
-                                <div className="text-2xl font-bold">{pendingRequests}</div>
-                            </div>
-
-                            <div className="rounded-xl border p-4 bg-card">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <CheckCircle2 className="icon-16 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Approved</span>
-                                </div>
-                                <div className="text-2xl font-bold">{approvedRequests}</div>
-                            </div>
-
-                            <div className="rounded-xl border p-4 bg-card">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <XCircle className="icon-16 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Rejected</span>
-                                </div>
-                                <div className="text-2xl font-bold">{rejectedRequests}</div>
-                            </div>
-
-                            <div className="rounded-xl border p-4 bg-card">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <BarChartIcon className="icon-16 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Approval Rate</span>
-                                </div>
-                                <div className="text-2xl font-bold">{approvalRate}%</div>
-                            </div>
-                        </div>
-
-                        {/* Quick Actions and Recent Activity */}
-                        <div className="sm:col-span-2 lg:col-span-3">
-                            <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent h-full"}>
-                                <div className="font-semibold text-base mb-3">Quick Actions</div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <Dialog open={addGearOpen} onOpenChange={setAddGearOpen}>
-                                        <DialogTrigger asChild>
-                                            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm w-full">
-                                                + Add Equipment
-                                            </Button>
-                                        </DialogTrigger>
-                                        <DialogContent className="sm:max-w-md">
-                                            <DialogHeader>
-                                                <DialogTitle>Add New Equipment</DialogTitle>
-                                            </DialogHeader>
-                                            <AddGearForm onSubmit={() => setAddGearOpen(false)} />
-                                        </DialogContent>
-                                    </Dialog>
-                                    <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
-                                        <Link href="/admin/manage-requests">Manage Requests</Link>
-                                    </Button>
-                                    <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
-                                        <Link href="/admin/reports">View Reports</Link>
-                                    </Button>
-                                    <Button asChild className="bg-secondary hover:bg-secondary/90 text-secondary-foreground text-sm w-full">
-                                        <Link href="/admin/manage-users">User Management</Link>
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Unified Notifications Panel */}
-                        <div className="sm:col-span-2 lg:col-span-3 mt-4">
-                            <UnifiedNotificationsPanel />
-                        </div>
-                        <div className="sm:col-span-2 lg:col-span-3">
-                            <RecentActivity />
-                        </div>
-
-                        {/* Equipment Categories (compact chips) */}
-                        <div className="sm:col-span-2 lg:col-span-6">
-                            <div className={minimal ? "rounded-xl border p-4 bg-card" : "border border-gray-300 dark:border-gray-700 shadow-xl rounded-2xl p-4 sm:p-6 bg-white dark:bg-transparent"}>
-                                <div className="font-semibold text-base mb-3">Equipment Categories</div>
-                                <div className="flex flex-wrap gap-2">
-                                    {categories.map((cat) => (
-                                        <span key={cat.name} className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm">
-                                            <span className="font-medium">{cat.name}</span>
-                                            <span className="text-primary font-bold">{cat.count}</span>
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                        {/* Collapsible analytics views */}
-                        <Accordion type="multiple" className={minimal ? "space-y-2" : "mb-8"}>
-                            <AccordionItem value="weekly-trends" className={minimal ? "border rounded-lg" : ""}>
-                                <AccordionTrigger className={minimal ? "px-4 py-3" : ""}>Weekly Request Trends</AccordionTrigger>
-                                <AccordionContent className={minimal ? "px-4 pb-4" : ""}><WeeklyTrendsChart /></AccordionContent>
-                            </AccordionItem>
-                            <AccordionItem value="overdue-gear" className={minimal ? "border rounded-lg" : ""}>
-                                <AccordionTrigger className={minimal ? "px-4 py-3" : ""}>Overdue Gear</AccordionTrigger>
-                                <AccordionContent className={minimal ? "px-4 pb-4" : ""}><OverdueGearTable /></AccordionContent>
-                            </AccordionItem>
-                            <AccordionItem value="user-activity" className={minimal ? "border rounded-lg" : ""}>
-                                <AccordionTrigger className={minimal ? "px-4 py-3" : ""}>User Activity Leaderboard</AccordionTrigger>
-                                <AccordionContent className={minimal ? "px-4 pb-4" : ""}><UserActivityLeaderboard /></AccordionContent>
-                            </AccordionItem>
-                            <AccordionItem value="gear-maintenance" className={minimal ? "border rounded-lg" : ""}>
-                                <AccordionTrigger className={minimal ? "px-4 py-3" : ""}>Gear Maintenance Summary</AccordionTrigger>
-                                <AccordionContent className={minimal ? "px-4 pb-4" : ""}><GearMaintenanceSummary /></AccordionContent>
-                            </AccordionItem>
-                        </Accordion>
-                    </>
+                {/* Error Display */}
+                {dashboardError && (
+                    <div className="text-red-500 font-bold text-center py-4 px-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                        {dashboardError}
+                    </div>
                 )}
+
+                {/* Main Stats Cards */}
+                {isLoading ? (
+                    <LoadingState variant="cards" count={3} />
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+                        {mainStats.map((stat, i) => (
+                            <motion.div
+                                key={stat.title}
+                                custom={i}
+                                initial="hidden"
+                                animate="visible"
+                                variants={cardVariants}
+                                className="w-full"
+                            >
+                                <Card className="h-full hover:shadow-lg transition-all duration-300 border-border/50">
+                                    <CardHeader className="flex flex-row items-center justify-between pb-3 p-6">
+                                        <CardTitle className="text-base sm:text-lg lg:text-xl font-semibold flex items-center gap-3 truncate">
+                                            {React.createElement(stat.icon, { className: `h-6 w-6 sm:h-7 sm:w-7 ${stat.color} flex-shrink-0` })}
+                                            <span className="truncate">{stat.title}</span>
+                                        </CardTitle>
+                                        <Badge
+                                            className={
+                                                'text-sm sm:text-base px-3 sm:px-4 py-1.5 font-bold shadow-none flex-shrink-0 rounded-lg ' +
+                                                (stat.title === 'Equipment' ? 'bg-blue-600 text-white' :
+                                                    stat.title === 'Users' ? 'bg-green-600 text-white' :
+                                                        stat.title === 'Pending Actions' ? 'bg-orange-600 text-white' :
+                                                            'bg-gray-600 text-white')
+                                            }
+                                        >
+                                            {stat.value}
+                                        </Badge>
+                                    </CardHeader>
+                                    <CardContent className="p-6 pt-0">
+                                        <p className="text-sm sm:text-base text-muted-foreground mb-4 line-clamp-2 leading-relaxed">
+                                            {stat.description}
+                                        </p>
+                                        {stat.value === 0 && (
+                                            <div className="text-sm text-muted-foreground italic">No {stat.title.toLowerCase()}.</div>
+                                        )}
+                                        <Link href={stat.link} className="text-blue-500 hover:underline text-sm sm:text-base inline-flex items-center gap-2">
+                                            View details
+                                            <ArrowUpRight className="h-4 w-4" />
+                                        </Link>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Quick Actions */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.2 }}
+                >
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Plus className="h-5 w-5" />
+                                Quick Actions
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <Dialog open={addGearOpen} onOpenChange={setAddGearOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button className="gap-2 h-12">
+                                            <Plus className="h-4 w-4" />
+                                            Add Equipment
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="sm:max-w-md">
+                                        <DialogHeader>
+                                            <DialogTitle>Add New Equipment</DialogTitle>
+                                        </DialogHeader>
+                                        <AddGearForm onSubmit={() => setAddGearOpen(false)} />
+                                    </DialogContent>
+                                </Dialog>
+
+                                <Button asChild variant="outline" className="gap-2 h-12">
+                                    <Link href="/admin/manage-requests">
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        Manage Requests
+                                    </Link>
+                                </Button>
+
+                                <Button asChild variant="outline" className="gap-2 h-12">
+                                    <Link href="/admin/manage-checkins">
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        Manage Check-ins
+                                    </Link>
+                                </Button>
+
+                                <Button asChild variant="outline" className="gap-2 h-12">
+                                    <Link href="/admin/manage-users">
+                                        <Users className="h-4 w-4" />
+                                        User Management
+                                    </Link>
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                {/* Main Content Grid */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8">
+                    {/* Left Column - Pending Items */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.3 }}
+                        className="space-y-6 sm:space-y-8"
+                    >
+                        <Card>
+                            <CardHeader className="flex items-center justify-between">
+                                <CardTitle className="flex items-center gap-2">
+                                    <AlertTriangle className="h-5 w-5" />
+                                    Needs Attention
+                                </CardTitle>
+                                <Badge variant="secondary" className="text-xs">
+                                    {pendingItems.length} items
+                                </Badge>
+                            </CardHeader>
+                            <CardContent>
+                                {isLoading ? (
+                                    <div className="space-y-3">
+                                        {[...Array(3)].map((_, i) => (
+                                            <div key={i} className="flex items-center space-x-3">
+                                                <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
+                                                <div className="flex-1 space-y-2">
+                                                    <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
+                                                    <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {pendingItems.length === 0 ? (
+                                            <div className="text-center py-8">
+                                                <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                                <p className="text-muted-foreground">All caught up! No pending items.</p>
+                                            </div>
+                                        ) : (
+                                            pendingItems.map((item) => (
+                                                <div key={item.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
+                                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center ${item.type === 'checkin' ? 'bg-orange-100' :
+                                                        item.type === 'request' ? 'bg-purple-100' :
+                                                            'bg-blue-100'
+                                                        }`}>
+                                                        {item.type === 'checkin' ? (
+                                                            <CheckCircle2 className="h-4 w-4 text-orange-600" />
+                                                        ) : item.type === 'request' ? (
+                                                            <Clock className="h-4 w-4 text-purple-600" />
+                                                        ) : (
+                                                            <Bell className="h-4 w-4 text-blue-600" />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">{item.user_name}</p>
+                                                        <p className="text-xs text-muted-foreground">{formatTimeAgo(item.created_at)}</p>
+                                                    </div>
+                                                    <div className="flex flex-col gap-1">
+                                                        <Badge className={`text-xs ${getPriorityColor(item.priority)}`}>
+                                                            {item.priority}
+                                                        </Badge>
+                                                        <Badge className={`text-xs ${getStatusColor(item.status)}`}>
+                                                            {item.status}
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+
+                    {/* Right Column - Recent Activity */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.4 }}
+                        className="space-y-6 sm:space-y-8"
+                    >
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Activity className="h-5 w-5" />
+                                    Recent Activity
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {isLoading ? (
+                                    <div className="space-y-3">
+                                        {[...Array(5)].map((_, i) => (
+                                            <div key={i} className="flex items-center space-x-3">
+                                                <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
+                                                <div className="flex-1 space-y-2">
+                                                    <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
+                                                    <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {recentActivity.length === 0 ? (
+                                            <p className="text-muted-foreground text-sm">No recent activity</p>
+                                        ) : (
+                                            recentActivity.slice(0, 5).map((activity) => (
+                                                <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
+                                                    <div className="h-8 w-8 rounded-full flex items-center justify-center bg-primary/15">
+                                                        <Activity className="h-4 w-4 text-primary" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-medium text-foreground">
+                                                            {activity.user_name} {activity.action.toLowerCase()} {activity.item}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">{formatTimeAgo(activity.timestamp)}</p>
+                                                    </div>
+                                                    <Badge variant="secondary" className="text-xs">
+                                                        {activity.status}
+                                                    </Badge>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                </div>
+
+                {/* Additional Stats Row */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.5 }}
+                >
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>System Overview</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold text-blue-600">{stats.available_equipment}</div>
+                                    <div className="text-sm text-muted-foreground">Available</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold text-orange-600">{stats.checked_out_equipment}</div>
+                                    <div className="text-sm text-muted-foreground">Checked Out</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold text-green-600">{stats.approved_requests}</div>
+                                    <div className="text-sm text-muted-foreground">Approved</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold text-red-600">{stats.rejected_requests}</div>
+                                    <div className="text-sm text-muted-foreground">Rejected</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold text-purple-600">{stats.total_notifications}</div>
+                                    <div className="text-sm text-muted-foreground">Notifications</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold text-yellow-600">{stats.unread_notifications}</div>
+                                    <div className="text-sm text-muted-foreground">Unread</div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
             </div>
-        </div>
+        </ErrorBoundary>
     );
 }

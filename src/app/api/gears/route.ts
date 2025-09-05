@@ -45,15 +45,15 @@ export async function GET(request: NextRequest) {
             baseQuery = supabase.from('gears').select('*', { count: 'exact' });
         }
         if (status && status !== 'all') {
-            // FIX: For Available status, ensure both status is Available AND available_quantity > 0
+            // FIX: For Available status, show both Available and Partially Available gears (both have available_quantity > 0)
             if (status === 'Available') {
-                baseQuery = baseQuery.eq('status', status).gt('available_quantity', 0);
+                baseQuery = baseQuery.in('status', ['Available', 'Partially Available']).gt('available_quantity', 0);
             } else {
                 baseQuery = baseQuery.eq('status', status);
             }
         } else if (status === 'all') {
-            // For 'all' status, still don't show items with 0 available_quantity as Available
-            baseQuery = baseQuery.not('status', 'eq', 'Available').or('status.eq.Available,available_quantity.gt.0');
+            // For 'all' status, show all gears except those with 0 available_quantity when status is Available or Partially Available
+            baseQuery = baseQuery.or('status.not.in.(Available,Partially Available),available_quantity.gt.0');
         }
         if (category && category !== 'all') {
             baseQuery = baseQuery.eq('category', category);

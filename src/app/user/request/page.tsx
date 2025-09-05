@@ -72,7 +72,7 @@ const reasonOptions = [
   "Youtube Shoot",          // Video content creation
   "Event Shoot",           // Event photography/videography
   "Site Update Shoot",     // Property documentation
-  "Offplan property Shoot", // Pre-construction marketing
+  "Off Plan Shoot", // Pre-construction marketing
   "Finished House Shoot",   // Completed property marketing
   "Allocation Shoot",       // Unit allocation documentation
   "Personal",              // Personal use
@@ -95,7 +95,7 @@ const durationOptions = [
   "1 week",     // Weekly usage
   "2 weeks",    // Bi-weekly usage
   "Month",      // Monthly usage
-  "year"        // Long-term usage
+  "1year"        // Long-term usage
 ];
 
 /**
@@ -120,7 +120,7 @@ const calculateDueDate = (duration: string): string => {
       return new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
     case "Month":
       return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    case "year":
+    case "1year":
       return new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString();
     default:
       // Default to 1 week if duration is not recognized
@@ -422,7 +422,9 @@ function RequestGearContent() {
     console.log("Equipment request submitted:", data);
 
     // Verify user authentication
+    console.log('🔍 User ID:', userId);
     if (!userId) {
+      console.error('🔍 No user ID found');
       toast({
         title: "Authentication Error",
         description: "User not authenticated. Please log in again.",
@@ -451,23 +453,29 @@ function RequestGearContent() {
         }
       }
       // Insert request into database
+      const requestPayload = {
+        user_id: userId || '',
+        reason: data.reason || '',
+        destination: data.destination || '',
+        expected_duration: data.duration || '',
+        due_date: calculateDueDate(data.duration || ''),
+        team_members: data.teamMembers.length ? data.teamMembers.join(',') : null,
+        status: 'Pending'
+      };
+
+      console.log('🔍 Submitting gear request with payload:', requestPayload);
+
       const { data: requestData, error } = await supabase
         .from('gear_requests')
-        .insert({
-          user_id: userId || '',
-          gear_ids: data.selectedGears,
-          reason: data.reason || '',
-          destination: data.destination || '',
-          expected_duration: data.duration || '',
-          due_date: calculateDueDate(data.duration || ''),
-          team_members: data.teamMembers.length ? data.teamMembers.join(',') : null,
-          status: 'Pending'
-        })
+        .insert(requestPayload)
         .select();
 
       if (error) {
+        console.error('🔍 Gear request insert error:', error);
         throw error;
       }
+
+      console.log('🔍 Gear request created successfully:', requestData);
 
       // Populate the gear_request_gears junction table
       if (requestData && requestData[0] && data.selectedGears.length > 0) {
@@ -550,25 +558,7 @@ function RequestGearContent() {
         console.error('Failed to send Google Chat notification:', notificationError);
       }
 
-      // Log activity
-      try {
-        await supabase
-          .from('gear_activity_log')
-          .insert({
-            gear_id: data.selectedGears[0], // Log first gear as primary
-            user_id: userId,
-            action: 'request_created',
-            details: JSON.stringify({
-              request_id: requestData?.[0]?.id,
-              gear_ids: data.selectedGears,
-              reason: data.reason,
-              destination: data.destination,
-              duration: data.duration
-            })
-          });
-      } catch (logError) {
-        console.error('Failed to log activity:', logError);
-      }
+      // Activity log table not present; skipping optional logging
 
       // Clear form and draft
       form.reset();

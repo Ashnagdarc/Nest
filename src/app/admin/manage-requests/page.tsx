@@ -164,27 +164,61 @@ function ManageRequestsContent() {
   // Optimized gear name extraction function with fallback support
   const extractGearNames = useCallback((request: { gear_request_gears?: Array<{ quantity?: number; gears?: { name?: string; gear_states?: GearState[] } }>; gear_ids?: string[] }): string[] => {
     console.log('🔍 extractGearNames called with:', request);
+
     // Prefer junction table with quantities: aggregate by name and append "x qty" and state info
     if (request.gear_request_gears && Array.isArray(request.gear_request_gears) && request.gear_request_gears.length > 0) {
       console.log('🔍 Using gear_request_gears junction table');
-      const gearInfo: Record<string, { qty: number; state?: GearState }> = {};
+      const gearInfo: Record<string, { qty: number; states: GearState[] }> = {};
+
       for (const item of request.gear_request_gears) {
         const name = (item.gears?.name || '').trim();
         if (!name) continue;
+
         const qty = Math.max(1, Number(item.quantity ?? 1));
-        const state = item.gears?.gear_states?.[0];
+        const states = item.gears?.gear_states || [];
+
         if (!gearInfo[name]) {
-          gearInfo[name] = { qty, state };
+          gearInfo[name] = { qty, states };
         } else {
           gearInfo[name].qty += qty;
+          gearInfo[name].states = [...gearInfo[name].states, ...states];
         }
-        console.log('🔍 Processing item:', { name, qty, state, currentInfo: gearInfo[name] });
       }
+
       const result = Object.entries(gearInfo).map(([name, info]) => {
         const qtyStr = info.qty > 1 ? ` x ${info.qty}` : '';
-        const stateStr = info.state ? ` (${info.state.status}, ${info.state.available_quantity} available)` : '';
-        return `${name}${qtyStr}${stateStr}`;
+
+        // Calculate total available quantity and determine overall status
+        let displayState = '';
+        if (info.states.length > 0) {
+          // PERMANENT FIX: Use gears table data instead of broken gear_states
+          const gear = info.states[0]?.gears;
+          if (gear) {
+            const totalQuantity = gear.quantity || 1;
+            const availableQuantity = gear.available_quantity || 0;
+            const gearStatus = gear.status || 'Available';
+            const checkedOutTo = gear.checked_out_to;
+            const currentRequestId = gear.current_request_id;
+
+            // Determine display status based on gear data
+            let statusText = gearStatus;
+            if (checkedOutTo && currentRequestId) {
+              statusText = 'Checked Out';
+            } else if (availableQuantity === 0) {
+              statusText = 'Checked Out';
+            } else if (availableQuantity < totalQuantity) {
+              statusText = 'Partially Available';
+            } else {
+              statusText = 'Available';
+            }
+
+            displayState = ` (${statusText}, ${availableQuantity} available)`;
+          }
+        }
+
+        return `${name}${qtyStr}${displayState}`;
       });
+
       console.log('🔍 Final result:', result);
       return result;
     }
@@ -338,20 +372,18 @@ function ManageRequestsContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId }),
       });
+
+      console.log('🔍 Approval response status:', resp.status);
       const result = await resp.json();
+      console.log('🔍 Approval response data:', result);
+
       if (!resp.ok || !result?.success) {
-        throw new Error(result?.error || 'Approval failed');
+        const errorMessage = result?.error || `Approval failed with status ${resp.status}`;
+        console.error('🔍 Approval failed:', errorMessage);
+        throw new Error(errorMessage);
       }
 
-      // Add to status history
-      await supabase
-        .from('request_status_history')
-        .insert({
-          request_id: requestId,
-          status: 'approved',
-          changed_at: new Date().toISOString(),
-          note: 'Request approved by admin'
-        });
+      // Status history table not in DB; skipping audit trail insert (handled by existing fields)
 
       toast({
         title: "Request Approved",
@@ -379,7 +411,10 @@ function ManageRequestsContent() {
       // Refresh the requests list
       fetchRequests();
     } catch (error) {
-      console.error('Error approving request:', error instanceof Error ? { message: error.message, stack: error.stack } : error);
+      // Only log if it's a real error, not an empty object
+      if (error && (typeof error === 'string' || error instanceof Error || (typeof error === 'object' && Object.keys(error).length > 0))) {
+        console.error('Error approving request:', error instanceof Error ? { message: error.message, stack: error.stack } : error);
+      }
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to approve request. Please try again.",
@@ -454,7 +489,10 @@ function ManageRequestsContent() {
       // Refresh the requests list
       fetchRequests();
     } catch (error) {
-      console.error('Error rejecting request:', error);
+      // Only log if it's a real error, not an empty object
+      if (error && (typeof error === 'string' || error instanceof Error || (typeof error === 'object' && Object.keys(error).length > 0))) {
+        console.error('Error rejecting request:', error);
+      }
       toast({
         title: "Error",
         description: "Failed to reject request. Please try again.",
@@ -700,28 +738,37 @@ function ManageRequestsContent() {
 
     setIsProcessing(true);
     try {
-      // Update the requests status - the database trigger will handle gear updates
-      const { error } = await supabase
-        .from('gear_requests')
-        .update({
-          status: 'approved',
-          approved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+      const results = await Promise.allSettled(
+        selectedRequests.map(async (requestId) => {
+          const resp = await fetch('/api/requests/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId }),
+          });
+          const result = await resp.json();
+          if (!resp.ok || !result?.success) {
+            throw new Error(result?.error || 'Approval failed');
+          }
+          return result;
         })
-        .in('id', selectedRequests);
+      );
 
-      if (error) throw error;
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
 
       toast({
-        title: "Batch Approval Successful",
-        description: `${selectedRequests.length} request(s) have been approved.`,
-        variant: "default",
+        title: failed ? "Batch Approval Completed with Errors" : "Batch Approval Successful",
+        description: `${succeeded} request(s) approved${failed ? `, ${failed} failed` : ''}`,
+        variant: failed ? "destructive" : "default",
       });
 
       setSelectedRequests([]);
       fetchRequests();
     } catch (error) {
-      console.error('Error batch approving requests:', error);
+      // Only log if it's a real error, not an empty object
+      if (error && (typeof error === 'string' || error instanceof Error || (typeof error === 'object' && Object.keys(error).length > 0))) {
+        console.error('Error batch approving requests:', error);
+      }
       toast({
         title: "Error",
         description: "Failed to approve requests. Please try again.",
@@ -733,7 +780,7 @@ function ManageRequestsContent() {
   };
 
   // Handle batch reject
-  const handleBatchReject = () => {
+  const handleBatchReject = async () => {
     if (selectedRequests.length === 0) {
       toast({
         title: "No Requests Selected",
@@ -743,8 +790,55 @@ function ManageRequestsContent() {
       return;
     }
 
-    setRequestToReject(selectedRequests[0]); // For now, just reject the first one
-    setRejectionReason('Batch rejection');
+    if (!rejectionReason.trim()) {
+      // If no reason provided, default to a generic reason for batch
+      setRejectionReason('Batch rejection');
+    }
+
+    setIsProcessing(true);
+    try {
+      const reason = rejectionReason?.trim() || 'Batch rejection';
+      const results = await Promise.allSettled(
+        selectedRequests.map(async (requestId) => {
+          const resp = await fetch('/api/requests/reject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId, reason }),
+          });
+          const result = await resp.json();
+          if (!resp.ok || !result?.success) {
+            throw new Error(result?.error || 'Reject failed');
+          }
+          return result;
+        })
+      );
+
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
+
+      toast({
+        title: failed ? "Batch Reject Completed with Errors" : "Batch Reject Successful",
+        description: `${succeeded} request(s) rejected${failed ? `, ${failed} failed` : ''}`,
+        variant: failed ? "destructive" : "default",
+      });
+
+      setSelectedRequests([]);
+      setRequestToReject(null);
+      setRejectionReason('');
+      fetchRequests();
+    } catch (error) {
+      // Only log if it's a real error, not an empty object
+      if (error && (typeof error === 'string' || error instanceof Error || (typeof error === 'object' && Object.keys(error).length > 0))) {
+        console.error('Error batch rejecting requests:', error);
+      }
+      toast({
+        title: "Error",
+        description: "Failed to reject requests. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Handle clear all filters
@@ -861,7 +955,22 @@ function ManageRequestsContent() {
           setSelectedRequests={setSelectedRequests}
           onApprove={handleApprove}
           onReject={(id) => { setRequestToReject(id); setRejectionReason(''); }}
-          onView={(req: TableGearRequest) => { setSelectedRequest(req as GearRequest); setIsDetailsOpen(true); }}
+          onView={(req: TableGearRequest) => {
+            // Convert TableGearRequest to GearRequest by adding missing fields
+            const fullRequest: GearRequest = {
+              ...req,
+              duration: 'Not specified',
+              reason: 'Not specified',
+              destination: 'Not specified',
+              adminNotes: null,
+              checkoutDate: null,
+              dueDate: null,
+              checkinDate: null,
+              gear_request_gears: []
+            };
+            setSelectedRequest(fullRequest);
+            setIsDetailsOpen(true);
+          }}
           isProcessing={isProcessing}
           getStatusBadge={getStatusBadge}
         />
