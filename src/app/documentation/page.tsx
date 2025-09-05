@@ -382,7 +382,7 @@ npm run build`}
                                                     <li>• notifications - System alerts</li>
                                                     <li>• announcements - System messages</li>
                                                     <li>• gear_maintenance - Maintenance records</li>
-                                                    <li>• gear_calendar_bookings - Scheduling</li>
+                                                    <li>• gear_calendar_bookings - REMOVED (Calendar feature)</li>
                                                 </ul>
                                             </div>
                                         </div>

@@ -54,32 +54,14 @@ export async function GET(request: NextRequest) {
             isAdmin
         });
 
-        // Test 4: Try to access calendar bookings (if admin)
+        // REMOVED: Calendar booking functionality test
         let calendarAccess = false;
-        let calendarError = null;
+        let calendarError = 'Calendar functionality removed';
 
-        if (isAdmin) {
-            try {
-                const { data: calendarData, error: calendarErr } = await supabase.rpc('get_calendar_bookings_with_profiles', {
-                    start_date_param: '2020-01-01',
-                    end_date_param: '2030-12-31',
-                    user_id_param: null,
-                    gear_id_param: null
-                });
-
-                calendarAccess = !calendarErr;
-                calendarError = calendarErr?.message;
-
-                console.log('[Test Auth API] Calendar access result:', {
-                    success: calendarAccess,
-                    dataCount: calendarData?.length || 0,
-                    error: calendarError
-                });
-            } catch (err) {
-                calendarError = err instanceof Error ? err.message : 'Unknown error';
-                console.error('[Test Auth API] Calendar access exception:', err);
-            }
-        }
+        console.log('[Test Auth API] Calendar access result:', {
+            success: calendarAccess,
+            error: calendarError
+        });
 
         return NextResponse.json({
             success: true,

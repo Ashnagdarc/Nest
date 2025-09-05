@@ -604,89 +604,10 @@ export async function sendRequestReceivedEmail({
 }
 
 // New: Overdue equipment reminder email
-// Calendar reservation email templates
-export async function sendReservationCreatedEmail({
-  to,
-  userName,
-  gearName,
-  startDate,
-  endDate,
-  reason,
-}: {
-  to: string;
-  userName: string;
-  gearName: string;
-  startDate: string;
-  endDate: string;
-  reason: string;
-}) {
-  try {
-    const html = `
-      ${EMAIL_STYLES}
-      <div class="email-container">
-        <div class="email-header">
-          <h1>📅 Reservation Created</h1>
-          <p class="subtitle">Your equipment reservation is pending admin approval</p>
-        </div>
-        <div class="email-body">
-          <h2>Hello ${userName}!</h2>
-          <p>Your calendar reservation has been successfully created and is now pending admin approval.</p>
-          
-          <div class="gear-details">
-            <h3 style="margin-top: 0; color: #2d3748;">Reservation Details</h3>
-            <div class="gear-item">
-              <span class="gear-name">Equipment:</span>
-              <span>${gearName}</span>
-            </div>
-            <div class="gear-item">
-              <span class="gear-name">Start Date:</span>
-              <span>${formatDate(startDate)}</span>
-            </div>
-            <div class="gear-item">
-              <span class="gear-name">End Date:</span>
-              <span>${formatDate(endDate)}</span>
-            </div>
-            <div class="gear-item">
-              <span class="gear-name">Reason:</span>
-              <span>${reason}</span>
-            </div>
-            <div class="gear-item">
-              <span class="gear-name">Status:</span>
-              <span class="gear-status status-pending">Pending Approval</span>
-            </div>
-          </div>
+// REMOVED: Calendar reservation email templates
 
-          <div class="info-note">
-            <p><strong>What happens next?</strong></p>
-            <p>An administrator will review your reservation request. You'll receive an email notification once it's approved or if any changes are needed.</p>
-          </div>
-        </div>
-        <div class="email-footer">
-          <p>Nest by Eden Oasis Equipment Management</p>
-        </div>
-      </div>
-    `;
-
-    const { data, error } = await resend.emails.send({
-      from: RESEND_FROM,
-      to,
-      subject: `📅 Reservation Created: ${gearName}`,
-      html,
-    });
-
-    if (error) {
-      console.error('[Email Error] Reservation created:', error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, data };
-  } catch (error: any) {
-    console.error('[Email Error] Reservation created:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-export async function sendReservationApprovedEmail({
+// REMOVED: Calendar booking functionality
+export async function sendReservationApprovedEmail_DISABLED({
   to,
   userName,
   gearName,
@@ -770,7 +691,8 @@ export async function sendReservationApprovedEmail({
   }
 }
 
-export async function sendReservationRejectedEmail({
+// REMOVED: Calendar booking functionality
+export async function sendReservationRejectedEmail_DISABLED({
   to,
   userName,
   gearName,
@@ -854,7 +776,8 @@ export async function sendReservationRejectedEmail({
   }
 }
 
-export async function sendReservationCancelledEmail({
+// REMOVED: Calendar booking functionality
+export async function sendReservationCancelledEmail_DISABLED({
   to,
   userName,
   gearName,
@@ -944,7 +867,8 @@ export async function sendReservationCancelledEmail({
   }
 }
 
-export async function sendReservationReminderEmail({
+// REMOVED: Calendar booking functionality
+export async function sendReservationReminderEmail_DISABLED({
   to,
   userName,
   gearName,
