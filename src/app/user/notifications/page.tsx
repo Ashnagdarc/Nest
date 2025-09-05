@@ -13,10 +13,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { createClient } from '@/lib/supabase/client';
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { logInfo, logError, validateTableContext } from '@/utils/logger';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { useSuccessFeedback } from '@/hooks/use-success-feedback';
-import { apiGet, apiPatch, apiPost } from '@/lib/apiClient';
+import { apiGet } from '@/lib/apiClient';
 
 type Announcement = {
   id: string;
@@ -57,22 +56,16 @@ export default function UserNotificationsPage() {
     const fetchNotificationsAndReadStatus = async () => {
       setIsLoading(true);
       try {
-        logInfo('Fetching notifications and read status', 'fetchNotificationsAndReadStatus');
-
         // Fetch notifications using the centralized API client
-        const { data: notificationsData, error: notificationsError } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications`);
-        if (notificationsError) {
-          logError(notificationsError, 'fetchNotificationsAndReadStatus', { stage: 'fetchNotifications' });
-          throw notificationsError;
+        const response = await apiGet(`/api/notifications`);
+        if (response.error) {
+          console.error('Error fetching notifications:', response.error);
+          throw new Error(response.error);
         }
-        if (notificationsData) {
-          setLocalNotifications(notificationsData);
-          const readIds = notificationsData.filter((notification: { is_read: boolean }) => notification.is_read).map((notification: { id: string }) => notification.id);
+        if (response.data) {
+          setLocalNotifications(response.data);
+          const readIds = response.data.filter((notification: { is_read: boolean }) => notification.is_read).map((notification: { id: string }) => notification.id);
           setReadNotificationIds(readIds);
-          logInfo('Notifications fetched successfully', 'fetchNotificationsAndReadStatus', {
-            notificationCount: notificationsData.length,
-            readNotificationsCount: readIds.length
-          });
         }
 
         // Fetch announcements (still using Supabase)
@@ -81,10 +74,9 @@ export default function UserNotificationsPage() {
           .select('*')
           .order('created_at', { ascending: false });
         if (announcementsError) {
-          logError(announcementsError, 'fetchNotificationsAndReadStatus', { stage: 'fetchAnnouncements' });
+          console.error('Error fetching announcements:', announcementsError);
         } else if (announcementsData) {
           setAnnouncements(announcementsData);
-          logInfo('Announcements fetched successfully', 'fetchNotificationsAndReadStatus', { announcementCount: announcementsData.length });
         }
 
         // Fetch read announcements (still using Supabase)
@@ -93,15 +85,12 @@ export default function UserNotificationsPage() {
           .select('announcement_id')
           .eq('user_id', (await supabase.auth.getUser()).data.user?.id);
         if (readAnnouncementsError) {
-          logError(readAnnouncementsError, 'fetchNotificationsAndReadStatus', { stage: 'fetchReadAnnouncements' });
+          console.error('Error fetching read announcements:', readAnnouncementsError);
         } else if (readAnnouncementsData) {
           const readIds = readAnnouncementsData.map((item: ReadAnnouncement) => item.announcement_id);
           setReadAnnouncements(readIds);
-          logInfo('Read announcements fetched successfully', 'fetchNotificationsAndReadStatus', { readAnnouncementsCount: readIds.length });
         }
       } catch (error) {
-        const formattedError = error instanceof Error ? error : new Error(JSON.stringify(error));
-        logError(formattedError, 'fetchNotificationsAndReadStatus', { stage: 'unexpectedError', originalError: error });
         console.error("Error fetching data:", error);
       } finally {
         setIsLoading(false);
@@ -115,32 +104,17 @@ export default function UserNotificationsPage() {
   const markAnnouncementAsRead = async (id: string) => {
     setLoading(true);
     try {
-      logInfo('Marking announcement as read', 'markAnnouncementAsRead', { announcementId: id });
-
       const { data: userData, error: userError } = await supabase.auth.getUser();
 
       if (userError) {
-        logError(userError, 'markAnnouncementAsRead', {
-          stage: 'getUser',
-          announcementId: id
-        });
+        console.error('Error getting user:', userError);
         throw userError;
       }
 
       if (!userData.user) {
-        const noUserError = new Error('No user found');
-        logError(noUserError, 'markAnnouncementAsRead', {
-          stage: 'validateUser',
-          announcementId: id
-        });
+        console.error('No user found');
         return;
       }
-
-      // Validate table context before operation
-      validateTableContext('read_announcements', 'upsert', {
-        user_id: userData.user.id,
-        announcement_id: id
-      });
 
       const { error } = await supabase
         .from('read_announcements')
@@ -150,24 +124,9 @@ export default function UserNotificationsPage() {
         );
 
       if (error) {
-        logError(error, 'markAnnouncementAsRead', {
-          stage: 'upsert',
-          announcementId: id,
-          userId: userData.user.id,
-          error: {
-            code: error.code,
-            message: error.message,
-            details: error.details,
-            hint: error.hint
-          }
-        });
+        console.error('Error marking announcement as read:', error);
         throw error;
       }
-
-      logInfo('Announcement marked as read successfully', 'markAnnouncementAsRead', {
-        announcementId: id,
-        userId: userData.user.id
-      });
 
       setReadAnnouncements(prev => [...prev, id]);
 
@@ -176,14 +135,9 @@ export default function UserNotificationsPage() {
       });
 
     } catch (error) {
-      logError(error, 'markAnnouncementAsRead', {
-        stage: 'unexpectedError',
-        announcementId: id
-      });
       console.error("Error marking announcement as read:", error);
-
       showErrorFeedback({
-        toast: { title: "Error", description: error instanceof Error ? error.message : JSON.stringify(error) },
+        toast: { title: "Error", description: error instanceof Error ? error.message : "Failed to mark announcement as read" },
       });
     } finally {
       setLoading(false);
@@ -195,11 +149,7 @@ export default function UserNotificationsPage() {
       const { data: userData, error: userError } = await supabase.auth.getUser();
 
       if (userError) {
-        logError(userError, 'markAsReadWithLogging', {
-          stage: 'getUser',
-          notificationId: id
-        });
-
+        console.error('Error getting user:', userError);
         toast({
           title: "Error",
           description: "Failed to authenticate user. Please try again.",
@@ -209,12 +159,7 @@ export default function UserNotificationsPage() {
       }
 
       if (!userData.user) {
-        const error = new Error('No user found');
-        logError(error, 'markAsReadWithLogging', {
-          stage: 'validateUser',
-          notificationId: id
-        });
-
+        console.error('No user found');
         toast({
           title: "Error",
           description: "User session not found. Please log in again.",
@@ -241,19 +186,8 @@ export default function UserNotificationsPage() {
         // Update local state to reflect the change immediately
         setReadNotificationIds(prev => [...prev, id]);
 
-        logInfo('Notification marked as read successfully', 'markAsReadWithLogging', {
-          notificationId: id,
-          userId: userData.user.id
-        });
-
       } catch (markError) {
-        // Log the specific error from markAsRead
-        logError(markError, 'markAsReadWithLogging', {
-          stage: 'callMarkAsRead',
-          notificationId: id,
-          userId: userData.user.id
-        });
-
+        console.error('Error marking notification as read:', markError);
         toast({
           title: "Error",
           description: "Failed to mark notification as read. Please try again.",
@@ -261,12 +195,7 @@ export default function UserNotificationsPage() {
         });
       }
     } catch (error) {
-      logError(error, 'markAsReadWithLogging', {
-        stage: 'unexpectedError',
-        notificationId: id
-      });
       console.error('Unexpected error in markAsReadWithLogging:', error);
-
       toast({
         title: "Error",
         description: "An unexpected error occurred. Please try again.",
@@ -278,22 +207,15 @@ export default function UserNotificationsPage() {
   const markAllNotificationsAsRead = async () => {
     setLoading(true);
     try {
-      logInfo('Marking all notifications as read', 'markAllNotificationsAsRead');
-
       const { data: userData, error: userError } = await supabase.auth.getUser();
 
       if (userError) {
-        logError(userError, 'markAllNotificationsAsRead', {
-          stage: 'getUser'
-        });
+        console.error('Error getting user:', userError);
         throw userError;
       }
 
       if (!userData.user) {
-        const noUserError = new Error('No user found');
-        logError(noUserError, 'markAllNotificationsAsRead', {
-          stage: 'validateUser'
-        });
+        console.error('No user found');
         return;
       }
 
@@ -301,17 +223,12 @@ export default function UserNotificationsPage() {
       const unreadNotifications = notifications.filter(n => !readNotificationIds.includes(n.id));
 
       if (unreadNotifications.length === 0) {
-        logInfo('No unread notifications found', 'markAllNotificationsAsRead');
+        console.log('No unread notifications found');
         return;
       }
 
       // Use the context's markAllAsRead function which now handles both tables
       await markAllAsRead();
-
-      logInfo('All notifications marked as read successfully', 'markAllNotificationsAsRead', {
-        userId: userData.user.id,
-        notificationCount: unreadNotifications.length
-      });
 
       // Update local state
       setReadNotificationIds(prev => [...prev, ...unreadNotifications.map(n => n.id)]);
@@ -321,13 +238,9 @@ export default function UserNotificationsPage() {
       });
 
     } catch (error) {
-      logError(error, 'markAllNotificationsAsRead', {
-        stage: 'unexpectedError'
-      });
       console.error('Error marking all notifications as read:', error);
-
       showErrorFeedback({
-        toast: { title: "Error", description: error instanceof Error ? error.message : JSON.stringify(error) },
+        toast: { title: "Error", description: error instanceof Error ? error.message : "Failed to mark all notifications as read" },
       });
     } finally {
       setLoading(false);
@@ -440,10 +353,13 @@ export default function UserNotificationsPage() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="space-y-6"
+      className="container mx-auto py-8 space-y-8 max-w-7xl"
     >
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold text-foreground">My Notifications</h1>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">My Notifications</h1>
+          <p className="text-muted-foreground text-lg mt-2">Stay updated with your gear requests and system alerts.</p>
+        </div>
         <div className="flex flex-wrap gap-2">
           <Button variant={filter === 'unread' ? 'secondary' : 'outline'} size="sm" onClick={() => setFilter('unread')}>
             Unread ({unreadNotificationsCount + unreadAnnouncementsCount})
@@ -491,8 +407,9 @@ export default function UserNotificationsPage() {
         onValueChange={(value) => setActiveTab(value as TabValue)}
         className="w-full"
       >
-        <TabsList className="grid grid-cols-3 mb-4">
-          <TabsTrigger value="all" className="relative">
+        <TabsList className="grid grid-cols-3 mb-6">
+          <TabsTrigger value="all" className="relative flex items-center gap-2">
+            <BellRing className="h-4 w-4" />
             All
             {(unreadNotificationsCount + unreadAnnouncementsCount) > 0 && (
               <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs">
@@ -500,7 +417,8 @@ export default function UserNotificationsPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="system" className="relative">
+          <TabsTrigger value="system" className="relative flex items-center gap-2">
+            <Info className="h-4 w-4" />
             System Alerts
             {unreadNotificationsCount > 0 && (
               <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs">
@@ -508,7 +426,8 @@ export default function UserNotificationsPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="announcements" className="relative">
+          <TabsTrigger value="announcements" className="relative flex items-center gap-2">
+            <Megaphone className="h-4 w-4" />
             Announcements
             {unreadAnnouncementsCount > 0 && (
               <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs">
@@ -659,10 +578,18 @@ export default function UserNotificationsPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.2 }}
-                        className="text-center py-10 text-muted-foreground"
+                        className="text-center py-16"
                       >
-                        <BellRing className="h-10 w-10 mx-auto mb-4 opacity-20" />
-                        <p>No {filter === 'unread' ? 'unread ' : ''}notifications or announcements.</p>
+                        <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-6">
+                          <BellRing className="h-10 w-10 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-xl font-semibold mb-3">No {filter === 'unread' ? 'unread ' : ''}notifications or announcements</h3>
+                        <p className="text-muted-foreground max-w-md mx-auto leading-relaxed">
+                          {filter === 'unread'
+                            ? "You're all caught up! No unread notifications or announcements."
+                            : "You haven't received any notifications or announcements yet."
+                          }
+                        </p>
                       </motion.div>
                     )}
                   </>

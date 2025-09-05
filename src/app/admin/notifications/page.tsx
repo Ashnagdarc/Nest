@@ -24,6 +24,12 @@ type ApiNotification = {
   is_read: boolean;
   link?: string;
   metadata?: Record<string, unknown>;
+  profiles?: {
+    id: string;
+    full_name?: string;
+    email?: string;
+    role?: string;
+  };
 };
 
 type Notification = {
@@ -35,6 +41,12 @@ type Notification = {
   read: boolean;
   link?: string;
   metadata?: Record<string, unknown>;
+  user?: {
+    id: string;
+    full_name?: string;
+    email?: string;
+    role?: string;
+  };
 };
 
 function isRequestMetadata(meta: unknown): meta is { requestId: string } {
@@ -88,12 +100,10 @@ export default function AdminNotificationsPage() {
 
   async function fetchNotifications() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const userId = user?.id || '';
-      // Use centralized API client and RESTful endpoint
-      const { data, error } = await apiGet<{ data: ApiNotification[]; error: string | null }>(`/api/notifications${userId ? `?userId=${userId}` : ''}`);
+      // Use admin-specific API that fetches ALL notifications in the system
+      const { data, error } = await apiGet<{ data: ApiNotification[]; error: string | null }>('/api/admin/notifications');
       if (error) {
-        console.error('Error fetching notifications:', error);
+        console.error('Error fetching admin notifications:', error);
         return;
       }
       setNotifications((data || []).map((n) => ({
@@ -104,6 +114,12 @@ export default function AdminNotificationsPage() {
         read: n.is_read,
         link: n.link,
         metadata: n.metadata ?? {},
+        user: n.profiles ? {
+          id: n.profiles.id,
+          full_name: n.profiles.full_name,
+          email: n.profiles.email,
+          role: n.profiles.role
+        } : undefined,
       })));
     } catch (error) {
       console.error('Error in fetchNotifications:', error);
@@ -139,7 +155,7 @@ export default function AdminNotificationsPage() {
   const markAsRead = async (id: string) => {
     try {
       setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
-      const { error } = await apiPut<{ data: Notification; error: string | null }>(`/api/notifications/${id}`, { is_read: true });
+      const { error } = await apiPut<{ data: Notification; error: string | null }>(`/api/admin/notifications/${id}`, { is_read: true });
       if (error) {
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: false } : n));
         console.error('Error updating notification status:', error);
@@ -152,7 +168,7 @@ export default function AdminNotificationsPage() {
 
   const markAllAsRead = async () => {
     try {
-      const { error } = await apiPut<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
+      const { error } = await apiPut<{ data: Notification[]; error: string | null }>(`/api/admin/notifications/mark-all-read`, {});
       if (error) {
         console.error('Error marking all as read:', error);
         return;
@@ -164,13 +180,23 @@ export default function AdminNotificationsPage() {
   };
 
   const deleteNotification = async (id: string) => {
-    const { error } = await supabase
-      .from('notifications')
-      .delete()
-      .eq('id', id);
+    try {
+      const response = await fetch(`/api/admin/notifications/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    if (!error) {
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error deleting notification:', errorData.error);
+        return;
+      }
+
       setNotifications(notifications.filter(n => n.id !== id));
+    } catch (error) {
+      console.error('Unexpected error in deleteNotification:', error);
     }
   };
 
@@ -310,6 +336,12 @@ export default function AdminNotificationsPage() {
                             {notification.content && (
                               <div className="text-sm text-muted-foreground whitespace-pre-line">
                                 {notification.content}
+                              </div>
+                            )}
+                            {notification.user && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                From: {notification.user.full_name || notification.user.email}
+                                {notification.user.role && ` (${notification.user.role})`}
                               </div>
                             )}
                           </div>

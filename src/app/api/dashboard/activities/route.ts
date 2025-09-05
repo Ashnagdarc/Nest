@@ -20,10 +20,22 @@ export async function GET() {
             return NextResponse.json({ data: null, error: 'Unauthorized: No authenticated user found' }, { status: 401 });
         }
 
-        // Fetch activities
+        // Fetch activities from checkins table (serves as activity log)
         const { data, error } = await supabase
-            .from('gear_activity_log')
-            .select('*')
+            .from('checkins')
+            .select(`
+                *,
+                profiles!inner (
+                    id,
+                    full_name,
+                    avatar_url
+                ),
+                gears!inner (
+                    id,
+                    name,
+                    category
+                )
+            `)
             .order('created_at', { ascending: false })
             .limit(50);
 

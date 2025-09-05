@@ -215,6 +215,7 @@ export default function EnhancedNavbar({
                                 width={112}
                                 height={112}
                                 className="w-16 h-16 lg:w-20 lg:h-20 rounded-lg object-contain transition-transform group-hover:scale-105"
+                                priority={true}
                             />
                         </div>
 
@@ -387,6 +388,7 @@ export default function EnhancedNavbar({
                                         width={40}
                                         height={40}
                                         className="h-10 w-10 rounded-lg flex-shrink-0"
+                                        priority={false}
                                     />
                                     <div className="min-w-0 flex-1">
                                         <p className="font-semibold text-sm truncate">{currentUser?.full_name || 'User'}</p>

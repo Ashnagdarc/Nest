@@ -217,22 +217,7 @@ export default function ManageCheckinsPage() {
       // Note: Gear status updates are now handled automatically by the database trigger
       // when check-in status is changed to 'Completed'
 
-      // Log activity for each gear
-      for (const c of group as Checkin[]) {
-        await supabase.rpc('log_gear_activity', {
-          p_user_id: c.userId,
-          p_gear_id: c.gearId,
-          p_request_id: c.requestId,
-          p_activity_type: 'Check-in',
-          p_status: 'Completed',
-          p_notes: `Check-in approved by admin`,
-          p_details: JSON.stringify({
-            condition: c.condition,
-            damage_notes: c.damageNotes,
-            approved_by: user?.id
-          })
-        });
-      }
+      // Note: Activity logging removed - the checkins table serves as the audit trail
       // Update gear_requests status
       if (requestId) {
         const { data: request } = await supabase
@@ -487,20 +472,7 @@ export default function ManageCheckinsPage() {
             });
         }
       }
-      // Step 3: Log the approval in gear_activity_log
-      await supabase.rpc('log_gear_activity', {
-        p_user_id: selectedCheckin.userId,
-        p_gear_id: selectedCheckin.gearId,
-        p_request_id: selectedCheckin.requestId,
-        p_activity_type: 'Check-in',
-        p_status: 'Completed',
-        p_notes: `Check-in approved by admin`,
-        p_details: JSON.stringify({
-          condition: selectedCheckin.condition,
-          damage_notes: selectedCheckin.damageNotes,
-          approved_by: user?.id
-        })
-      });
+      // Step 3: Note: Activity logging removed - the checkins table serves as the audit trail
       // Step 4: Create notification for user
       await createSystemNotification(
         selectedCheckin.userId,

@@ -34,7 +34,7 @@ import { calculateAccurateDashboardCounts } from '@/lib/utils/fix-dashboard-coun
 type Gear = Database['public']['Tables']['gears']['Row']
 type Profile = Database['public']['Tables']['profiles']['Row']
 type GearRequest = Database['public']['Tables']['gear_requests']['Row']
-type ActivityLog = Database['public']['Tables']['gear_activity_log']['Row']
+type ActivityLog = Database['public']['Tables']['checkins']['Row'] // Using checkins table as activity log
 type Notification = Database['public']['Tables']['notifications']['Row']
 
 /**
@@ -472,17 +472,17 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                 )
                 .subscribe()
 
-            // Activities subscription
-            const activitiesChannel = supabase
-                .channel('dashboard-activities')
-                .on('postgres_changes',
-                    { event: 'INSERT', schema: 'public', table: 'gear_activity_log' },
-                    (payload) => {
-                        console.log('Activity change detected:', payload)
-                        fetchActivities()
-                    }
-                )
-                .subscribe()
+            // Activities subscription - DISABLED due to table access issues
+            // const activitiesChannel = supabase
+            //     .channel('dashboard-activities')
+            //     .on('postgres_changes',
+            //         { event: 'INSERT', schema: 'public', table: 'gear_activity_log' },
+            //         (payload) => {
+            //             console.log('Activity change detected:', payload)
+            //             fetchActivities()
+            //         }
+            //     )
+            //     .subscribe()
 
             // Notifications subscription
             const notificationsChannel = supabase
@@ -499,7 +499,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             subscriptionsRef.current = [
                 gearsChannel,
                 requestsChannel,
-                activitiesChannel,
+                // activitiesChannel, // Disabled due to table access issues
                 notificationsChannel
             ]
 
@@ -508,7 +508,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                 ...prev,
                 connected: true,
                 lastHeartbeat: new Date(),
-                subscriptions: ['gears', 'requests', 'activities', 'notifications'],
+                subscriptions: ['gears', 'requests', 'notifications'], // Removed 'activities'
                 connectionAttempts: 0
             }))
 

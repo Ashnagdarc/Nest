@@ -10,12 +10,12 @@ export async function GET(request: NextRequest) {
         // Create direct Supabase client with service role key to bypass RLS
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-        
+
         if (!supabaseUrl || !supabaseServiceKey) {
             console.error('Missing Supabase environment variables');
             return NextResponse.json({ data: null, error: 'Server configuration error' }, { status: 500 });
         }
-        
+
         const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
             auth: {
                 autoRefreshToken: false,
@@ -34,10 +34,8 @@ export async function GET(request: NextRequest) {
 
         console.log('🔍 Query params:', { status, userId, page, pageSize, from, to });
 
-        // Build the query - with service role key, we can bypass RLS
-        // Include gear details, states, and user profiles
-        // Use LEFT JOIN to include requests even without gear associations
-        // Explicitly bypass RLS for service role queries
+        // Build the query - get requests first, then gear data separately
+        // This avoids the multiple rows issue from gear_states
         let query = supabase
             .from('gear_requests')
             .select(`
@@ -46,23 +44,6 @@ export async function GET(request: NextRequest) {
                     id,
                     full_name,
                     email
-                ),
-                gear_request_gears (
-                    quantity,
-                    gears (
-                        id,
-                        name,
-                        category,
-                        description,
-                        serial_number,
-                        quantity,
-                        gear_states (
-                            status,
-                            available_quantity,
-                            checked_out_to,
-                            due_date
-                        )
-                    )
                 )
             `, { count: 'exact' });
 
@@ -77,7 +58,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Execute the paginated query
-        const { data, error, count } = await query
+        const { data: requests, error, count } = await query
             .order('created_at', { ascending: false })
             .range(from, to);
 
@@ -87,10 +68,69 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ data: null, total: 0, error: `Database error: ${error.message}` }, { status: 500 });
         }
 
-        console.log('✅ Successfully fetched requests:', { count: data?.length || 0, total: count || 0, data: data });
+        if (!requests || requests.length === 0) {
+            return NextResponse.json({ data: [], total: 0, error: null });
+        }
+
+        // Get all request IDs to fetch gear data
+        const requestIds = requests.map(req => req.id);
+
+        // Fetch gear data for all requests
+        const { data: gearRequestGears, error: gearError } = await supabase
+            .from('gear_request_gears')
+            .select(`
+                gear_request_id,
+                quantity,
+                gears (
+                    id,
+                    name,
+                    category,
+                    description,
+                    serial_number,
+                    quantity,
+                    available_quantity,
+                    status,
+                    checked_out_to,
+                    current_request_id,
+                    due_date
+                )
+            `)
+            .in('gear_request_id', requestIds);
+
+        if (gearError) {
+            console.error('❌ Error fetching gear data:', gearError);
+            return NextResponse.json({ data: null, total: 0, error: `Gear data error: ${gearError.message}` }, { status: 500 });
+        }
+
+        // Note: We no longer use gear_states table due to data integrity issues
+        // All availability data now comes from the gears table directly
+
+        // Combine the data
+        const enrichedRequests = requests.map(request => {
+            const requestGears = gearRequestGears?.filter(grg => grg.gear_request_id === request.id) || [];
+
+            // Add gear data to the request
+            const gear_request_gears = requestGears.map(grg => {
+                return {
+                    ...grg,
+                    gears: {
+                        ...grg.gears,
+                        // No longer using gear_states due to data integrity issues
+                        gear_states: []
+                    }
+                };
+            });
+
+            return {
+                ...request,
+                gear_request_gears
+            };
+        });
+
+        console.log('✅ Successfully fetched requests with gear data:', { count: enrichedRequests.length, total: count || 0 });
 
         // Return successful response
-        return NextResponse.json({ data, total: count ?? 0, error: null });
+        return NextResponse.json({ data: enrichedRequests, total: count ?? 0, error: null });
     } catch (error) {
         console.error('❌ Unexpected error in /api/requests:', error);
         return NextResponse.json({ data: null, error: 'Failed to fetch requests' }, { status: 500 });

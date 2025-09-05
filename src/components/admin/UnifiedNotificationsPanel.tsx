@@ -110,11 +110,7 @@ export function UnifiedNotificationsPanel() {
             </CardHeader>
             <CardContent>
                 <Tabs defaultValue="requests">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="bookings" className="flex items-center gap-2" disabled>
-                            <Calendar className="h-4 w-4" />
-                            Calendar Bookings (Removed)
-                        </TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-1">
                         <TabsTrigger value="requests" className="flex items-center gap-2">
                             <CheckSquare className="h-4 w-4" />
                             Gear Requests
@@ -124,49 +120,7 @@ export function UnifiedNotificationsPanel() {
                         </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="bookings" className="space-y-4 pt-3">
-                        {isLoading ? (
-                            <div className="flex items-center justify-center py-6">
-                                <Clock className="h-5 w-5 animate-spin mr-2" />
-                                <span>Loading...</span>
-                            </div>
-                        ) : pendingBookings.length === 0 ? (
-                            <div className="text-center py-6 text-muted-foreground">
-                                No pending calendar bookings
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {pendingBookings.map((booking) => (
-                                    <div key={booking.id} className="border rounded-lg p-3">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <h4 className="font-medium">{booking.gears?.name || 'Gear'}</h4>
-                                                <p className="text-sm text-muted-foreground">
-                                                    By {booking.profiles?.full_name || 'Unknown User'}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    {new Date(booking.start_date).toLocaleDateString()} - {new Date(booking.end_date).toLocaleDateString()}
-                                                </p>
-                                            </div>
-                                            <Button asChild size="sm" variant="outline">
-                                                <Link href={`/admin/calendar?booking=${booking.id}`}>
-                                                    Review
-                                                </Link>
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))}
 
-                                <div className="text-center pt-2">
-                                    <Button asChild variant="ghost" size="sm">
-                                        <Link href="/admin/calendar">
-                                            View All Calendar Bookings
-                                        </Link>
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-                    </TabsContent>
 
                     <TabsContent value="requests" className="space-y-4 pt-3">
                         {isLoading ? (

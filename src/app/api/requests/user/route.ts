@@ -1,39 +1,17 @@
 import { NextResponse } from 'next/server';
-import type { Database } from '@/types/supabase';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export async function GET() {
     try {
-        // Create and await the Supabase client with admin privileges since we're in a server context
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        // Use server client tied to cookies/session
+        const supabase = await createSupabaseServerClient();
 
-        if (!supabaseUrl || !supabaseServiceRoleKey) {
-            console.error('Missing Supabase environment variables');
-            return NextResponse.json({
-                data: null,
-                error: 'Server configuration error'
-            }, { status: 500 });
-        }
-
-        // Use direct client creation for API route
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-
-        // Get the authenticated user
+        // Get the authenticated user (robust to API route context)
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-
-
-        // Log authentication errors but continue with admin privileges
-        if (authError) {
-            console.warn('Authentication error, using admin privileges:', authError);
-            // Continue with the query using admin privileges
-        }
-
-        // If no user, try to get data anyway using admin privileges
-        if (!user) {
-            console.warn('No authenticated user found, using admin privileges');
-            // Continue with the query using admin privileges
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = user?.id || session?.user?.id;
+        if (authError || !userId) {
+            return NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 });
         }
 
         // Fetch user's requests with gear details and current states
@@ -61,7 +39,7 @@ export async function GET() {
                     )
                 )
             `)
-            .eq('user_id', user?.id || '883edf0b-4418-4a39-a13e-f4dd8dd27033') // Use a default user ID if not authenticated
+            .eq('user_id', userId)
             .order('created_at', { ascending: false });
 
         // Handle database query errors

@@ -1,5 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+
+// Helper function to map table names to valid notification types
+function getNotificationType(table: string): string {
+    const typeMap: Record<string, string> = {
+        'gear_requests': 'Request',
+        'checkins': 'System',
+        'gear_maintenance': 'Maintenance',
+        'notifications': 'System',
+        'profiles': 'System',
+        'gears': 'System',
+        'announcements': 'System'
+    };
+    return typeMap[table] || 'System';
+}
 import {
     sendGearRequestEmail,
     sendRequestReceivedEmail,
@@ -119,7 +133,7 @@ export async function POST(req: NextRequest) {
                             await supabase.from('notifications').insert([
                                 {
                                     user_id: record.user_id,
-                                    type: 'gear_requests',
+                                    type: 'Request',
                                     title: userTitle,
                                     message: userMessage,
                                     is_read: false,
@@ -147,7 +161,7 @@ export async function POST(req: NextRequest) {
                 }
                 // After user email, also notify admins by email
                 await notifyAdminsByEmail(title, emailHtml);
-            } else if (type === 'UPDATE' && record.status === 'approved' && old_record.status !== 'approved') {
+            } else if (type === 'UPDATE' && record.status === 'Approved' && old_record.status !== 'Approved') {
                 title = 'Your Gear Request Was Approved!';
                 message = `Your request for ${record.gear_name || 'equipment'} has been approved.`;
 
@@ -508,7 +522,7 @@ export async function POST(req: NextRequest) {
                     const { data, error } = await supabase.from('notifications').insert([
                         {
                             user_id: targetId,
-                            type: table,
+                            type: getNotificationType(table),
                             title,
                             message,
                             is_read: false,

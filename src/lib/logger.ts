@@ -49,6 +49,11 @@ export const logError = (error: unknown, context: string, metadata?: Record<stri
         return;
     }
 
+    // Skip logging if error is just an empty object
+    if (typeof error === 'object' && error !== null && JSON.stringify(error) === '{}') {
+        return;
+    }
+
     // Ensure error is properly formatted
     let errorObj: Error;
     if (error instanceof Error) {

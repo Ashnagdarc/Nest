@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/supabase';
 import { sendGearRequestEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
@@ -10,16 +11,39 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'requestId is required' }, { status: 400 });
         }
 
-        const supabase = await createSupabaseServerClient(true);
+        // Create direct Supabase client with service role key to bypass RLS
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-        // Load request, requester and gear names
+        if (!supabaseUrl || !supabaseServiceKey) {
+            console.error('Missing Supabase environment variables');
+            return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
+        }
+
+        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        });
+
+        // Load request first
         const { data: req, error } = await supabase
             .from('gear_requests')
-            .select('id, user_id, reason, destination, expected_duration, created_at, gear_request_gears(gear_id, quantity)')
+            .select('id, user_id, reason, destination, expected_duration, created_at')
             .eq('id', requestId)
             .single();
         if (error || !req) {
             return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+        }
+
+        // Then load gear request gears separately
+        const { data: gearRequestGears, error: gearError } = await supabase
+            .from('gear_request_gears')
+            .select('gear_id, quantity')
+            .eq('gear_request_id', requestId);
+        if (gearError) {
+            return NextResponse.json({ success: false, error: 'Failed to load gear data' }, { status: 500 });
         }
 
         const { data: user } = await supabase
@@ -30,8 +54,8 @@ export async function POST(request: NextRequest) {
 
         // Build gear list string
         let gearList = 'equipment';
-        if (Array.isArray(req.gear_request_gears) && req.gear_request_gears.length) {
-            const ids = req.gear_request_gears.map((g: any) => g.gear_id);
+        if (Array.isArray(gearRequestGears) && gearRequestGears.length) {
+            const ids = gearRequestGears.map((g: any) => g.gear_id);
             const { data: gears } = await supabase
                 .from('gears')
                 .select('id, name')
@@ -39,7 +63,7 @@ export async function POST(request: NextRequest) {
             if (gears && gears.length) {
                 // Aggregate by name x quantity
                 const counts: Record<string, number> = {};
-                for (const g of req.gear_request_gears as any[]) {
+                for (const g of gearRequestGears as any[]) {
                     const found = gears.find(x => x.id === g.gear_id);
                     if (!found) continue;
                     const key = found.name;

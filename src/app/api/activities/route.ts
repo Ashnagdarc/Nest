@@ -27,10 +27,22 @@ export async function GET(request: NextRequest) {
         const dateLimit = new Date();
         dateLimit.setDate(dateLimit.getDate() - days);
 
-        // First get the activity log data
+        // Get activity data from checkins table (serves as activity log)
         const { data: activityData, error: activityError, count } = await supabase
-            .from('gear_activity_log')
-            .select('*', { count: 'exact' })
+            .from('checkins')
+            .select(`
+                *,
+                profiles!inner (
+                    id,
+                    full_name,
+                    avatar_url
+                ),
+                gears!inner (
+                    id,
+                    name,
+                    category
+                )
+            `, { count: 'exact' })
             .order('created_at', { ascending: false })
             .gte('created_at', dateLimit.toISOString())
             .range(offset, offset + limit - 1);
@@ -80,7 +92,7 @@ export async function GET(request: NextRequest) {
 
         // Apply filters to the combined data
         let filteredData = data || [];
-        
+
         if (userId) {
             filteredData = filteredData.filter(activity => activity.user_id === userId);
         }

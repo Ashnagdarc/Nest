@@ -9,13 +9,15 @@ interface ThemeLogoProps {
     height?: number
     className?: string
     alt?: string
+    priority?: boolean
 }
 
 export function ThemeLogo({
     width = 32,
     height = 32,
     className = "",
-    alt = "Nest Logo"
+    alt = "Nest Logo",
+    priority = false
 }: ThemeLogoProps) {
     const { theme, resolvedTheme } = useTheme()
     const [mounted, setMounted] = useState(false)
@@ -33,6 +35,7 @@ export function ThemeLogo({
                 width={width}
                 height={height}
                 className={className}
+                priority={priority}
             />
         )
     }
@@ -47,6 +50,7 @@ export function ThemeLogo({
             width={width}
             height={height}
             className={className}
+            priority={priority}
         />
     )
 }

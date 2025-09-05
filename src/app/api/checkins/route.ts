@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
             .insert([{
                 user_id,
                 gear_id,
+                action: 'Check In',
                 condition: condition || 'Good',
                 notes,
                 status: 'Completed'
