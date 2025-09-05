@@ -43,28 +43,8 @@ export function UnifiedNotificationsPanel() {
         async function fetchNotifications() {
             setIsLoading(true);
 
-            // Fetch pending calendar bookings using secure API endpoint
+            // REMOVED: Calendar booking functionality
             let bookings: BookingItem[] = [];
-            try {
-                const response = await fetch('/api/calendar/bookings', {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                });
-                
-                if (response.ok) {
-                    const responseData = await response.json();
-                    const allBookings: BookingItem[] = responseData.bookings || [];
-                    // Filter for pending bookings only
-                    bookings = allBookings.filter((booking) => booking.status === 'Pending')
-                        .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-                } else {
-                    console.error('Failed to fetch calendar bookings');
-                }
-            } catch (error) {
-                console.error('Error fetching calendar bookings:', error);
-            }
 
             // Fetch pending gear requests
             const { data: requestsData } = await supabase
@@ -102,7 +82,7 @@ export function UnifiedNotificationsPanel() {
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',
-                table: 'gear_calendar_bookings',
+                // REMOVED: gear_calendar_bookings table
                 filter: 'status=eq.Pending'
             }, fetchNotifications)
             .subscribe();
@@ -126,17 +106,14 @@ export function UnifiedNotificationsPanel() {
         <Card>
             <CardHeader>
                 <CardTitle className="text-lg font-semibold">Pending Approvals</CardTitle>
-                <CardDescription>Calendar bookings and gear requests that need your attention</CardDescription>
+                <CardDescription>Gear requests that need your attention</CardDescription>
             </CardHeader>
             <CardContent>
-                <Tabs defaultValue="bookings">
+                <Tabs defaultValue="requests">
                     <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="bookings" className="flex items-center gap-2">
+                        <TabsTrigger value="bookings" className="flex items-center gap-2" disabled>
                             <Calendar className="h-4 w-4" />
-                            Calendar Bookings
-                            {pendingBookings.length > 0 && (
-                                <Badge variant="secondary" className="ml-1">{pendingBookings.length}</Badge>
-                            )}
+                            Calendar Bookings (Removed)
                         </TabsTrigger>
                         <TabsTrigger value="requests" className="flex items-center gap-2">
                             <CheckSquare className="h-4 w-4" />

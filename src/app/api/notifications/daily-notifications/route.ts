@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createClient } from '@/lib/supabase/client';
-import { sendReservationReminderEmail, sendGearRequestEmail } from '@/lib/email';
+import { sendGearRequestEmail } from '@/lib/email';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 
 export async function POST(req: NextRequest) {
@@ -12,9 +12,7 @@ export async function POST(req: NextRequest) {
 
     try {
         const results = {
-            gearOverdue: await handleGearOverdue(),
-            reservationReminders: await handleReservationReminders(),
-            reservationDueReminders: await handleReservationDueReminders()
+            gearOverdue: await handleGearOverdue()
         };
 
         return NextResponse.json({
@@ -195,7 +193,8 @@ async function handleGearOverdue() {
     }
 }
 
-async function handleReservationReminders() {
+// REMOVED: Calendar booking functionality
+async function handleReservationReminders_DISABLED() {
     try {
         const supabase = await createSupabaseServerClient(true);
         const now = new Date();
@@ -320,7 +319,8 @@ async function handleReservationReminders() {
     }
 }
 
-async function handleReservationDueReminders() {
+// REMOVED: Calendar booking functionality  
+async function handleReservationDueReminders_DISABLED() {
     try {
         const supabase = await createSupabaseServerClient(true);
         const now = new Date();

@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Package, ArrowUpDown, PlusCircle, Search, AlertTriangle, CalendarDays } from "lucide-react";
+import { Package, ArrowUpDown, PlusCircle, Search, AlertTriangle } from "lucide-react";
 
 interface QuickAction {
     label: string;
@@ -48,13 +48,6 @@ export function QuickActions() {
             icon: <AlertTriangle className="h-5 w-5" />,
             href: "/user/report",
             variant: "ghost"
-        },
-        {
-            label: "Calendar",
-            description: "View equipment schedule",
-            icon: <CalendarDays className="h-5 w-5" />,
-            href: "/user/calendar",
-            variant: "outline"
         },
     ];
 

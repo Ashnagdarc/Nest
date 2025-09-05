@@ -18,7 +18,6 @@ import {
     LogOut,
     User,
     Package,
-    Calendar,
     ChevronDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -66,12 +65,6 @@ const userNavItems: NavItem[] = [
         label: 'Check-in Gear',
         icon: UploadCloud,
         description: 'Return equipment'
-    },
-    {
-        href: '/user/calendar',
-        label: 'Calendar',
-        icon: Calendar,
-        description: 'View bookings'
     },
     {
         href: '/user/history',
@@ -123,12 +116,6 @@ const adminNavItems: NavItem[] = [
         label: 'Manage Users',
         icon: User,
         description: 'User management'
-    },
-    {
-        href: '/admin/calendar',
-        label: 'Calendar',
-        icon: Calendar,
-        description: 'Booking calendar'
     },
     {
         href: '/admin/announcements',

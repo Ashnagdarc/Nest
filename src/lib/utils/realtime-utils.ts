@@ -11,7 +11,7 @@ const STATUS_DEBOUNCE_MS = 500; // Debounce time for status change handling
 import {
     fetchAnnouncements,
     fetchCheckins,
-    fetchCalendarBookings,
+    // REMOVED: fetchCalendarBookings,
     fetchActivities
 } from '../api/queries';
 
@@ -242,16 +242,8 @@ async function pollTableChanges(
                 break;
 
             case 'gear_calendar_bookings':
-                // For calendar bookings, we need start/end dates
-                const now = new Date();
-                const oneMonthAgo = new Date();
-                oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-
-                const calendarResponse = await fetchCalendarBookings({
-                    startDate: oneMonthAgo.toISOString(),
-                    endDate: now.toISOString()
-                });
-                data = calendarResponse.bookings;
+                // REMOVED: Calendar booking functionality
+                data = [];
                 break;
 
             default:
