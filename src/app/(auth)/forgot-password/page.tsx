@@ -15,6 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { ThemeLogo } from '@/components/ui/theme-logo';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
+import { ArrowLeft } from 'lucide-react';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -67,6 +68,16 @@ export default function ForgotPasswordPage() {
       >
         <Card className="shadow-xl">
           <CardHeader className="space-y-4 text-center">
+            <div className="flex justify-between items-start">
+              <Link
+                href="/"
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Home
+              </Link>
+              <div className="flex-1"></div>
+            </div>
             <div className="flex justify-center">
               <ThemeLogo
                 width={96}

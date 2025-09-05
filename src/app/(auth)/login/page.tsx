@@ -14,6 +14,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { ThemeLogo } from '@/components/ui/theme-logo';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
+import { usePendingNotifications } from '@/hooks/use-pending-notifications';
+import { ArrowLeft } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -28,7 +30,14 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState<{ id: string, role: string } | null>(null);
   const supabase = useMemo(() => createClient(), []);
+
+  // Use pending notifications hook
+  const { showPendingNotificationsToast } = usePendingNotifications(
+    loggedInUser?.id,
+    loggedInUser?.role
+  );
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -76,6 +85,10 @@ export default function LoginPage() {
         throw new Error(`Account status is ${profile.status}. Please contact support.`);
       }
 
+      // Set logged in user for pending notifications check
+      console.log('🔍 Setting logged in user:', { id: authData.user.id, role: profile.role });
+      setLoggedInUser({ id: authData.user.id, role: profile.role });
+
       // Show success message
       toast({
         title: `Welcome back, ${profile.full_name || 'User'}!`,
@@ -86,12 +99,18 @@ export default function LoginPage() {
       setIsLoading(false);
       setShowSuccessAnimation(true);
 
-      // Direct redirect using window.location
-      setTimeout(() => {
-        const targetPath = profile.role === 'Admin' ? '/admin/dashboard' : '/user/dashboard';
-        console.log('Redirecting to:', targetPath);
-        window.location.href = targetPath;
-      }, 1500);
+      // Show pending notifications after a short delay, then redirect
+      setTimeout(async () => {
+        console.log('🔍 Attempting to show pending notifications toast...');
+        await showPendingNotificationsToast();
+
+        // Redirect after showing the toast
+        setTimeout(() => {
+          const targetPath = profile.role === 'Admin' ? '/admin/dashboard' : '/user/dashboard';
+          console.log('Redirecting to:', targetPath);
+          window.location.href = targetPath;
+        }, 1000); // Give time for toast to show
+      }, 1000); // Show toast after 1 second
 
     } catch (error: unknown) {
       setIsLoading(false);
@@ -141,6 +160,16 @@ export default function LoginPage() {
           {showSuccessAnimation ? SuccessAnimationComponent : (
             <>
               <CardHeader className="space-y-4 text-center">
+                <div className="flex justify-between items-start">
+                  <Link
+                    href="/"
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Home
+                  </Link>
+                  <div className="flex-1"></div>
+                </div>
                 <div className="flex justify-center">
                   <ThemeLogo
                     width={96}

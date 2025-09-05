@@ -14,8 +14,8 @@ export default function FlipWordsHero() {
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] px-4 sm:px-6 py-12 sm:py-16 bg-black">
             <div className="text-center w-full max-w-4xl mx-auto relative">
                 <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 sm:mb-8 leading-[1.1] sm:leading-tight text-white">
-                    Streamline Gear<br />
-                    Management for<br />
+                    Internal Gear<br />
+                    Management System for<br />
                     Eden Oasis
                 </h1>
                 <div className="text-2xl md:text-3xl font-normal text-neutral-400 mb-6">

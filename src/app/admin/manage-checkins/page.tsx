@@ -220,32 +220,45 @@ export default function ManageCheckinsPage() {
       // Note: Activity logging removed - the checkins table serves as the audit trail
       // Update gear_requests status
       if (requestId) {
-        const { data: request } = await supabase
-          .from('gear_requests')
-          .select('gear_ids, status')
-          .eq('id', requestId)
-          .single();
-        if (request) {
-          const remainingGears = request.gear_ids.filter(
-            (id: string) => !gearIdList.includes(id)
-          );
-          const newStatus = remainingGears.length === 0 ? 'Returned' : 'Partially Returned';
-          await supabase
-            .from('gear_requests')
-            .update({
-              status: newStatus,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', requestId);
-          // Add status history entry
-          await supabase
-            .from('request_status_history')
-            .insert({
-              request_id: requestId,
-              status: newStatus,
-              changed_by: user?.id,
-              note: `Check-in approved for gear: ${gearNames.join(', ')}`
-            });
+        // Check if all gears in this request have been checked in
+        const { data: requestGears } = await supabase
+          .from('gear_request_gears')
+          .select('gear_id, quantity')
+          .eq('gear_request_id', requestId);
+
+        if (requestGears && requestGears.length > 0) {
+          // Count total requested quantity vs completed check-ins
+          const totalRequestedQuantity = requestGears.reduce((sum, rg) => sum + rg.quantity, 0);
+
+          const { data: completedCheckins } = await supabase
+            .from('checkins')
+            .select('gear_id')
+            .eq('user_id', group[0].userId)
+            .eq('status', 'Completed')
+            .in('gear_id', requestGears.map(rg => rg.gear_id));
+
+          const completedQuantity = completedCheckins?.length || 0;
+
+          // If all requested gear has been checked in, mark request as completed
+          if (completedQuantity >= totalRequestedQuantity) {
+            await supabase
+              .from('gear_requests')
+              .update({
+                status: 'Completed',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', requestId);
+
+            // Add status history entry
+            await supabase
+              .from('request_status_history')
+              .insert({
+                request_id: requestId,
+                status: 'Completed',
+                changed_by: user?.id,
+                note: `All gear checked in - request completed`
+              });
+          }
         }
       }
       // Notify user (system notification)
@@ -444,32 +457,45 @@ export default function ManageCheckinsPage() {
 
       // Step 2: Update gear_requests status if all gear is returned
       if (selectedCheckin.requestId) {
-        const { data: request } = await supabase
-          .from('gear_requests')
-          .select('gear_ids, status')
-          .eq('id', selectedCheckin.requestId)
-          .single();
-        if (request) {
-          const remainingGears = request.gear_ids.filter(
-            (id: string) => id !== selectedCheckin.gearId
-          );
-          const newStatus = remainingGears.length <= 1 ? 'Returned' : 'Partially Returned';
-          await supabase
-            .from('gear_requests')
-            .update({
-              status: newStatus,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', selectedCheckin.requestId);
-          // Add status history entry
-          await supabase
-            .from('request_status_history')
-            .insert({
-              request_id: selectedCheckin.requestId,
-              status: newStatus,
-              changed_by: user?.id,
-              note: `Check-in approved for gear ${selectedCheckin.gearName}`
-            });
+        // Check if all gears in this request have been checked in
+        const { data: requestGears } = await supabase
+          .from('gear_request_gears')
+          .select('gear_id, quantity')
+          .eq('gear_request_id', selectedCheckin.requestId);
+
+        if (requestGears && requestGears.length > 0) {
+          // Count total requested quantity vs completed check-ins
+          const totalRequestedQuantity = requestGears.reduce((sum, rg) => sum + rg.quantity, 0);
+
+          const { data: completedCheckins } = await supabase
+            .from('checkins')
+            .select('gear_id')
+            .eq('user_id', selectedCheckin.userId)
+            .eq('status', 'Completed')
+            .in('gear_id', requestGears.map(rg => rg.gear_id));
+
+          const completedQuantity = completedCheckins?.length || 0;
+
+          // If all requested gear has been checked in, mark request as completed
+          if (completedQuantity >= totalRequestedQuantity) {
+            await supabase
+              .from('gear_requests')
+              .update({
+                status: 'Completed',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', selectedCheckin.requestId);
+
+            // Add status history entry
+            await supabase
+              .from('request_status_history')
+              .insert({
+                request_id: selectedCheckin.requestId,
+                status: 'Completed',
+                changed_by: user?.id,
+                note: `All gear checked in - request completed`
+              });
+          }
         }
       }
       // Step 3: Note: Activity logging removed - the checkins table serves as the audit trail
