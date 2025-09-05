@@ -10,16 +10,12 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { AnnouncementsWidget } from "@/components/dashboard/AnnouncementsWidget";
-import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
-import { RecentActivity } from "@/components/dashboard/RecentActivity";
-import { PopularGearWidget } from "@/components/dashboard/PopularGearWidget";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { logError } from '@/lib/logger';
 import { useToast } from "@/hooks/use-toast";
-import { useDashboardData } from '@/hooks/dashboard/use-dashboard-data';
+import { useUnifiedDashboard } from '@/hooks/dashboard/use-unified-dashboard';
 import { apiGet } from '@/lib/apiClient';
 import React from 'react';
 
@@ -42,11 +38,10 @@ export default function UserDashboardPage() {
   const { toast } = useToast();
   const supabase = createClient();
 
-  // Use optimized centralized dashboard data
-  const dashboardData = useDashboardData();
+  // Use unified dashboard data
+  const { data: dashboardData, loading: isLoading, error: dashboardError, refetch } = useUnifiedDashboard();
 
   const [userData, setUserData] = useState<Profile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   // Fetch user profile
   useEffect(() => {
@@ -63,8 +58,6 @@ export default function UserDashboardPage() {
         if (error && (typeof error === 'string' || error instanceof Error || (typeof error === 'object' && Object.keys(error).length > 0))) {
           logError(error, 'fetchUserProfile');
         }
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -75,7 +68,7 @@ export default function UserDashboardPage() {
   const userStats = [
     {
       title: 'Checked Out Gears',
-      value: dashboardData.userStats.checkedOut,
+      value: dashboardData?.stats.checked_out_equipment || 0,
       icon: PackageCheck,
       color: 'text-blue-500',
       bgColor: 'bg-blue-500/10',
@@ -84,7 +77,7 @@ export default function UserDashboardPage() {
     },
     {
       title: 'Overdue Gears',
-      value: dashboardData.userStats.overdue,
+      value: dashboardData?.overdue_items?.length || 0,
       icon: Clock,
       color: 'text-red-500',
       bgColor: 'bg-red-500/10',
@@ -93,7 +86,7 @@ export default function UserDashboardPage() {
     },
     {
       title: 'Available Gears',
-      value: dashboardData.userStats.available,
+      value: dashboardData?.stats.available_equipment || 0,
       icon: Box,
       color: 'text-green-500',
       bgColor: 'bg-green-500/10',
@@ -115,8 +108,8 @@ export default function UserDashboardPage() {
     }),
   };
 
-  // Check if any data is still loading
-  const isDataLoading = Object.values(dashboardData.loading).some(loading => loading);
+  // Check if data is still loading
+  const isDataLoading = isLoading;
 
   return (
     <ErrorBoundary>
@@ -215,33 +208,96 @@ export default function UserDashboardPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8">
           {/* Left Column */}
           <div className="space-y-6 sm:space-y-8">
-            <UpcomingEvents />
-            <PopularGearWidget />
+            {/* Available Gears */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Box className="h-5 w-5" />
+                  Available Equipment
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isDataLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="flex items-center space-x-3">
+                        <div className="h-10 w-10 bg-gray-200 rounded animate-pulse" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
+                          <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {dashboardData?.gears?.slice(0, 5).map((gear) => (
+                      <div key={gear.id} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-50">
+                        <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <Box className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-sm">{gear.name}</h4>
+                          <p className="text-xs text-gray-500">{gear.category} • Qty: {gear.quantity}</p>
+                        </div>
+                        <Badge variant="secondary" className="text-xs">
+                          {gear.current_state.status}
+                        </Badge>
+                      </div>
+                    ))}
+                    {(!dashboardData?.gears || dashboardData.gears.length === 0) && (
+                      <p className="text-gray-500 text-sm">No equipment available</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Right Column - Combined Activity and Announcements */}
+          {/* Right Column */}
           <div className="space-y-6 sm:space-y-8">
-            <Card className="h-fit">
-              <CardHeader className="pb-3 sm:pb-4">
-                <CardTitle className="text-base sm:text-lg lg:text-xl">Activity & Announcements</CardTitle>
+            {/* Recent Activity */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Recent Activity
+                </CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
-                <div className="grid grid-cols-1 divide-y">
-                  <div className="p-4 sm:p-6">
-                    <h3 className="text-sm sm:text-base font-medium mb-3 sm:mb-4 flex items-center gap-2">
-                      <Activity className="h-4 w-4" />
-                      Recent Activity
-                    </h3>
-                    <RecentActivity embedded={true} />
+              <CardContent>
+                {isDataLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="flex items-center space-x-3">
+                        <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
+                          <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="p-4 sm:p-6">
-                    <h3 className="text-sm sm:text-base font-medium mb-3 sm:mb-4 flex items-center gap-2">
-                      <Megaphone className="h-4 w-4" />
-                      Announcements
-                    </h3>
-                    <AnnouncementsWidget embedded={true} />
+                ) : (
+                  <div className="space-y-3">
+                    {dashboardData?.recent_activity?.slice(0, 5).map((activity) => (
+                      <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-50">
+                        <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
+                          <Activity className="h-4 w-4 text-green-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{activity.description}</p>
+                          <p className="text-xs text-gray-500">{activity.timestamp}</p>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {activity.status}
+                        </Badge>
+                      </div>
+                    ))}
+                    {(!dashboardData?.recent_activity || dashboardData.recent_activity.length === 0) && (
+                      <p className="text-gray-500 text-sm">No recent activity</p>
+                    )}
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </div>
