@@ -84,11 +84,10 @@ export async function GET(request: NextRequest) {
         // Calculate stats using the gears table directly
         const now = new Date();
 
-        // Get user's checked out gears (where checked_out_to = user.id)
+        // Get user's checked out gears (where checked_out_to = user.id and quantity > available_quantity)
         const userCheckedOutGears = gears.filter(gear =>
             gear.checked_out_to === user.id &&
-            gear.due_date &&
-            new Date(gear.due_date) > now
+            gear.quantity > gear.available_quantity
         );
 
         // Get user's overdue gears (where checked_out_to = user.id and due_date < now)
