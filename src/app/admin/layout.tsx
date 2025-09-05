@@ -150,7 +150,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <DashboardHeader />
+        <DashboardHeader userType="admin" />
         <div className="p-3 sm:p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
           <div className="max-w-full">
             {/* Render children only if user loading is complete and user is verified admin */}

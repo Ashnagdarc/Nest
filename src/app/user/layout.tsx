@@ -155,7 +155,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <DashboardHeader />
+        <DashboardHeader userType="user" />
         <div className="p-3 sm:p-4 md:p-6 lg:p-8 flex-1 overflow-auto">
           <div className="max-w-full">
             <div className="container mx-auto px-2 sm:px-4 w-full">

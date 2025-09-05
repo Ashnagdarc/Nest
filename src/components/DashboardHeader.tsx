@@ -7,8 +7,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useUserProfile } from "@/components/providers/user-profile-provider";
+import { NotificationBell } from "@/components/NotificationBell";
 
-export function DashboardHeader() {
+interface DashboardHeaderProps {
+    userType?: 'admin' | 'user';
+}
+
+export function DashboardHeader({ userType = 'user' }: DashboardHeaderProps) {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const supabase = createClient();
@@ -36,6 +41,7 @@ export function DashboardHeader() {
                 <ThemeLogo width={56} height={56} className="h-14 w-14 lg:h-16 lg:w-16" />
             </div>
             <div className="flex items-center gap-3">
+                <NotificationBell userType={userType} />
                 <Avatar className="h-8 w-8">
                     <AvatarImage
                         src={currentUser?.avatar_url || (currentUser?.email ? `https://picsum.photos/seed/${currentUser.email}/100/100` : undefined)}

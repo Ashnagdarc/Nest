@@ -19,6 +19,7 @@ import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { createClient } from '@/lib/supabase/client';
 import { isFileList, isFile } from '@/lib/utils/browser-safe';
 import { ThemeLogo } from "@/components/ui/theme-logo";
+import { ArrowLeft } from 'lucide-react';
 
 const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]\d{3}[)])?([-]?[\s]?)(\d{3})([-]?[\s]?)(\d{4})$/
@@ -208,6 +209,16 @@ export default function SignupPage() {
       >
         <Card>
           <CardHeader className="space-y-4 text-center">
+            <div className="flex justify-between items-start">
+              <Link
+                href="/"
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Home
+              </Link>
+              <div className="flex-1"></div>
+            </div>
             <div className="flex justify-center">
               <ThemeLogo
                 width={96}
