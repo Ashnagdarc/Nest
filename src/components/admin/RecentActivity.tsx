@@ -104,39 +104,65 @@ export function RecentActivity() {
       setLoading(true);
       setError(null);
 
-      const response = await apiGet<{
-        activities: ActivityData[];
-        pagination: {
-          total: number;
-          page: number;
-          limit: number;
-          totalPages: number;
-        };
-      }>('/api/activities?limit=10&days=7');
+      // Use the unified dashboard API instead of the non-existent activities endpoint
+      let response;
+      try {
+        response = await apiGet<{
+          data: {
+            recent_activity: Array<{
+              id: string;
+              type: string;
+              action: string;
+              item: string;
+              user: string;
+              timestamp: string;
+              status: string;
+              metadata: any;
+            }>;
+          };
+          error: string | null;
+        }>('/api/dashboard/unified');
+      } catch (unifiedError) {
+        console.warn('Unified API failed, trying simple API:', unifiedError);
+        response = await apiGet<{
+          data: {
+            recent_activity: Array<{
+              id: string;
+              type: string;
+              action: string;
+              item: string;
+              user: string;
+              timestamp: string;
+              status: string;
+              metadata: any;
+            }>;
+          };
+          error: string | null;
+        }>('/api/dashboard/simple');
+      }
 
-      const data = response.activities;
+      if (response.error) {
+        throw new Error(response.error);
+      }
 
-      const processedActivities: ActivityItem[] = (data || []).map((activity) => {
-        const user = activity.profiles?.full_name || 'Unknown User';
-        const gear = activity.gears?.name || 'Unknown Equipment';
-        const activityType = activity.activity_type || 'Activity';
+      const data = response.data?.recent_activity || [];
+
+      const processedActivities: ActivityItem[] = data.map((activity) => {
+        const user = activity.user || 'Unknown User';
+        const gear = activity.item || 'Unknown Equipment';
+        const activityType = activity.type || 'Activity';
         const status = activity.status || 'Unknown';
-        
+
         let description = '';
         switch (activityType.toLowerCase()) {
-          case 'check-in':
           case 'checkin':
             description = `${user} checked in ${gear}`;
             break;
-          case 'check-out':
-          case 'checkout':
-            description = `${user} checked out ${gear}`;
-            break;
-          case 'status change':
-            description = `${gear} status changed`;
+          case 'request':
+            description = `${user} ${activity.action.toLowerCase()} ${gear}`;
             break;
           default:
-            description = `${user} performed ${activityType.toLowerCase()} on ${gear}`;
+            description = `${user} performed ${activity.action.toLowerCase()} on ${gear}`;
         }
 
         return {
@@ -145,7 +171,7 @@ export function RecentActivity() {
           description,
           user,
           gear,
-          timestamp: formatTimeAgo(activity.created_at),
+          timestamp: formatTimeAgo(activity.timestamp),
           status,
           icon: getActivityIcon(activityType),
           statusColor: getStatusColor(status)

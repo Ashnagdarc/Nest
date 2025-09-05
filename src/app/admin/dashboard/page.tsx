@@ -18,6 +18,7 @@ import AdvancedSearchBar from '@/components/admin/analytics/AdvancedSearchBar';
 import { useBulkSelection } from '@/hooks/analytics/useBulkSelection';
 import { useAdvancedSearch } from '@/hooks/analytics/useAdvancedSearch';
 import PageHeader from '@/components/foundation/PageHeader';
+import { useUnifiedDashboard } from '@/hooks/dashboard/use-unified-dashboard';
 
 // Import the UnifiedNotificationsPanel
 import { UnifiedNotificationsPanel } from '@/components/admin/UnifiedNotificationsPanel';
@@ -91,13 +92,20 @@ function WeeklyTrendsChart() {
 function OverdueGearTable() {
     const [data, setData] = useState<OverdueGearRow[]>([]);
     const [search, setSearch] = useState('');
-    const supabase = createClient();
+    const { data: dashboardData } = useUnifiedDashboard();
+
     useEffect(() => {
-        supabase
-            .from('overdue_gear')
-            .select('*')
-            .then(({ data }) => setData(data || []));
-    }, []);
+        if (dashboardData?.overdue_items) {
+            const overdueData = dashboardData.overdue_items.map(item => ({
+                request_id: item.gear_id,
+                gear_name: item.gear_name,
+                full_name: 'Unknown User', // Will be populated with actual user name
+                email: 'unknown@example.com',
+                due_date: item.due_date
+            }));
+            setData(overdueData);
+        }
+    }, [dashboardData]);
     // Advanced search
     const filteredData = useAdvancedSearch(
         data,
@@ -256,61 +264,29 @@ function GearMaintenanceSummary() {
 }
 
 export default function AdminDashboardPage() {
-    // State for all dashboard data
-    const [loading, setLoading] = useState(true);
-    const [gears, setGears] = useState<Gear[]>([]);
-    const [users, setUsers] = useState<Profile[]>([]);
-    const [requests, setRequests] = useState<GearRequest[]>([]);
-    const [error, setError] = useState("");
     const [addGearOpen, setAddGearOpen] = useState(false);
 
-    useEffect(() => {
-        async function fetchData() {
-            setLoading(true);
-            setError("");
-            try {
-                const gearsRes = await apiGet<{ data: Gear[] }>("/api/gears?pageSize=1000");
-                const usersRes = await apiGet<{ data: Profile[] }>("/api/users?pageSize=1000");
-                const requestsRes = await apiGet<{ data: GearRequest[] }>("/api/requests?pageSize=1000");
-                setGears(gearsRes.data || []);
-                setUsers(usersRes.data || []);
-                setRequests(requestsRes.data || []);
-            } catch (e: unknown) {
-                function isErrorWithMessage(error: unknown): error is { message: string } {
-                    return (
-                        typeof error === "object" &&
-                        error !== null &&
-                        "message" in error &&
-                        typeof (error as { message: unknown }).message === "string"
-                    );
-                }
-                if (isErrorWithMessage(e)) {
-                    setError(e.message);
-                } else {
-                    setError("Failed to load dashboard data");
-                }
-            } finally {
-                setLoading(false);
-            }
-        }
-        fetchData();
-    }, []);
+    // Use unified dashboard hook for all data
+    const { data: dashboardData, loading, error, refetch } = useUnifiedDashboard();
 
-    // Compute stats
-    const totalEquipment = gears.reduce((sum, g) => sum + (g.quantity ?? 1), 0);
-    // const availableEquipment = gears.reduce((sum, g) => sum + (g.available_quantity ?? 0), 0);
-    // Note: status and available_quantity are in gear_states table, not gears table
-    // For now, we'll use a simplified calculation based on quantity
-    const checkedOutEquipment = 0; // TODO: Implement proper gear state tracking
-    const underRepairEquipment = 0; // TODO: Implement proper gear state tracking
+    // Extract data from unified response
+    const gears = dashboardData?.gears || [];
+    const users = dashboardData?.users || [];
+    const requests = dashboardData?.requests || [];
+    const stats = dashboardData?.stats;
+
+    // Use stats from unified API instead of computing locally
+    const totalEquipment = stats?.total_equipment || 0;
+    const checkedOutEquipment = stats?.checked_out_equipment || 0;
+    const underRepairEquipment = stats?.under_repair_equipment || 0; // TODO: Implement proper gear state tracking
     const utilizationRate = totalEquipment > 0 ? Math.round((checkedOutEquipment / totalEquipment) * 100) : 0;
 
-    const totalUsers = users.length;
-    const activeUsers = users.filter((u: Profile) => u.status === "Active").length;
+    const totalUsers = stats?.total_users || 0;
+    const activeUsers = stats?.active_users || 0;
 
-    const pendingRequests = requests.filter((r: GearRequest) => r.status === "Pending").length;
-    const approvedRequests = requests.filter((r: GearRequest) => r.status?.toLowerCase() === "approved").length;
-    const rejectedRequests = requests.filter((r: GearRequest) => r.status === "Rejected").length;
+    const pendingRequests = stats?.pending_requests || 0;
+    const approvedRequests = stats?.approved_requests || 0;
+    const rejectedRequests = stats?.rejected_requests || 0;
     const approvalRate = requests.length > 0 ? Math.round((approvedRequests / requests.length) * 100) : 0;
 
     // Compute categories
