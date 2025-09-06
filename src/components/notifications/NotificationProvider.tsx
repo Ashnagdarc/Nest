@@ -207,6 +207,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                     fetchNotifications();
                 }
             )
+            .on('postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+                (payload: { new: Notification }) => {
+                    // Update notifications list when notification is marked as read
+                    fetchNotifications();
+                }
+            )
             .subscribe();
 
         return () => {

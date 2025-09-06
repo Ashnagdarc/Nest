@@ -24,12 +24,16 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const unreadOnly = searchParams.get('unreadOnly') === 'true';
         const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : undefined;
+        const userIdParam = searchParams.get('userId');
+
+        // Use userId from query param if provided, otherwise use authenticated user
+        const targetUserId = userIdParam || user.id;
 
         // Build the query
         let query = supabase
             .from('notifications')
             .select('*')
-            .eq('user_id', user.id);
+            .eq('user_id', targetUserId);
 
         // Apply filters
         if (unreadOnly) {

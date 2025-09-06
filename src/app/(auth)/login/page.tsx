@@ -14,7 +14,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { ThemeLogo } from '@/components/ui/theme-logo';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
-import { usePendingNotifications } from '@/hooks/use-pending-notifications';
 import { ArrowLeft } from 'lucide-react';
 
 const loginSchema = z.object({
@@ -30,14 +29,8 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [loggedInUser, setLoggedInUser] = useState<{ id: string, role: string } | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
-  // Use pending notifications hook
-  const { showPendingNotificationsToast } = usePendingNotifications(
-    loggedInUser?.id,
-    loggedInUser?.role
-  );
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -55,6 +48,16 @@ export default function LoginPage() {
       // Sanitize email to prevent copy/paste whitespace and case issues
       const cleanedEmail = data.email.trim().toLowerCase();
 
+      // Validate email format
+      if (!cleanedEmail || !cleanedEmail.includes('@')) {
+        throw new Error('Please enter a valid email address.');
+      }
+
+      // Validate password
+      if (!data.password || data.password.length < 1) {
+        throw new Error('Password is required.');
+      }
+
       // Direct client-side login
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: cleanedEmail,
@@ -62,11 +65,19 @@ export default function LoginPage() {
       });
 
       if (authError) {
-        throw new Error(authError.message || 'Login failed.');
+        // Handle specific error cases
+        if (authError.message.includes('Invalid login credentials')) {
+          throw new Error('Invalid email or password. Please check your credentials and try again.');
+        } else if (authError.message.includes('Email not confirmed')) {
+          throw new Error('Please verify your email address before logging in.');
+        } else if (authError.message.includes('Too many requests')) {
+          throw new Error('Too many login attempts. Please wait a moment and try again.');
+        }
+        throw new Error(authError.message || 'Login failed. Please try again.');
       }
 
       if (!authData.user) {
-        throw new Error('Login succeeded but user data missing.');
+        throw new Error('Login succeeded but user data missing. Please try again.');
       }
 
       // Fetch profile to determine role
@@ -76,18 +87,22 @@ export default function LoginPage() {
         .eq('id', authData.user.id)
         .single();
 
-      if (profileError || !profile) {
-        throw new Error('Could not fetch user profile.');
+      if (profileError) {
+        console.error('Profile fetch error:', profileError);
+        throw new Error('Could not fetch user profile. Please try again.');
+      }
+
+      if (!profile) {
+        throw new Error('User profile not found. Please contact support.');
       }
 
       if (profile.status !== 'Active') {
         await supabase.auth.signOut();
-        throw new Error(`Account status is ${profile.status}. Please contact support.`);
+        throw new Error(`Account status is ${profile.status}. Please contact support to activate your account.`);
       }
 
-      // Set logged in user for pending notifications check
-      console.log('🔍 Setting logged in user:', { id: authData.user.id, role: profile.role });
-      setLoggedInUser({ id: authData.user.id, role: profile.role });
+      // Log successful login
+      console.log('🔍 Login successful:', { id: authData.user.id, role: profile.role });
 
       // Show success message
       toast({
@@ -99,18 +114,49 @@ export default function LoginPage() {
       setIsLoading(false);
       setShowSuccessAnimation(true);
 
-      // Show pending notifications after a short delay, then redirect
+      // Show pending notifications after user data is set and a delay, then redirect
       setTimeout(async () => {
         console.log('🔍 Attempting to show pending notifications toast...');
-        await showPendingNotificationsToast();
+        console.log('🔍 User data:', { id: authData.user.id, role: profile.role });
+
+        // Fetch notifications directly for this user
+        try {
+          const { data: userNotifications, error: notificationsError } = await supabase
+            .from('notifications')
+            .select('id, is_read')
+            .eq('user_id', authData.user.id)
+            .eq('is_read', false);
+
+          if (notificationsError) {
+            console.error('Error fetching notifications:', notificationsError);
+          } else {
+            const unreadCount = userNotifications?.length || 0;
+            console.log('🔍 Direct notification fetch result:', { unreadCount, notifications: userNotifications?.length });
+
+            // Show toast if there are unread notifications
+            if (unreadCount > 0) {
+              console.log('📢 Showing toast for unread notifications:', unreadCount);
+              toast({
+                title: `You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`,
+                description: "Check your notifications for updates on your requests and system alerts.",
+                variant: 'default',
+                duration: 5000,
+              });
+            } else {
+              console.log('✅ No unread notifications found');
+            }
+          }
+        } catch (error) {
+          console.error('Error in notification toast logic:', error);
+        }
 
         // Redirect after showing the toast
         setTimeout(() => {
           const targetPath = profile.role === 'Admin' ? '/admin/dashboard' : '/user/dashboard';
           console.log('Redirecting to:', targetPath);
           window.location.href = targetPath;
-        }, 1000); // Give time for toast to show
-      }, 1000); // Show toast after 1 second
+        }, 2000); // Give more time for toast to show
+      }, 1500); // Show toast after 1.5 seconds
 
     } catch (error: unknown) {
       setIsLoading(false);

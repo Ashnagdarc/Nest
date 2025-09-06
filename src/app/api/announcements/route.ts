@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const supabase = await createSupabaseServerClient(true);
-        const { title, content, author_id } = await request.json();
+        const { title, content, author_id, send_notifications = false } = await request.json();
 
         if (!title || !content || !author_id) {
             return NextResponse.json(
@@ -91,6 +91,38 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // If send_notifications is true, use the new service with notifications and emails
+        if (send_notifications) {
+            const { AnnouncementService } = await import('@/services/announcement-service');
+            const announcementService = new AnnouncementService();
+
+            const result = await announcementService.createAnnouncementWithNotifications(
+                title,
+                content,
+                author_id
+            );
+
+            if (!result.success) {
+                return NextResponse.json(
+                    {
+                        error: 'Failed to create announcement with notifications',
+                        details: result.errors
+                    },
+                    { status: 500 }
+                );
+            }
+
+            return NextResponse.json({
+                announcement: result.announcement,
+                stats: {
+                    notificationsSent: result.notificationsSent,
+                    emailsSent: result.emailsSent,
+                    errors: result.errors,
+                },
+            });
+        }
+
+        // Original behavior - just create announcement without notifications
         const { data, error } = await supabase
             .from('announcements')
             .insert([{ title, content, author_id }])
