@@ -28,3 +28,5 @@ COMMENT ON SCHEMA extensions IS 'Dedicated schema for PostgreSQL extensions - se
 -- Verify the fix
 SELECT 'HTTP extension security fix applied successfully' as status;
 
+
+

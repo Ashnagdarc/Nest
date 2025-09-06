@@ -94,6 +94,14 @@ export function usePendingNotifications(userId?: string, userRole?: string) {
     }, [userId, userRole, supabase]);
 
     const showPendingNotificationsToast = async () => {
+        console.log('🔍 showPendingNotificationsToast called with:', { userId, userRole, isLoading, pendingItems });
+
+        // If we don't have user data yet, wait for it
+        if (!userId || !userRole) {
+            console.log('⏳ Waiting for user data...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
         // Wait for data to load if still loading
         if (isLoading) {
             console.log('⏳ Waiting for pending notifications data to load...');
@@ -101,7 +109,7 @@ export function usePendingNotifications(userId?: string, userRole?: string) {
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        console.log('🔍 Pending items:', pendingItems);
+        console.log('🔍 Final pending items:', pendingItems);
 
         if (pendingItems.length === 0) {
             console.log('✅ No pending items found');

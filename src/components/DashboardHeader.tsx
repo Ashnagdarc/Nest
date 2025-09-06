@@ -41,7 +41,7 @@ export function DashboardHeader({ userType = 'user' }: DashboardHeaderProps) {
                 <ThemeLogo width={56} height={56} className="h-14 w-14 lg:h-16 lg:w-16" />
             </div>
             <div className="flex items-center gap-3">
-                <NotificationBell userType={userType} />
+                <NotificationBell userType={userType} userId={currentUser?.id} />
                 <Avatar className="h-8 w-8">
                     <AvatarImage
                         src={currentUser?.avatar_url || (currentUser?.email ? `https://picsum.photos/seed/${currentUser.email}/100/100` : undefined)}

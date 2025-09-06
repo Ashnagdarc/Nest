@@ -9,10 +9,11 @@ import { useRouter } from 'next/navigation';
 
 interface NotificationBellProps {
     userType: 'admin' | 'user';
+    userId?: string;
     className?: string;
 }
 
-export function NotificationBell({ userType, className = "" }: NotificationBellProps) {
+export function NotificationBell({ userType, userId, className = "" }: NotificationBellProps) {
     const [unreadCount, setUnreadCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const supabase = createClient();
@@ -21,17 +22,32 @@ export function NotificationBell({ userType, className = "" }: NotificationBellP
     useEffect(() => {
         const fetchUnreadCount = async () => {
             try {
-                const { data, error } = await supabase
-                    .from('notifications')
-                    .select('id')
-                    .eq('is_read', false);
+                if (userType === 'admin') {
+                    // For admins, count pending requests and check-ins
+                    const [requestsResult, checkinsResult] = await Promise.all([
+                        supabase
+                            .from('gear_requests')
+                            .select('id', { count: 'exact' })
+                            .eq('status', 'Pending'),
+                        supabase
+                            .from('checkins')
+                            .select('id', { count: 'exact' })
+                            .eq('status', 'Pending Admin Approval')
+                    ]);
 
-                if (error) {
-                    console.error('Error fetching unread notifications:', error);
-                    return;
+                    const requestsCount = requestsResult.count || 0;
+                    const checkinsCount = checkinsResult.count || 0;
+                    setUnreadCount(requestsCount + checkinsCount);
+                } else if (userId) {
+                    // For users, count their unread notifications
+                    const { count } = await supabase
+                        .from('notifications')
+                        .select('id', { count: 'exact' })
+                        .eq('user_id', userId)
+                        .eq('is_read', false);
+
+                    setUnreadCount(count || 0);
                 }
-
-                setUnreadCount(data?.length || 0);
             } catch (error) {
                 console.error('Error fetching unread count:', error);
             } finally {
@@ -49,18 +65,34 @@ export function NotificationBell({ userType, className = "" }: NotificationBellP
                 {
                     event: '*',
                     schema: 'public',
-                    table: 'notifications'
+                    table: userType === 'admin' ? 'gear_requests' : 'notifications'
                 },
                 () => {
                     fetchUnreadCount();
                 }
-            )
-            .subscribe();
+            );
+
+        // For admins, also listen to checkins table changes
+        if (userType === 'admin') {
+            channel.on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'checkins'
+                },
+                () => {
+                    fetchUnreadCount();
+                }
+            );
+        }
+
+        channel.subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [supabase]);
+    }, [userType, userId, supabase]);
 
     const handleNotificationClick = () => {
         const notificationsPath = userType === 'admin' ? '/admin/notifications' : '/user/notifications';

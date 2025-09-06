@@ -205,6 +205,70 @@ export async function sendGearRequestEmail({
   }
 }
 
+// Announcement email template
+export async function sendAnnouncementEmail({
+  to,
+  userName,
+  announcementTitle,
+  announcementContent,
+  authorName,
+  announcementId,
+}: {
+  to: string;
+  userName: string;
+  announcementTitle: string;
+  announcementContent: string;
+  authorName: string;
+  announcementId: string;
+}) {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://nest-eden-oasis.vercel.app';
+  const announcementUrl = `${siteUrl}/user/announcements?announcement=${announcementId}`;
+
+  const html = `
+    ${EMAIL_STYLES}
+    <div class="email-container">
+      <div class="email-header">
+        <h1>📢 New Announcement</h1>
+        <p class="subtitle">Important update from ${authorName}</p>
+      </div>
+      
+      <div class="email-body">
+        <h2>Hello ${userName},</h2>
+        
+        <p>A new announcement has been posted that requires your attention:</p>
+        
+        <div class="info-note">
+          <h3 style="margin: 0 0 10px 0; color: #2d3748;">${announcementTitle}</h3>
+          <div style="white-space: pre-wrap; line-height: 1.6;">${announcementContent}</div>
+        </div>
+        
+        <p>Please review this announcement in your dashboard for complete details and any required actions.</p>
+        
+        <a href="${announcementUrl}" class="action-button">
+          View Full Announcement
+        </a>
+        
+        <p style="margin-top: 30px; font-size: 14px; color: #718096;">
+          This announcement was sent to all users. If you have any questions, please contact your administrator.
+        </p>
+      </div>
+      
+      <div class="email-footer">
+        <p>
+          This email was sent from <a href="${siteUrl}">Nest by Eden Oasis</a><br>
+          Asset Management System
+        </p>
+      </div>
+    </div>
+  `;
+
+  return await sendGearRequestEmail({
+    to,
+    subject: `📢 New Announcement: ${announcementTitle}`,
+    html,
+  });
+}
+
 // Enhanced approval email template
 export async function sendApprovalEmail({
   to,

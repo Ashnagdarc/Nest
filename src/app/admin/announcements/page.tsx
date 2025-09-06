@@ -30,12 +30,6 @@ type AnnouncementRow = {
     updated_at?: string;
 };
 
-type AnnouncementInsert = {
-    title: string;
-    content: string;
-    created_at?: string;
-    created_by: string;
-};
 
 // Original type definition using the Database type
 // type AnnouncementRow = Database['public']['Tables']['announcements']['Row'];
@@ -55,6 +49,7 @@ export default function AnnouncementsPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newContent, setNewContent] = useState('');
+    const [sendNotifications, setSendNotifications] = useState(true);
     const { showSuccessFeedback, showErrorFeedback, loading, setLoading } = useSuccessFeedback();
 
     useEffect(() => {
@@ -147,40 +142,49 @@ export default function AnnouncementsPage() {
 
             console.log("User profile:", profileData, "Error:", profileError);
 
-            // Step 3: Use direct RPC call to bypass schema cache issue
-            // This uses a Postgres function call instead of the REST API that's having schema cache issues
-            const { data, error } = await supabase.rpc('create_announcement', {
-                p_title: newTitle,
-                p_content: newContent,
-                p_user_id: user.id
+            // Step 3: Use the new API with notification support
+            const response = await fetch('/api/announcements', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    title: newTitle,
+                    content: newContent,
+                    author_id: user.id,
+                    send_notifications: sendNotifications
+                }),
             });
 
-            // Enhanced error logging
-            console.log("Complete response from RPC call:", { data, error });
+            const result = await response.json();
 
-            // Detailed error logging
-            if (error) {
-                console.error("Error posting announcement:", {
-                    message: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    code: error.code,
-                    fullError: JSON.stringify(error, null, 2)
-                });
-                throw new Error(error.message || 'Unknown error');
-            } else if (!data) {
-                // Handle the case where there's no error but also no data
-                console.error("No data returned from insert operation");
-                throw new Error('No data returned');
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to create announcement');
             }
 
-            console.log("Announcement posted successfully:", data);
+            console.log("Announcement posted successfully:", result);
 
             // Reset form and update UI on success
             setNewTitle('');
             setNewContent('');
             setIsModalOpen(false);
-            showSuccessFeedback({ toast: { title: "Success", description: "Announcement posted successfully." }, onSuccess: () => setTimeout(() => { fetchAnnouncements(); }, 500) });
+
+            // Show success message with notification stats
+            let successMessage = "Announcement posted successfully.";
+            if (sendNotifications && result.stats) {
+                successMessage += ` Sent ${result.stats.notificationsSent} notifications and ${result.stats.emailsSent} emails.`;
+                if (result.stats.errors && result.stats.errors.length > 0) {
+                    successMessage += ` (${result.stats.errors.length} errors occurred)`;
+                }
+            }
+
+            showSuccessFeedback({
+                toast: {
+                    title: "Success",
+                    description: successMessage
+                },
+                onSuccess: () => setTimeout(() => { fetchAnnouncements(); }, 500)
+            });
         } catch (e: any) {
             showErrorFeedback({ toast: { title: "Error", description: e.message || "Failed to post announcement." } });
         } finally {
@@ -270,6 +274,18 @@ export default function AnnouncementsPage() {
                                         placeholder="Write your announcement here..."
                                         rows={5}
                                     />
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="checkbox"
+                                        id="send-notifications"
+                                        checked={sendNotifications}
+                                        onChange={(e) => setSendNotifications(e.target.checked)}
+                                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                                    />
+                                    <Label htmlFor="send-notifications" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                        Send notifications and emails to all users
+                                    </Label>
                                 </div>
                                 <DialogFooter>
                                     <DialogClose asChild>
