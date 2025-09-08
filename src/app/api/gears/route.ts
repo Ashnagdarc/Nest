@@ -5,7 +5,6 @@ export async function GET(request: NextRequest) {
     try {
 
 
-
         let supabase;
         try {
             supabase = createSupabaseApiClient(true);
@@ -19,6 +18,7 @@ export async function GET(request: NextRequest) {
         // Extract query parameters
         const status = searchParams.get('status');
         const category = searchParams.get('category');
+        const excludeCategories = searchParams.get('excludeCategories');
         const ids = searchParams.get('ids');
         const fields = searchParams.get('fields');
         const search = searchParams.get('search');
@@ -35,6 +35,18 @@ export async function GET(request: NextRequest) {
             }
             return query;
         }
+
+        const applyExclusions = (query: any) => {
+            if (excludeCategories) {
+                const list = excludeCategories.split(',').map(s => s.trim()).filter(Boolean);
+                if (list.length === 1) {
+                    return query.neq('category', list[0]);
+                }
+                const tuple = `(${list.join(',')})`;
+                return query.not('category', 'in', tuple);
+            }
+            return query;
+        };
 
         // Build the base query for filters
         let baseQuery;
@@ -58,6 +70,7 @@ export async function GET(request: NextRequest) {
         if (category && category !== 'all') {
             baseQuery = baseQuery.eq('category', category);
         }
+        baseQuery = applyExclusions(baseQuery);
         if (ids) {
             const idArray = ids.split(',');
             baseQuery = baseQuery.in('id', idArray);
@@ -94,6 +107,7 @@ export async function GET(request: NextRequest) {
         if (category && category !== 'all') {
             dataQuery = dataQuery.eq('category', category);
         }
+        dataQuery = applyExclusions(dataQuery);
         if (ids) {
             const idArray = ids.split(',');
             dataQuery = dataQuery.in('id', idArray);

@@ -35,6 +35,7 @@ const userNavItems = [
   { href: '/user/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/user/browse', label: 'Browse Gears', icon: Search },
   { href: '/user/request', label: 'Request Gear', icon: PlusSquare },
+  { href: '/user/car-booking', label: 'Book a Car', icon: PlusSquare },
   { href: '/user/my-requests', label: 'My Requests', icon: ListChecks },
   { href: '/user/check-in', label: 'Check-in Gear', icon: UploadCloud },
   { href: '/user/history', label: 'History', icon: History },

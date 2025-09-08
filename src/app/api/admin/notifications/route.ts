@@ -24,10 +24,11 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const unreadOnly = searchParams.get('unreadOnly') === 'true';
         const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : undefined;
+        const userId = searchParams.get('userId') || undefined;
 
-        console.log('📊 Fetching admin notifications with filters:', { unreadOnly, limit });
+        console.log('📊 Fetching admin notifications with filters:', { unreadOnly, limit, userId });
 
-        // Build the query - admins see ALL notifications in the system
+        // Build the query; support optional userId scoping
         let query = supabase
             .from('notifications')
             .select(`
@@ -50,20 +51,20 @@ export async function GET(request: NextRequest) {
                 )
             `);
 
-        // Apply filters
+        if (userId) {
+            query = query.eq('user_id', userId);
+        }
+
         if (unreadOnly) {
             query = query.eq('is_read', false);
         }
 
-        // Apply limit if specified
         if (limit && !isNaN(limit)) {
             query = query.limit(limit);
         }
 
-        // Execute the query with ordering
         const { data, error } = await query.order('created_at', { ascending: false });
 
-        // Handle database query errors
         if (error) {
             console.error('❌ Database error fetching admin notifications:', error);
             return NextResponse.json({ data: null, error: `Database error: ${error.message}` }, { status: 500 });
@@ -74,7 +75,6 @@ export async function GET(request: NextRequest) {
             unreadCount: data?.filter(n => !n.is_read).length || 0
         });
 
-        // Return successful response
         return NextResponse.json({
             data: data || [],
             error: null,

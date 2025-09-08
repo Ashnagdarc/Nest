@@ -100,8 +100,12 @@ export default function AdminNotificationsPage() {
 
   async function fetchNotifications() {
     try {
-      // Use admin-specific API that fetches ALL notifications in the system
-      const { data, error } = await apiGet<{ data: ApiNotification[]; error: string | null }>('/api/admin/notifications');
+      // Get current admin id
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData?.user?.id;
+
+      // Use admin API but filter to current admin's notifications only
+      const { data, error } = await apiGet<{ data: ApiNotification[]; error: string | null }>(`/api/admin/notifications?userId=${currentUserId ?? ''}`);
       if (error) {
         console.error('Error fetching admin notifications:', error);
         return;

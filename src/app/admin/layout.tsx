@@ -32,6 +32,7 @@ const adminNavItems = [
   { href: '/admin/manage-gears', label: 'Manage Gears', icon: Package },
   { href: '/admin/manage-requests', label: 'Manage Requests', icon: ListChecks },
   { href: '/admin/manage-checkins', label: 'Manage Check-ins', icon: Upload },
+  { href: '/admin/manage-car-bookings', label: 'Manage Car Bookings', icon: ListChecks },
   { href: '/admin/manage-users', label: 'Manage Users', icon: UserCog },
   { href: '/admin/announcements', label: 'Announcements', icon: Bell },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart2 },
