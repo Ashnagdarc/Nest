@@ -1,15 +1,30 @@
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export async function GET() {
     try {
         const supabase = await createSupabaseServerClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        if (error) throw error;
-        return NextResponse.json({ data, error: null });
-    } catch (error) {
-        return NextResponse.json({ data: null, error: 'Failed to fetch profile' }, { status: 500 });
+
+        // Get current auth user
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
+            return NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Fetch profile for this user
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, email, full_name, avatar_url, role, status')
+            .eq('id', userData.user.id)
+            .maybeSingle();
+
+        if (profileError) {
+            return NextResponse.json({ data: null, error: profileError.message || 'Failed to fetch profile' }, { status: 500 });
+        }
+
+        return NextResponse.json({ data: profile ?? null, error: null }, { status: 200 });
+    } catch (err: any) {
+        const message = err?.message || 'Unexpected server error';
+        return NextResponse.json({ data: null, error: message }, { status: 500 });
     }
 } 

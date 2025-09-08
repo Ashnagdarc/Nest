@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -10,16 +10,17 @@ import { z } from 'zod';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { createClient } from '@/lib/supabase/client';
 import { isFileList, isFile } from '@/lib/utils/browser-safe';
-import { ThemeLogo } from "@/components/ui/theme-logo";
-import { ArrowLeft } from 'lucide-react';
+import { AuthCard } from '@/components/auth/AuthCard';
+import { PasswordField } from '@/components/auth/PasswordField';
+import { formatPhone } from '@/lib/utils/phone';
+import { trackAuthEvent } from '@/lib/analytics';
 
 const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]\d{3}[)])?([-]?[\s]?)(\d{3})([-]?[\s]?)(\d{4})$/
@@ -51,9 +52,18 @@ export default function SignupPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const supabase = createClient();
+
+  // Auto-redirect if already authenticated
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        window.location.href = '/user/dashboard';
+      }
+    })();
+  }, [supabase]);
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -70,6 +80,7 @@ export default function SignupPage() {
   });
 
   const onSubmit = async (data: SignupFormValues) => {
+    trackAuthEvent('signup_success', { email: data.email, method: 'password' });
     setIsLoading(true);
     setShowSuccessModal(false);
     console.log("[Signup Attempt] Starting for email:", data.email);
@@ -167,6 +178,8 @@ export default function SignupPage() {
     } catch (error) {
       setIsLoading(false);
       console.error("[Signup Attempt Failed]:", error);
+      const message = error instanceof Error ? error.message : 'signup_failed';
+      trackAuthEvent('signup_failure', { method: 'password', error: message });
 
       const errorMessage = error instanceof Error ? error.message : "Could not create account. Please try again.";
 
@@ -184,8 +197,15 @@ export default function SignupPage() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      form.setValue('profilePicture', file);
+    }
+  };
+
   return (
-    <div className="container mx-auto flex min-h-screen flex-col items-center justify-center bg-background p-4">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
       {/* Success Modal */}
       <Dialog open={showSuccessModal}>
         <DialogContent className="flex flex-col items-center justify-center gap-4">
@@ -202,211 +222,149 @@ export default function SignupPage() {
         </DialogContent>
       </Dialog>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-lg"
+        className="w-full max-w-md"
       >
-        <Card>
-          <CardHeader className="space-y-4 text-center">
-            <div className="flex justify-between items-start">
-              <Link
-                href="/"
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Home
-              </Link>
-              <div className="flex-1"></div>
-            </div>
-            <div className="flex justify-center">
-              <ThemeLogo
-                width={96}
-                height={96}
-                className="w-24 h-24 rounded-lg"
+        <AuthCard title="Create an Account" description="Enter your information to get started">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="fullName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Full Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-1">
-              <CardTitle className="text-3xl font-bold">Create an Account</CardTitle>
-              <CardDescription>Enter your information to get started</CardDescription>
-            </div>
-          </CardHeader>
 
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="john@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
-                  name="fullName"
+                  name="phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Full Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="John Doe" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder="john@example.com" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone (Optional)</FormLabel>
-                        <FormControl>
-                          <Input type="tel" placeholder="(555) 555-5555" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="department"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Department (Optional)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., Marketing" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input type={showPassword ? 'text' : 'password'} {...field} />
-                          <button
-                            type="button"
-                            aria-label={showPassword ? 'Hide password' : 'Show password'}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            onClick={() => setShowPassword((s) => !s)}
-                          >
-                            {showPassword ? 'Hide' : 'Show'}
-                          </button>
-                        </div>
-                      </FormControl>
-                      <FormDescription>
-                        Must be at least 8 characters with 1 uppercase, 1 lowercase, 1 number, and 1 special character.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="confirmPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Confirm Password</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input type={showConfirm ? 'text' : 'password'} {...field} />
-                          <button
-                            type="button"
-                            aria-label={showConfirm ? 'Hide password' : 'Show password'}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            onClick={() => setShowConfirm((s) => !s)}
-                          >
-                            {showConfirm ? 'Hide' : 'Show'}
-                          </button>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="terms"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>
-                          I accept the{' '}
-                          <Link href="/terms" className="text-primary hover:underline">
-                            terms and conditions
-                          </Link>
-                        </FormLabel>
-                        <FormMessage />
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="profilePicture"
-                  render={({ field: { onChange, ...fieldProps } }) => (
-                    <FormItem>
-                      <FormLabel>Profile Photo (Optional)</FormLabel>
+                      <FormLabel>Phone (Optional)</FormLabel>
                       <FormControl>
                         <Input
-                          {...fieldProps}
-                          type="file"
-                          accept="image/*"
-                          onChange={e => onChange(e.target.files)}
+                          placeholder="(555) 555-5555"
+                          value={field.value || ''}
+                          onChange={(e) => field.onChange(formatPhone(e.target.value))}
+                          onBlur={(e) => field.onChange(formatPhone(e.target.value))}
                         />
                       </FormControl>
-                      <FormDescription>Upload a profile photo to personalize your account.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="department"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Department (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Marketing" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
-                <Button
-                  type="submit"
-                  className="w-full"
-                  loading={isLoading}
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Creating Account..." : "Create Account"}
-                </Button>
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <PasswordField
+                    id="signup-password"
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    label="Password"
+                    placeholder="********"
+                    showChecklist
+                  />
+                )}
+              />
 
-                <p className="text-center text-sm text-muted-foreground">
-                  Already have an account?{' '}
-                  <Link href="/login" className="text-primary hover:underline">
-                    Sign in
-                  </Link>
-                </p>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm Password</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input type={showConfirmPassword ? 'text' : 'password'} placeholder="********" {...field} />
+                        <button
+                          type="button"
+                          aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowConfirmPassword((s) => !s)}
+                        >
+                          {showConfirmPassword ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="terms"
+                render={({ field }) => (
+                  <FormItem className="flex items-start space-x-2">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>I accept the terms and conditions</FormLabel>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div>
+                <FormLabel>Profile Photo (Optional)</FormLabel>
+                <Input type="file" accept="image/*" onChange={handleFileChange} />
+              </div>
+
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? 'Creating…' : 'Create Account'}
+              </Button>
+            </form>
+          </Form>
+
+          <div className="mt-6 text-center text-sm">
+            Already have an account?{' '}
+            <Link href="/login" className="font-medium text-primary hover:underline">
+              Sign in
+            </Link>
+          </div>
+        </AuthCard>
       </motion.div>
     </div>
   );

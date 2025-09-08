@@ -255,6 +255,20 @@ export default function ManageGearsPage() {
         });
         return;
       }
+      // Ensure user has Admin/SuperAdmin role before proceeding (matches RLS)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      if (!profile || (profile.role !== 'Admin' && profile.role !== 'SuperAdmin')) {
+        toast({
+          title: 'Permission denied',
+          description: 'Only Admins can add gear.',
+          variant: 'destructive',
+        });
+        return;
+      }
 
       // Generate a unique ID for the new gear
       const gearId = crypto.randomUUID();
@@ -299,7 +313,7 @@ export default function ManageGearsPage() {
         toast({
           title: "No Image Provided",
           description: "Gear will be added without an image. You can update it later.",
-          variant: "destructive",
+          variant: "default",
         });
         if (data.image_url !== undefined) {
           console.warn("[AddGear] image_url is not a File:", data.image_url);
@@ -326,26 +340,21 @@ export default function ManageGearsPage() {
         .insert([gearToInsert]);
 
       if (insertError) {
-        if (insertError instanceof Error) {
-          console.error("Error adding gear:", insertError);
-          toast({
-            title: "Error",
-            description: insertError.message || "Failed to add gear",
-            variant: "destructive",
-          });
-        } else {
-          console.error("Error adding gear:", insertError);
-          toast({
-            title: "Error",
-            description: "Failed to add gear",
-            variant: "destructive",
-          });
-        }
+        console.error("Error adding gear (PostgrestError):", insertError);
+        toast({
+          title: "Error",
+          description: (insertError as any)?.message || "Failed to add gear",
+          variant: "destructive",
+        });
         throw insertError;
       }
 
-      // Create notification
-      await createGearNotification(user.id, data.name || '', 'add');
+      // Create notification (non-blocking)
+      try {
+        await createGearNotification(user.id, data.name || '', 'add');
+      } catch (e) {
+        console.warn('[AddGear] Non-blocking notification failed:', e);
+      }
 
       // Refresh gear list
       fetchGears();
@@ -356,44 +365,38 @@ export default function ManageGearsPage() {
       });
       setIsAddModalOpen(false);
 
-      // After successful gear creation
-      // Fetch admin profile
-      const { data: adminProfile } = await supabase
-        .from('profiles')
-        .select('full_name, email')
-        .eq('id', user?.id)
-        .single();
-      // Send Google Chat notification for gear add
-      await fetch('/api/notifications/google-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventType: 'ADMIN_ADD_GEAR',
-          payload: {
-            adminName: adminProfile?.full_name || 'Unknown Admin',
-            adminEmail: adminProfile?.email || 'Unknown Email',
-            gearName: data.name,
-            category: data.category,
-            action: 'add',
-          }
-        })
-      });
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error("Error adding gear:", error);
-        toast({
-          title: "Error",
-          description: error.message || "Failed to add gear",
-          variant: "destructive",
+      // Send Google Chat notification for gear add (non-blocking, isolated)
+      try {
+        const { data: adminProfile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user?.id)
+          .single();
+        await fetch('/api/notifications/google-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventType: 'ADMIN_ADD_GEAR',
+            payload: {
+              adminName: adminProfile?.full_name || 'Unknown Admin',
+              adminEmail: adminProfile?.email || 'Unknown Email',
+              gearNames: [data.name],
+              category: data.category,
+              action: 'add',
+            }
+          })
         });
-      } else {
-        console.error("Error adding gear:", error);
-        toast({
-          title: "Error",
-          description: "Failed to add gear",
-          variant: "destructive",
-        });
+      } catch (chatErr) {
+        console.warn('[AddGear] Google Chat notification failed:', chatErr);
       }
+    } catch (error: unknown) {
+      const desc = typeof error === 'string' ? error : (error as any)?.message || JSON.stringify(error || {});
+      console.error("Error adding gear:", error);
+      toast({
+        title: "Error",
+        description: desc || "Failed to add gear",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
