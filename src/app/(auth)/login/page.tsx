@@ -2,19 +2,20 @@
 "use client";
 
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { ThemeLogo } from '@/components/ui/theme-logo';
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@/lib/supabase/client';
-import { ArrowLeft } from 'lucide-react';
+import { AuthCard } from '@/components/auth/AuthCard';
+import { PasswordField } from '@/components/auth/PasswordField';
+import { trackAuthEvent } from '@/lib/analytics';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -24,12 +25,23 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   // Removed unused router
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+
   const supabase = useMemo(() => createClient(), []);
+
+  // Auto-redirect if already authenticated
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        window.location.href = '/user/dashboard';
+      }
+    })();
+  }, [supabase]);
 
 
   const form = useForm<LoginFormValues>({
@@ -41,6 +53,11 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginFormValues) => {
+    // Cooldown check
+    if (cooldownUntil && Date.now() < cooldownUntil) {
+      toast({ title: 'Please wait a moment', description: 'Too many attempts. Try again shortly.', variant: 'destructive' });
+      return;
+    }
     setIsLoading(true);
     setShowSuccessAnimation(false);
 
@@ -104,6 +121,9 @@ export default function LoginPage() {
       // Log successful login
       console.log('🔍 Login successful:', { id: authData.user.id, role: profile.role });
 
+      // Analytics (non‑PII)
+      trackAuthEvent('login_success', { email: cleanedEmail, method: 'password' });
+
       // Show success message
       toast({
         title: `Welcome back, ${profile.full_name || 'User'}!`,
@@ -159,10 +179,15 @@ export default function LoginPage() {
       }, 1500); // Show toast after 1.5 seconds
 
     } catch (error: unknown) {
+      // Simple cooldown after failure: 5s
+      setCooldownUntil(Date.now() + 5000);
       setIsLoading(false);
       setShowSuccessAnimation(false);
 
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
+
+      // Analytics (non‑PII)
+      trackAuthEvent('login_failure', { method: 'password', error: errorMessage });
 
       toast({
         title: "Login Failed",
@@ -202,91 +227,56 @@ export default function LoginPage() {
         transition={{ duration: 0.5 }}
         className="w-full max-w-md"
       >
-        <Card className="shadow-lg rounded-lg border-border/50">
-          {showSuccessAnimation ? SuccessAnimationComponent : (
-            <>
-              <CardHeader className="space-y-4 text-center">
-                <div className="flex justify-between items-start">
-                  <Link
-                    href="/"
-                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back to Home
-                  </Link>
-                  <div className="flex-1"></div>
-                </div>
-                <div className="flex justify-center">
-                  <ThemeLogo
-                    width={96}
-                    height={96}
-                    className="w-24 h-24 rounded-lg"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <CardTitle className="text-2xl font-bold text-primary">Welcome Back!</CardTitle>
-                  <CardDescription>Enter your credentials to access your dashboard</CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input placeholder="you@example.com" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+        {showSuccessAnimation ? (
+          <Card className="shadow-lg rounded-lg border-border/50">{SuccessAnimationComponent}</Card>
+        ) : (
+          <AuthCard title="Welcome Back!" description="Enter your credentials to access your dashboard">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input placeholder="you@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <PasswordField
+                      id="login-password"
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      label="Password"
+                      placeholder="********"
                     />
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Password</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <Input type={showPassword ? 'text' : 'password'} placeholder="********" {...field} />
-                              <button
-                                type="button"
-                                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                onClick={() => setShowPassword((s) => !s)}
-                              >
-                                {showPassword ? 'Hide' : 'Show'}
-                              </button>
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                      {isLoading ? 'Logging in...' : 'Login'}
-                    </Button>
-                  </form>
-                </Form>
-                <div className="mt-4 text-center text-sm">
-                  <Link href="/forgot-password" className="underline text-muted-foreground hover:text-primary">
-                    Forgot Password?
-                  </Link>
-                </div>
-                <div className="mt-6 text-center text-sm">
-                  <p>Don&apos;t have an account?</p>
-                  <Link href="/signup" className="font-medium text-primary hover:underline">
-                    Sign Up
-                  </Link>
-                </div>
-              </CardContent>
-            </>
-          )}
-        </Card>
+                  )}
+                />
+                <Button type="submit" className="w-full" disabled={isLoading || (cooldownUntil && Date.now() < cooldownUntil) as boolean}>
+                  {isLoading ? 'Logging in...' : (cooldownUntil && Date.now() < cooldownUntil ? 'Please wait…' : 'Login')}
+                </Button>
+              </form>
+            </Form>
+            <div className="mt-4 text-center text-sm">
+              <Link href="/forgot-password" className="underline text-muted-foreground hover:text-primary">
+                Forgot Password?
+              </Link>
+            </div>
+            <div className="mt-6 text-center text-sm">
+              <p>Don&apos;t have an account?</p>
+              <Link href="/signup" className="font-medium text-primary hover:underline">
+                Sign Up
+              </Link>
+            </div>
+          </AuthCard>
+        )}
       </motion.div>
     </div>
   );
