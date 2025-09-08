@@ -192,23 +192,26 @@ export default function AnnouncementsPage() {
         }
     };
 
-    // Correct single declaration for handleDeleteAnnouncement
     const handleDeleteAnnouncement = async (announcementId: string) => {
+        // Optimistic UI update
+        setAnnouncements((prev) => prev.filter((a) => a.id !== announcementId));
         setLoading(true);
         try {
-            const { error } = await supabase
-                .from('announcements')
-                .delete()
-                .eq('id', announcementId);
-
-            if (error) {
-                showErrorFeedback({ toast: { title: "Error", description: "Failed to delete announcement." } });
-                return;
+            const response = await fetch(`/api/announcements/${announcementId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const result = await response.json();
+            if (!response.ok || result?.error) {
+                throw new Error(result?.details || result?.error || 'Failed to delete announcement');
             }
-
-            showSuccessFeedback({ toast: { title: "Success", description: "Announcement deleted successfully." }, onSuccess: () => fetchAnnouncements() });
+            showSuccessFeedback({ toast: { title: 'Deleted', description: 'Announcement deleted successfully.' } });
+            // Re-fetch after a short delay to account for DB replication lag
+            setTimeout(() => { fetchAnnouncements(); }, 300);
         } catch (e: any) {
-            showErrorFeedback({ toast: { title: "Error", description: e.message || "Failed to delete announcement." } });
+            // Revert optimistic update on error
+            await fetchAnnouncements();
+            showErrorFeedback({ toast: { title: 'Error', description: e.message || 'Failed to delete announcement.' } });
         } finally {
             setLoading(false);
         }
@@ -236,7 +239,7 @@ export default function AnnouncementsPage() {
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
+            exit={{ opacity: 0 }}
             className="space-y-6"
         >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
