@@ -41,10 +41,10 @@ export class AnnouncementService {
         try {
             const supabase = await createSupabaseServerClient(true);
 
-            // Step 1: Create the announcement
+            // Create the announcement (map authorId to created_by; no author_id column)
             const { data: announcement, error: announcementError } = await supabase
                 .from('announcements')
-                .insert([{ title, content, author_id: authorId }])
+                .insert([{ title, content, created_by: authorId }])
                 .select()
                 .single();
 
@@ -54,7 +54,7 @@ export class AnnouncementService {
 
             console.log('✅ Announcement created:', announcement.id);
 
-            // Step 2: Get author information
+            // Fetch author information for notification metadata
             const { data: author, error: authorError } = await supabase
                 .from('profiles')
                 .select('full_name')
@@ -67,7 +67,7 @@ export class AnnouncementService {
 
             const authorName = author?.full_name || 'Administrator';
 
-            // Step 3: Get all active users
+            // Get all active users
             const { data: users, error: usersError } = await supabase
                 .from('profiles')
                 .select('id, email, full_name')
@@ -78,103 +78,37 @@ export class AnnouncementService {
                 throw new Error(`Failed to fetch users: ${usersError.message}`);
             }
 
-            if (!users || users.length === 0) {
-                console.warn('No active users found to notify');
-                return {
-                    success: true,
-                    announcement,
-                    notificationsSent: 0,
-                    emailsSent: 0,
-                };
+            // Create notifications for users
+            const notificationsPayload = (users || []).map(u => ({
+                user_id: u.id,
+                type: 'announcement',
+                title: title,
+                message: content,
+                link: `/user/announcements?announcement=${announcement.id}`,
+                metadata: { author_name: authorName }
+            }));
+
+            if (notificationsPayload.length > 0) {
+                const { error: notifyError } = await supabase
+                    .from('notifications')
+                    .insert(notificationsPayload);
+                if (notifyError) {
+                    errors.push(`Notification insert failed: ${notifyError.message}`);
+                } else {
+                    notificationsSent = notificationsPayload.length;
+                }
             }
-
-            console.log(`📧 Sending notifications to ${users.length} users`);
-
-            // Step 4: Create notifications for all users
-            const notificationPromises = users.map(async (user: UserData) => {
-                try {
-                    const { error: notificationError } = await supabase
-                        .from('notifications')
-                        .insert({
-                            user_id: user.id,
-                            type: 'Announcement',
-                            title: `New Announcement: ${title}`,
-                            message: `A new announcement "${title}" has been posted by ${authorName}.`,
-                            category: 'announcement',
-                            priority: 'High',
-                            metadata: {
-                                announcement_id: announcement.id,
-                                author_name: authorName,
-                            },
-                            link: `/user/announcements?announcement=${announcement.id}`,
-                        });
-
-                    if (notificationError) {
-                        console.error(`Failed to create notification for user ${user.id}:`, notificationError);
-                        errors.push(`Notification for ${user.email}: ${notificationError.message}`);
-                        return false;
-                    }
-
-                    return true;
-                } catch (error) {
-                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                    console.error(`Error creating notification for user ${user.id}:`, error);
-                    errors.push(`Notification for ${user.email}: ${errorMessage}`);
-                    return false;
-                }
-            });
-
-            const notificationResults = await Promise.all(notificationPromises);
-            notificationsSent = notificationResults.filter(Boolean).length;
-
-            console.log(`✅ Created ${notificationsSent} notifications`);
-
-            // Step 5: Send emails to all users
-            const emailPromises = users.map(async (user) => {
-                try {
-                    const emailResult = await sendAnnouncementEmail({
-                        to: user.email,
-                        userName: user.full_name || 'User',
-                        announcementTitle: title,
-                        announcementContent: content,
-                        authorName,
-                        announcementId: announcement.id,
-                    });
-
-                    if (!emailResult.success) {
-                        console.error(`Failed to send email to ${user.email}:`, emailResult.error);
-                        errors.push(`Email to ${user.email}: ${emailResult.error}`);
-                        return false;
-                    }
-
-                    return true;
-                } catch (error) {
-                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                    console.error(`Error sending email to ${user.email}:`, error);
-                    errors.push(`Email to ${user.email}: ${errorMessage}`);
-                    return false;
-                }
-            });
-
-            const emailResults = await Promise.all(emailPromises);
-            emailsSent = emailResults.filter(Boolean).length;
-
-            console.log(`✅ Sent ${emailsSent} emails`);
 
             return {
                 success: true,
                 announcement,
                 notificationsSent,
                 emailsSent,
-                errors: errors.length > 0 ? errors : undefined,
+                errors: errors.length ? errors : undefined,
             };
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            console.error('Error in createAnnouncementWithNotifications:', error);
-            return {
-                success: false,
-                errors: [errorMessage],
-            };
+        } catch (e: any) {
+            errors.push(e?.message || String(e));
+            return { success: false, errors };
         }
     }
 
