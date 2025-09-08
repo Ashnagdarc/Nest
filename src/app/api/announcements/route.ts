@@ -17,9 +17,7 @@ export async function GET(request: NextRequest) {
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
-        // If userId is provided, filter for read status
         if (userId) {
-            // Create a different query for read announcements
             const { data, error, count } = await supabase
                 .from('announcements')
                 .select(`
@@ -50,7 +48,6 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // Original query for all announcements
         const { data, error, count } = await query;
 
         if (error) {
@@ -91,7 +88,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // If send_notifications is true, use the new service with notifications and emails
         if (send_notifications) {
             const { AnnouncementService } = await import('@/services/announcement-service');
             const announcementService = new AnnouncementService();
@@ -122,25 +118,30 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // Original behavior - just create announcement without notifications
+        // Insert announcement using created_by only (author_id column does not exist)
         const { data, error } = await supabase
             .from('announcements')
-            .insert([{ title, content, author_id }])
+            .insert([{ title, content, created_by: author_id }])
             .select();
 
         if (error) {
+            const fkViolation = (error as any)?.code === '23503';
             console.error('Error creating announcement:', error);
             return NextResponse.json(
-                { error: 'Failed to create announcement' },
+                {
+                    error: 'Failed to create announcement',
+                    details: error.message,
+                    hint: fkViolation ? 'Foreign key violation on created_by → profiles(id). Ensure the author profile exists.' : undefined,
+                },
                 { status: 500 }
             );
         }
 
         return NextResponse.json({ announcement: data[0] });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Unexpected error creating announcement:', error);
         return NextResponse.json(
-            { error: 'An unexpected error occurred' },
+            { error: 'An unexpected error occurred', details: String(error?.message || error) },
             { status: 500 }
         );
     }

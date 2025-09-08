@@ -132,7 +132,7 @@ Important services:
 
 Create `.env.local`:
 
-```bash
+   ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
@@ -149,17 +149,17 @@ Never commit secrets. Use Vercel/Cloud provider secrets for production.
 
 ## Setup
 
-```bash
-npm install
+   ```bash
+   npm install
 # (optional) clean cache
 rm -rf .next
 ```
 
 Run local dev:
 
-```bash
-npm run dev
-```
+   ```bash
+   npm run dev
+   ```
 
 ---
 
@@ -200,7 +200,7 @@ select policyname, cmd from pg_policies where schemaname='public' and tablename 
 
 Helpful scripts:
 
-```bash
+   ```bash
 npm run dev       # start dev server
 npm run build     # production build
 npm run start     # run production build locally
