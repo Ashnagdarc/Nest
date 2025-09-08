@@ -205,7 +205,7 @@ export default function BrowseGearsPage() {
   useEffect(() => {
     // fetch distinct categories once
     (async () => {
-      const { data } = await supabase.from('gears').select('category').not('category', 'is', null).neq('category', '').order('category');
+      const { data } = await supabase.from('gears').select('category').not('category', 'is', null).neq('category', '').neq('category', 'Cars').order('category');
       const distinct = Array.from(new Set((data || []).map((d: any) => d.category)));
       setCategories(distinct);
     })();
@@ -229,11 +229,13 @@ export default function BrowseGearsPage() {
     try {
       const params = new URLSearchParams({
         status: filterStatus,
-        category: filterCategory,
+        category: filterCategory === 'Cars' ? 'all' : filterCategory,
         page: String(page),
         pageSize: String(pageSize),
         search: debouncedSearch,
       });
+      // Always exclude Cars from browse list
+      params.set('excludeCategories', 'Cars');
       const { data, total: apiTotal, error } = await apiGet<{ data: Gear[]; total: number; error: string | null }>(`/api/gears?${params.toString()}`);
       if (error) {
         console.error("Error fetching gears:", error);

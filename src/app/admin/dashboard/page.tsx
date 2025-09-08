@@ -269,6 +269,8 @@ export default function AdminDashboardPage() {
         unread_notifications: pendingItems.filter(item => item.type === 'notification').length,
     };
 
+    const pendingCarBookings = (dashboardData as any)?.stats?.pending_car_bookings || 0;
+
     // Main dashboard stats (3 key metrics like user dashboard)
     const mainStats = [
         {
@@ -291,12 +293,12 @@ export default function AdminDashboardPage() {
         },
         {
             title: 'Pending Actions',
-            value: stats.pending_checkins + stats.pending_requests,
+            value: stats.pending_checkins + stats.pending_requests + pendingCarBookings,
             icon: Clock,
             color: 'text-orange-500',
             bgColor: 'bg-orange-500/10',
             link: '/admin/manage-requests',
-            description: `${stats.pending_checkins} check-ins, ${stats.pending_requests} requests`
+            description: `${stats.pending_checkins} check-ins, ${stats.pending_requests} requests, ${pendingCarBookings} car bookings`
         },
     ];
 

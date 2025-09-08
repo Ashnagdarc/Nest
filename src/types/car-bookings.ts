@@ -1,0 +1,36 @@
+export interface CarBooking {
+    id: string;
+    requester_id: string | null;
+    employee_name: string;
+    date_of_use: string; // ISO date
+    time_slot: string;
+    destination: string | null;
+    purpose: string | null;
+    status: 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
+    approved_by: string | null;
+    approved_at: string | null;
+    rejected_by: string | null;
+    rejection_reason: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Car {
+    id: string;
+    label: string;
+    plate: string | null;
+    active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface CarAssignment {
+    booking_id: string;
+    car_id: string;
+    created_at: string;
+}
+
+export interface PaginatedCarBookings {
+    data: CarBooking[];
+    total: number;
+}

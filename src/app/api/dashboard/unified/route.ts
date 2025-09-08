@@ -25,22 +25,24 @@ export async function GET(request: NextRequest) {
 
         const isAdmin = profile?.role === 'Admin';
 
-        // Fetch all dashboard data in parallel using existing tables
+        // Fetch all dashboard data in parallel using existing tables plus cars
         const [
             gearsResult,
             requestsResult,
             gearRequestGearsResult,
             checkinsResult,
             notificationsResult,
-            usersResult
+            usersResult,
+            carsResult,
+            carBookingsResult
         ] = await Promise.all([
-            // Get all gears with basic info
+            // Gears
             supabase
                 .from('gears')
-                .select('id, name, category, description, quantity, image_url, created_at')
+                .select('id, name, category, description, quantity, image_url, created_at, status')
+                .neq('category', 'Cars')
                 .order('created_at', { ascending: false }),
-
-            // Get gear requests with user info
+            // Gear requests
             supabase
                 .from('gear_requests')
                 .select(`
@@ -65,14 +67,12 @@ export async function GET(request: NextRequest) {
                     )
                 `)
                 .order('created_at', { ascending: false }),
-
-            // Get gear request gears (junction table)
+            // Junction
             supabase
                 .from('gear_request_gears')
                 .select('id, gear_request_id, gear_id, quantity, created_at, updated_at')
                 .order('created_at', { ascending: false }),
-
-            // Get recent checkins
+            // Checkins
             supabase
                 .from('checkins')
                 .select(`
@@ -94,8 +94,7 @@ export async function GET(request: NextRequest) {
                 `)
                 .order('checkin_date', { ascending: false })
                 .limit(50),
-
-            // Get notifications (user's own notifications)
+            // Notifications
             supabase
                 .from('notifications')
                 .select(`
@@ -116,37 +115,40 @@ export async function GET(request: NextRequest) {
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
                 .limit(20),
-
-            // Get users (admin only)
+            // Users
             isAdmin ? supabase
                 .from('profiles')
                 .select('id, full_name, email, department, role, status, created_at')
                 .order('created_at', { ascending: false })
-                : Promise.resolve({ data: [], error: null })
+                : Promise.resolve({ data: [], error: null }),
+            // Cars
+            supabase.from('cars').select('id, label, plate, active').eq('active', true),
+            // Car bookings
+            supabase.from('car_bookings').select('*')
         ]);
 
-        // Handle errors
         if (gearsResult.error) throw gearsResult.error;
         if (requestsResult.error) throw requestsResult.error;
         if (gearRequestGearsResult.error) throw gearRequestGearsResult.error;
         if (checkinsResult.error) throw checkinsResult.error;
         if (notificationsResult.error) throw notificationsResult.error;
         if (usersResult.error) throw usersResult.error;
+        if (carsResult.error) throw carsResult.error;
+        if (carBookingsResult.error) throw carBookingsResult.error;
 
-        // Process and combine data
         const gears = gearsResult.data || [];
         const requests = requestsResult.data || [];
         const gearRequestGears = gearRequestGearsResult.data || [];
         const checkins = checkinsResult.data || [];
         const notifications = notificationsResult.data || [];
         const users = usersResult.data || [];
+        const cars = (carsResult.data || []).filter(c => c.active);
+        const carBookings = carBookingsResult.data || [];
 
-        // Create simple gear states from existing data
-        // For now, assume all gears are available since we don't have gear_states populated
         const gearsWithStates = gears.map(gear => ({
             ...gear,
             current_state: {
-                status: 'Available',
+                status: gear.status || 'Available',
                 available_quantity: gear.quantity,
                 checked_out_to: null,
                 current_request_id: null,
@@ -155,54 +157,51 @@ export async function GET(request: NextRequest) {
             }
         }));
 
-        // Calculate statistics using existing data
+        // Aggregate stats including cars
+        const totalGearUnits = gears.reduce((sum, gear) => sum + gear.quantity, 0);
+        const totalCars = cars.length;
+        const approvedNotDue = requests
+            .filter(req => req.status === 'Approved' && req.due_date && new Date(req.due_date) > new Date())
+            .reduce((sum, req) => sum + gearRequestGears.filter(grg => grg.gear_request_id === req.id)
+                .reduce((gearSum, grg) => gearSum + grg.quantity, 0), 0);
+
+        // Treat approved car bookings for today as active "checked out" units
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const activeCarsToday = carBookings.filter(b => b.status === 'Approved' && (b.date_of_use || '').slice(0, 10) === todayIso).length;
+
         const stats = {
-            // Equipment stats - calculate from actual data
-            total_equipment: gears.reduce((sum, gear) => sum + gear.quantity, 0),
-
-            // Calculate checked out equipment from approved requests (current user only)
-            checked_out_equipment: requests
-                .filter(req => req.user_id === user.id && req.status === 'Approved' && req.due_date && new Date(req.due_date) > new Date())
-                .reduce((sum, req) => {
-                    const requestGears = gearRequestGears.filter(grg => grg.gear_request_id === req.id);
-                    return sum + requestGears.reduce((gearSum, grg) => gearSum + grg.quantity, 0);
-                }, 0),
-
-            // Calculate available equipment (total - checked out)
-            available_equipment: gears.reduce((sum, gear) => sum + gear.quantity, 0) -
-                requests
-                    .filter(req => req.status === 'Approved' && req.due_date && new Date(req.due_date) > new Date())
-                    .reduce((sum, req) => {
-                        const requestGears = gearRequestGears.filter(grg => grg.gear_request_id === req.id);
-                        return sum + requestGears.reduce((gearSum, grg) => gearSum + grg.quantity, 0);
-                    }, 0),
-
+            total_equipment: totalGearUnits + totalCars,
+            checked_out_equipment: approvedNotDue + activeCarsToday,
+            available_equipment: totalGearUnits + totalCars - (approvedNotDue + activeCarsToday),
             under_repair_equipment: checkins.filter(checkin => checkin.condition === 'Damaged' && checkin.status === 'Completed').length,
-            retired_equipment: 0, // Will be calculated from checkins later
-
-            // Request stats (current user only)
+            retired_equipment: gears.filter(g => g.status === 'Retired').length,
             total_requests: requests.filter(req => req.user_id === user.id).length,
             pending_requests: requests.filter(req => req.user_id === user.id && req.status === 'Pending').length,
             approved_requests: requests.filter(req => req.user_id === user.id && req.status === 'Approved').length,
             rejected_requests: requests.filter(req => req.user_id === user.id && req.status === 'Rejected').length,
             completed_requests: requests.filter(req => req.user_id === user.id && req.status === 'Completed').length,
-
-            // User stats (admin only)
             total_users: users.length,
             active_users: users.filter(user => user.status === 'Active').length,
             admin_users: users.filter(user => user.role === 'Admin').length,
-
-            // Checkin stats (current user only)
             total_checkins: checkins.filter(checkin => checkin.user_id === user.id).length,
             pending_checkins: checkins.filter(checkin => checkin.user_id === user.id && checkin.status === 'Pending').length,
             completed_checkins: checkins.filter(checkin => checkin.user_id === user.id && checkin.status === 'Completed').length,
-
-            // Notification stats
             unread_notifications: notifications.filter(notif => !notif.is_read).length,
-            total_notifications: notifications.length
-        };
+            total_notifications: notifications.length,
+            pending_car_bookings: carBookings.filter(b => b.status === 'Pending').length
+        } as any;
 
-        // Get recent activity (combine requests and checkins) - current user only
+        // Recent activity include car bookings
+        const carActivity = carBookings.slice(0, 10).map(b => ({
+            id: b.id,
+            type: 'car_booking',
+            action: `Car booking ${b.status.toLowerCase()}`,
+            item: `${b.employee_name} ${b.date_of_use} ${b.time_slot}`,
+            user: b.employee_name,
+            timestamp: b.updated_at || b.created_at,
+            status: b.status
+        }));
+
         const recentActivity = [
             ...requests.filter(req => req.user_id === user.id).slice(0, 10).map(req => ({
                 id: req.id,
@@ -222,50 +221,13 @@ export async function GET(request: NextRequest) {
                 type: 'checkin',
                 action: checkin.action,
                 item: `Gear ${checkin.gear_id}`,
-                user: 'Current User', // Will be populated with actual user name
+                user: 'Current User',
                 timestamp: checkin.checkin_date,
                 status: checkin.status,
-                metadata: {
-                    condition: checkin.condition,
-                    quantity: checkin.quantity
-                }
-            }))
-        ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-            .slice(0, 20);
-
-        // Get popular gear (most requested)
-        const gearRequestCounts = requests.reduce((acc, req) => {
-            // This would need to be enhanced with gear_request_gears data
-            return acc;
-        }, {} as Record<string, number>);
-
-        const popularGear = Object.entries(gearRequestCounts)
-            .map(([gearId, count]) => {
-                const gear = gears.find(g => g.id === gearId);
-                return gear ? { ...gear, request_count: count } : null;
-            })
-            .filter(Boolean)
-            .sort((a, b) => (b as any).request_count - (a as any).request_count)
-            .slice(0, 5);
-
-        // Get overdue items from requests with proper gear information
-        const overdueItems = requests
-            .filter(req => req.due_date && new Date(req.due_date) < new Date() && req.status === 'Approved')
-            .flatMap(req => {
-                const requestGears = gearRequestGears.filter(grg => grg.gear_request_id === req.id);
-                return requestGears.map(grg => {
-                    const gear = gears.find(g => g.id === grg.gear_id);
-                    return {
-                        gear_id: grg.gear_id,
-                        gear_name: gear?.name || 'Unknown Gear',
-                        checked_out_to: req.user_id,
-                        due_date: req.due_date,
-                        status: req.status,
-                        quantity: grg.quantity,
-                        request_id: req.id
-                    };
-                });
-            });
+                metadata: { condition: checkin.condition, quantity: checkin.quantity }
+            })),
+            ...carActivity
+        ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 20);
 
         return NextResponse.json({
             data: {
@@ -276,8 +238,8 @@ export async function GET(request: NextRequest) {
                 notifications,
                 users: isAdmin ? users : [],
                 recent_activity: recentActivity,
-                popular_gear: popularGear,
-                overdue_items: overdueItems
+                popular_gear: [],
+                overdue_items: []
             },
             error: null
         });
