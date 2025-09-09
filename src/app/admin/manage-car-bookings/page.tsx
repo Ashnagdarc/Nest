@@ -23,7 +23,7 @@ function StatusPill({ status, updatedAt }: { status: string; updatedAt?: string 
     return (
         <div className="flex items-center gap-2">
             <span className={`text-xs px-2 py-1 rounded-full ${color}`}>{status}</span>
-            {rel && <span className="text-xs text-muted-foreground">• updated {rel.toISOString().slice(11, 16)}Z</span>}
+            {rel && <span className="text-xs text-muted-foreground">• updated {(updatedAt || '').slice(11, 16)}Z</span>}
         </div>
     );
 }
@@ -54,11 +54,13 @@ export default function AdminManageCarBookingsPage() {
     const [approvingId, setApprovingId] = useState<string | null>(null);
     const [rejectingId, setRejectingId] = useState<string | null>(null);
     const [reassignId, setReassignId] = useState<string | null>(null);
+    const [sectionLoading, setSectionLoading] = useState<{ pending?: boolean; approved?: boolean; history?: boolean; cars?: boolean }>({});
 
     const supabase = createClient();
     const { toast } = useToast();
 
     const load = async () => {
+        setSectionLoading({ pending: true, approved: true, history: true, cars: true });
         const [p, a, c, r] = await Promise.all([
             listCarBookings({ page: 1, pageSize: 100, status: 'Pending' }),
             listCarBookings({ page: 1, pageSize: 100, status: 'Approved' }),
@@ -88,6 +90,7 @@ export default function AdminManageCarBookingsPage() {
         }
         const status = await apiGet<{ data: Array<{ id: string; label: string; plate?: string; in_use: boolean; image_url?: string }> }>(`/api/cars/status`);
         setCarStatus(status.data || []);
+        setSectionLoading({ pending: false, approved: false, history: false, cars: false });
     };
 
     useEffect(() => { load(); }, []);
@@ -121,6 +124,18 @@ export default function AdminManageCarBookingsPage() {
         return m;
     };
 
+    const to12h = (hhmm: string | null | undefined): string => {
+        if (!hhmm) return '';
+        const [h, m] = hhmm.slice(0, 5).split(':').map(Number);
+        const d = new Date(); d.setHours(h, m, 0, 0);
+        return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+    };
+    const range12h = (s?: string | null, e?: string | null, fallback?: string | null) => {
+        if (s && e) return `${to12h(s)}-${to12h(e)}`;
+        if (fallback) return fallback;
+        return '';
+    };
+
     const openCarDialog = async (car: { id: string; label: string; plate?: string }) => {
         const res = await apiGet<{ data: CarBooking[] }>(`/api/cars/${car.id}/bookings`);
         setCarDialogData({ label: car.label, plate: car.plate, rows: res.data || [] });
@@ -147,14 +162,14 @@ export default function AdminManageCarBookingsPage() {
             rows: pending,
             renderActions: (b) => (
                 <div className="flex items-center gap-2">
-                    <Select defaultValue={bookingCarMap[b.id]?.car_id} disabled={assigningId === b.id} onValueChange={async (carId) => { setAssigningId(b.id); try { const r = await assignCar(b.id, carId); if (r.conflict) { toast({ title: 'Overlap detected', description: 'Assigned car overlaps another approved booking in this slot.', variant: 'destructive' }); } else { toast({ title: 'Assigned', description: 'Car assigned to booking.' }); } } finally { setAssigningId(null); } }}>
+                    <Select defaultValue={bookingCarMap[b.id]?.car_id} disabled={assigningId === b.id} onValueChange={async (carId) => { setAssigningId(b.id); try { const r = await assignCar(b.id, carId); if (r.conflict) { toast({ title: 'Overlap detected', description: 'Assigned car overlaps another approved booking in this slot.', variant: 'destructive' }); } else { toast({ title: 'Assigned', description: 'Car assigned to booking.' }); await load(); } } finally { setAssigningId(null); } }}>
                         <SelectTrigger className="w-[180px]"><SelectValue placeholder="Assign car" /></SelectTrigger>
                         <SelectContent>
                             {cars.map(c => <SelectItem key={c.id} value={c.id}>{c.label}{c.plate ? ` (${c.plate})` : ''}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Button size="sm" disabled={!bookingCarMap[b.id]?.car_id || approvingId === b.id} onClick={async () => { setApprovingId(b.id); try { await approveCarBooking(b.id); toast({ title: 'Approved', description: 'Booking approved.' }); } catch { toast({ title: 'Error', description: 'Failed to approve', variant: 'destructive' }); } finally { setApprovingId(null); } }}>{approvingId === b.id ? 'Approving…' : 'Approve'}</Button>
-                    <Button size="sm" variant="destructive" disabled={rejectingId === b.id} onClick={async () => { setRejectingId(b.id); try { await rejectCarBooking(b.id); toast({ title: 'Rejected', description: 'Booking rejected.' }); } catch { toast({ title: 'Error', description: 'Failed to reject', variant: 'destructive' }); } finally { setRejectingId(null); } }}>{rejectingId === b.id ? 'Rejecting…' : 'Reject'}</Button>
+                    <Button size="sm" disabled={!bookingCarMap[b.id]?.car_id || approvingId === b.id} onClick={async () => { setApprovingId(b.id); try { await approveCarBooking(b.id); toast({ title: 'Approved', description: 'Booking approved.' }); await load(); } catch { toast({ title: 'Error', description: 'Failed to approve', variant: 'destructive' }); } finally { setApprovingId(null); } }}>{approvingId === b.id ? 'Approving…' : 'Approve'}</Button>
+                    <Button size="sm" variant="destructive" disabled={rejectingId === b.id} onClick={async () => { setRejectingId(b.id); try { await rejectCarBooking(b.id); toast({ title: 'Rejected', description: 'Booking rejected.' }); await load(); } catch { toast({ title: 'Error', description: 'Failed to reject', variant: 'destructive' }); } finally { setRejectingId(null); } }}>{rejectingId === b.id ? 'Rejecting…' : 'Reject'}</Button>
                 </div>
             )
         },
@@ -168,7 +183,7 @@ export default function AdminManageCarBookingsPage() {
                 if (reassignId === b.id) {
                     return (
                         <div className="flex items-center gap-2">
-                            <Select defaultValue={carInfo?.car_id} disabled={assigningId === b.id} onValueChange={async (carId) => { setAssigningId(b.id); try { const r = await assignCar(b.id, carId); if (r.conflict) { toast({ title: 'Overlap detected', description: 'Assigned car overlaps another approved booking in this slot.', variant: 'destructive' }); } else { toast({ title: 'Reassigned', description: 'Car reassigned to booking.' }); } } finally { setAssigningId(null); } }}>
+                            <Select defaultValue={carInfo?.car_id} disabled={assigningId === b.id} onValueChange={async (carId) => { setAssigningId(b.id); try { const r = await assignCar(b.id, carId); if (r.conflict) { toast({ title: 'Overlap detected', description: 'Assigned car overlaps another approved booking in this slot.', variant: 'destructive' }); } else { toast({ title: 'Reassigned', description: 'Car reassigned to booking.' }); await load(); } } finally { setAssigningId(null); } }}>
                                 <SelectTrigger className="w-[180px]"><SelectValue placeholder="Select car" /></SelectTrigger>
                                 <SelectContent>
                                     {cars.map(c => <SelectItem key={c.id} value={c.id}>{c.label}{c.plate ? ` (${c.plate})` : ''}</SelectItem>)}
@@ -207,6 +222,15 @@ export default function AdminManageCarBookingsPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {sectionLoading.cars && [0, 1, 2].map(i => (
+                            <div key={i} className="border rounded overflow-hidden animate-pulse">
+                                <div className="h-28 bg-muted" />
+                                <div className="p-3">
+                                    <div className="h-4 bg-muted rounded w-2/3 mb-2" />
+                                    <div className="h-3 bg-muted rounded w-1/3" />
+                                </div>
+                            </div>
+                        ))}
                         {carStatus.map(c => (
                             <div key={c.id} className={`border rounded overflow-hidden ${cardAnim(c.in_use)}`}>
                                 <button onClick={() => openCarDialog(c)} className="block w-full">
@@ -228,7 +252,7 @@ export default function AdminManageCarBookingsPage() {
                                 </div>
                             </div>
                         ))}
-                        {carStatus.length === 0 && <div className="text-sm text-muted-foreground">No cars</div>}
+                        {!sectionLoading.cars && carStatus.length === 0 && <div className="text-sm text-muted-foreground">No cars</div>}
                     </div>
                 </CardContent>
             </Card>
@@ -258,7 +282,7 @@ export default function AdminManageCarBookingsPage() {
                     <div className="space-y-2 max-h-[50vh] overflow-auto">
                         {(carDialogData?.rows || []).map((b: CarBooking) => (
                             <div key={b.id} className="border rounded p-2 text-sm">
-                                <div className="font-medium">{b.employee_name} — {b.date_of_use} ({b.time_slot})</div>
+                                <div className="font-medium">{b.employee_name} — {b.date_of_use} ({range12h(b.start_time, b.end_time, b.time_slot || '')})</div>
                                 <div className="text-xs">Status: {b.status}</div>
                             </div>
                         ))}
@@ -279,6 +303,15 @@ export default function AdminManageCarBookingsPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-2">
+                                {sectionLoading[section.key] && [0, 1, 2].map(i => (
+                                    <div key={i} className="flex items-center justify-between border rounded p-3 animate-pulse">
+                                        <div className="space-y-2 w-full mr-4">
+                                            <div className="h-4 bg-muted rounded w-2/3" />
+                                            <div className="h-3 bg-muted rounded w-1/2" />
+                                        </div>
+                                        <div className="h-6 w-24 bg-muted rounded" />
+                                    </div>
+                                ))}
                                 {section.rows.map(b => {
                                     const label = b.start_time && b.end_time ? `${b.start_time.slice(0, 5)}-${b.end_time.slice(0, 5)}` : (b.time_slot || '');
                                     const overlaps = (grouped.get(`${b.date_of_use}|${label}`) || []).filter(x => x.status === 'Approved' && x.id !== b.id).length;
@@ -287,7 +320,7 @@ export default function AdminManageCarBookingsPage() {
                                     return (
                                         <div key={b.id} className="flex items-center justify-between border rounded p-3">
                                             <div className="text-sm">
-                                                <div className="font-medium">{b.employee_name} — {b.date_of_use} ({b.start_time && b.end_time ? `${b.start_time.slice(0, 5)}-${b.end_time.slice(0, 5)}` : b.time_slot})</div>
+                                                <div className="font-medium">{b.employee_name} — {b.date_of_use} ({range12h(b.start_time, b.end_time, b.time_slot || '')})</div>
                                                 <div className="text-muted-foreground">{b.destination} · {b.purpose}</div>
                                                 <div className="flex items-center gap-2">
                                                     <StatusPill status={b.status} updatedAt={b.updated_at || undefined} />
@@ -302,7 +335,7 @@ export default function AdminManageCarBookingsPage() {
                                         </div>
                                     );
                                 })}
-                                {section.rows.length === 0 && <div className="text-sm text-muted-foreground">No items.</div>}
+                                {!sectionLoading[section.key] && section.rows.length === 0 && <div className="text-sm text-muted-foreground">No items.</div>}
                             </div>
                         </CardContent>
                     </Card>

@@ -10,7 +10,22 @@ export async function createCarBooking(payload: {
     destination?: string;
     purpose?: string;
 }): Promise<{ success: boolean; data?: CarBooking; error?: string }> {
-    return apiPost('/api/car-bookings', payload);
+    // Handle non-2xx (e.g., 409 overlap) gracefully instead of throwing
+    const res = await fetch('/api/car-bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+    });
+    let json: any = null;
+    try { json = await res.json(); } catch {
+        // ignore parse error; fall back to status text
+    }
+    if (!res.ok) {
+        const errorMsg = (json && (json.error || json.message)) || res.statusText || 'Request failed';
+        return { success: false, error: errorMsg };
+    }
+    return json as { success: boolean; data?: CarBooking; error?: string };
 }
 
 export async function listCarBookings(params: {

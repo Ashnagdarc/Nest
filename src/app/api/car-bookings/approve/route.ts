@@ -13,6 +13,19 @@ export async function POST(request: NextRequest) {
         if (selErr || !booking) return NextResponse.json({ success: false, error: selErr?.message || 'Not found' }, { status: 404 });
         if (booking.status === 'Approved') return NextResponse.json({ success: true, data: { message: 'Already approved' } });
 
+        // Enforce: only one Approved per user per day
+        if (booking.requester_id) {
+            const { count: alreadyApproved } = await admin
+                .from('car_bookings')
+                .select('*', { count: 'exact', head: true })
+                .eq('requester_id', booking.requester_id)
+                .eq('date_of_use', booking.date_of_use)
+                .eq('status', 'Approved');
+            if ((alreadyApproved || 0) > 0) {
+                return NextResponse.json({ success: false, error: 'User already has an approved car booking for this date.' }, { status: 400 });
+            }
+        }
+
         // Require assignment before approval
         const { data: assignment } = await admin.from('car_assignment').select('car_id').eq('booking_id', bookingId).maybeSingle();
         if (!assignment?.car_id) {

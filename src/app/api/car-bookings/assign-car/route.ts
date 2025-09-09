@@ -22,17 +22,11 @@ export async function POST(request: NextRequest) {
             const ids = conflicts.map(r => r.booking_id);
             const { data: bookings } = await admin
                 .from('car_bookings')
-                .select('id, date_of_use, time_slot, status, start_time, end_time')
+                .select('id, date_of_use, time_slot, status')
                 .in('id', ids)
                 .eq('date_of_use', booking.date_of_use)
                 .eq('status', 'Approved');
-            const hasOverlap = (bookings || []).some(b => {
-                // If either has start/end, use interval overlap; else fall back to exact time_slot match
-                if (booking.start_time && booking.end_time && b.start_time && b.end_time) {
-                    return !(booking.end_time <= b.start_time || booking.start_time >= b.end_time);
-                }
-                return b.time_slot === booking.time_slot; // legacy exact slot
-            });
+            const hasOverlap = (bookings || []).some(b => b.time_slot === booking.time_slot);
             conflict = hasOverlap;
         }
 
