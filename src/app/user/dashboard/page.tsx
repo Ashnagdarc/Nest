@@ -40,11 +40,13 @@ export default function UserDashboardPage() {
 
   // Use unified dashboard data
   const { data: dashboardData, loading: isLoading, error: dashboardError, refetch } = useUnifiedDashboard();
+  const [mounted, setMounted] = useState(false);
 
   const [userData, setUserData] = useState<Profile | null>(null);
 
   // Fetch user profile
   useEffect(() => {
+    setMounted(true);
     const fetchUserProfile = async () => {
       try {
         const { data: profile, error } = await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/profile`);
@@ -349,8 +351,7 @@ export default function UserDashboardPage() {
                         const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
                         if (k === today) return 'Today';
                         if (k === y) return 'Yesterday';
-                        const d = new Date(k);
-                        return d.toLocaleDateString();
+                        return k; // stable ISO date string for SSR/CSR match
                       };
                       return ordered.map(([k, arr]) => (
                         <details key={k} className="rounded border">
@@ -361,14 +362,14 @@ export default function UserDashboardPage() {
                           <div className="space-y-2 p-2 pt-0">
                             {arr.slice(0, 20).map((activity: any) => {
                               const when = new Date(activity.timestamp);
-                              const rel = Intl.RelativeTimeFormat ? (() => {
+                              const rel = mounted ? (() => {
                                 const diff = (when.getTime() - Date.now()) / 1000;
                                 const abs = Math.abs(diff);
                                 if (abs < 60) return `${Math.round(abs)}s ago`;
                                 if (abs < 3600) return `${Math.round(abs / 60)}m ago`;
                                 if (abs < 86400) return `${Math.round(abs / 3600)}h ago`;
-                                return `${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-                              })() : when.toLocaleString();
+                                return `${when.toISOString().slice(11, 16)}Z`;
+                              })() : `${when.toISOString().slice(11, 16)}Z`;
                               const text = activity.type === 'request' ? `Request ${activity.action} • ${activity.item}` : `${activity.action} • ${activity.item}`;
                               return (
                                 <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
