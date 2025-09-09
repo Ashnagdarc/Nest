@@ -20,6 +20,7 @@ import {
     CheckCircle2
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { LoadingState } from "@/components/ui/loading-state";
@@ -73,9 +74,30 @@ interface RecentActivity {
 export default function AdminDashboardPage() {
     const { toast } = useToast();
     const supabase = createClient();
+    const router = useRouter();
     const [addGearOpen, setAddGearOpen] = useState(false);
     const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
     const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+
+    const markNotificationRead = async (id: string, redirectAfter: boolean = false) => {
+        try {
+            // Optimistic remove
+            setPendingItems(prev => prev.filter(p => !(p.type === 'notification' && p.id === id)));
+            const res = await fetch(`/api/admin/notifications/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_read: true })
+            });
+            if (!res.ok) {
+                throw new Error(`Failed to mark read: ${res.status}`);
+            }
+            if (redirectAfter) {
+                router.push('/admin/notifications');
+            }
+        } catch (e: any) {
+            toast({ title: 'Could not dismiss', description: e?.message || 'Try again', variant: 'destructive' });
+        }
+    };
 
     // Use unified dashboard data
     const { data: dashboardData, loading: isLoading, error: dashboardError, refetch } = useUnifiedDashboard();
@@ -232,12 +254,30 @@ export default function AdminDashboardPage() {
                     // Don't throw, just log and continue
                 }
 
+                // Build human-friendly labels by looking up user and gear names
+                const gearIds = Array.from(new Set((activities || []).map(a => a.gear_id).filter(Boolean)));
+                const userIds = Array.from(new Set((activities || []).map(a => a.user_id).filter(Boolean)));
+
+                const [gearsRes, usersRes] = await Promise.all([
+                    gearIds.length > 0
+                        ? supabase.from('gears').select('id, name').in('id', gearIds as any)
+                        : Promise.resolve({ data: [], error: null } as any),
+                    userIds.length > 0
+                        ? supabase.from('profiles').select('id, full_name').in('id', userIds as any)
+                        : Promise.resolve({ data: [], error: null } as any),
+                ]);
+
+                const gearMap = new Map<string, string>();
+                (gearsRes.data || []).forEach((g: any) => { if (g?.id) gearMap.set(g.id, g.name || 'Gear'); });
+                const userMap = new Map<string, string>();
+                (usersRes.data || []).forEach((u: any) => { if (u?.id) userMap.set(u.id, u.full_name || `User`); });
+
                 const transformedActivities: RecentActivity[] = (activities || []).map(item => ({
                     id: item.id,
                     type: 'checkin',
                     action: item.action,
-                    item: `Gear ${item.gear_id?.slice(0, 8) || 'Unknown'}`,
-                    user_name: `User ${item.user_id?.slice(0, 8) || 'Unknown'}`,
+                    item: gearMap.get(item.gear_id as any) || 'Gear',
+                    user_name: userMap.get(item.user_id as any) || 'User',
                     timestamp: item.created_at,
                     status: item.status
                 }));
@@ -363,28 +403,7 @@ export default function AdminDashboardPage() {
                             Manage equipment, users, and system operations
                         </p>
                     </div>
-                    <div className="flex flex-col sm:flex-row items-stretch gap-3 sm:gap-4 w-full sm:w-auto">
-                        <Button
-                            variant="outline"
-                            className="gap-3 w-full sm:w-auto min-h-[48px] text-base"
-                            onClick={() => refetch()}
-                        >
-                            <RefreshCcw className="h-5 w-5" />
-                            <span className="hidden xs:inline">Refresh</span>
-                        </Button>
-                        <Link href="/admin/reports" className="w-full sm:w-auto">
-                            <Button variant="outline" className="gap-3 w-full sm:w-auto min-h-[48px] text-base">
-                                <BarChart3 className="h-5 w-5" />
-                                <span className="hidden xs:inline">Reports</span>
-                            </Button>
-                        </Link>
-                        <Link href="/admin/settings" className="w-full sm:w-auto">
-                            <Button variant="outline" className="gap-3 w-full sm:w-auto min-h-[48px] text-base">
-                                <Settings className="h-5 w-5" />
-                                <span className="hidden xs:inline">Settings</span>
-                            </Button>
-                        </Link>
-                    </div>
+                    {/* Header actions removed as requested */}
                 </motion.div>
 
                 {/* Error Display */}
@@ -540,7 +559,11 @@ export default function AdminDashboardPage() {
                                             </div>
                                         ) : (
                                             pendingItems.map((item) => (
-                                                <div key={item.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
+                                                <div
+                                                    key={item.id}
+                                                    className="flex items-center space-x-3 p-3 rounded-lg bg-card border hover:bg-accent cursor-pointer"
+                                                    onClick={() => { if (item.type === 'notification') markNotificationRead(item.id, true); }}
+                                                >
                                                     <div className={`h-8 w-8 rounded-full flex items-center justify-center ${item.type === 'checkin' ? 'bg-orange-100' :
                                                         item.type === 'request' ? 'bg-purple-100' :
                                                             'bg-blue-100'
@@ -562,7 +585,10 @@ export default function AdminDashboardPage() {
                                                         <Badge className={`text-xs ${getPriorityColor(item.priority)}`}>
                                                             {item.priority}
                                                         </Badge>
-                                                        <Badge className={`text-xs ${getStatusColor(item.status)}`}>
+                                                        <Badge
+                                                            onClick={(e) => { e.stopPropagation(); if (item.type === 'notification') markNotificationRead(item.id, true); }}
+                                                            className={`text-xs ${getStatusColor(item.status)} cursor-pointer`}
+                                                        >
                                                             {item.status}
                                                         </Badge>
                                                     </div>
@@ -604,26 +630,49 @@ export default function AdminDashboardPage() {
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                        {recentActivity.length === 0 ? (
-                                            <p className="text-muted-foreground text-sm">No recent activity</p>
-                                        ) : (
-                                            recentActivity.slice(0, 5).map((activity) => (
-                                                <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
-                                                    <div className="h-8 w-8 rounded-full flex items-center justify-center bg-primary/15">
-                                                        <Activity className="h-4 w-4 text-primary" />
+                                        {(() => {
+                                            if (recentActivity.length === 0) return <p className="text-muted-foreground text-sm">No recent activity</p>;
+                                            const groups = new Map<string, RecentActivity[]>();
+                                            for (const a of recentActivity) {
+                                                const d = new Date(a.timestamp);
+                                                const key = d.toISOString().slice(0, 10);
+                                                const arr = groups.get(key) || [];
+                                                arr.push(a);
+                                                groups.set(key, arr);
+                                            }
+                                            const ordered = Array.from(groups.entries()).sort((a, b) => a[0] > b[0] ? -1 : 1);
+                                            const pretty = (k: string) => {
+                                                const today = new Date().toISOString().slice(0, 10);
+                                                const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+                                                if (k === today) return 'Today';
+                                                if (k === y) return 'Yesterday';
+                                                const d = new Date(k); return d.toLocaleDateString();
+                                            };
+                                            return ordered.map(([k, arr]) => (
+                                                <details key={k} className="rounded border">
+                                                    <summary className="cursor-pointer select-none px-3 py-2 text-sm font-semibold flex items-center justify-between">
+                                                        <span>{pretty(k)}</span>
+                                                        <span className="text-muted-foreground text-xs">{arr.length}</span>
+                                                    </summary>
+                                                    <div className="space-y-2 p-2 pt-0">
+                                                        {arr.slice(0, 20).map((activity) => (
+                                                            <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
+                                                                <div className="h-8 w-8 rounded-full flex items-center justify-center bg-primary/15">
+                                                                    <Activity className="h-4 w-4 text-primary" />
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <p className="text-sm font-medium text-foreground">
+                                                                        {activity.user_name} {activity.action.toLowerCase()} {activity.item}
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground">{formatTimeAgo(activity.timestamp)}</p>
+                                                                </div>
+                                                                <Badge variant="secondary" className="text-xs">{activity.status}</Badge>
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                    <div className="flex-1">
-                                                        <p className="text-sm font-medium text-foreground">
-                                                            {activity.user_name} {activity.action.toLowerCase()} {activity.item}
-                                                        </p>
-                                                        <p className="text-xs text-muted-foreground">{formatTimeAgo(activity.timestamp)}</p>
-                                                    </div>
-                                                    <Badge variant="secondary" className="text-xs">
-                                                        {activity.status}
-                                                    </Badge>
-                                                </div>
-                                            ))
-                                        )}
+                                                </details>
+                                            ));
+                                        })()}
                                     </div>
                                 )}
                             </CardContent>

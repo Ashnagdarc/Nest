@@ -196,11 +196,14 @@ export async function GET(request: NextRequest) {
             id: b.id,
             type: 'car_booking',
             action: `Car booking ${b.status.toLowerCase()}`,
-            item: `${b.employee_name} ${b.date_of_use} ${b.time_slot}`,
+            item: `${b.employee_name} ${b.date_of_use} ${b.start_time && b.end_time ? `${b.start_time.slice(0, 5)}-${b.end_time.slice(0, 5)}` : (b.time_slot || '')}`,
             user: b.employee_name,
             timestamp: b.updated_at || b.created_at,
             status: b.status
         }));
+
+        const gearIdToName = new Map<string, string>();
+        for (const g of gears) { if (g?.id && g?.name) gearIdToName.set(g.id, g.name); }
 
         const recentActivity = [
             ...requests.filter(req => req.user_id === user.id).slice(0, 10).map(req => ({
@@ -208,7 +211,7 @@ export async function GET(request: NextRequest) {
                 type: 'request',
                 action: `Request ${req.status.toLowerCase()}`,
                 item: req.reason,
-                user: req.profiles?.full_name || 'Unknown',
+                user: (req as any).profiles?.full_name || 'Unknown',
                 timestamp: req.created_at,
                 status: req.status,
                 metadata: {
@@ -220,8 +223,8 @@ export async function GET(request: NextRequest) {
                 id: checkin.id,
                 type: 'checkin',
                 action: checkin.action,
-                item: `Gear ${checkin.gear_id}`,
-                user: 'Current User',
+                item: gearIdToName.get(checkin.gear_id as any) || `Gear`,
+                user: profile?.role === 'Admin' ? 'User' : 'You',
                 timestamp: checkin.checkin_date,
                 status: checkin.status,
                 metadata: { condition: checkin.condition, quantity: checkin.quantity }
