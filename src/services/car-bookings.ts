@@ -4,7 +4,9 @@ import type { CarBooking, PaginatedCarBookings } from '@/types/car-bookings';
 export async function createCarBooking(payload: {
     employeeName: string;
     dateOfUse: string;
-    timeSlot: string;
+    timeSlot?: string;
+    startTime?: string; // HH:MM
+    endTime?: string;   // HH:MM
     destination?: string;
     purpose?: string;
 }): Promise<{ success: boolean; data?: CarBooking; error?: string }> {
@@ -20,6 +22,8 @@ export async function listCarBookings(params: {
     userId?: string;
     dateOfUse?: string;
     timeSlot?: string;
+    startTime?: string;
+    endTime?: string;
     carId?: string;
 } = {}): Promise<PaginatedCarBookings> {
     const qs = new URLSearchParams();
@@ -31,6 +35,8 @@ export async function listCarBookings(params: {
     if (params.userId) qs.set('userId', params.userId);
     if (params.dateOfUse) qs.set('dateOfUse', params.dateOfUse);
     if (params.timeSlot) qs.set('timeSlot', params.timeSlot);
+    if (params.startTime) qs.set('startTime', params.startTime);
+    if (params.endTime) qs.set('endTime', params.endTime);
     if (params.carId) qs.set('carId', params.carId);
     return apiGet(`/api/car-bookings?${qs.toString()}`);
 }

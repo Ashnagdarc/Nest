@@ -3,10 +3,12 @@ export interface CarBooking {
     requester_id: string | null;
     employee_name: string;
     date_of_use: string; // ISO date
-    time_slot: string;
+    time_slot?: string | null;
+    start_time?: string | null; // HH:MM:SS
+    end_time?: string | null;   // HH:MM:SS
     destination: string | null;
     purpose: string | null;
-    status: 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
+    status: 'Pending' | 'Approved' | 'Rejected' | 'Cancelled' | 'Completed';
     approved_by: string | null;
     approved_at: string | null;
     rejected_by: string | null;

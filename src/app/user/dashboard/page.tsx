@@ -332,37 +332,61 @@ export default function UserDashboardPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {dashboardData?.recent_activity?.slice(0, 5).map((activity) => {
-                      const when = new Date(activity.timestamp);
-                      const rel = Intl.RelativeTimeFormat ? (() => {
-                        const diff = (when.getTime() - Date.now()) / 1000;
-                        const abs = Math.abs(diff);
-                        if (abs < 60) return `${Math.round(abs)}s ago`;
-                        if (abs < 3600) return `${Math.round(abs / 60)}m ago`;
-                        if (abs < 86400) return `${Math.round(abs / 3600)}h ago`;
-                        return `${when.toLocaleDateString()}`;
-                      })() : when.toLocaleString();
-                      const text = activity.type === 'request'
-                        ? `Request ${activity.action} • ${activity.item}`
-                        : `${activity.action} • ${activity.item}`;
-                      return (
-                        <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
-                          <div className="h-8 w-8 rounded-full flex items-center justify-center bg-primary/15">
-                            <Activity className="h-4 w-4 text-primary" />
+                    {(() => {
+                      const items = dashboardData?.recent_activity || [];
+                      if (items.length === 0) return <p className="text-gray-500 text-sm">No recent activity</p>;
+                      const groups = new Map<string, typeof items>();
+                      for (const a of items) {
+                        const d = new Date(a.timestamp);
+                        const key = d.toISOString().slice(0, 10);
+                        const arr = (groups.get(key) || []) as any;
+                        arr.push(a);
+                        groups.set(key, arr);
+                      }
+                      const ordered = Array.from(groups.entries()).sort((a, b) => a[0] > b[0] ? -1 : 1);
+                      const pretty = (k: string) => {
+                        const today = new Date().toISOString().slice(0, 10);
+                        const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+                        if (k === today) return 'Today';
+                        if (k === y) return 'Yesterday';
+                        const d = new Date(k);
+                        return d.toLocaleDateString();
+                      };
+                      return ordered.map(([k, arr]) => (
+                        <details key={k} className="rounded border">
+                          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-semibold flex items-center justify-between">
+                            <span>{pretty(k)}</span>
+                            <span className="text-muted-foreground text-xs">{arr.length}</span>
+                          </summary>
+                          <div className="space-y-2 p-2 pt-0">
+                            {arr.slice(0, 20).map((activity: any) => {
+                              const when = new Date(activity.timestamp);
+                              const rel = Intl.RelativeTimeFormat ? (() => {
+                                const diff = (when.getTime() - Date.now()) / 1000;
+                                const abs = Math.abs(diff);
+                                if (abs < 60) return `${Math.round(abs)}s ago`;
+                                if (abs < 3600) return `${Math.round(abs / 60)}m ago`;
+                                if (abs < 86400) return `${Math.round(abs / 3600)}h ago`;
+                                return `${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                              })() : when.toLocaleString();
+                              const text = activity.type === 'request' ? `Request ${activity.action} • ${activity.item}` : `${activity.action} • ${activity.item}`;
+                              return (
+                                <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
+                                  <div className="h-8 w-8 rounded-full flex items-center justify-center bg-primary/15">
+                                    <Activity className="h-4 w-4 text-primary" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-foreground">{text}</p>
+                                    <p className="text-xs text-muted-foreground">{rel}</p>
+                                  </div>
+                                  <Badge variant="secondary" className="text-xs">{activity.status}</Badge>
+                                </div>
+                              );
+                            })}
                           </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-foreground">{text}</p>
-                            <p className="text-xs text-muted-foreground">{rel}</p>
-                          </div>
-                          <Badge variant="secondary" className="text-xs">
-                            {activity.status}
-                          </Badge>
-                        </div>
-                      );
-                    })}
-                    {(!dashboardData?.recent_activity || dashboardData.recent_activity.length === 0) && (
-                      <p className="text-gray-500 text-sm">No recent activity</p>
-                    )}
+                        </details>
+                      ));
+                    })()}
                   </div>
                 )}
               </CardContent>

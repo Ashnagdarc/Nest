@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
         const { data: booking, error: bErr } = await admin.from('car_bookings').select('*').eq('id', bookingId).maybeSingle();
         if (bErr || !booking) return NextResponse.json({ success: false, error: bErr?.message || 'Booking not found' }, { status: 404 });
 
-        // Overlap warning: same date/time & same car approved
+        // Overlap warning: same date/time (or overlapping time range) & same car approved on same day
         const { data: conflicts, error: cErr } = await admin
             .from('car_assignment')
             .select('booking_id, car_id')
@@ -22,12 +22,18 @@ export async function POST(request: NextRequest) {
             const ids = conflicts.map(r => r.booking_id);
             const { data: bookings } = await admin
                 .from('car_bookings')
-                .select('id, date_of_use, time_slot, status')
+                .select('id, date_of_use, time_slot, status, start_time, end_time')
                 .in('id', ids)
                 .eq('date_of_use', booking.date_of_use)
-                .eq('time_slot', booking.time_slot)
                 .eq('status', 'Approved');
-            conflict = (bookings || []).length > 0;
+            const hasOverlap = (bookings || []).some(b => {
+                // If either has start/end, use interval overlap; else fall back to exact time_slot match
+                if (booking.start_time && booking.end_time && b.start_time && b.end_time) {
+                    return !(booking.end_time <= b.start_time || booking.start_time >= b.end_time);
+                }
+                return b.time_slot === booking.time_slot; // legacy exact slot
+            });
+            conflict = hasOverlap;
         }
 
         // Upsert assignment
