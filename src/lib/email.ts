@@ -196,13 +196,38 @@ export async function sendGearRequestEmail({
       subject,
       html,
     });
-    console.log('[Email Service] Email sent successfully:', { to, subject });
+    console.log('[Email Service] Email sent successfully:', { to, subject, result });
     return { success: true, result };
   } catch (error: unknown) {
     console.error('[Email Service Error]:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return { success: false, error: `Failed to send email: ${errorMessage}` };
   }
+}
+
+// Minimal, short welcome email for new users
+export async function sendWelcomeEmail({ to, userName }: { to: string; userName?: string }) {
+  const html = `
+    ${EMAIL_STYLES}
+    <div class="email-container">
+      <div class="email-header">
+        <h1>👋 Welcome to Nest!</h1>
+      </div>
+      <div class="email-body">
+        <h2>Hello${userName ? ` ${userName}` : ''},</h2>
+        <p>We're excited to have you on board. Start managing your assets and equipment with ease.</p>
+        <p style="margin-top:24px; font-size:14px; color:#718096;">If you have any questions, just reply to this email or contact support.</p>
+      </div>
+      <div class="email-footer">
+        <p>— The Nest by Eden Oasis Team</p>
+      </div>
+    </div>
+  `;
+  return sendGearRequestEmail({
+    to,
+    subject: '👋 Welcome to Nest by Eden Oasis',
+    html,
+  });
 }
 
 // Announcement email template
