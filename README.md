@@ -1,5 +1,30 @@
 # Nest — Asset & Equipment Management
 
+---
+
+## 📚 Project Documentation Index
+
+All major documentation is available in the `Project-docs/` folder:
+
+| # | Document | Description |
+|---|----------|-------------|
+| 1 | [Product Requirements Document (PRD)](./Project-docs/01-Product-Requirements-Document.md) | Product vision, requirements, user stories |
+| 2 | [Technical Design Document (TDD)](./Project-docs/02-Technical-Design-Document.md) | Architecture, database, API, security |
+| 3 | [API Documentation](./Project-docs/03-API-Documentation.md) | REST API reference, endpoints, examples |
+| 4 | [User Manual](./Project-docs/04-User-Manual.md) | End-user and admin guide, workflows, FAQ |
+| 5 | [Source Code Documentation](./Project-docs/05-Source-Code-Documentation.md) | Code structure, components, hooks, standards |
+| 6 | [Deployment & Maintenance Guide](./Project-docs/06-Deployment-Maintenance-Guide.md) | Deployment, CI/CD, maintenance, backup |
+| 7 | [Release Notes](./Project-docs/07-Release-Notes.md) | Version history, features, roadmap |
+| 8 | [Process Documentation](./Project-docs/08-Process-Documentation.md) | Dev workflow, Git, reviews, testing, incidents |
+| 9 | [Documentation README](./Project-docs/README.md) | Documentation navigation, quick start |
+| 10 | [Documentation Summary](./Project-docs/DOCUMENTATION-SUMMARY.txt) | Overview, stats, and coverage |
+
+**Quick Navigation:**
+- [Project-docs/README.md](./Project-docs/README.md) — Start here for a full documentation overview and quick start guides for all roles.
+- [DOCUMENTATION-SUMMARY.txt](./Project-docs/DOCUMENTATION-SUMMARY.txt) — One-page summary of all documentation, features, and coverage.
+
+---
+
 <p align="center">
   <img src="public/Nest-logo.png" alt="Nest Logo" width="160" />
 </p>
