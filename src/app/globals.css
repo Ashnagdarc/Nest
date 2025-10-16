@@ -251,68 +251,68 @@
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    /* Dark Gray - not pure black */
-    --foreground: 0 0% 98%;
-    /* Light Gray */
+    --background: 0 0% 0%;
+    /* Pure Black */
+    --foreground: 0 0% 100%;
+    /* Pure White */
 
-    --card: 240 10% 3.9%;
-    /* Dark Gray */
-    --card-foreground: 0 0% 98%;
-    /* Light Gray */
+    --card: 0 0% 0%;
+    /* Pure Black */
+    --card-foreground: 0 0% 100%;
+    /* Pure White */
 
-    --popover: 240 10% 3.9%;
-    /* Dark Gray */
-    --popover-foreground: 0 0% 98%;
-    /* Light Gray */
+    --popover: 0 0% 0%;
+    /* Pure Black */
+    --popover-foreground: 0 0% 100%;
+    /* Pure White */
 
     --primary: 24 96% 60%;
     /* Brighter Orange for dark mode */
 
-    --sidebar-background: 240 10% 3.9%;
-    /* Dark Gray */
-    --sidebar-foreground: 0 0% 98%;
-    /* Light Gray */
+    --sidebar-background: 0 0% 0%;
+    /* Pure Black */
+    --sidebar-foreground: 0 0% 100%;
+    /* Pure White */
     --sidebar-primary: 24 96% 60%;
     /* Orange */
     --sidebar-primary-foreground: 0 0% 100%;
     /* White */
-    --sidebar-accent: 240 10% 10%;
-    /* Dark Accent */
-    --sidebar-accent-foreground: 0 0% 98%;
-    /* Light Gray */
-    --sidebar-border: 240 10% 20%;
+    --sidebar-accent: 0 0% 10%;
+    /* Very Dark */
+    --sidebar-accent-foreground: 0 0% 100%;
+    /* Pure White */
+    --sidebar-border: 0 0% 20%;
     /* Dark Border */
     --sidebar-ring: 24 96% 60%;
     /* Orange Ring */
     /* Orange primary color */
-    --primary-foreground: 240 5.9% 10%;
-    /* Darker Gray */
+    --primary-foreground: 0 0% 0%;
+    /* Pure Black */
 
-    --secondary: 240 3.7% 15.9%;
-    /* Very Dark Gray */
-    --secondary-foreground: 0 0% 98%;
-    /* Light Gray */
+    --secondary: 0 0% 15%;
+    /* Very Dark */
+    --secondary-foreground: 0 0% 100%;
+    /* Pure White */
 
-    --muted: 240 3.7% 15.9%;
-    /* Very Dark Gray */
-    --muted-foreground: 240 5% 64.9%;
+    --muted: 0 0% 15%;
+    /* Very Dark */
+    --muted-foreground: 0 0% 65%;
     /* Mid Gray */
 
-    --accent: 240 3.7% 15.9%;
-    /* Very Dark Gray */
-    --accent-foreground: 0 0% 98%;
-    /* Light Gray */
+    --accent: 0 0% 15%;
+    /* Very Dark */
+    --accent-foreground: 0 0% 100%;
+    /* Pure White */
 
-    --destructive: 0 62.8% 30.6%;
-    /* Adjusted Red for dark mode */
-    --destructive-foreground: 0 0% 98%;
-    /* Light Gray */
+    --destructive: 0 85% 60%;
+    /* Red for dark mode */
+    --destructive-foreground: 0 0% 100%;
+    /* Pure White */
 
-    --border: 240 3.7% 15.9%;
-    /* Very Dark Gray */
-    --input: 240 3.7% 15.9%;
-    /* Very Dark Gray */
+    --border: 0 0% 20%;
+    /* Dark Border */
+    --input: 0 0% 15%;
+    /* Very Dark */
     --ring: 24 96% 60%;
     /* Orange */
 
@@ -322,7 +322,7 @@
     /* Gray */
     --chart-3: 215 20.2% 65.1%;
     /* Mid Gray */
-    --chart-4: 0 62.8% 30.6%;
+    --chart-4: 0 85% 60%;
     /* Red */
     --chart-5: 142 76% 36%;
     /* Apple Green */
@@ -505,4 +505,171 @@ html {
     min-width: 0 !important;
     overflow-x: auto;
   }
+}
+
+/* Documentation Portal Styles */
+.doc-card {
+  @apply relative overflow-hidden rounded-2xl border-2 transition-all duration-300;
+  @apply bg-white dark:bg-black;
+  @apply border-gray-200 dark:border-gray-800;
+  @apply hover:shadow-2xl hover:-translate-y-1;
+  @apply p-6;
+}
+
+.doc-card-category {
+  @apply text-xs font-semibold uppercase tracking-wider mb-4;
+  @apply text-gray-500 dark:text-gray-500;
+}
+
+.doc-card-icon-wrapper {
+  @apply w-14 h-14 rounded-xl flex items-center justify-center mb-5;
+  @apply transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3;
+}
+
+.doc-card-icon {
+  @apply w-7 h-7 text-white;
+}
+
+.doc-card-title {
+  @apply text-xl font-bold mb-3 text-black dark:text-white;
+  @apply transition-colors duration-300;
+}
+
+.doc-card-description {
+  @apply text-gray-600 dark:text-gray-400 text-sm leading-relaxed mb-6;
+  @apply line-clamp-3;
+}
+
+.doc-card-arrow {
+  @apply flex items-center font-medium text-sm transition-all duration-300;
+  @apply text-gray-700 dark:text-gray-300;
+}
+
+/* Color variants for doc cards */
+.doc-card-blue .doc-card-icon-wrapper {
+  @apply bg-blue-600 dark:bg-blue-500;
+}
+
+.doc-card-blue:hover {
+  @apply border-blue-600 dark:border-blue-500;
+}
+
+.doc-card-blue:hover .doc-card-title {
+  @apply text-blue-600 dark:text-blue-400;
+}
+
+.doc-card-blue .doc-card-arrow {
+  @apply group-hover:text-blue-600 dark:group-hover:text-blue-400;
+}
+
+.doc-card-purple .doc-card-icon-wrapper {
+  @apply bg-purple-600 dark:bg-purple-500;
+}
+
+.doc-card-purple:hover {
+  @apply border-purple-600 dark:border-purple-500;
+}
+
+.doc-card-purple:hover .doc-card-title {
+  @apply text-purple-600 dark:text-purple-400;
+}
+
+.doc-card-purple .doc-card-arrow {
+  @apply group-hover:text-purple-600 dark:group-hover:text-purple-400;
+}
+
+.doc-card-green .doc-card-icon-wrapper {
+  @apply bg-green-600 dark:bg-green-500;
+}
+
+.doc-card-green:hover {
+  @apply border-green-600 dark:border-green-500;
+}
+
+.doc-card-green:hover .doc-card-title {
+  @apply text-green-600 dark:text-green-400;
+}
+
+.doc-card-green .doc-card-arrow {
+  @apply group-hover:text-green-600 dark:group-hover:text-green-400;
+}
+
+.doc-card-orange .doc-card-icon-wrapper {
+  @apply bg-orange-600 dark:bg-orange-500;
+}
+
+.doc-card-orange:hover {
+  @apply border-orange-600 dark:border-orange-500;
+}
+
+.doc-card-orange:hover .doc-card-title {
+  @apply text-orange-600 dark:text-orange-400;
+}
+
+.doc-card-orange .doc-card-arrow {
+  @apply group-hover:text-orange-600 dark:group-hover:text-orange-400;
+}
+
+.doc-card-pink .doc-card-icon-wrapper {
+  @apply bg-pink-600 dark:bg-pink-500;
+}
+
+.doc-card-pink:hover {
+  @apply border-pink-600 dark:border-pink-500;
+}
+
+.doc-card-pink:hover .doc-card-title {
+  @apply text-pink-600 dark:text-pink-400;
+}
+
+.doc-card-pink .doc-card-arrow {
+  @apply group-hover:text-pink-600 dark:group-hover:text-pink-400;
+}
+
+.doc-card-red .doc-card-icon-wrapper {
+  @apply bg-red-600 dark:bg-red-500;
+}
+
+.doc-card-red:hover {
+  @apply border-red-600 dark:border-red-500;
+}
+
+.doc-card-red:hover .doc-card-title {
+  @apply text-red-600 dark:text-red-400;
+}
+
+.doc-card-red .doc-card-arrow {
+  @apply group-hover:text-red-600 dark:group-hover:text-red-400;
+}
+
+.doc-card-teal .doc-card-icon-wrapper {
+  @apply bg-teal-600 dark:bg-teal-500;
+}
+
+.doc-card-teal:hover {
+  @apply border-teal-600 dark:border-teal-500;
+}
+
+.doc-card-teal:hover .doc-card-title {
+  @apply text-teal-600 dark:text-teal-400;
+}
+
+.doc-card-teal .doc-card-arrow {
+  @apply group-hover:text-teal-600 dark:group-hover:text-teal-400;
+}
+
+.doc-card-indigo .doc-card-icon-wrapper {
+  @apply bg-indigo-600 dark:bg-indigo-500;
+}
+
+.doc-card-indigo:hover {
+  @apply border-indigo-600 dark:border-indigo-500;
+}
+
+.doc-card-indigo:hover .doc-card-title {
+  @apply text-indigo-600 dark:text-indigo-400;
+}
+
+.doc-card-indigo .doc-card-arrow {
+  @apply group-hover:text-indigo-600 dark:group-hover:text-indigo-400;
 }
