@@ -2,6 +2,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import rateLimit from 'next-rate-limit';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
+import { sendWelcomeEmail } from '@/lib/email';
 
 const limiter = rateLimit({
     interval: 60 * 1000, // 1 minute
@@ -89,15 +90,15 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Create profile in profiles table
-        if (data.user && !data.user.email_confirmed_at) {
-            // User needs to verify email first
-            return NextResponse.json({
-                message: 'Please check your email to verify your account before logging in.',
-                user: data.user,
-                needsVerification: true
+
+        // Send welcome email (minimal, short, and safe)
+        if (data.user && email) {
+            // Fire and forget, do not block signup on email failure
+            sendWelcomeEmail({ to: email, userName: fullName }).catch((err) => {
+                console.error('Failed to send welcome email:', err);
             });
         }
+
 
         // Send Google Chat notification for new user sign up
         await notifyGoogleChat(NotificationEventType.USER_SIGNUP, {
