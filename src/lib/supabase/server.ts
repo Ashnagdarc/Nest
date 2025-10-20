@@ -1,14 +1,57 @@
+/**
+ * Supabase Server Client Configuration - Nest by Eden Oasis
+ * 
+ * This module provides server-side Supabase client instances for Next.js App Router.
+ * Handles server components, server actions, and API routes with proper cookie management.
+ * 
+ * Key Features:
+ * - Dual-mode authentication (anon key for users, service role for admin)
+ * - Cookie-based session management for App Router
+ * - Fallback handling for API routes without cookie access
+ * - Type-safe database operations with generated types
+ * 
+ * When to use:
+ * - Server Components: Use with default (isAdmin=false) for user context
+ * - Admin Operations: Use with isAdmin=true to bypass RLS policies
+ * - API Routes: Automatically handles cookie availability
+ * 
+ * @fileoverview Server-side Supabase client configuration
+ * @author Daniel Chinonso Samuel
+ * @version 1.0.0
+ * @since 2024-01-15
+ */
 'use server';
 
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import type { Database } from '@/types/supabase'; // Import your generated types
+import type { Database } from '@/types/supabase';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // Use anon key for server components by default
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; // Use service role key for admin actions
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Function to create a server client for server components/actions
+/**
+ * Creates a server-side Supabase client with proper authentication
+ * 
+ * Why two modes:
+ * - isAdmin=false: Uses anon key + user session cookies (respects RLS)
+ * - isAdmin=true: Uses service role key (bypasses RLS for admin operations)
+ * 
+ * Cookie handling:
+ * - In App Router: Uses Next.js cookies() for session persistence
+ * - In API routes: Falls back to cookieless mode when cookies() unavailable
+ * 
+ * @param isAdmin - Use service role key to bypass RLS (admin operations only)
+ * @returns Configured Supabase client for server-side operations
+ * 
+ * @example
+ * // In Server Component (user context)
+ * const supabase = await createSupabaseServerClient();
+ * 
+ * @example
+ * // In API Route (admin operations)
+ * const supabase = await createSupabaseServerClient(true);
+ */
 export async function createSupabaseServerClient(isAdmin = false) {
   const key = isAdmin ? supabaseServiceRoleKey : supabaseKey;
 
@@ -16,14 +59,17 @@ export async function createSupabaseServerClient(isAdmin = false) {
     console.error(`Supabase ${isAdmin ? 'Service Role' : 'Anon'} Key or URL is missing. Check environment variables.`);
     console.error('Supabase URL:', supabaseUrl ? 'Present' : 'Missing');
     console.error('Supabase Key:', key ? 'Present' : 'Missing');
-    // Handle the error appropriately, maybe throw or return a specific error state
     throw new Error(`Supabase ${isAdmin ? 'Service Role' : 'Anon'} Key or URL is missing.`);
   }
 
-  // For API routes, we need to handle cookies properly
+  /**
+   * Cookie handling for App Router
+   * 
+   * Why: Next.js App Router uses cookies() for session management.
+   * Try-catch handles API routes where cookies() might not be available.
+   */
   if (typeof window === 'undefined') {
     try {
-      // Test if we're in an API route context
       const cookieStore = await cookies();
 
       // Create client with proper cookie handling for API routes

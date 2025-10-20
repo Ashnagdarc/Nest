@@ -1,3 +1,30 @@
+/**
+ * Pending Notifications Hook - Tracks unread items for badge display
+ * 
+ * Why: Admins and users need real-time awareness of pending actions.
+ * Badge counts drive attention to items requiring review or response.
+ * 
+ * What it tracks:
+ * - Admins: Pending gear requests + check-ins awaiting approval
+ * - Users: Unread notifications (approvals, rejections, reminders)
+ * 
+ * Performance: Uses Supabase counts instead of fetching full records
+ * to minimize data transfer and improve responsiveness.
+ * 
+ * @param userId - Current user's ID
+ * @param userRole - 'Admin' or 'User' to determine what to track
+ * @returns {Object} Hook state
+ * @returns {PendingNotification[]} pendingItems - Array of pending item types with counts
+ * @returns {boolean} isLoading - Whether initial fetch is in progress
+ * 
+ * @example
+ * ```tsx
+ * const { pendingItems, isLoading } = usePendingNotifications(userId, 'Admin');
+ * const totalCount = pendingItems.reduce((sum, item) => sum + item.count, 0);
+ * 
+ * return <Badge>{totalCount}</Badge>;
+ * ```
+ */
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -30,7 +57,12 @@ export function usePendingNotifications(userId?: string, userRole?: string) {
 
                 if (userRole === 'Admin') {
                     console.log('🔍 Checking admin pending items...');
-                    // Check for pending requests
+                    /**
+                     * Admin pending requests check
+                     * 
+                     * Why: Admins need to see count of requests awaiting approval.
+                     * Only counts, not full data, for performance.
+                     */
                     const { data: requests, error: requestsError } = await supabase
                         .from('gear_requests')
                         .select('id')

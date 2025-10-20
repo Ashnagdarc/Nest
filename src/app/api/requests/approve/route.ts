@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 
+/**
+ * Calculates due date based on request duration
+ * 
+ * Why: Requests specify duration as human-readable string ("24hours", "1 week").
+ * We convert this to ISO timestamp for database storage and notifications.
+ * 
+ * Uses UTC to avoid timezone issues with multi-location teams.
+ * 
+ * @param duration - Duration string from request form
+ * @returns ISO timestamp for when gear is due back
+ */
 const calculateDueDate = (duration: string): string => {
     const now = new Date();
     const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()));
@@ -21,6 +32,24 @@ const calculateDueDate = (duration: string): string => {
     return dueDate.toISOString();
 };
 
+/**
+ * POST /api/requests/approve
+ * 
+ * Approves a gear request and updates inventory availability
+ * 
+ * Request body: { requestId: string }
+ * 
+ * Returns: { success: boolean, message?: string, error?: string }
+ * 
+ * Side effects:
+ * - Updates request status to 'Approved'
+ * - Decrements available_quantity for each requested gear
+ * - Sets checkout_date and due_date on request
+ * - Creates notification for requester
+ * - Sends email confirmation
+ * 
+ * Security: Uses service role key to bypass RLS (admin-only operation)
+ */
 export async function POST(request: NextRequest) {
     try {
         const { requestId } = await request.json();
@@ -30,7 +59,14 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'requestId is required' }, { status: 400 });
         }
 
-        // Create direct Supabase client with service role key to bypass RLS
+        /**
+         * Use service role key instead of user session
+         * 
+         * Why: RLS policies block admins from updating gear inventory directly.
+         * Service role bypasses RLS to allow atomic approval + inventory update.
+         * 
+         * Security: This endpoint should have auth middleware to verify admin role.
+         */
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
