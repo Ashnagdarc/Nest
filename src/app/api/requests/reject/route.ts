@@ -91,13 +91,17 @@ export async function POST(req: Request) {
                             .eq('role', 'Admin')
                             .eq('status', 'Active');
                         
+                        console.log(`[Gear Rejection] Found ${admins?.length || 0} admins to notify`);
+                        
                         if (admins && Array.isArray(admins)) {
                             const gearNames = gearListFormatted.map((g: { name: string; quantity: number }) => `${g.name} (x${g.quantity})`).join(', ') || 'Gear items';
                             const userName = userProfile.full_name || 'User';
 
                             for (const admin of admins) {
+                                console.log(`[Gear Rejection] Processing admin: ${admin.email}`);
                                 if (admin.email) {
                                     try {
+                                        console.log(`[Gear Rejection] Sending email to: ${admin.email}`);
                                         await sendGearRequestEmail({
                                             to: admin.email,
                                             subject: `❌ Gear Request Rejected - ${userName}`,
@@ -158,14 +162,15 @@ export async function POST(req: Request) {
                                                 </html>
                                             `
                                         });
+                                        console.log(`[Gear Rejection] ✅ Email sent successfully to: ${admin.email}`);
                                     } catch (adminEmailError) {
-                                        console.warn(`Failed to send rejection email to admin ${admin.email}:`, adminEmailError);
+                                        console.error(`[Gear Rejection] ❌ Failed to send rejection email to admin ${admin.email}:`, adminEmailError);
                                     }
                                 }
                             }
                         }
                     } catch (e) {
-                        console.warn('Failed to notify admins of rejection:', e);
+                        console.error('[Gear Rejection] Error fetching admins or sending notifications:', e);
                     }
                 }
             }

@@ -139,10 +139,14 @@ export async function POST(request: NextRequest) {
                 .eq('role', 'Admin')
                 .eq('status', 'Active');
             
+            console.log(`[Car Booking] Found ${admins?.length || 0} admins to notify`);
+            
             if (admins && Array.isArray(admins)) {
                 for (const admin of admins) {
+                    console.log(`[Car Booking] Processing admin: ${admin.email}`);
                     if (admin.email) {
                         try {
+                            console.log(`[Car Booking] Sending email to: ${admin.email}`);
                             await sendGearRequestEmail({
                                 to: admin.email,
                                 subject: `🚗 New Car Booking Request - ${employeeName}`,
@@ -207,14 +211,19 @@ export async function POST(request: NextRequest) {
                                     </html>
                                 `
                             });
+                            console.log(`[Car Booking] ✅ Email sent successfully to: ${admin.email}`);
                         } catch (emailError) {
-                            console.warn(`Failed to send email to admin ${admin.email}:`, emailError);
+                            console.error(`[Car Booking] ❌ Failed to send email to admin ${admin.email}:`, emailError);
                         }
+                    } else {
+                        console.warn(`[Car Booking] ⚠️ Admin has no email: ${admin.full_name}`);
                     }
                 }
+            } else {
+                console.warn('[Car Booking] No admins found or admins is not an array');
             }
         } catch (e) {
-            console.warn('Failed to notify admins by email:', e);
+            console.error('[Car Booking] Failed to notify admins by email:', e);
         }
 
         return NextResponse.json({ success: true, data });
