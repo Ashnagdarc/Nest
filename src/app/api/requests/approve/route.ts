@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
-import { sendGearRequestApprovalEmail } from '@/lib/email';
+import { sendGearRequestApprovalEmail, sendGearRequestEmail } from '@/lib/email';
 
 /**
  * Calculates due date based on request duration
@@ -218,6 +218,89 @@ export async function POST(request: NextRequest) {
                     reason: req.expected_duration ? `${req.expected_duration}` : undefined,
                     destination: req.destination || undefined,
                 });
+
+                // Send notification email to all admins about the approval
+                try {
+                    const { data: admins } = await supabase
+                        .from('profiles')
+                        .select('email, full_name')
+                        .eq('role', 'Admin')
+                        .eq('status', 'Active');
+                    
+                    if (admins && Array.isArray(admins)) {
+                        const gearNames = gearListFormatted.map(g => `${g.name} (x${g.quantity})`).join(', ') || 'Gear items';
+                        const userName = userProfile.full_name || 'User';
+
+                        for (const admin of admins) {
+                            if (admin.email) {
+                                try {
+                                    await sendGearRequestEmail({
+                                        to: admin.email,
+                                        subject: `✅ Gear Request Approved - ${userName}`,
+                                        html: `
+                                            <!DOCTYPE html>
+                                            <html>
+                                                <head>
+                                                    <meta charset="utf-8">
+                                                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                                </head>
+                                                <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+                                                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                                                        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px 40px; text-align: center;">
+                                                            <h1 style="margin: 0; font-size: 24px; font-weight: 600;">✅ Gear Request Approved</h1>
+                                                            <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Equipment ready for pickup</p>
+                                                        </div>
+                                                        <div style="padding: 40px; line-height: 1.6; color: #333;">
+                                                            <h2 style="color: #2d3748; margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Hello ${admin.full_name || 'Admin'},</h2>
+                                                            <p style="margin: 0 0 16px 0; font-size: 15px; color: #374151;">A gear request has been approved.</p>
+                                                            <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 16px; margin: 24px 0; border-radius: 4px;">
+                                                                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #166534;">Approval Details</h3>
+                                                                <table style="width: 100%; border-collapse: collapse;">
+                                                                    <tr>
+                                                                        <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">User:</td>
+                                                                        <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${userName}</td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Equipment:</td>
+                                                                        <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${gearNames}</td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Due Date:</td>
+                                                                        <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${new Date(calculatedDueDate).toLocaleDateString()}</td>
+                                                                    </tr>
+                                                                    ${req.destination ? `
+                                                                    <tr>
+                                                                        <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Destination:</td>
+                                                                        <td style="padding: 8px 0; color: #1f2937;">${req.destination}</td>
+                                                                    </tr>
+                                                                    ` : ''}
+                                                                </table>
+                                                            </div>
+                                                            <div style="text-align: center; margin: 32px 0;">
+                                                                <a href="https://nestbyeden.app/admin/manage-requests" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">View All Requests</a>
+                                                            </div>
+                                                            <p style="margin-top: 32px; font-size: 14px; color: #6b7280; line-height: 1.6;">User has been notified and can now pick up the equipment.</p>
+                                                        </div>
+                                                        <div style="background-color: #f7fafc; padding: 20px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
+                                                            <p style="margin: 0; font-size: 14px; color: #718096;">
+                                                                This is an automated notification from <a href="https://nestbyeden.app" style="color: #10b981; text-decoration: none;"><strong>Nest by Eden Oasis</strong></a><br>
+                                                                Equipment Management System
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </body>
+                                            </html>
+                                        `
+                                    });
+                                } catch (adminEmailError) {
+                                    console.warn(`Failed to send approval email to admin ${admin.email}:`, adminEmailError);
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Failed to notify admins of approval:', e);
+                }
             }
         } catch (emailError) {
             console.warn('Failed to send gear approval email:', emailError);
