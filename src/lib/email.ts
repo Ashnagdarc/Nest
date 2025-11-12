@@ -1507,6 +1507,219 @@ export async function sendCarReturnConfirmationEmail({
   });
 }
 
+// Gear Request Approval Email
+export async function sendGearRequestApprovalEmail({
+  to,
+  userName,
+  gearList,
+  dueDate,
+  requestId,
+  reason,
+  destination,
+}: {
+  to: string;
+  userName: string;
+  gearList: Array<{ name: string; quantity: number }>;
+  dueDate: string;
+  requestId?: string;
+  reason?: string;
+  destination?: string;
+}) {
+  const formattedDueDate = formatDate(dueDate);
+  const gearItems = gearList.map(item => `${item.name} (Qty: ${item.quantity})`).join('<br/>');
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+        ${EMAIL_STYLES}
+        <div class="email-container">
+          <div class="email-header" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+            <h1 style="margin: 0; font-size: 24px; font-weight: 600;">✅ Request Approved!</h1>
+            <p class="subtitle" style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95;">Your gear request has been approved</p>
+          </div>
+          
+          <div class="email-body">
+            <p style="font-size: 16px; color: #1f2937; margin: 0 0 24px 0;">Hello <strong>${userName}</strong>,</p>
+            
+            <p style="font-size: 15px; color: #374151; line-height: 1.6; margin: 0 0 24px 0;">
+              Great news! Your gear request has been <strong style="color: #10b981;">approved</strong> and is ready for pickup.
+            </p>
+
+            <div class="info-box" style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 16px; margin: 24px 0; border-radius: 4px;">
+              <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #166534;">📦 Approved Items</h3>
+              <div style="color: #166534; line-height: 1.8;">
+                ${gearItems}
+              </div>
+            </div>
+
+            <div class="info-box">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Due Date:</td>
+                  <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${formattedDueDate}</td>
+                </tr>
+                ${reason ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Purpose:</td>
+                  <td style="padding: 8px 0; color: #1f2937;">${reason}</td>
+                </tr>
+                ` : ''}
+                ${destination ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Destination:</td>
+                  <td style="padding: 8px 0; color: #1f2937;">${destination}</td>
+                </tr>
+                ` : ''}
+              </table>
+            </div>
+
+            <div class="info-note" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 24px 0; border-radius: 4px;">
+              <p style="margin: 0; color: #92400e; font-size: 14px;">
+                <strong>⏰ Important:</strong> Please return all items by <strong>${formattedDueDate}</strong> to avoid late fees.
+              </p>
+            </div>
+
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="https://nestbyeden.app/user/gear-requests${requestId ? '?request=' + requestId : ''}" 
+                 class="action-button"
+                 style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">
+                View Request Details
+              </a>
+            </div>
+
+            <p style="margin-top: 32px; font-size: 14px; color: #6b7280; line-height: 1.6;">
+              If you have any questions or need to modify your request, please contact the equipment management team.
+            </p>
+          </div>
+          
+          <div class="email-footer">
+            <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+            <p>Equipment pickup is available during business hours</p>
+            <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return sendGearRequestEmail({
+    to,
+    subject: '✅ Gear Request Approved - Ready for Pickup!',
+    html,
+  });
+}
+
+// Gear Request Rejection Email
+export async function sendGearRequestRejectionEmail({
+  to,
+  userName,
+  gearList,
+  reason,
+  requestReason,
+  destination,
+}: {
+  to: string;
+  userName: string;
+  gearList: Array<{ name: string; quantity: number }>;
+  reason?: string;
+  requestReason?: string;
+  destination?: string;
+}) {
+  const gearItems = gearList.map(item => `${item.name} (Qty: ${item.quantity})`).join('<br/>');
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+        ${EMAIL_STYLES}
+        <div class="email-container">
+          <div class="email-header" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+            <h1 style="margin: 0; font-size: 24px; font-weight: 600;">❌ Request Update</h1>
+            <p class="subtitle" style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95;">Your gear request status</p>
+          </div>
+          
+          <div class="email-body">
+            <p style="font-size: 16px; color: #1f2937; margin: 0 0 24px 0;">Hello <strong>${userName}</strong>,</p>
+            
+            <p style="font-size: 15px; color: #374151; line-height: 1.6; margin: 0 0 24px 0;">
+              We regret to inform you that your gear request could not be approved at this time.
+            </p>
+
+            <div class="info-box" style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 16px; margin: 24px 0; border-radius: 4px;">
+              <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #991b1b;">📦 Requested Items</h3>
+              <div style="color: #991b1b; line-height: 1.8;">
+                ${gearItems}
+              </div>
+            </div>
+
+            ${reason ? `
+            <div class="info-note" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 24px 0; border-radius: 4px;">
+              <h3 style="margin: 0 0 8px 0; font-size: 15px; color: #92400e;">Reason for Rejection:</h3>
+              <p style="margin: 0; color: #78350f; font-size: 14px; line-height: 1.6;">
+                ${reason}
+              </p>
+            </div>
+            ` : ''}
+
+            ${requestReason || destination ? `
+            <div class="info-box">
+              <h3 style="margin: 0 0 12px 0; font-size: 15px; color: #374151;">Your Request Details:</h3>
+              <table style="width: 100%; border-collapse: collapse;">
+                ${requestReason ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Purpose:</td>
+                  <td style="padding: 8px 0; color: #1f2937;">${requestReason}</td>
+                </tr>
+                ` : ''}
+                ${destination ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Destination:</td>
+                  <td style="padding: 8px 0; color: #1f2937;">${destination}</td>
+                </tr>
+                ` : ''}
+              </table>
+            </div>
+            ` : ''}
+
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="https://nestbyeden.app/user/gear-requests" 
+                 class="action-button"
+                 style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">
+                Submit New Request
+              </a>
+            </div>
+
+            <p style="margin-top: 32px; font-size: 14px; color: #6b7280; line-height: 1.6;">
+              You may submit a new request or contact the equipment management team for more information about equipment availability.
+            </p>
+          </div>
+          
+          <div class="email-footer">
+            <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+            <p>We're here to help with your equipment needs</p>
+            <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return sendGearRequestEmail({
+    to,
+    subject: '❌ Gear Request Update',
+    html,
+  });
+}
+
 // Backward compatible approval email (keeping for existing integrations)
 export async function sendApprovalEmailLegacy({
   to,

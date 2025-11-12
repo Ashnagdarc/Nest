@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
+import { sendGearRequestApprovalEmail } from '@/lib/email';
 
 /**
  * Calculates due date based on request duration
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
         // Load request first
         const { data: req, error: reqErr } = await supabase
             .from('gear_requests')
-            .select('id, user_id, status, due_date, expected_duration')
+            .select('id, user_id, status, due_date, expected_duration, reason, destination')
             .eq('id', requestId)
             .maybeSingle();
         if (reqErr || !req) {
@@ -185,6 +186,43 @@ export async function POST(request: NextRequest) {
         }
 
         // Status history table not present; relying on gear_requests.approved_at/updated_at fields
+
+        // Send approval email to user
+        try {
+            const { data: userProfile } = await supabase
+                .from('profiles')
+                .select('email, full_name')
+                .eq('id', req.user_id)
+                .single();
+
+            if (userProfile?.email) {
+                // Fetch gear names and quantities from junction table
+                const gearListFormatted: Array<{ name: string; quantity: number }> = [];
+                for (const line of lines) {
+                    const { data: gear } = await supabase
+                        .from('gears')
+                        .select('name')
+                        .eq('id', line.gear_id)
+                        .single();
+                    if (gear) {
+                        gearListFormatted.push({ name: gear.name, quantity: line.quantity });
+                    }
+                }
+
+                await sendGearRequestApprovalEmail({
+                    to: userProfile.email,
+                    userName: userProfile.full_name || 'User',
+                    gearList: gearListFormatted,
+                    dueDate: calculatedDueDate,
+                    requestId: requestId,
+                    reason: req.expected_duration ? `${req.expected_duration}` : undefined,
+                    destination: req.destination || undefined,
+                });
+            }
+        } catch (emailError) {
+            console.warn('Failed to send gear approval email:', emailError);
+            // Don't fail the request if email fails
+        }
 
         console.log('🔍 Request approved successfully:', { updated: updates.length, gear_ids: distinctGearIds });
         return NextResponse.json({ success: true, data: { updated: updates.length, gear_ids: distinctGearIds } });
