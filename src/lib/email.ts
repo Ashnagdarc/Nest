@@ -1507,6 +1507,107 @@ export async function sendCarReturnConfirmationEmail({
   });
 }
 
+export async function sendCarBookingCancellationEmail({
+  to,
+  userName,
+  dateOfUse,
+  timeSlot,
+  destination,
+  cancelledBy,
+  reason,
+}: {
+  to: string;
+  userName: string;
+  dateOfUse: string;
+  timeSlot: string;
+  destination?: string;
+  cancelledBy: 'user' | 'admin';
+  reason?: string;
+}) {
+  const formattedDate = formatDate(dateOfUse);
+  const isUserCancelled = cancelledBy === 'user';
+  const title = isUserCancelled ? 'Booking Cancelled' : 'Booking Cancelled by Admin';
+
+  const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Car Booking Cancellation</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>🚫 ${title}</h1>
+              <p class="subtitle">Your car booking has been cancelled</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName},</h2>
+              
+              <div class="${isUserCancelled ? 'info-note' : 'important-note'}">
+                <strong>${isUserCancelled ? 'Cancellation Confirmed:' : 'Admin Cancellation:'}</strong> 
+                Your car booking has been cancelled ${isUserCancelled ? 'as requested' : 'by an administrator'}.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Cancelled Booking Details:</h3>
+                <div class="gear-item">
+                  <span class="gear-name">Date of Use:</span>
+                  <span>${formattedDate}</span>
+                </div>
+                <div class="gear-item">
+                  <span class="gear-name">Time Slot:</span>
+                  <span>${timeSlot}</span>
+                </div>
+                ${destination ? `
+                <div class="gear-item">
+                  <span class="gear-name">Destination:</span>
+                  <span>${destination}</span>
+                </div>
+                ` : ''}
+                ${reason ? `
+                <div class="gear-item">
+                  <span class="gear-name">Reason:</span>
+                  <span>${reason}</span>
+                </div>
+                ` : ''}
+              </div>
+              
+              ${isUserCancelled ? `
+              <p>Your booking has been successfully cancelled. You can submit a new booking request anytime.</p>
+              ` : `
+              <p>This booking was cancelled by an administrator. If you have any questions, please contact the admin team.</p>
+              `}
+              
+              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
+                View My Bookings
+              </a>
+              
+              <div class="info-note">
+                <strong>Need a car?</strong> You can submit a new booking request at any time through the booking page.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>We're here to help with your transportation needs</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+  return sendGearRequestEmail({
+    to,
+    subject: `🚫 ${title}`,
+    html,
+  });
+}
+
 // Gear Request Approval Email
 export async function sendGearRequestApprovalEmail({
   to,

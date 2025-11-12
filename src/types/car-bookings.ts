@@ -13,6 +13,9 @@ export interface CarBooking {
     approved_at: string | null;
     rejected_by: string | null;
     rejection_reason: string | null;
+    cancelled_at?: string | null;
+    cancelled_by?: string | null;
+    cancelled_reason?: string | null;
     created_at: string;
     updated_at: string;
 }

@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button';
 // Dialog imports removed since we simplified the UI
 import { Input } from '@/components/ui/input';
 import { useForm } from 'react-hook-form';
-import { createCarBooking, listCarBookings } from '@/services/car-bookings';
+import { createCarBooking, listCarBookings, cancelCarBooking } from '@/services/car-bookings';
 import type { CarBooking } from '@/types/car-bookings';
 import { useToast } from '@/hooks/use-toast';
 // import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiGet } from '@/lib/apiClient';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function UserCarBookingPage() {
     const { register, handleSubmit, reset, formState: { errors } } = useForm<{ employeeName: string; dateOfUse: string; timeSlot?: string; destination?: string; purpose?: string }>();
@@ -19,6 +21,10 @@ export default function UserCarBookingPage() {
     const [history, setHistory] = useState<CarBooking[]>([]);
     const [assignedMap, setAssignedMap] = useState<Record<string, { label?: string; plate?: string }>>({});
     const [returningId, setReturningId] = useState<string | null>(null);
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
+    const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+    const [bookingToCancel, setBookingToCancel] = useState<CarBooking | null>(null);
+    const [cancelReason, setCancelReason] = useState('');
     const [isMounted, setIsMounted] = useState(false);
 
     // const TIME_SLOTS = useMemo(() => [
@@ -89,6 +95,49 @@ export default function UserCarBookingPage() {
         } else {
             const msg = res.error || 'Failed to submit';
             toast({ title: 'Error', description: msg, variant: 'destructive' });
+        }
+    };
+
+    const canCancelBooking = (booking: CarBooking): boolean => {
+        // Can cancel if status is Pending or Approved
+        if (!['Pending', 'Approved'].includes(booking.status)) return false;
+        
+        const today = new Date().toISOString().split('T')[0];
+        const bookingDate = booking.date_of_use;
+        
+        // Can cancel if:
+        // 1. Future or today (date >= today)
+        // 2. Past pending (date < today AND status = Pending)
+        const isFutureOrToday = bookingDate >= today;
+        const isPastPending = bookingDate < today && booking.status === 'Pending';
+        
+        return isFutureOrToday || isPastPending;
+    };
+
+    const handleCancelClick = (booking: CarBooking) => {
+        setBookingToCancel(booking);
+        setCancelReason('');
+        setCancelDialogOpen(true);
+    };
+
+    const handleCancelConfirm = async () => {
+        if (!bookingToCancel) return;
+        
+        setCancellingId(bookingToCancel.id);
+        try {
+            const res = await cancelCarBooking(bookingToCancel.id, cancelReason || 'User cancelled');
+            if (res.success) {
+                toast({ title: 'Cancelled', description: 'Your booking has been cancelled.' });
+                setCancelDialogOpen(false);
+                setBookingToCancel(null);
+                load();
+            } else {
+                toast({ title: 'Error', description: 'Failed to cancel booking', variant: 'destructive' });
+            }
+        } catch (e) {
+            toast({ title: 'Error', description: 'Failed to cancel booking', variant: 'destructive' });
+        } finally {
+            setCancellingId(null);
         }
     };
 
@@ -188,6 +237,16 @@ export default function UserCarBookingPage() {
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
+                                    {canCancelBooking(b) && (
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={cancellingId === b.id}
+                                            onClick={() => handleCancelClick(b)}
+                                        >
+                                            {cancellingId === b.id ? 'Cancelling…' : 'Cancel'}
+                                        </Button>
+                                    )}
                                     {b.status === 'Approved' && (
                                         <Button
                                             size="sm"
@@ -242,6 +301,47 @@ export default function UserCarBookingPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Cancel Confirmation Dialog */}
+            <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Cancel Booking</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to cancel this booking for {bookingToCancel?.date_of_use} at {bookingToCancel?.time_slot}?
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div>
+                            <label className="text-sm font-medium mb-2 block">Reason (optional)</label>
+                            <Select value={cancelReason} onValueChange={setCancelReason}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a reason" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Schedule change">Schedule change</SelectItem>
+                                    <SelectItem value="Client postponement">Client postponement</SelectItem>
+                                    <SelectItem value="Weather/Traffic">Weather/Traffic</SelectItem>
+                                    <SelectItem value="No longer needed">No longer needed</SelectItem>
+                                    <SelectItem value="Other">Other</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>
+                            Keep Booking
+                        </Button>
+                        <Button 
+                            variant="destructive" 
+                            onClick={handleCancelConfirm}
+                            disabled={cancellingId !== null}
+                        >
+                            {cancellingId ? 'Cancelling...' : 'Yes, Cancel Booking'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

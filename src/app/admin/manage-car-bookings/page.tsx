@@ -18,7 +18,8 @@ function StatusPill({ status, updatedAt }: { status: string; updatedAt?: string 
     const color = status === 'Approved' ? 'bg-amber-100 text-amber-700' :
         status === 'Pending' ? 'bg-blue-100 text-blue-700' :
             status === 'Rejected' ? 'bg-rose-100 text-rose-700' :
-                status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700';
+                status === 'Cancelled' ? 'bg-gray-100 text-gray-700' :
+                    status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700';
     const rel = updatedAt ? new Date(updatedAt) : undefined;
     return (
         <div className="flex items-center gap-2">
@@ -61,15 +62,16 @@ export default function AdminManageCarBookingsPage() {
 
     const load = async () => {
         setSectionLoading({ pending: true, approved: true, history: true, cars: true });
-        const [p, a, c, r] = await Promise.all([
+        const [p, a, c, r, cancelled] = await Promise.all([
             listCarBookings({ page: 1, pageSize: 100, status: 'Pending' }),
             listCarBookings({ page: 1, pageSize: 100, status: 'Approved' }),
             listCarBookings({ page: 1, pageSize: 100, status: 'Completed' }),
             listCarBookings({ page: 1, pageSize: 100, status: 'Rejected' }),
+            listCarBookings({ page: 1, pageSize: 100, status: 'Cancelled' }),
         ]);
         setPending(p.data);
         setApproved(a.data);
-        const hist = [...(c.data || []), ...(r.data || [])];
+        const hist = [...(c.data || []), ...(r.data || []), ...(cancelled.data || [])];
         setHistory(hist);
         const carRes = await listCars();
         setCars(carRes.data);
