@@ -129,17 +129,92 @@ export async function POST(request: NextRequest) {
             console.warn('sendCarBookingRequestEmail to user failed', e);
         }
 
-        // Send notification email to admin
+        // Send notification email to all admins
         try {
-            if (process.env.CAR_BOOKINGS_EMAIL_TO) {
-                await sendGearRequestEmail({
-                    to: process.env.CAR_BOOKINGS_EMAIL_TO,
-                    subject: `New car booking: ${employeeName}`,
-                    html: `<p>New car booking submitted.</p><p><b>Name:</b> ${employeeName}<br/><b>Date:</b> ${dateOfUse}<br/><b>Time:</b> ${timeSlot}<br/><b>Destination:</b> ${destination || ''}<br/><b>Purpose:</b> ${purpose || ''}</p>`
-                });
+            // Create admin client to bypass RLS for querying profiles
+            const adminSupabase = await createSupabaseServerClient(true);
+            const { data: admins } = await adminSupabase
+                .from('profiles')
+                .select('email, full_name')
+                .eq('role', 'Admin')
+                .eq('status', 'Active');
+            
+            if (admins && Array.isArray(admins)) {
+                for (const admin of admins) {
+                    if (admin.email) {
+                        try {
+                            await sendGearRequestEmail({
+                                to: admin.email,
+                                subject: `🚗 New Car Booking Request - ${employeeName}`,
+                                html: `
+                                    <!DOCTYPE html>
+                                    <html>
+                                        <head>
+                                            <meta charset="utf-8">
+                                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                        </head>
+                                        <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+                                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                                                <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 30px 40px; text-align: center;">
+                                                    <h1 style="margin: 0; font-size: 24px; font-weight: 600;">🚗 New Car Booking Request</h1>
+                                                    <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Action required - Review and assign vehicle</p>
+                                                </div>
+                                                <div style="padding: 40px; line-height: 1.6; color: #333;">
+                                                    <h2 style="color: #2d3748; margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Hello ${admin.full_name || 'Admin'},</h2>
+                                                    <p style="margin: 0 0 16px 0; font-size: 15px; color: #374151;">A new car booking request has been submitted and requires your review.</p>
+                                                    <div style="background-color: #f0f9ff; border-left: 4px solid #3b82f6; padding: 16px; margin: 24px 0; border-radius: 4px;">
+                                                        <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #1e40af;">Booking Details</h3>
+                                                        <table style="width: 100%; border-collapse: collapse;">
+                                                            <tr>
+                                                                <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Employee:</td>
+                                                                <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${employeeName}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Date of Use:</td>
+                                                                <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${dateOfUse}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Time Slot:</td>
+                                                                <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${timeSlot}</td>
+                                                            </tr>
+                                                            ${destination ? `
+                                                            <tr>
+                                                                <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Destination:</td>
+                                                                <td style="padding: 8px 0; color: #1f2937;">${destination}</td>
+                                                            </tr>
+                                                            ` : ''}
+                                                            ${purpose ? `
+                                                            <tr>
+                                                                <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Purpose:</td>
+                                                                <td style="padding: 8px 0; color: #1f2937;">${purpose}</td>
+                                                            </tr>
+                                                            ` : ''}
+                                                        </table>
+                                                    </div>
+                                                    <div style="text-align: center; margin: 32px 0;">
+                                                        <a href="https://nestbyeden.app/admin/manage-car-bookings" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">Review Booking Request</a>
+                                                    </div>
+                                                    <p style="margin-top: 32px; font-size: 14px; color: #6b7280; line-height: 1.6;">Please review this request and assign an available vehicle if approved.</p>
+                                                </div>
+                                                <div style="background-color: #f7fafc; padding: 20px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
+                                                    <p style="margin: 0; font-size: 14px; color: #718096;">
+                                                        This is an automated notification from <a href="https://nestbyeden.app" style="color: #3b82f6; text-decoration: none;"><strong>Nest by Eden Oasis</strong></a><br>
+                                                        Vehicle Management System
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </body>
+                                    </html>
+                                `
+                            });
+                        } catch (emailError) {
+                            console.warn(`Failed to send email to admin ${admin.email}:`, emailError);
+                        }
+                    }
+                }
             }
         } catch (e) {
-            console.warn('sendGearRequestEmail to admin failed', e);
+            console.warn('Failed to notify admins by email:', e);
         }
 
         return NextResponse.json({ success: true, data });
