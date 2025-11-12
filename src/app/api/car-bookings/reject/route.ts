@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
-import { sendGearRequestEmail } from '@/lib/email';
+import { sendGearRequestEmail, sendCarBookingRejectionEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
     try {
@@ -28,9 +28,35 @@ export async function POST(request: NextRequest) {
                 user_id: booking.requester_id,
                 type: 'Rejection',
                 title: 'Car booking rejected',
-                message: `Your car booking for ${booking.date_of_use} (${booking.time_slot}) was rejected${reason ? `: ${reason}` : ''}.`,
+                message: `Your car booking for ${booking.date_of_use} (${booking.time_slot}) has been rejected.${reason ? ` Reason: ${reason}` : ''}`,
                 link: '/user/car-booking'
             });
+        }
+
+        // Get user email for notification
+        let userEmail = '';
+        if (booking.requester_id) {
+            const { data: profile } = await admin
+                .from('profiles')
+                .select('email')
+                .eq('id', booking.requester_id)
+                .single();
+            userEmail = profile?.email || '';
+        }
+
+        // Send rejection email to user
+        try {
+            if (userEmail) {
+                await sendCarBookingRejectionEmail({
+                    to: userEmail,
+                    userName: booking.employee_name,
+                    dateOfUse: booking.date_of_use,
+                    timeSlot: booking.time_slot,
+                    reason: reason || undefined,
+                });
+            }
+        } catch (e) {
+            console.warn('sendCarBookingRejectionEmail to user failed', e);
         }
 
         try {
@@ -40,15 +66,17 @@ export async function POST(request: NextRequest) {
                 userName: booking.employee_name,
                 userEmail: '',
                 gearNames: [`Car booking: ${booking.date_of_use} ${booking.time_slot}`],
-                reason
+                dueDate: booking.date_of_use
             });
         } catch { }
+
+        // Send notification email to admin
         try {
             if (process.env.CAR_BOOKINGS_EMAIL_TO) {
                 await sendGearRequestEmail({
                     to: process.env.CAR_BOOKINGS_EMAIL_TO,
                     subject: `Car booking rejected: ${booking.employee_name}`,
-                    html: `<p>Rejected car booking.</p><p><b>Name:</b> ${booking.employee_name}<br/><b>Date:</b> ${booking.date_of_use}<br/><b>Time:</b> ${booking.time_slot}<br/><b>Reason:</b> ${reason || ''}</p>`
+                    html: `<p>Rejected car booking.</p><p><b>Name:</b> ${booking.employee_name}<br/><b>Date:</b> ${booking.date_of_use}<br/><b>Time:</b> ${booking.time_slot}${reason ? `<br/><b>Reason:</b> ${reason}` : ''}</p>`
                 });
             }
         } catch { }

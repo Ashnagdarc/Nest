@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
-import { sendGearRequestEmail } from '@/lib/email';
+import { sendGearRequestEmail, sendCarBookingApprovalEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
     try {
@@ -52,6 +52,42 @@ export async function POST(request: NextRequest) {
             });
         }
 
+        // Get user email for notification
+        let userEmail = '';
+        if (booking.requester_id) {
+            const { data: profile } = await admin
+                .from('profiles')
+                .select('email')
+                .eq('id', booking.requester_id)
+                .single();
+            userEmail = profile?.email || '';
+        }
+
+        // Get assigned car details
+        let carDetails = '';
+        if (assignment?.car_id) {
+            const { data: car } = await admin.from('cars').select('label, plate').eq('id', assignment.car_id).maybeSingle();
+            if (car) {
+                carDetails = `${car.label || ''} ${car.plate ? '(' + car.plate + ')' : ''}`.trim();
+            }
+        }
+
+        // Send approval email to user
+        try {
+            if (userEmail) {
+                await sendCarBookingApprovalEmail({
+                    to: userEmail,
+                    userName: booking.employee_name,
+                    dateOfUse: booking.date_of_use,
+                    timeSlot: booking.time_slot,
+                    destination: booking.destination || undefined,
+                    carDetails: carDetails || undefined,
+                });
+            }
+        } catch (e) {
+            console.warn('sendCarBookingApprovalEmail to user failed', e);
+        }
+
         try {
             await notifyGoogleChat(NotificationEventType.ADMIN_APPROVE_REQUEST, {
                 adminName: me.user?.email,
@@ -62,12 +98,14 @@ export async function POST(request: NextRequest) {
                 dueDate: booking.date_of_use
             });
         } catch { }
+
+        // Send notification email to admin
         try {
             if (process.env.CAR_BOOKINGS_EMAIL_TO) {
                 await sendGearRequestEmail({
                     to: process.env.CAR_BOOKINGS_EMAIL_TO,
                     subject: `Car booking approved: ${booking.employee_name}`,
-                    html: `<p>Approved car booking.</p><p><b>Name:</b> ${booking.employee_name}<br/><b>Date:</b> ${booking.date_of_use}<br/><b>Time:</b> ${booking.time_slot}</p>`
+                    html: `<p>Approved car booking.</p><p><b>Name:</b> ${booking.employee_name}<br/><b>Date:</b> ${booking.date_of_use}<br/><b>Time:</b> ${booking.time_slot}${carDetails ? `<br/><b>Car:</b> ${carDetails}` : ''}</p>`
                 });
             }
         } catch { }

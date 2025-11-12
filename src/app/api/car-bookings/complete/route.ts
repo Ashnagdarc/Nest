@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { sendGearRequestEmail } from '@/lib/email';
+import { sendGearRequestEmail, sendCarReturnConfirmationEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
     try {
@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
             .select('id,status,employee_name,date_of_use,time_slot,updated_at')
             .maybeSingle();
         if (updErr) return NextResponse.json({ success: false, error: updErr.message }, { status: 400 });
+        
+        let finalRow = updatedRow;
+        
         // If no row returned, double-check current status and treat as success if already completed
         if (!updatedRow) {
             const { data: afterCheck } = await admin
@@ -53,11 +56,13 @@ export async function POST(request: NextRequest) {
             // If secondTry not completed, proceed to final verification and fallback below
         }
 
-        let finalRow = updatedRow || (await admin
-            .from('car_bookings')
-            .select('id,status,employee_name,date_of_use,time_slot,updated_at')
-            .eq('id', bookingId)
-            .maybeSingle()).data;
+        if (!finalRow) {
+            finalRow = (await admin
+                .from('car_bookings')
+                .select('id,status,employee_name,date_of_use,time_slot,updated_at')
+                .eq('id', bookingId)
+                .maybeSingle()).data;
+        }
         if (!finalRow || finalRow.status !== 'Completed') {
             // Retry read with short backoff, then accept success to avoid user bounce if update had no error
             for (let i = 0; i < 3; i++) {
@@ -123,6 +128,34 @@ export async function POST(request: NextRequest) {
             if (car?.plate || car?.label) plateInfo = `${car?.label || ''} ${car?.plate ? '(' + car.plate + ')' : ''}`;
         }
 
+        // Get user email for return confirmation
+        let userEmail = '';
+        if (existing.requester_id) {
+            const { data: profile } = await admin
+                .from('profiles')
+                .select('email')
+                .eq('id', existing.requester_id)
+                .single();
+            userEmail = profile?.email || '';
+        }
+
+        // Send return confirmation email to user
+        try {
+            if (userEmail) {
+                await sendCarReturnConfirmationEmail({
+                    to: userEmail,
+                    userName: existing.employee_name || 'User',
+                    dateOfUse: existing.date_of_use || '',
+                    timeSlot: existing.time_slot || '',
+                    carDetails: plateInfo || undefined,
+                    returnedAt: finalRow.updated_at || new Date().toISOString(),
+                });
+            }
+        } catch (e) {
+            console.warn('sendCarReturnConfirmationEmail to user failed', e);
+        }
+
+        // Send admin notification email
         try {
             if (process.env.CAR_BOOKINGS_EMAIL_TO) {
                 const timestamp = new Date().toISOString();
