@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
-import { sendGearRequestEmail } from '@/lib/email';
+import { sendGearRequestEmail, sendCarBookingRequestEmail } from '@/lib/email';
 
 const MAX_PENDING_DEFAULT = 2;
 
@@ -112,6 +112,24 @@ export async function POST(request: NextRequest) {
         } catch (e) {
             console.warn('notifyGoogleChat failed', e);
         }
+
+        // Send confirmation email to user
+        try {
+            if (me.user?.email) {
+                await sendCarBookingRequestEmail({
+                    to: me.user.email,
+                    userName: employeeName,
+                    dateOfUse,
+                    timeSlot,
+                    destination: destination || undefined,
+                    purpose: purpose || undefined,
+                });
+            }
+        } catch (e) {
+            console.warn('sendCarBookingRequestEmail to user failed', e);
+        }
+
+        // Send notification email to admin
         try {
             if (process.env.CAR_BOOKINGS_EMAIL_TO) {
                 await sendGearRequestEmail({
@@ -121,7 +139,7 @@ export async function POST(request: NextRequest) {
                 });
             }
         } catch (e) {
-            console.warn('sendGearRequestEmail failed', e);
+            console.warn('sendGearRequestEmail to admin failed', e);
         }
 
         return NextResponse.json({ success: true, data });
