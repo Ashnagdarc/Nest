@@ -227,13 +227,17 @@ export async function POST(request: NextRequest) {
                         .eq('role', 'Admin')
                         .eq('status', 'Active');
                     
+                    console.log(`[Gear Approval] Found ${admins?.length || 0} admins to notify`);
+                    
                     if (admins && Array.isArray(admins)) {
                         const gearNames = gearListFormatted.map(g => `${g.name} (x${g.quantity})`).join(', ') || 'Gear items';
                         const userName = userProfile.full_name || 'User';
 
                         for (const admin of admins) {
+                            console.log(`[Gear Approval] Processing admin: ${admin.email}`);
                             if (admin.email) {
                                 try {
+                                    console.log(`[Gear Approval] Sending email to: ${admin.email}`);
                                     await sendGearRequestEmail({
                                         to: admin.email,
                                         subject: `✅ Gear Request Approved - ${userName}`,
@@ -292,14 +296,15 @@ export async function POST(request: NextRequest) {
                                             </html>
                                         `
                                     });
+                                    console.log(`[Gear Approval] ✅ Email sent successfully to: ${admin.email}`);
                                 } catch (adminEmailError) {
-                                    console.warn(`Failed to send approval email to admin ${admin.email}:`, adminEmailError);
+                                    console.error(`[Gear Approval] ❌ Failed to send approval email to admin ${admin.email}:`, adminEmailError);
                                 }
                             }
                         }
                     }
                 } catch (e) {
-                    console.warn('Failed to notify admins of approval:', e);
+                    console.error('[Gear Approval] Error fetching admins or sending notifications:', e);
                 }
             }
         } catch (emailError) {

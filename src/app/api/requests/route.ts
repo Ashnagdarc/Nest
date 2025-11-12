@@ -232,6 +232,8 @@ export async function POST(request: NextRequest) {
                     .eq('role', 'Admin')
                     .eq('status', 'Active');
                 
+                console.log(`[Gear Request] Found ${admins?.length || 0} admins to notify`);
+                
                 if (admins && Array.isArray(admins)) {
                     // Get gear names for the email
                     const gearNames = fullRequest.gear_request_gears?.map((grg: any) => 
@@ -242,8 +244,10 @@ export async function POST(request: NextRequest) {
                     const userEmail = fullRequest.profiles?.email || '';
 
                     for (const admin of admins) {
+                        console.log(`[Gear Request] Processing admin: ${admin.email}`);
                         if (admin.email) {
                             try {
+                                console.log(`[Gear Request] Sending email to: ${admin.email}`);
                                 await sendGearRequestEmail({
                                     to: admin.email,
                                     subject: `📦 New Gear Request - ${userName}`,
@@ -316,14 +320,15 @@ export async function POST(request: NextRequest) {
                                         </html>
                                     `
                                 });
+                                console.log(`[Gear Request] ✅ Email sent successfully to: ${admin.email}`);
                             } catch (emailError) {
-                                console.warn(`Failed to send email to admin ${admin.email}:`, emailError);
+                                console.error(`[Gear Request] ❌ Failed to send email to admin ${admin.email}:`, emailError);
                             }
                         }
                     }
                 }
             } catch (e) {
-                console.warn('Failed to notify admins by email:', e);
+                console.error('[Gear Request] Error fetching admins or sending notifications:', e);
             }
 
             return NextResponse.json({ data: fullRequest, error: null });
