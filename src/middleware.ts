@@ -7,6 +7,19 @@ import type { Database } from '@/types/supabase';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // Quick fixes for password recovery links and tracking rewrites:
+  // 1) If the reset flow lands on the root with a `code` query param
+  //    (some trackers rewrite links and cause this), redirect to /reset-password
+  //    so the client-side recovery UI can pick up the session.
+  // 2) Allow /reset-password through without attempting server-side redirects.
+  if (pathname === '/' && request.nextUrl.searchParams.has('code')) {
+    const redirectUrl = new URL(`/reset-password${request.nextUrl.search}`, request.url);
+    return NextResponse.redirect(redirectUrl);
+  }
+  if (pathname === '/reset-password' || pathname.startsWith('/reset-password/')) {
+    return NextResponse.next({ request: { headers: request.headers } });
+  }
+
   let response = NextResponse.next({ request: { headers: request.headers } });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;

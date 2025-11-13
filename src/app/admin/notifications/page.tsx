@@ -73,24 +73,71 @@ export default function AdminNotificationsPage() {
     // Initialize audio
     audioRef.current = new Audio('/sounds/notification-bell.mp3');
     audioRef.current.volume = soundVolume / 100;
+    // Load user preferences with backward-compatible migration
+    const readBoolPref = (newKey: string, oldKey: string, defaultVal: boolean) => {
+      try {
+        const v = localStorage.getItem(newKey);
+        if (v !== null) return v === 'true';
+        const old = localStorage.getItem(oldKey);
+        if (old !== null) {
+          localStorage.setItem(newKey, old);
+          try { localStorage.removeItem(oldKey); } catch (e) { /* ignore */ }
+          return old === 'true';
+        }
+      } catch (e) {
+        console.error('Error reading boolean pref', e);
+      }
+      return defaultVal;
+    };
 
-    // Load user preferences from localStorage
-    const savedSoundEnabled = localStorage.getItem('flowtagSoundEnabled');
-    const savedSoundVolume = localStorage.getItem('flowtagSoundVolume');
-    const savedSoundType = localStorage.getItem('flowtagSoundType');
+    const readNumberPref = (newKey: string, oldKey: string, defaultVal: number) => {
+      try {
+        const v = localStorage.getItem(newKey);
+        if (v !== null) return parseInt(v);
+        const old = localStorage.getItem(oldKey);
+        if (old !== null) {
+          localStorage.setItem(newKey, old);
+          try { localStorage.removeItem(oldKey); } catch (e) { /* ignore */ }
+          return parseInt(old);
+        }
+      } catch (e) {
+        console.error('Error reading number pref', e);
+      }
+      return defaultVal;
+    };
 
-    if (savedSoundEnabled !== null) setSoundEnabled(savedSoundEnabled === 'true');
-    if (savedSoundVolume !== null) setSoundVolume(parseInt(savedSoundVolume));
-    if (savedSoundType !== null) setSoundType(savedSoundType);
+    const readStringPref = (newKey: string, oldKey: string, defaultVal: string) => {
+      try {
+        const v = localStorage.getItem(newKey);
+        if (v !== null) return v;
+        const old = localStorage.getItem(oldKey);
+        if (old !== null) {
+          localStorage.setItem(newKey, old);
+          try { localStorage.removeItem(oldKey); } catch (e) { /* ignore */ }
+          return old;
+        }
+      } catch (e) {
+        console.error('Error reading string pref', e);
+      }
+      return defaultVal;
+    };
+
+    const savedSoundEnabled = readBoolPref('nestbyeden.appSoundEnabled', 'flowtagSoundEnabled', true);
+    const savedSoundVolume = readNumberPref('nestbyeden.appSoundVolume', 'flowtagSoundVolume', 80);
+    const savedSoundType = readStringPref('nestbyeden.appSoundType', 'flowtagSoundType', 'bell');
+
+    setSoundEnabled(savedSoundEnabled);
+    setSoundVolume(savedSoundVolume);
+    setSoundType(savedSoundType);
 
     fetchNotifications();
   }, []);
 
   // Save preferences when they change
   useEffect(() => {
-    localStorage.setItem('flowtagSoundEnabled', soundEnabled.toString());
-    localStorage.setItem('flowtagSoundVolume', soundVolume.toString());
-    localStorage.setItem('flowtagSoundType', soundType);
+  localStorage.setItem('nestbyeden.appSoundEnabled', soundEnabled.toString());
+  localStorage.setItem('nestbyeden.appSoundVolume', soundVolume.toString());
+  localStorage.setItem('nestbyeden.appSoundType', soundType);
 
     // Update audio volume
     if (audioRef.current) {
