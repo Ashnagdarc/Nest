@@ -162,15 +162,33 @@ function ManageRequestsContent() {
      * Why: Users who work in shared spaces need to disable notification sounds.
      * Preference persists across sessions for better UX.
      */
-    const savedSoundPreference = localStorage.getItem('flowtagSoundEnabled');
-    if (savedSoundPreference !== null) {
-      setSoundEnabled(savedSoundPreference === 'true');
-    }
+    // Backward-compatibility migration:
+    // - Prefer the new key 'nestbyeden.appSoundEnabled'
+    // - If missing, fall back to the old 'flowtagSoundEnabled', copy it to the new key
+    const readBoolPref = (newKey: string, oldKey: string, defaultVal: boolean) => {
+      try {
+        const v = localStorage.getItem(newKey);
+        if (v !== null) return v === 'true';
+        const old = localStorage.getItem(oldKey);
+        if (old !== null) {
+          // migrate value
+          localStorage.setItem(newKey, old);
+          try { localStorage.removeItem(oldKey); } catch (e) { /* ignore */ }
+          return old === 'true';
+        }
+      } catch (e) {
+        console.error('Error reading sound preference from localStorage', e);
+      }
+      return defaultVal;
+    };
+
+    const savedSoundPreference = readBoolPref('nestbyeden.appSoundEnabled', 'flowtagSoundEnabled', true);
+    setSoundEnabled(savedSoundPreference);
   }, []);
 
   // Save sound preference when it changes
   useEffect(() => {
-    localStorage.setItem('flowtagSoundEnabled', soundEnabled.toString());
+    localStorage.setItem('nestbyeden.appSoundEnabled', soundEnabled.toString());
   }, [soundEnabled]);
 
   /**
@@ -231,7 +249,7 @@ function ManageRequestsContent() {
         let displayState = '';
         if (info.states.length > 0) {
           // PERMANENT FIX: Use gears table data instead of broken gear_states
-          const gear = info.states[0]?.gears;
+          const gear = (info.states[0] as any)?.gears;
           if (gear) {
             const totalQuantity = gear.quantity || 1;
             const availableQuantity = gear.available_quantity || 0;
