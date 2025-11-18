@@ -570,26 +570,81 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            // Push notification
-            if (sendPush && FCM_SERVER_KEY) {
+            // Push notification: prefer firebase-admin (service account) when available; fall back to legacy FCM key
+            if (sendPush) {
                 try {
-                    const { data: tokens } = await supabase.from('user_push_tokens').select('token').eq('user_id', targetId);
-                    for (const row of tokens || []) {
-                        await fetch(FCM_API_URL, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `key=${FCM_SERVER_KEY}`,
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                to: row.token,
-                                notification: {
-                                    title,
-                                    body: message,
-                                },
-                                data: metadata,
-                            }),
-                        });
+                    const { data: tokenRows } = await supabase.from('user_push_tokens').select('token').eq('user_id', targetId);
+                    const tokens = (tokenRows || []).map((r: any) => r.token).filter(Boolean);
+                    if (tokens.length === 0) {
+                        // nothing to send
+                    } else {
+                        // Try firebase-admin path
+                        try {
+                            const firebaseAdmin = await import('@/lib/firebaseAdmin');
+                            if (firebaseAdmin && firebaseAdmin.initFirebaseAdmin && firebaseAdmin.initFirebaseAdmin()) {
+                                const resp: any = await firebaseAdmin.sendMulticast(tokens, {
+                                    notification: { title, body: message },
+                                    data: (metadata as any) || {}
+                                });
+                                // Remove invalid tokens reported by sendMulticast
+                                const toRemove: string[] = [];
+                                resp.responses.forEach((r: any, idx: number) => {
+                                    if (!r.success) {
+                                        try {
+                                            const errCode = (r.error && (r.error as any).code) || '';
+                                            // common invalid token errors
+                                            if (errCode === 'messaging/registration-token-not-registered' || errCode === 'messaging/invalid-registration-token') {
+                                                toRemove.push(tokens[idx]);
+                                            }
+                                        } catch (e) {
+                                            // best-effort
+                                            toRemove.push(tokens[idx]);
+                                        }
+                                    }
+                                });
+                                if (toRemove.length) {
+                                    await supabase.from('user_push_tokens').delete().in('token', toRemove as any[]);
+                                }
+                            } else if (FCM_SERVER_KEY) {
+                                // fallback to legacy FCM REST API
+                                for (const t of tokens) {
+                                    await fetch(FCM_API_URL, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Authorization': `key=${FCM_SERVER_KEY}`,
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                            to: t,
+                                            notification: { title, body: message },
+                                            data: metadata,
+                                        }),
+                                    });
+                                }
+                            }
+                        } catch (errAdmin) {
+                            // If admin send fails, try legacy key if available
+                            console.error('[Notification Trigger] firebase-admin error', errAdmin);
+                            if (FCM_SERVER_KEY) {
+                                for (const t of tokens) {
+                                    await fetch(FCM_API_URL, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Authorization': `key=${FCM_SERVER_KEY}`,
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                            to: t,
+                                            notification: { title, body: message },
+                                            data: metadata,
+                                        }),
+                                    });
+                                }
+                            } else {
+                                lastError = (lastError ? lastError + '; ' : '') + `Push(Admin): ${errAdmin instanceof Error ? errAdmin.message : String(errAdmin)}`;
+                                errors.push(lastError);
+                            }
+                        }
                     }
                 } catch (err: any) {
                     lastError = (lastError ? lastError + '; ' : '') + `Push: ${err.message}`;

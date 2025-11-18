@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Save, Bell, Lock, User, Settings, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { createClient } from '@/lib/supabase/client'; // Import Supabase client
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -23,7 +24,6 @@ import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
 import { apiGet } from '@/lib/apiClient';
 import { isFileList, isFile } from '@/lib/utils/browser-safe';
-import QuantityFixPanel from '@/components/admin/QuantityFixPanel';
 import SystemOverview from '@/components/admin/SystemOverview';
 
 // --- Schemas ---
@@ -52,22 +52,11 @@ const brandingSchema = z.object({
     logo: z.any().optional(),
 });
 
-// Enhanced app settings schema with comprehensive options
+// App settings schema - essential application configuration only
 const appSettingsSchema = z.object({
-    // Existing settings
-    emailNotifications: z.boolean(),
     autoApproveRequests: z.boolean(),
     maxCheckoutDuration: z.number().min(1, "Must be at least 1 day"),
-
-    // New enhanced settings
-    maintenanceMode: z.boolean(),
     requireAdminApproval: z.boolean(),
-    sessionTimeout: z.number().min(5, "Must be at least 5 minutes").max(480, "Must be at most 8 hours"),
-    enableTwoFactor: z.boolean(),
-    passwordMinLength: z.number().min(6, "Must be at least 6 characters").max(32, "Must be at most 32 characters"),
-    enableAuditLogs: z.boolean(),
-    backupFrequency: z.enum(['daily', 'weekly', 'monthly']),
-    maxFileSize: z.number().min(1, "Must be at least 1MB").max(100, "Must be at most 100MB"),
 });
 
 
@@ -127,6 +116,15 @@ export default function AdminSettingsPage() {
     const [showCropper, setShowCropper] = useState(false);
     const [rawImage, setRawImage] = useState<string | null>(null);
     const [croppedFile, setCroppedFile] = useState<File | null>(null);
+    
+    // Notification preferences state (3-channel model)
+    const [notificationPreferences, setNotificationPreferences] = useState<Record<string, any>>({
+        in_app: {},
+        email: {},
+        push: {},
+    });
+    const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+    const { enable: enablePush, isSupported: isPushSupported } = usePushNotifications();
 
     // --- Forms ---
     const profileForm = useForm<ProfileFormValues>({
@@ -163,17 +161,9 @@ export default function AdminSettingsPage() {
     const appSettingsForm = useForm<AppSettingsFormValues>({
         resolver: zodResolver(appSettingsSchema),
         defaultValues: {
-            emailNotifications: true,
             autoApproveRequests: false,
             maxCheckoutDuration: 7,
-            maintenanceMode: false,
             requireAdminApproval: true,
-            sessionTimeout: 120,
-            enableTwoFactor: false,
-            passwordMinLength: 8,
-            enableAuditLogs: true,
-            backupFrequency: 'weekly',
-            maxFileSize: 10
         },
     });
 
@@ -250,32 +240,16 @@ export default function AdminSettingsPage() {
                     const settings: Partial<AppSettingsFormValues & { logoUrl?: string }> = {};
                     settingsData.forEach((setting: AppSetting) => {
                         if (setting.key === 'logoUrl') settings.logoUrl = setting.value ?? undefined;
-                        if (setting.key === 'emailNotifications') settings.emailNotifications = setting.value === 'true';
                         if (setting.key === 'auto_approve_requests') settings.autoApproveRequests = setting.value === 'true';
                         if (setting.key === 'max_request_duration_days') settings.maxCheckoutDuration = parseInt(setting.value || '7', 10);
-                        if (setting.key === 'maintenance_mode') settings.maintenanceMode = setting.value === 'true';
                         if (setting.key === 'require_admin_approval') settings.requireAdminApproval = setting.value === 'true';
-                        if (setting.key === 'session_timeout') settings.sessionTimeout = parseInt(setting.value || '120', 10);
-                        if (setting.key === 'enable_two_factor') settings.enableTwoFactor = setting.value === 'true';
-                        if (setting.key === 'password_min_length') settings.passwordMinLength = parseInt(setting.value || '8', 10);
-                        if (setting.key === 'enable_audit_logs') settings.enableAuditLogs = setting.value === 'true';
-                        if (setting.key === 'backup_frequency') settings.backupFrequency = setting.value as 'daily' | 'weekly' | 'monthly';
-                        if (setting.key === 'max_file_size') settings.maxFileSize = parseInt(setting.value || '10', 10);
                     });
 
                     setCurrentLogoUrl(settings.logoUrl);
                     appSettingsForm.reset({
-                        emailNotifications: settings.emailNotifications ?? true,
                         autoApproveRequests: settings.autoApproveRequests ?? false,
                         maxCheckoutDuration: settings.maxCheckoutDuration ?? 7,
-                        maintenanceMode: settings.maintenanceMode ?? false,
                         requireAdminApproval: settings.requireAdminApproval ?? true,
-                        sessionTimeout: settings.sessionTimeout ?? 120,
-                        enableTwoFactor: settings.enableTwoFactor ?? false,
-                        passwordMinLength: settings.passwordMinLength ?? 8,
-                        enableAuditLogs: settings.enableAuditLogs ?? true,
-                        backupFrequency: settings.backupFrequency ?? 'weekly',
-                        maxFileSize: settings.maxFileSize ?? 10,
                     });
                     console.log("AdminSettings: App settings form reset with fetched values.");
                 } else {
@@ -285,6 +259,65 @@ export default function AdminSettingsPage() {
             } catch (settingsError) {
                 console.error("AdminSettings: Error processing app settings:", settingsError);
             }
+
+            // Fetch notification preferences from admin's profile
+            try {
+                console.log("AdminSettings: Fetching admin notification preferences...");
+                const { data: profileData } = await supabase
+                    .from('profiles')
+                    .select('notification_preferences')
+                    .eq('id', user.id)
+                    .single();
+
+                if (profileData?.notification_preferences) {
+                    console.log("AdminSettings: Notification preferences loaded:", profileData.notification_preferences);
+                    setNotificationPreferences(profileData.notification_preferences);
+                } else {
+                    console.log("AdminSettings: No notification preferences found, using defaults.");
+                    // Initialize with default structure (8 events per channel matching user settings)
+                    const defaultPrefs = {
+                        in_app: {
+                            approved: true,
+                            rejected: true,
+                            due_soon: true,
+                            returned: true,
+                            overdue: true,
+                            damaged: true,
+                            maintenance_reminder: true,
+                            system_alert: true,
+                        },
+                        email: {
+                            approved: true,
+                            rejected: true,
+                            due_soon: true,
+                            returned: true,
+                            overdue: true,
+                            damaged: true,
+                            maintenance_reminder: true,
+                            system_alert: true,
+                        },
+                        push: {
+                            approved: true,
+                            rejected: true,
+                            due_soon: true,
+                            returned: true,
+                            overdue: true,
+                            damaged: true,
+                            maintenance_reminder: true,
+                            system_alert: true,
+                        },
+                    };
+                    setNotificationPreferences(defaultPrefs);
+                }
+            } catch (notifError) {
+                console.error("AdminSettings: Error fetching notification preferences:", notifError);
+                setNotificationPreferences({
+                    in_app: {},
+                    email: {},
+                    push: {},
+                });
+            }
+
             setIsLoadingUser(false);
         };
         fetchData();
@@ -536,24 +569,16 @@ export default function AdminSettingsPage() {
         setIsAppSettingsLoading(true);
         console.log("AdminSettings: Saving app settings:", data);
 
-        // Use Promise.all to save multiple settings concurrently
+        // Save only essential app configuration settings
         const savePromises = [
-            saveSetting('emailNotifications', data.emailNotifications),
             saveSetting('auto_approve_requests', data.autoApproveRequests),
             saveSetting('max_request_duration_days', data.maxCheckoutDuration),
-            saveSetting('maintenance_mode', data.maintenanceMode),
             saveSetting('require_admin_approval', data.requireAdminApproval),
-            saveSetting('session_timeout', data.sessionTimeout),
-            saveSetting('enable_two_factor', data.enableTwoFactor),
-            saveSetting('password_min_length', data.passwordMinLength),
-            saveSetting('enable_audit_logs', data.enableAuditLogs),
-            saveSetting('backup_frequency', data.backupFrequency),
-            saveSetting('max_file_size', data.maxFileSize),
         ];
 
         try {
             const results = await Promise.all(savePromises);
-            if (results.every(Boolean)) { // Check if all saves were successful
+            if (results.every(Boolean)) {
                 toast({ title: "App Settings Saved", description: "Application settings have been updated." });
             } else {
                 toast({ title: "Partial Error", description: "Some settings could not be saved. Check logs.", variant: "destructive" });
@@ -563,6 +588,76 @@ export default function AdminSettingsPage() {
             toast({ title: "Error", description: "Failed to save application settings.", variant: "destructive" });
         } finally {
             setIsAppSettingsLoading(false);
+        }
+    };
+
+    // Handle notification preference changes
+    const handleNotificationChange = (channel: string, event: string, value: boolean) => {
+        console.log(`AdminSettings: Toggling notification - Channel: ${channel}, Event: ${event}, Value: ${value}`);
+        setNotificationPreferences((prev) => ({
+            ...prev,
+            [channel]: {
+                ...(prev[channel] || {}),
+                [event]: value,
+            },
+        }));
+    };
+
+    // Save notification preferences to admin's profile
+    const handleSaveNotificationSettings = async () => {
+        setIsLoadingNotifications(true);
+        console.log("AdminSettings: Saving notification preferences:", notificationPreferences);
+
+        try {
+            if (!adminUser) {
+                toast({ title: "Error", description: "Admin user data not loaded.", variant: "destructive" });
+                setIsLoadingNotifications(false);
+                return;
+            }
+
+            const { error } = await supabase
+                .from('profiles')
+                .update({ notification_preferences: notificationPreferences })
+                .eq('id', adminUser.id);
+
+            if (error) {
+                console.error("Error saving notification preferences:", error.message);
+                toast({ title: "Error", description: "Could not save notification preferences.", variant: "destructive" });
+            } else {
+                console.log("AdminSettings: Notification preferences saved successfully.");
+                toast({ title: "Preferences Saved", description: "Notification preferences have been updated." });
+            }
+        } catch (error) {
+            console.error("AdminSettings: Error in handleSaveNotificationSettings:", error);
+            toast({ title: "Error", description: "Failed to save notification preferences.", variant: "destructive" });
+        } finally {
+            setIsLoadingNotifications(false);
+        }
+    };
+
+    // Handle enabling push notifications
+    const handleEnablePush = async () => {
+        console.log("AdminSettings: Enabling push notifications...");
+        try {
+            await enablePush();
+            // Update push channel to all true
+            setNotificationPreferences((prev) => ({
+                ...prev,
+                push: {
+                    approved: true,
+                    rejected: true,
+                    due_soon: true,
+                    returned: true,
+                    overdue: true,
+                    damaged: true,
+                    maintenance_reminder: true,
+                    system_alert: true,
+                },
+            }));
+            toast({ title: "Success", description: "Push notifications have been enabled." });
+        } catch (error) {
+            console.error("AdminSettings: Error enabling push notifications:", error);
+            toast({ title: "Error", description: "Could not enable push notifications.", variant: "destructive" });
         }
     };
 
@@ -824,155 +919,92 @@ export default function AdminSettingsPage() {
                                 <div className="space-y-4 p-3 sm:p-4 border rounded-md">
                                     <h3 className="font-medium text-base md:text-lg flex items-center gap-2"><Bell className="h-4 w-4 flex-shrink-0" /> Notifications</h3>
                                     <Separator className="my-2" />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="emailNotifications"
-                                        render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
-                                                <div className="space-y-0.5 pr-2">
-                                                    <FormLabel className="text-sm">Enable Admin Email Notifications</FormLabel>
-                                                    <FormDescription className="text-xs sm:text-sm">
-                                                        Receive email alerts for important events (new requests, etc.).
-                                                    </FormDescription>
-                                                </div>
-                                                <FormControl>
-                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                                </FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
+                                    
+                                    {/* Email Notifications */}
+                                    <div className="space-y-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-md">
+                                        <h4 className="font-medium text-sm">Email Notifications</h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {Object.entries(notificationPreferences.email || {}).map(([event, enabled]) => (
+                                                <FormItem key={`email-${event}`} className="flex items-center space-x-2">
+                                                    <Switch
+                                                        checked={enabled as boolean}
+                                                        onCheckedChange={(checked) => handleNotificationChange('email', event, checked)}
+                                                    />
+                                                    <FormLabel className="text-xs cursor-pointer">
+                                                        {event.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                                    </FormLabel>
+                                                </FormItem>
+                                            ))}
+                                        </div>
+                                    </div>
 
-                                <div className="space-y-4 p-3 sm:p-4 border rounded-md">
-                                    <h3 className="font-medium text-base md:text-lg flex items-center gap-2"><Lock className="h-4 w-4 flex-shrink-0" /> Security</h3>
-                                    <Separator className="my-2" />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="enableTwoFactor"
-                                        render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
-                                                <div className="space-y-0.5 pr-2">
-                                                    <FormLabel className="text-sm">Enable Two-Factor Authentication</FormLabel>
-                                                    <FormDescription className="text-xs sm:text-sm">
-                                                        Require 2FA for all admin accounts.
-                                                    </FormDescription>
-                                                </div>
-                                                <FormControl>
-                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                                </FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="passwordMinLength"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-sm">Minimum Password Length</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="6" max="32" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 8)} />
-                                                </FormControl>
-                                                <FormDescription className="text-xs sm:text-sm">
-                                                    Minimum number of characters required for passwords.
-                                                </FormDescription>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="sessionTimeout"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-sm">Session Timeout (Minutes)</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="5" max="480" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 120)} />
-                                                </FormControl>
-                                                <FormDescription className="text-xs sm:text-sm">
-                                                    How long users stay logged in before requiring re-authentication.
-                                                </FormDescription>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="enableAuditLogs"
-                                        render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
-                                                <div className="space-y-0.5 pr-2">
-                                                    <FormLabel className="text-sm">Enable Audit Logs</FormLabel>
-                                                    <FormDescription className="text-xs sm:text-sm">
-                                                        Log all admin actions for security and compliance.
-                                                    </FormDescription>
-                                                </div>
-                                                <FormControl>
-                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                                </FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
+                                    {/* In-App Notifications */}
+                                    <div className="space-y-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-md">
+                                        <h4 className="font-medium text-sm">In-App Notifications</h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {Object.entries(notificationPreferences.in_app || {}).map(([event, enabled]) => (
+                                                <FormItem key={`in_app-${event}`} className="flex items-center space-x-2">
+                                                    <Switch
+                                                        checked={enabled as boolean}
+                                                        onCheckedChange={(checked) => handleNotificationChange('in_app', event, checked)}
+                                                    />
+                                                    <FormLabel className="text-xs cursor-pointer">
+                                                        {event.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                                    </FormLabel>
+                                                </FormItem>
+                                            ))}
+                                        </div>
+                                    </div>
 
-                                <div className="space-y-4 p-3 sm:p-4 border rounded-md">
-                                    <h3 className="font-medium text-base md:text-lg flex items-center gap-2"><Settings className="h-4 w-4 flex-shrink-0" /> System</h3>
-                                    <Separator className="my-2" />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="maintenanceMode"
-                                        render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
-                                                <div className="space-y-0.5 pr-2">
-                                                    <FormLabel className="text-sm">Maintenance Mode</FormLabel>
-                                                    <FormDescription className="text-xs sm:text-sm">
-                                                        Temporarily disable the application for maintenance.
-                                                    </FormDescription>
-                                                </div>
-                                                <FormControl>
-                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                                </FormControl>
-                                            </FormItem>
+                                    {/* Push Notifications */}
+                                    <div className="space-y-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-md">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h4 className="font-medium text-sm">Push Notifications</h4>
+                                                {!isPushSupported && (
+                                                    <p className="text-xs text-destructive mt-1">
+                                                        Push notifications are not supported on your device or browser
+                                                    </p>
+                                                )}
+                                            </div>
+                                            {isPushSupported && (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={handleEnablePush}
+                                                    disabled={isLoadingNotifications}
+                                                >
+                                                    {isLoadingNotifications ? 'Enabling...' : 'Enable'}
+                                                </Button>
+                                            )}
+                                        </div>
+                                        {isPushSupported && (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {Object.entries(notificationPreferences.push || {}).map(([event, enabled]) => (
+                                                    <FormItem key={`push-${event}`} className="flex items-center space-x-2">
+                                                        <Switch
+                                                            checked={enabled as boolean}
+                                                            disabled={!isPushSupported}
+                                                            onCheckedChange={(checked) => handleNotificationChange('push', event, checked)}
+                                                        />
+                                                        <FormLabel className="text-xs cursor-pointer">
+                                                            {event.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                                        </FormLabel>
+                                                    </FormItem>
+                                                ))}
+                                            </div>
                                         )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="backupFrequency"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-sm">Backup Frequency</FormLabel>
-                                                <FormControl>
-                                                    <select
-                                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        {...field}
-                                                    >
-                                                        <option value="daily">Daily</option>
-                                                        <option value="weekly">Weekly</option>
-                                                        <option value="monthly">Monthly</option>
-                                                    </select>
-                                                </FormControl>
-                                                <FormDescription className="text-xs sm:text-sm">
-                                                    How often to create automated backups.
-                                                </FormDescription>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="maxFileSize"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-sm">Maximum File Upload Size (MB)</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="1" max="100" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 10)} />
-                                                </FormControl>
-                                                <FormDescription className="text-xs sm:text-sm">
-                                                    Maximum size for file uploads (images, documents, etc.).
-                                                </FormDescription>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
+                                    </div>
+
+                                    <Button
+                                        type="button"
+                                        onClick={handleSaveNotificationSettings}
+                                        disabled={isLoadingNotifications}
+                                        className="w-full"
+                                    >
+                                        {isLoadingNotifications ? 'Saving...' : 'Save Notification Preferences'}
+                                    </Button>
                                 </div>
 
                                 <div className="flex justify-end pt-2">
@@ -985,11 +1017,6 @@ export default function AdminSettingsPage() {
                         </Form>
                     </CardContent>
                 </Card>
-            </motion.div>
-
-            {/* Database Maintenance */}
-            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={5}>
-                <QuantityFixPanel />
             </motion.div>
 
             {showCropper && (

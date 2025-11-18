@@ -64,6 +64,8 @@
     "clsx": "^2.1.1",
     "composio": "^1.0.0",
     "date-fns": "^3.6.0",
+    "firebase": "^12.6.0",
+    "firebase-admin": "^13.6.0",
     "framer-motion": "^11.3.12",
     "gray-matter": "^4.0.3",
     "hamburger-react": "^2.5.2",

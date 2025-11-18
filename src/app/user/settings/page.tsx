@@ -20,6 +20,7 @@ import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
 import { useSuccessFeedback } from '@/hooks/use-success-feedback';
 import { apiGet } from '@/lib/apiClient';
 import { isFileList, isFile } from '@/lib/utils/browser-safe';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 // --- Schemas ---
 const phoneRegex = new RegExp(
@@ -80,12 +81,16 @@ export default function UserSettingsPage() {
 
     // --- State ---
     const [currentUserData, setCurrentUserData] = useState<Profile | null>(null);
-    const [notificationSettings, setNotificationSettings] = useState({ // Placeholder
-        emailOnApproval: true,
-        emailOnRejection: true,
-        emailOnDueSoon: true,
-    });
-    // Removed unused isNotificationLoading, setIsNotificationLoading
+    const [notificationSettings, setNotificationSettings] = useState<Record<string, any>>(
+        {
+            in_app: {},
+            email: {},
+            push: {},
+        }
+    );
+    const [pushEnabled, setPushEnabled] = useState(false);
+    const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+    const { enable: enablePush, isSupported: isPushSupported } = usePushNotifications();
     const [isLoadingUser, setIsLoadingUser] = useState(true);
     const [showCropper, setShowCropper] = useState(false);
     const [rawImage, setRawImage] = useState<string | null>(null);
@@ -118,6 +123,71 @@ export default function UserSettingsPage() {
 
     // Clear draft on submit
     const clearProfileDraft = () => localStorage.removeItem(PROFILE_FORM_DRAFT_KEY);
+
+    // Load notification preferences from database
+    useEffect(() => {
+        if (!currentUserData?.id) return;
+        
+        const loadNotificationPreferences = async () => {
+            try {
+                setIsLoadingNotifications(true);
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('notification_preferences')
+                    .eq('id', currentUserData.id)
+                    .single();
+                
+                if (error) throw error;
+                
+                const prefs = data?.notification_preferences || {};
+                
+                // Initialize default structure if empty
+                if (Object.keys(prefs).length === 0) {
+                    const defaultPrefs = {
+                        in_app: {
+                            gear_requests: true,
+                            gear_approvals: true,
+                            gear_rejections: true,
+                            gear_checkins: true,
+                            gear_checkouts: true,
+                            overdue_reminders: true,
+                            maintenance_alerts: true,
+                            system_notifications: true,
+                        },
+                        email: {
+                            gear_requests: true,
+                            gear_approvals: true,
+                            gear_rejections: true,
+                            gear_checkins: true,
+                            gear_checkouts: true,
+                            overdue_reminders: true,
+                            maintenance_alerts: true,
+                            system_notifications: true,
+                        },
+                        push: {
+                            gear_requests: true,
+                            gear_approvals: true,
+                            gear_rejections: true,
+                            gear_checkins: true,
+                            gear_checkouts: true,
+                            overdue_reminders: true,
+                            maintenance_alerts: true,
+                            system_notifications: true,
+                        },
+                    };
+                    setNotificationSettings(defaultPrefs);
+                } else {
+                    setNotificationSettings(prefs);
+                }
+            } catch (err) {
+                console.error('Failed to load notification preferences:', err);
+            } finally {
+                setIsLoadingNotifications(false);
+            }
+        };
+        
+        loadNotificationPreferences();
+    }, [currentUserData?.id]);
 
     // --- Effects ---
     useEffect(() => {
@@ -294,22 +364,22 @@ export default function UserSettingsPage() {
         });
     };
 
-    const handleNotificationChange = (key: keyof typeof notificationSettings, value: boolean) => {
+    const handleNotificationChange = (channel: string, event: string, value: boolean) => {
         setNotificationSettings(prev => {
-            const newSettings = { ...prev, [key]: value };
+            const newSettings = { ...prev };
+            if (!newSettings[channel]) newSettings[channel] = {};
+            newSettings[channel][event] = value;
             handleSaveNotificationSettings(newSettings);
             return newSettings;
         });
     };
 
-    const handleSaveNotificationSettings = async (settingsToSave: typeof notificationSettings) => {
+    const handleSaveNotificationSettings = async (settingsToSave: Record<string, any>) => {
         if (!currentUserData) return;
-        // Removed unused isNotificationLoading, setIsNotificationLoading
         console.log("UserSettings: Saving notification settings:", settingsToSave);
-        // TODO: Implement saving notification settings to Supabase profile
         const { error } = await supabase
             .from('profiles')
-            .update({ notification_prefs: settingsToSave, updated_at: new Date().toISOString() } as unknown as ProfileUpdate) // Cast if 'notification_prefs' isn't strictly typed yet
+            .update({ notification_preferences: settingsToSave, updated_at: new Date().toISOString() } as unknown as ProfileUpdate)
             .eq('id', currentUserData.id);
 
         if (error) {
@@ -318,7 +388,17 @@ export default function UserSettingsPage() {
         } else {
             toast({ title: "Notification Settings Saved" });
         }
-        // Removed unused isNotificationLoading, setIsNotificationLoading
+    };
+
+    const handleEnablePush = async () => {
+        try {
+            await enablePush();
+            setPushEnabled(true);
+            toast({ title: "Push Notifications Enabled", description: "You will receive push notifications." });
+        } catch (err) {
+            console.error('Failed to enable push notifications:', err);
+            toast({ title: "Push Failed", description: "Could not enable push notifications.", variant: "destructive" });
+        }
     };
 
     const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
@@ -497,35 +577,98 @@ export default function UserSettingsPage() {
                             <Bell className="h-5 w-5 text-primary flex-shrink-0" />
                             <span className="truncate">Notification Preferences</span>
                         </CardTitle>
-                        <CardDescription className="text-sm">Choose which email notifications you receive.</CardDescription>
+                        <CardDescription className="text-sm">Manage how you receive notifications across all channels.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border rounded-md bg-muted/50 opacity-70">
-                            <Label htmlFor="email-approval" className="flex flex-col space-y-1 mb-2 sm:mb-0 pr-2">
-                                <span className="text-sm font-medium">Request Approved</span>
-                                <span className="font-normal leading-snug text-muted-foreground text-xs">
-                                    Get notified when your gear request is approved.
-                                </span>
-                            </Label>
-                            <Switch id="email-approval" checked={notificationSettings.emailOnApproval} onCheckedChange={(checked) => handleNotificationChange('emailOnApproval', checked)} disabled />
+                    <CardContent className="space-y-6">
+                        {/* Email Notifications */}
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold text-foreground">📧 Email Notifications</h3>
+                            <div className="space-y-2 pl-2">
+                                <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                                    <Label htmlFor="email-gear-requests" className="flex flex-col space-y-1 cursor-pointer">
+                                        <span className="text-sm font-medium">Gear Requests</span>
+                                        <span className="font-normal text-muted-foreground text-xs">Notifications about gear requests</span>
+                                    </Label>
+                                    <Switch id="email-gear-requests" checked={notificationSettings.email?.gear_requests ?? true} onCheckedChange={(checked) => handleNotificationChange('email', 'gear_requests', checked)} />
+                                </div>
+                                <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                                    <Label htmlFor="email-approvals" className="flex flex-col space-y-1 cursor-pointer">
+                                        <span className="text-sm font-medium">Request Approvals</span>
+                                        <span className="font-normal text-muted-foreground text-xs">When your request is approved</span>
+                                    </Label>
+                                    <Switch id="email-approvals" checked={notificationSettings.email?.gear_approvals ?? true} onCheckedChange={(checked) => handleNotificationChange('email', 'gear_approvals', checked)} />
+                                </div>
+                                <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                                    <Label htmlFor="email-rejections" className="flex flex-col space-y-1 cursor-pointer">
+                                        <span className="text-sm font-medium">Request Rejections</span>
+                                        <span className="font-normal text-muted-foreground text-xs">When your request is rejected</span>
+                                    </Label>
+                                    <Switch id="email-rejections" checked={notificationSettings.email?.gear_rejections ?? true} onCheckedChange={(checked) => handleNotificationChange('email', 'gear_rejections', checked)} />
+                                </div>
+                                <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                                    <Label htmlFor="email-reminders" className="flex flex-col space-y-1 cursor-pointer">
+                                        <span className="text-sm font-medium">Overdue Reminders</span>
+                                        <span className="font-normal text-muted-foreground text-xs">Reminders before gear is due</span>
+                                    </Label>
+                                    <Switch id="email-reminders" checked={notificationSettings.email?.overdue_reminders ?? true} onCheckedChange={(checked) => handleNotificationChange('email', 'overdue_reminders', checked)} />
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border rounded-md bg-muted/50 opacity-70">
-                            <Label htmlFor="email-rejection" className="flex flex-col space-y-1 mb-2 sm:mb-0 pr-2">
-                                <span className="text-sm font-medium">Request Rejected</span>
-                                <span className="font-normal leading-snug text-muted-foreground text-xs">
-                                    Get notified when your gear request is rejected.
-                                </span>
-                            </Label>
-                            <Switch id="email-rejection" checked={notificationSettings.emailOnRejection} onCheckedChange={(checked) => handleNotificationChange('emailOnRejection', checked)} disabled />
+
+                        {/* In-App Notifications */}
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold text-foreground">🔔 In-App Notifications</h3>
+                            <div className="space-y-2 pl-2">
+                                <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                                    <Label htmlFor="inapp-gear-requests" className="flex flex-col space-y-1 cursor-pointer">
+                                        <span className="text-sm font-medium">Gear Requests</span>
+                                        <span className="font-normal text-muted-foreground text-xs">Notifications about gear requests</span>
+                                    </Label>
+                                    <Switch id="inapp-gear-requests" checked={notificationSettings.in_app?.gear_requests ?? true} onCheckedChange={(checked) => handleNotificationChange('in_app', 'gear_requests', checked)} />
+                                </div>
+                                <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                                    <Label htmlFor="inapp-approvals" className="flex flex-col space-y-1 cursor-pointer">
+                                        <span className="text-sm font-medium">Request Approvals</span>
+                                        <span className="font-normal text-muted-foreground text-xs">When your request is approved</span>
+                                    </Label>
+                                    <Switch id="inapp-approvals" checked={notificationSettings.in_app?.gear_approvals ?? true} onCheckedChange={(checked) => handleNotificationChange('in_app', 'gear_approvals', checked)} />
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border rounded-md bg-muted/50 opacity-70">
-                            <Label htmlFor="email-due-soon" className="flex flex-col space-y-1 mb-2 sm:mb-0 pr-2">
-                                <span className="text-sm font-medium">Gear Due Soon Reminder</span>
-                                <span className="font-normal leading-snug text-muted-foreground text-xs">
-                                    Receive a reminder before your checked-out gear is due.
-                                </span>
-                            </Label>
-                            <Switch id="email-due-soon" checked={notificationSettings.emailOnDueSoon} onCheckedChange={(checked) => handleNotificationChange('emailOnDueSoon', checked)} disabled />
+
+                        {/* Push Notifications */}
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold text-foreground">📱 Push Notifications</h3>
+                            {isPushSupported ? (
+                                <div className="space-y-2 pl-2">
+                                    {!pushEnabled && (
+                                        <Button onClick={handleEnablePush} variant="outline" className="w-full mb-3">
+                                            Enable Push Notifications
+                                        </Button>
+                                    )}
+                                    {pushEnabled && (
+                                        <div className="text-xs text-green-600 mb-2">✓ Push notifications enabled</div>
+                                    )}
+                                    <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                                        <Label htmlFor="push-gear-requests" className="flex flex-col space-y-1 cursor-pointer">
+                                            <span className="text-sm font-medium">Gear Requests</span>
+                                            <span className="font-normal text-muted-foreground text-xs">Push notifications for gear requests</span>
+                                        </Label>
+                                        <Switch id="push-gear-requests" checked={notificationSettings.push?.gear_requests ?? true} onCheckedChange={(checked) => handleNotificationChange('push', 'gear_requests', checked)} disabled={!pushEnabled} />
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                                        <Label htmlFor="push-approvals" className="flex flex-col space-y-1 cursor-pointer">
+                                            <span className="text-sm font-medium">Request Approvals</span>
+                                            <span className="font-normal text-muted-foreground text-xs">When your request is approved</span>
+                                        </Label>
+                                        <Switch id="push-approvals" checked={notificationSettings.push?.gear_approvals ?? true} onCheckedChange={(checked) => handleNotificationChange('push', 'gear_approvals', checked)} disabled={!pushEnabled} />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="p-3 border rounded-md bg-muted/30">
+                                    <p className="text-xs text-muted-foreground">Push notifications are not supported on your device or browser.</p>
+                                </div>
+                            )}
                         </div>
                     </CardContent>
                 </Card>
