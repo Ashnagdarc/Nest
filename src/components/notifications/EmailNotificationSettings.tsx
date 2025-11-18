@@ -83,12 +83,25 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
     const savePreferences = async () => {
         setSaving(true);
         try {
+            // First, fetch current preferences to preserve other channels (in_app, push)
+            const { data: currentProfile } = await supabase
+                .from('profiles')
+                .select('notification_preferences')
+                .eq('id', userId)
+                .single();
+
+            const currentPrefs = currentProfile?.notification_preferences || {};
+
+            // Merge: preserve in_app and push channels, update only email
+            const updatedPreferences = {
+                ...currentPrefs,
+                email: preferences,
+            };
+
             const { error } = await supabase
                 .from('profiles')
                 .update({
-                    notification_preferences: {
-                        email: preferences,
-                    },
+                    notification_preferences: updatedPreferences,
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', userId);
