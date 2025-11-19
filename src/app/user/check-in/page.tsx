@@ -303,6 +303,25 @@ export default function CheckInGearPage() {
           throw new Error(`Failed to update gear status: ${gearUpdateError.message}`);
         }
 
+        // Send email notifications for check-in submission
+        try {
+          await fetch('/api/checkins/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              gearId,
+              gearName: gear.name,
+              condition: isDamaged ? 'Damaged' : 'Good',
+              notes: checkinNotes || undefined,
+              damageNotes: isDamaged ? damageDescription : undefined
+            })
+          });
+        } catch (emailError) {
+          console.error('Failed to send check-in email notifications:', emailError);
+          // Don't fail the check-in if email fails
+        }
+
         // Notify admins of pending check-in
         const { data: admins } = await supabase
           .from('profiles')

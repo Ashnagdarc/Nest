@@ -339,22 +339,21 @@ export default function ManageCheckinsPage() {
         `Your check-in for ${selectedCheckin.gearName} was rejected. Reason: ${rejectionReason}`
       );
 
-      // Step 4: Send rejection email using enhanced template
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('email, full_name')
-        .eq('id', selectedCheckin.userId)
-        .single();
-      if (userProfile?.email) {
-        // Import the enhanced email function
-        const { sendCheckinRejectionEmail } = await import('@/lib/email');
-        await sendCheckinRejectionEmail({
-          to: userProfile.email,
-          userName: userProfile.full_name || 'there',
-          gearList: [{ name: selectedCheckin.gearName }],
-          reason: rejectionReason,
-          checkinDate: selectedCheckin.checkinDate?.toISOString() || new Date().toISOString(),
+      // Step 4: Send rejection email notifications
+      try {
+        await fetch('/api/checkins/reject', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            checkinId: selectedCheckin.id,
+            userId: selectedCheckin.userId,
+            gearName: selectedCheckin.gearName,
+            reason: rejectionReason
+          })
         });
+      } catch (emailError) {
+        console.error('Failed to send check-in rejection emails:', emailError);
+        // Don't fail the rejection if email fails
       }
 
       // Send Google Chat notification for check-in rejection
@@ -506,27 +505,22 @@ export default function ManageCheckinsPage() {
         `Your check-in for ${selectedCheckin.gearName} has been approved.`
       );
 
-      // Step 5: Send approval email using enhanced template
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('email, full_name')
-        .eq('id', selectedCheckin.userId)
-        .single();
-      if (userProfile?.email) {
-        // Import the enhanced email function
-        const { sendCheckinApprovalEmail } = await import('@/lib/email');
-        await sendCheckinApprovalEmail({
-          to: userProfile.email,
-          userName: userProfile.full_name || 'there',
-          gearList: [{
-            name: selectedCheckin.gearName,
-            condition: selectedCheckin.condition || 'Good'
-          }],
-          checkinDate: selectedCheckin.checkinDate?.toISOString() || new Date().toISOString(),
-          condition: selectedCheckin.condition || 'Good',
-          notes: selectedCheckin.notes,
+      // Step 5: Send approval email notifications
+      try {
+        await fetch('/api/checkins/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            checkinId: selectedCheckin.id,
+            userId: selectedCheckin.userId,
+            gearName: selectedCheckin.gearName
+          })
         });
+      } catch (emailError) {
+        console.error('Failed to send check-in approval emails:', emailError);
+        // Don't fail the approval if email fails
       }
+
       // Step 6: Send Google Chat notification for check-in approval
       const { data: adminProfile } = await supabase
         .from('profiles')

@@ -11,6 +11,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Favicon } from "@/components/ui/theme-favicon";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { SessionRecoveryInitializer } from "@/components/SessionRecoveryInitializer";
 
 // Patch console.error for Supabase real-time polling fallback
 if (typeof window !== 'undefined') {
@@ -148,6 +149,7 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
       </head>
       <body className={`${lato.variable} font-sans antialiased`}>
+        <SessionRecoveryInitializer />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

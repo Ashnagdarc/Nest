@@ -25,7 +25,7 @@
 
 import { createBrowserClient } from '@supabase/ssr';
 import type { Database } from '@/types/supabase';
-
+import { cleanCorruptedSupabaseSession } from './storage-recovery';
 // Environment configuration with fallback for development
 // Note: The URL fallback is for development only and should be replaced in production
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lkgxzrvcozfxydpmbtqq.supabase.co';
@@ -106,6 +106,17 @@ let supabaseInstance: ReturnType<typeof createBrowserClient<Database>> | null = 
  * ```
  */
 export const createClient = () => {
+    // Clean up any corrupted sessions before creating the client
+    // This prevents TypeError from corrupted 'user' fields in localStorage
+    if (typeof window !== 'undefined') {
+        try {
+            cleanCorruptedSupabaseSession();
+        } catch (error) {
+            console.warn('[Supabase Client] Error during session recovery:', error);
+            // Continue anyway - recovery is non-critical
+        }
+    }
+
     // Critical environment validation
     // Both URL and anon key are required for client initialization
     if (!supabaseUrl || !supabaseAnonKey) {
