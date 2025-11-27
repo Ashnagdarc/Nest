@@ -289,6 +289,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
     // Calculate Enhanced Statistics
     const stats = useMemo((): EnhancedDashboardStats => {
+        // Log unique status values encountered in development
+        if (process.env.NODE_ENV === 'development') {
+            const uniqueStatuses = new Set(gears.map(g => g.status).filter(Boolean));
+            if (uniqueStatuses.size > 0) {
+                console.log('[Dashboard] Gear statuses in DB:', Array.from(uniqueStatuses));
+            }
+        }
+        
         // Calculate equipment statistics considering pending check-ins
         const totalEquipment = gears.reduce((sum, gear) => sum + (gear.quantity ?? 1), 0);
 
@@ -297,9 +305,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         // Note: This would need to be fetched from the server, but for now we'll use the available_quantity field
         // which should be updated by our database triggers
 
+        // Count available equipment using available_quantity field which reflects actual availability
         const availableEquipment = gears.reduce((sum, gear) => sum + (gear.available_quantity ?? 0), 0);
         const checkedOutEquipment = gears
-            .filter(gear => gear.status === 'Checked Out' || gear.status === 'Partially Checked Out')
+            .filter(gear => {
+                const status = gear.status || '';
+                return status === 'Checked Out' || status === 'Partially Checked Out' || status === 'Partially Available';
+            })
             .reduce((sum, gear) => {
                 // Calculate how many of this gear are checked out
                 const totalQuantity = gear.quantity ?? 1;
@@ -307,7 +319,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                 const checkedOutQuantity = totalQuantity - availableQuantity;
                 return sum + Math.max(0, checkedOutQuantity);
             }, 0);
-        const underRepairEquipment = gears.filter(gear => gear.status === 'Under Repair').length;
+        const underRepairEquipment = gears.filter(gear => gear.status === 'Under Repair' || gear.status === 'Needs Repair' || gear.status === 'Maintenance').length;
         const retiredEquipment = gears.filter(gear => gear.status === 'Retired').length;
         const utilizationRate = totalEquipment > 0 ? Math.round((checkedOutEquipment / totalEquipment) * 100) : 0;
 

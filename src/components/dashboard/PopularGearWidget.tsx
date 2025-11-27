@@ -8,6 +8,7 @@ import Link from "next/link";
 import { logger } from "@/utils/logger";
 import { TrendingUp, TrendingDown, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box } from 'lucide-react';
 import Image from 'next/image';
+import { normalizeGearStatus, GearStatus } from '@/lib/constants/gear-status';
 
 interface PopularGear {
     gear_id: string;
@@ -143,13 +144,22 @@ export function PopularGearWidget() {
     }, []);
 
     const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'Available':
+        const normalized = normalizeGearStatus(status);
+        switch (normalized) {
+            case GearStatus.AVAILABLE:
                 return 'bg-green-500/10 text-green-500';
-            case 'CheckedOut':
+            case GearStatus.CHECKED_OUT:
+            case GearStatus.PARTIALLY_CHECKED_OUT:
                 return 'bg-amber-500/10 text-amber-500';
-            case 'Maintenance':
+            case GearStatus.PARTIALLY_AVAILABLE:
+                return 'bg-green-500/10 text-green-500';
+            case GearStatus.MAINTENANCE:
+            case GearStatus.UNDER_REPAIR:
+            case GearStatus.NEEDS_REPAIR:
                 return 'bg-blue-500/10 text-blue-500';
+            case GearStatus.RETIRED:
+            case GearStatus.LOST:
+                return 'bg-gray-500/10 text-gray-500';
             default:
                 return 'bg-gray-500/10 text-gray-500';
         }
