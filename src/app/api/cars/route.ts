@@ -6,8 +6,8 @@ export async function GET(_request: NextRequest) {
         const supabase = await createSupabaseServerClient();
         const { data, error } = await supabase
             .from('cars')
-            .select('id, label, plate, active')
-            .eq('active', true)
+            .select('id, label, plate, status')
+            .neq('status', 'Retired')
             .order('label');
         if (error) return NextResponse.json({ data: [], error: error.message }, { status: 400 });
         return NextResponse.json({ data, error: null });

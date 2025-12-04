@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const admin = await createSupabaseServerClient(true);
-        const carId = params.id;
+        const { id: carId } = await params;
         const { data: assignmentRows, error: aErr } = await admin
             .from('car_assignment')
             .select('booking_id')

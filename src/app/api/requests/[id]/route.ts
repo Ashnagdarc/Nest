@@ -143,11 +143,12 @@ export async function GET(
     }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const { id } = await params;
         const supabase = await createSupabaseServerClient();
         const body = await request.json();
-        const { data, error } = await supabase.from('gear_requests').update(body).eq('id', params.id).select().single();
+        const { data, error } = await supabase.from('gear_requests').update(body).eq('id', id).select().single();
         if (error) throw error;
         return NextResponse.json({ data, error: null });
     } catch {
@@ -155,10 +156,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const { id } = await params;
         const supabase = await createSupabaseServerClient();
-        const { error } = await supabase.from('gear_requests').delete().eq('id', params.id);
+        const { error } = await supabase.from('gear_requests').delete().eq('id', id);
         if (error) throw error;
         return NextResponse.json({ success: true });
     } catch {

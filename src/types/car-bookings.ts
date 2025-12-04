@@ -24,7 +24,8 @@ export interface Car {
     id: string;
     label: string;
     plate: string | null;
-    active: boolean;
+    // active: boolean; (removed, use status instead)
+    status: string;
     created_at: string;
     updated_at: string;
 }
