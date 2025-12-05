@@ -25,7 +25,7 @@
 
 import { createBrowserClient } from '@supabase/ssr';
 import type { Database } from '@/types/supabase';
-import { cleanCorruptedSupabaseSession } from './storage-recovery';
+import { cleanCorruptedSupabaseSession, clearAllSupabaseAuth } from './storage-recovery';
 // Environment configuration with fallback for development
 // Note: The URL fallback is for development only and should be replaced in production
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lkgxzrvcozfxydpmbtqq.supabase.co';
@@ -110,10 +110,17 @@ export const createClient = () => {
     // This prevents TypeError from corrupted 'user' fields in localStorage
     if (typeof window !== 'undefined') {
         try {
-            cleanCorruptedSupabaseSession();
+            const wasCleaned = cleanCorruptedSupabaseSession();
+            if (wasCleaned) {
+                console.log('[Supabase Client] Corrupted session data was cleaned');
+            }
         } catch (error) {
             console.warn('[Supabase Client] Error during session recovery:', error);
-            // Continue anyway - recovery is non-critical
+            // If recovery fails completely, try nuclear option
+            try {
+                clearAllSupabaseAuth();
+                console.log('[Supabase Client] Used nuclear cleanup after recovery failure');
+            } catch {}
         }
     }
 
@@ -180,6 +187,54 @@ export const createClient = () => {
         );
 
 
+        // Create a proxy that wraps specific auth methods to handle corruption errors
+        // while preserving all other methods and properties
+        const originalAuth = supabaseInstance.auth;
+        const wrappedAuth = new Proxy(originalAuth, {
+            get(target, prop, receiver) {
+                const value = Reflect.get(target, prop, receiver);
+                
+                // Wrap specific methods that can encounter session corruption
+                if (prop === 'signInWithPassword' && typeof value === 'function') {
+                    return async (...args: any[]) => {
+                        try {
+                            return await value.apply(target, args);
+                        } catch (error: any) {
+                            if (error.message?.includes("Cannot create property 'user' on string")) {
+                                console.warn('[Supabase Client] Detected session corruption during login, clearing storage');
+                                const { clearAllSupabaseAuth } = await import('./storage-recovery');
+                                clearAllSupabaseAuth();
+                                // Try again after cleanup
+                                return await value.apply(target, args);
+                            }
+                            throw error;
+                        }
+                    };
+                }
+                
+                if (prop === 'getUser' && typeof value === 'function') {
+                    return async (...args: any[]) => {
+                        try {
+                            return await value.apply(target, args);
+                        } catch (error: any) {
+                            if (error.message?.includes("Cannot create property 'user' on string")) {
+                                console.warn('[Supabase Client] Detected session corruption during getUser, clearing storage');
+                                const { clearAllSupabaseAuth } = await import('./storage-recovery');
+                                clearAllSupabaseAuth();
+                                return { data: { user: null }, error: null };
+                            }
+                            throw error;
+                        }
+                    };
+                }
+                
+                // For all other properties and methods, return as-is
+                return value;
+            }
+        });
+
+        // Replace the auth object with our proxy
+        (supabaseInstance as any).auth = wrappedAuth;
         return supabaseInstance;
     } catch (error) {
         // Enhanced error logging for debugging client creation issues

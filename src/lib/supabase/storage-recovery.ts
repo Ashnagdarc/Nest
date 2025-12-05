@@ -79,6 +79,14 @@ export function cleanCorruptedSupabaseSession(): boolean {
             wasCleaned = true;
             continue;
           }
+          
+          // Also check for other corruption patterns
+          if (session.user && typeof session.user !== 'object') {
+            console.warn('[Supabase Recovery] Session.user is not an object. Removing corrupted session.');
+            window.localStorage.removeItem(key);
+            wasCleaned = true;
+            continue;
+          }
 
           // Try to salvage what we can
           const repaired = repairSession(session);
@@ -227,5 +235,48 @@ export function clearAllSupabaseAuth(): void {
     }
   } catch (error) {
     console.warn('[Supabase Recovery] Error clearing auth data:', error);
+  }
+}
+
+/**
+ * Nuclear option: Clear all Supabase auth storage
+ * 
+ * Use this when corruption is severe and automatic recovery fails.
+ * This will force a complete re-authentication.
+ * 
+ * @returns {boolean} true if any storage was cleared
+ */
+export function clearAllSupabaseAuthStorage(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    const keys = Object.keys(window.localStorage);
+    let wasCleared = false;
+
+    for (const key of keys) {
+      if (key.startsWith('sb-') && key.includes('auth')) {
+        console.log(`[Supabase Recovery] Clearing auth storage: ${key}`);
+        window.localStorage.removeItem(key);
+        wasCleared = true;
+      }
+    }
+
+    // Also clear session storage
+    try {
+      const sessionKeys = Object.keys(window.sessionStorage);
+      for (const key of sessionKeys) {
+        if (key.startsWith('sb-') && key.includes('auth')) {
+          window.sessionStorage.removeItem(key);
+          wasCleared = true;
+        }
+      }
+    } catch {}
+
+    return wasCleared;
+  } catch (error) {
+    console.warn('[Supabase Recovery] Error during nuclear cleanup:', error);
+    return false;
   }
 }

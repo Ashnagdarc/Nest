@@ -83,6 +83,61 @@ const nextConfig = {
     // Only ignore ESLint during builds in production
     ignoreDuringBuilds: process.env.NODE_ENV === 'production',
   },
+  // Add headers for CORS and security
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: process.env.NODE_ENV === 'production' 
+              ? 'https://www.nestbyeden.app' 
+              : '*'
+          },
+          {
+            key: 'Access-Control-Allow-Methods',
+            value: 'GET, POST, PUT, DELETE, OPTIONS',
+          },
+          {
+            key: 'Access-Control-Allow-Headers',
+            value: 'Content-Type, Authorization, X-Requested-With',
+          },
+          {
+            key: 'Access-Control-Allow-Credentials',
+            value: 'true',
+          },
+        ],
+      },
+      {
+        source: '/favicon.ico',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, immutable, max-age=31536000',
+          },
+        ],
+      },
+      {
+        source: '/Favicon.png',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, immutable, max-age=31536000',
+          },
+        ],
+      },
+    ];
+  },
+  // Add rewrites to handle favicon properly
+  async rewrites() {
+    return [
+      {
+        source: '/favicon.ico',
+        destination: '/Favicon.ico',
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {
