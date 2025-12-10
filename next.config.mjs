@@ -79,10 +79,8 @@ const nextConfig = {
     // Only ignore build errors in production
     ignoreBuildErrors: process.env.NODE_ENV === 'production',
   },
-  eslint: {
-    // Only ignore ESLint during builds in production
-    ignoreDuringBuilds: process.env.NODE_ENV === 'production',
-  },
+  // Turbopack is enabled by default in Next.js 16
+  turbopack: {},
   // Add headers for CORS and security
   async headers() {
     return [
