@@ -19,6 +19,10 @@ export default function UserCarBookingPage() {
     const { toast } = useToast();
     const [rows, setRows] = useState<CarBooking[]>([]);
     const [history, setHistory] = useState<CarBooking[]>([]);
+    const [historyPage, setHistoryPage] = useState(1);
+    const [historyTotal, setHistoryTotal] = useState(0);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const historyPageSize = 10;
     const [assignedMap, setAssignedMap] = useState<Record<string, { label?: string; plate?: string }>>({});
     const [returningId, setReturningId] = useState<string | null>(null);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -46,6 +50,50 @@ export default function UserCarBookingPage() {
 
     // Simplified: no duration functions needed since we only use time_slot
 
+    const loadHistoryPage = async (page: number = historyPage) => {
+        setHistoryLoading(true);
+        try {
+            // Get all history items first to calculate proper pagination
+            const [cAll, rAll, cancelledAll] = await Promise.all([
+                listCarBookings({ page: 1, pageSize: 1000, status: 'Completed' }).catch(() => ({ data: [], total: 0 })),
+                listCarBookings({ page: 1, pageSize: 1000, status: 'Rejected' }).catch(() => ({ data: [], total: 0 })),
+                listCarBookings({ page: 1, pageSize: 1000, status: 'Cancelled' }).catch(() => ({ data: [], total: 0 })),
+            ]);
+        
+            // Combine all history items and sort by date (most recent first)
+            let allHist = [...(cAll.data || []), ...(rAll.data || []), ...(cancelledAll.data || [])]
+                .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime());
+            
+            const total = allHist.length;
+            const startIndex = (page - 1) * historyPageSize;
+            const endIndex = startIndex + historyPageSize;
+            const paginatedHist = allHist.slice(startIndex, endIndex);
+            
+            setHistory(paginatedHist);
+            setHistoryTotal(total);
+            setHistoryPage(page);
+            
+            // Update car assignments for paginated history items
+            const histIds = paginatedHist.map(b => b.id).join(',');
+            if (histIds && paginatedHist.length > 0) {
+                try {
+                    const assigned = await apiGet<{ data: Array<{ booking_id: string; label?: string; plate?: string }> }>(`/api/cars/assigned?bookingIds=${encodeURIComponent(histIds)}`);
+                    const newMap: Record<string, { label?: string; plate?: string }> = {};
+                    (assigned.data || []).forEach((a) => { newMap[a.booking_id] = { label: a.label, plate: a.plate }; });
+                    setAssignedMap(prev => ({ ...prev, ...newMap }));
+                } catch (error) {
+                    console.warn('Failed to load car assignments for history:', error);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load history:', error);
+            setHistory([]);
+            setHistoryTotal(0);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
     const load = async () => {
         // Fetch both Pending and Approved bookings for "My Recent Car Bookings"
         const [pending, approved] = await Promise.all([
@@ -55,24 +103,16 @@ export default function UserCarBookingPage() {
         const recent = [...(pending.data || []), ...(approved.data || [])];
         setRows(recent);
 
-        // Fetch completed and rejected for history
-        const [histCompleted, histRejected] = await Promise.all([
-            listCarBookings({ page: 1, pageSize: 10, status: 'Completed' }),
-            listCarBookings({ page: 1, pageSize: 10, status: 'Rejected' })
-        ]);
-        const hist = [...(histCompleted.data || []), ...(histRejected.data || [])];
-        setHistory(hist);
+        // Load history with pagination
+        await loadHistoryPage(1);
 
-        // Get assigned cars for all bookings
-        const idsArr = [...recent.map(b => b.id), ...hist.map(b => b.id)];
-        const ids = idsArr.join(',');
-        if (ids) {
-            const assigned = await apiGet<{ data: Array<{ booking_id: string; label?: string; plate?: string }> }>(`/api/cars/assigned?bookingIds=${encodeURIComponent(ids)}`);
+        // Get assigned cars for recent bookings
+        const recentIds = recent.map(b => b.id).join(',');
+        if (recentIds) {
+            const assigned = await apiGet<{ data: Array<{ booking_id: string; label?: string; plate?: string }> }>(`/api/cars/assigned?bookingIds=${encodeURIComponent(recentIds)}`);
             const map: Record<string, { label?: string; plate?: string }> = {};
             (assigned.data || []).forEach(a => { map[a.booking_id] = { label: a.label, plate: a.plate }; });
-            setAssignedMap(map);
-        } else {
-            setAssignedMap({});
+            setAssignedMap(prev => ({ ...prev, ...map }));
         }
     };
 
@@ -264,7 +304,7 @@ export default function UserCarBookingPage() {
                                                     const j: { success?: boolean; error?: string } = await res.json();
                                                     if (j.success) {
                                                         toast({ title: 'Thanks', description: 'Car return submitted.' });
-                                                        load(); // Refresh all data 
+                                                        load(); // Refresh recent bookings and history 
                                                     } else {
                                                         toast({ title: 'Error', description: j.error || 'Failed', variant: 'destructive' });
                                                     }
@@ -286,19 +326,96 @@ export default function UserCarBookingPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>History</CardTitle>
+                    <div className="flex items-center justify-between">
+                        <CardTitle>History</CardTitle>
+                        <span className="text-sm text-muted-foreground">
+                            {historyTotal > 0 ? `${historyTotal} total` : ''}
+                        </span>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-2">
-                        {history.map(b => (
+                        {historyLoading && [0, 1, 2].map(i => (
+                            <div key={i} className="border rounded p-2 animate-pulse">
+                                <div className="h-4 bg-muted rounded w-2/3 mb-2" />
+                                <div className="h-3 bg-muted rounded w-1/2 mb-1" />
+                                <div className="h-3 bg-muted rounded w-1/3" />
+                            </div>
+                        ))}
+                        {!historyLoading && history.map(b => (
                             <div key={b.id} className="border rounded p-2 text-sm">
                                 <div className="font-medium">{b.date_of_use} — {b.time_slot}</div>
                                 <div className="text-muted-foreground">{b.destination} · {b.purpose}</div>
-                                <div>Status: {b.status}</div>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span>Status: {b.status}</span>
+                                    {assignedMap[b.id] && (
+                                        <span className="text-xs text-muted-foreground">• Car: {assignedMap[b.id].label || '—'} {assignedMap[b.id].plate ? `(${assignedMap[b.id].plate})` : ''}</span>
+                                    )}
+                                </div>
                             </div>
                         ))}
-                        {history.length === 0 && <div className="text-sm text-muted-foreground">No history yet.</div>}
+                        {!historyLoading && history.length === 0 && <div className="text-sm text-muted-foreground">No history yet.</div>}
                     </div>
+
+                    {/* Pagination Controls */}
+                    {historyTotal > historyPageSize && (
+                        <div className="mt-4 pt-4 border-t">
+                            <div className="flex items-center justify-between">
+                                <div className="text-xs text-muted-foreground">
+                                    Showing <span className="font-semibold">{Math.min((historyPage - 1) * historyPageSize + 1, historyTotal)}</span> to <span className="font-semibold">{Math.min(historyPage * historyPageSize, historyTotal)}</span> of <span className="font-semibold">{historyTotal}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={historyPage <= 1 || historyLoading}
+                                        onClick={() => loadHistoryPage(historyPage - 1)}
+                                        className="px-3 py-1 text-xs"
+                                    >
+                                        ← Previous
+                                    </Button>
+                                    
+                                    <div className="flex items-center gap-1">
+                                        {Array.from({ length: Math.min(5, Math.ceil(historyTotal / historyPageSize)) }, (_, i) => {
+                                            const totalPages = Math.ceil(historyTotal / historyPageSize);
+                                            let pageNum;
+                                            if (totalPages <= 5) {
+                                                pageNum = i + 1;
+                                            } else if (historyPage <= 3) {
+                                                pageNum = i + 1;
+                                            } else if (historyPage >= totalPages - 2) {
+                                                pageNum = totalPages - 4 + i;
+                                            } else {
+                                                pageNum = historyPage - 2 + i;
+                                            }
+                                            return (
+                                                <Button
+                                                    key={pageNum}
+                                                    size="sm"
+                                                    variant={historyPage === pageNum ? "default" : "outline"}
+                                                    disabled={historyLoading}
+                                                    onClick={() => loadHistoryPage(pageNum)}
+                                                    className="w-8 h-7 p-0 text-xs"
+                                                >
+                                                    {pageNum}
+                                                </Button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={historyPage >= Math.ceil(historyTotal / historyPageSize) || historyLoading}
+                                        onClick={() => loadHistoryPage(historyPage + 1)}
+                                        className="px-3 py-1 text-xs"
+                                    >
+                                        Next →
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 

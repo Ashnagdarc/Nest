@@ -9,22 +9,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createClient } from '@/lib/supabase/client';
 import { apiGet } from '@/lib/apiClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-// import { RefreshCcw } from 'lucide-react';
+import { MapPin, Car, AlertCircle, RefreshCw } from 'lucide-react';
 import Image from 'next/image';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 
 function StatusPill({ status, updatedAt }: { status: string; updatedAt?: string }) {
-    const color = status === 'Approved' ? 'bg-amber-100 text-amber-700' :
-        status === 'Pending' ? 'bg-blue-100 text-blue-700' :
-            status === 'Rejected' ? 'bg-rose-100 text-rose-700' :
-                status === 'Cancelled' ? 'bg-gray-100 text-gray-700' :
-                    status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700';
-    const rel = updatedAt ? new Date(updatedAt) : undefined;
+    const getStatusStyles = (status: string) => {
+        switch (status) {
+            case 'Approved':
+                return { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-300', label: '• Approved' };
+            case 'Pending':
+                return { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300', label: '◦ Pending' };
+            case 'Rejected':
+                return { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-300', label: '✕ Rejected' };
+            case 'Cancelled':
+                return { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-700 dark:text-gray-300', label: '— Cancelled' };
+            case 'Completed':
+                return { bg: 'bg-emerald-100 dark:bg-emerald-900/30', text: 'text-emerald-700 dark:text-emerald-300', label: '✓ Completed' };
+            default:
+                return { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-700 dark:text-gray-300', label: status };
+        }
+    };
+    
+    const styles = getStatusStyles(status);
     return (
-        <div className="flex items-center gap-2">
-            <span className={`text-xs px-2 py-1 rounded-full ${color}`}>{status}</span>
-            {rel && <span className="text-xs text-muted-foreground">• updated {(updatedAt || '').slice(11, 16)}Z</span>}
+        <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium ${styles.bg} ${styles.text}`}>
+            <span>{styles.label}</span>
+            {updatedAt && <span className="opacity-60">({(updatedAt || '').slice(11, 16)}Z)</span>}
         </div>
     );
 }
@@ -343,103 +355,115 @@ export default function AdminManageCarBookingsPage() {
     ];
 
     return (
-        <div className="mx-auto max-w-5xl space-y-6">
-            <div className="flex items-center justify-between">
-                <CardTitle>Manage Car Bookings</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => { load(); toast({ title: 'Refreshed', description: 'Data reloaded.' }); }}>Refresh</Button>
+        <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manage Bookings</h1>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Car booking approvals and check-ins</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => { load(); toast({ title: 'Refreshed', description: 'Data reloaded.' }); }} className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Refresh</span>
+                </Button>
             </div>
             {/* Cars Overview */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Cars Overview</CardTitle>
+            <Card className="border-0 shadow-sm bg-white dark:bg-gray-900">
+                <CardHeader className="pb-4">
+                    <CardTitle className="text-lg font-semibold">Vehicles</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {sectionLoading.cars && [0, 1, 2].map(i => (
-                            <div key={i} className="border rounded overflow-hidden animate-pulse">
-                                <div className="h-28 bg-muted" />
+                            <div key={i} className="border rounded-lg overflow-hidden animate-pulse">
+                                <div className="h-32 bg-gray-100 dark:bg-gray-800" />
                                 <div className="p-3">
-                                    <div className="h-4 bg-muted rounded w-2/3 mb-2" />
-                                    <div className="h-3 bg-muted rounded w-1/3" />
+                                    <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-2/3 mb-2" />
+                                    <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/3" />
                                 </div>
                             </div>
                         ))}
                         {carStatus.map(c => (
-                            <div key={c.id} className={`border rounded overflow-hidden ${cardAnim(c.in_use)}`}>
+                            <div key={c.id} className={`border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden hover:shadow-md transition-shadow duration-200 ${cardAnim(c.in_use)}`}>
                                 <button onClick={() => openCarDialog(c)} className="block w-full">
-                                    <div className="relative h-28 w-full bg-card">
+                                    <div className="relative h-32 w-full bg-gray-100 dark:bg-gray-800">
                                         {c.image_url ? (
                                             <Image src={c.image_url} alt={c.label} fill className="object-cover" unoptimized />
                                         ) : (
-                                            <div className="h-full w-full flex items-center justify-center text-muted-foreground text-xs">No image</div>
+                                            <div className="h-full w-full flex items-center justify-center text-gray-400 dark:text-gray-500">
+                                                <Car className="w-6 h-6" />
+                                            </div>
                                         )}
-                                        {/* Status overlay for unavailable cars */}
+                                        {/* Status overlay */}
                                         {(c.status === 'Unavailable' || c.status === 'Maintenance') && (
-                                            <div className={`absolute inset-0 flex items-center justify-center ${
+                                            <div className={`absolute inset-0 flex items-center justify-center backdrop-blur-sm ${
                                                 c.status === 'Unavailable' 
-                                                    ? 'bg-red-500/70 text-white' 
-                                                    : 'bg-yellow-500/70 text-white'
+                                                    ? 'bg-red-600/80' 
+                                                    : 'bg-yellow-500/80'
                                             }`}>
-                                                <span className="font-medium text-sm px-2 py-1 rounded bg-black/20">
+                                                <span className="text-white text-xs font-semibold px-2 py-1 rounded-md bg-black/30">
                                                     {c.status}
                                                 </span>
                                             </div>
                                         )}
                                     </div>
-                                    <div className="p-3 text-sm text-left">
-                                        <div className="font-medium">{c.label}</div>
-                                        <div className="text-muted-foreground text-xs">{c.plate || '—'}</div>
-                                        <div className={`text-xs mt-1 ${c.in_use ? 'text-amber-600' : c.status === 'Available' ? 'text-emerald-600' : 'text-gray-500'}`}>{c.in_use ? 'Checked out' : (c.status || 'Unavailable')}</div>
+                                    <div className="p-3 space-y-2">
+                                        <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{c.label}</div>
+                                        <div className="text-xs text-gray-500 dark:text-gray-400">{c.plate || '—'}</div>
+                                        <div className={`text-xs font-medium ${
+                                            c.in_use ? 'text-amber-600 dark:text-amber-400' : 
+                                            c.status === 'Available' ? 'text-green-600 dark:text-green-400' : 
+                                            'text-gray-500 dark:text-gray-400'
+                                        }`}>
+                                            {c.in_use ? 'Checked out' : (c.status || 'Unavailable')}
+                                        </div>
                                     </div>
                                 </button>
-                                <div className="p-2 border-t flex justify-between items-center">
-                                    <span className="text-xs">Status: <span className="font-semibold">{c.status || 'Available'}</span></span>
-                                    <div className="flex gap-2">
-                                        <Button size="sm" variant="outline" onClick={() => openEdit(c)}>Edit Image</Button>
-                                        <Button size="sm" variant="outline" onClick={() => { setEditStatusCar(c); setNewStatus(c.status || 'Available'); setEditStatusOpen(true); }}>Edit Status</Button>
-                                    </div>
+                                <div className="p-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-2 bg-gray-50 dark:bg-gray-800/50">
+                                    <Button size="sm" variant="outline" className="text-xs" onClick={() => openEdit(c)}>Edit</Button>
+                                    <Button size="sm" variant="outline" className="text-xs" onClick={() => { setEditStatusCar(c); setNewStatus(c.status || 'Available'); setEditStatusOpen(true); }}>Status</Button>
                                 </div>
-                                        {/* Edit Status Dialog */}
-                                        <Dialog open={editStatusOpen} onOpenChange={setEditStatusOpen}>
-                                            <DialogContent>
-                                                <DialogHeader>
-                                                    <DialogTitle>Edit Status for {editStatusCar?.label}</DialogTitle>
-                                                </DialogHeader>
-                                                <div className="space-y-3">
-                                                    <Select value={newStatus} onValueChange={setNewStatus}>
-                                                        <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="Available">Available</SelectItem>
-                                                            <SelectItem value="Maintenance">Maintenance</SelectItem>
-                                                            <SelectItem value="Retired">Retired</SelectItem>
-                                                            <SelectItem value="Unavailable">Unavailable</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <div className="flex justify-end gap-2">
-                                                        <Button variant="outline" onClick={() => setEditStatusOpen(false)}>Cancel</Button>
-                                                        <Button onClick={async () => {
-                                                            if (!editStatusCar) return;
-                                                            await fetch(`/api/cars/${editStatusCar.id}/status`, {
-                                                                method: 'PATCH',
-                                                                headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({ status: newStatus }),
-                                                                credentials: 'include',
-                                                            });
-                                                            setEditStatusOpen(false);
-                                                            setEditStatusCar(null);
-                                                            setNewStatus('Available');
-                                                            load();
-                                                        }}>Save</Button>
-                                                    </div>
-                                                </div>
-                                            </DialogContent>
-                                        </Dialog>
                             </div>
                         ))}
-                        {!sectionLoading.cars && carStatus.length === 0 && <div className="text-sm text-muted-foreground">No cars</div>}
+                        {!sectionLoading.cars && carStatus.length === 0 && <div className="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">No vehicles available</div>}
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Edit Status Dialog */}
+            <Dialog open={editStatusOpen} onOpenChange={setEditStatusOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Status for {editStatusCar?.label}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <Select value={newStatus} onValueChange={setNewStatus}>
+                            <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Available">Available</SelectItem>
+                                <SelectItem value="Maintenance">Maintenance</SelectItem>
+                                <SelectItem value="Retired">Retired</SelectItem>
+                                <SelectItem value="Unavailable">Unavailable</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setEditStatusOpen(false)}>Cancel</Button>
+                            <Button onClick={async () => {
+                                if (!editStatusCar) return;
+                                await fetch(`/api/cars/${editStatusCar.id}/status`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ status: newStatus }),
+                                    credentials: 'include',
+                                });
+                                setEditStatusOpen(false);
+                                setEditStatusCar(null);
+                                setNewStatus('Available');
+                                load();
+                            }}>Save</Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* Edit Image Dialog */}
             <Dialog open={editImageOpen} onOpenChange={setEditImageOpen}>
@@ -478,22 +502,24 @@ export default function AdminManageCarBookingsPage() {
             {sections.map(section => {
                 const grouped = bySlot(section.rows);
                 return (
-                    <Card key={section.key}>
-                        <CardHeader>
-                            <CardTitle className="flex items-center justify-between">
-                                <span>{section.title}</span>
-                                <span className="text-sm text-muted-foreground">{section.rows.length}</span>
-                            </CardTitle>
+                    <Card key={section.key} className="border-0 shadow-sm bg-white dark:bg-gray-900">
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="text-lg font-semibold">{section.title}</CardTitle>
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                    {section.rows.length}
+                                </span>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-2">
                                 {sectionLoading[section.key] && [0, 1, 2].map(i => (
-                                    <div key={i} className="flex items-center justify-between border rounded p-3 animate-pulse">
+                                    <div key={i} className="flex items-center justify-between border border-gray-100 dark:border-gray-800 rounded-lg p-4 animate-pulse">
                                         <div className="space-y-2 w-full mr-4">
-                                            <div className="h-4 bg-muted rounded w-2/3" />
-                                            <div className="h-3 bg-muted rounded w-1/2" />
+                                            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-2/3" />
+                                            <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
                                         </div>
-                                        <div className="h-6 w-24 bg-muted rounded" />
+                                        <div className="h-8 w-24 bg-gray-100 dark:bg-gray-800 rounded" />
                                     </div>
                                 ))}
                                 {section.rows.map(b => {
@@ -513,43 +539,70 @@ export default function AdminManageCarBookingsPage() {
                                     };
                                     
                                     return (
-                                        <div key={b.id} className={`border rounded-lg p-4 transition-all duration-200 hover:shadow-md ${getStatusColor(b.status)}`}>
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex-1 space-y-2">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="font-semibold text-gray-900 dark:text-gray-100">
+                                        <div key={b.id} className={`border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-all duration-200 ${getStatusColor(b.status)}`}>
+                                            <div className="space-y-3">
+                                                {/* Header: Name and Date */}
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="font-semibold text-gray-900 dark:text-gray-100 text-base truncate">
                                                             {b.employee_name}
                                                         </div>
-                                                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                        <div className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
                                                             {b.date_of_use}
                                                         </div>
-                                                        <div className="text-sm text-gray-500 dark:text-gray-500 bg-white dark:bg-gray-800 px-2 py-0.5 rounded border">
+                                                    </div>
+                                                    <div>
+                                                        <StatusPill status={b.status} updatedAt={b.updated_at || undefined} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Details Section */}
+                                                <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                                                    {/* Time Slot */}
+                                                    <div className="flex items-center gap-2 text-sm">
+                                                        <span className="text-gray-500 dark:text-gray-400 min-w-fit">Time:</span>
+                                                        <span className="font-medium text-gray-900 dark:text-gray-100 px-2 py-1 rounded bg-gray-50 dark:bg-gray-800 text-xs">
                                                             {range12h(b.start_time, b.end_time, b.time_slot || '')}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Destination */}
+                                                    <div className="flex items-start gap-2 text-sm">
+                                                        <MapPin className="w-4 h-4 text-gray-500 dark:text-gray-400 mt-0.5 flex-shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="font-medium text-gray-900 dark:text-gray-100">{b.destination}</div>
+                                                            {b.purpose && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{b.purpose}</div>}
                                                         </div>
                                                     </div>
-                                                    <div className="text-sm text-gray-700 dark:text-gray-300">
-                                                        <span className="font-medium">📍 {b.destination}</span>
-                                                        {b.purpose && <span className="ml-2 text-gray-500">• {b.purpose}</span>}
-                                                    </div>
-                                                    <div className="flex items-center gap-3 flex-wrap">
-                                                        <StatusPill status={b.status} updatedAt={b.updated_at || undefined} />
-                                                        {section.key === 'history' && <ReturnedTag visible={isReturned} />}
-                                                        {carInfo && (section.key === 'approved' || section.key === 'history') && (
-                                                            <div className="flex items-center gap-1 text-xs bg-white dark:bg-gray-800 px-2 py-1 rounded border">
-                                                                <span className="text-gray-500">🚗</span>
-                                                                <span className="font-medium text-gray-700 dark:text-gray-300">
-                                                                    {carInfo.label || '—'} {carInfo.plate ? `(${carInfo.plate})` : ''}
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
+
+                                                    {/* Car Assignment */}
+                                                    {carInfo && (section.key === 'approved' || section.key === 'history') && (
+                                                        <div className="flex items-center gap-2 text-sm px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
+                                                            <Car className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                                                            <span className="font-medium text-blue-700 dark:text-blue-300 text-xs">
+                                                                {carInfo.label || '—'}{carInfo.plate ? ` • ${carInfo.plate}` : ''}
+                                                            </span>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Overlap Warning */}
                                                     {overlaps > 0 && (
-                                                        <div className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 px-2 py-1 rounded">
-                                                            ⚠️ {overlaps} overlap(s) in this slot
+                                                        <div className="flex items-center gap-2 text-xs px-2 py-1.5 rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 text-amber-700 dark:text-amber-300">
+                                                            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                                            <span className="font-medium">{overlaps} time slot conflict{overlaps !== 1 ? 's' : ''}</span>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Returned Tag */}
+                                                    {isReturned && (
+                                                        <div className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 text-xs font-medium text-green-700 dark:text-green-300">
+                                                            ✓ Returned
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="ml-4">
+
+                                                {/* Actions Section */}
+                                                <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
                                                     {section.renderActions(b)}
                                                 </div>
                                             </div>
@@ -559,34 +612,24 @@ export default function AdminManageCarBookingsPage() {
                                 {!sectionLoading[section.key] && section.rows.length === 0 && <div className="text-sm text-muted-foreground">No items.</div>}
                             </div>
                             {section.key === 'history' && (
-                                <div className="border-t bg-gray-50/50 dark:bg-gray-900/20">
-                                    {/* Filter tabs */}
-                                    <div className="p-4 border-b bg-white dark:bg-gray-800">
+                                <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                    {/* Filter Section */}
+                                    <div className="mb-4">
+                                        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-3">Filter</div>
                                         <div className="flex flex-wrap gap-2">
                                             {(['All', 'Completed', 'Rejected', 'Cancelled'] as const).map((filterOption) => {
-                                                const getFilterStyles = (filter: string, isActive: boolean) => {
-                                                    if (isActive) {
-                                                        switch (filter) {
-                                                            case 'Completed': return 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:border-green-700';
-                                                            case 'Rejected': return 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:border-red-700';
-                                                            case 'Cancelled': return 'bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200 dark:bg-orange-900 dark:text-orange-200 dark:border-orange-700';
-                                                            default: return 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-200 dark:border-blue-700';
-                                                        }
-                                                    }
-                                                    return 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 dark:border-gray-600';
-                                                };
-                                                
+                                                const isActive = historyFilter === filterOption;
                                                 return (
                                                     <Button
                                                         key={filterOption}
                                                         size="sm"
-                                                        variant="outline"
+                                                        variant={isActive ? "default" : "outline"}
                                                         disabled={sectionLoading.history}
                                                         onClick={() => {
                                                             setHistoryPage(1);
                                                             loadHistoryPage(1, filterOption);
                                                         }}
-                                                        className={`${getFilterStyles(filterOption, historyFilter === filterOption)} font-medium transition-all duration-200`}
+                                                        className="text-xs"
                                                     >
                                                         {filterOption}
                                                     </Button>
@@ -594,24 +637,25 @@ export default function AdminManageCarBookingsPage() {
                                             })}
                                         </div>
                                     </div>
-                                    {/* Pagination controls */}
+
+                                    {/* Pagination Section */}
                                     {historyTotal > historyPageSize && (
-                                        <div className="p-4 bg-white dark:bg-gray-800 border-t">
-                                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                                                <div className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                                                    Showing <span className="text-gray-900 dark:text-gray-100">{Math.min((historyPage - 1) * historyPageSize + 1, historyTotal)}</span> to <span className="text-gray-900 dark:text-gray-100">{Math.min(historyPage * historyPageSize, historyTotal)}</span> of <span className="text-gray-900 dark:text-gray-100">{historyTotal}</span> entries
-                                                </div>
-                                                <div className="flex items-center gap-2">
+                                        <div className="pt-4 space-y-3">
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
+                                                Showing <span className="font-semibold text-gray-900 dark:text-gray-100">{Math.min((historyPage - 1) * historyPageSize + 1, historyTotal)}</span> of <span className="font-semibold text-gray-900 dark:text-gray-100">{historyTotal}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between flex-wrap gap-3">
+                                                <div className="flex items-center gap-1">
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
                                                         disabled={historyPage <= 1 || sectionLoading.history}
                                                         onClick={() => loadHistoryPage(historyPage - 1, historyFilter)}
-                                                        className="px-3 py-1.5 text-xs font-medium"
+                                                        className="text-xs"
                                                     >
-                                                        ← Previous
+                                                        ← Prev
                                                     </Button>
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex items-center gap-0.5 mx-1">
                                                         {Array.from({ length: Math.min(5, Math.ceil(historyTotal / historyPageSize)) }, (_, i) => {
                                                             const totalPages = Math.ceil(historyTotal / historyPageSize);
                                                             let pageNum;
@@ -631,11 +675,7 @@ export default function AdminManageCarBookingsPage() {
                                                                     variant={historyPage === pageNum ? "default" : "outline"}
                                                                     disabled={sectionLoading.history}
                                                                     onClick={() => loadHistoryPage(pageNum, historyFilter)}
-                                                                    className={`w-8 h-8 p-0 text-xs font-medium ${
-                                                                        historyPage === pageNum 
-                                                                            ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700' 
-                                                                            : 'hover:bg-gray-50 dark:hover:bg-gray-700'
-                                                                    }`}
+                                                                    className="w-8 h-8 p-0 text-xs font-medium"
                                                                 >
                                                                     {pageNum}
                                                                 </Button>
@@ -647,7 +687,7 @@ export default function AdminManageCarBookingsPage() {
                                                         variant="outline"
                                                         disabled={historyPage >= Math.ceil(historyTotal / historyPageSize) || sectionLoading.history}
                                                         onClick={() => loadHistoryPage(historyPage + 1, historyFilter)}
-                                                        className="px-3 py-1.5 text-xs font-medium"
+                                                        className="text-xs"
                                                     >
                                                         Next →
                                                     </Button>
