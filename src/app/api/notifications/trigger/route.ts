@@ -578,71 +578,71 @@ export async function POST(req: NextRequest) {
                     if (tokens.length === 0) {
                         // nothing to send
                     } else {
-                        // Try firebase-admin path
-                        try {
-                            const firebaseAdmin = await import('@/lib/firebaseAdmin');
-                            if (firebaseAdmin && firebaseAdmin.initFirebaseAdmin && firebaseAdmin.initFirebaseAdmin()) {
-                                const resp: any = await firebaseAdmin.sendMulticast(tokens, {
-                                    notification: { title, body: message },
-                                    data: (metadata as any) || {}
-                                });
-                                // Remove invalid tokens reported by sendMulticast
-                                const toRemove: string[] = [];
-                                resp.responses.forEach((r: any, idx: number) => {
-                                    if (!r.success) {
-                                        try {
-                                            const errCode = (r.error && (r.error as any).code) || '';
-                                            // common invalid token errors
-                                            if (errCode === 'messaging/registration-token-not-registered' || errCode === 'messaging/invalid-registration-token') {
-                                                toRemove.push(tokens[idx]);
-                                            }
-                                        } catch (e) {
-                                            // best-effort
-                                            toRemove.push(tokens[idx]);
-                                        }
-                                    }
-                                });
-                                if (toRemove.length) {
-                                    await supabase.from('user_push_tokens').delete().in('token', toRemove as any[]);
+                        const webPushLib = await import('@/lib/webPush');
+                        const fcmTokens: string[] = [];
+                        const webPushSubscriptions: any[] = [];
+
+                        // Categorize tokens (Web Push vs FCM)
+                        for (const t of tokens) {
+                            try {
+                                const parsed = JSON.parse(t);
+                                if (parsed && parsed.endpoint) {
+                                    webPushSubscriptions.push(parsed);
+                                } else {
+                                    fcmTokens.push(t);
                                 }
-                            } else if (FCM_SERVER_KEY) {
-                                // fallback to legacy FCM REST API
-                                for (const t of tokens) {
-                                    await fetch(FCM_API_URL, {
-                                        method: 'POST',
-                                        headers: {
-                                            'Authorization': `key=${FCM_SERVER_KEY}`,
-                                            'Content-Type': 'application/json',
-                                        },
-                                        body: JSON.stringify({
-                                            to: t,
-                                            notification: { title, body: message },
-                                            data: metadata,
-                                        }),
-                                    });
+                            } catch (e) {
+                                fcmTokens.push(t);
+                            }
+                        }
+
+                        // 1. Send via Web Push (VAPID)
+                        if (webPushSubscriptions.length > 0) {
+                            for (const sub of webPushSubscriptions) {
+                                try {
+                                    await webPushLib.sendWebPush(sub, { title, body: message, data: (metadata as any) || {} });
+                                } catch (err: any) {
+                                    console.error('[Notification Trigger] WebPush individual error', err.statusCode, err.message);
+                                    if (err.statusCode === 410 || err.statusCode === 404) {
+                                        // Expired or invalid subscription
+                                        await supabase.from('user_push_tokens').delete().eq('token', JSON.stringify(sub));
+                                    }
                                 }
                             }
-                        } catch (errAdmin) {
-                            // If admin send fails, try legacy key if available
-                            console.error('[Notification Trigger] firebase-admin error', errAdmin);
-                            if (FCM_SERVER_KEY) {
-                                for (const t of tokens) {
-                                    await fetch(FCM_API_URL, {
-                                        method: 'POST',
-                                        headers: {
-                                            'Authorization': `key=${FCM_SERVER_KEY}`,
-                                            'Content-Type': 'application/json',
-                                        },
-                                        body: JSON.stringify({
-                                            to: t,
-                                            notification: { title, body: message },
-                                            data: metadata,
-                                        }),
+                        }
+
+                        // 2. Send via Firebase (Legacy / Fallback)
+                        if (fcmTokens.length > 0) {
+                            try {
+                                const firebaseAdmin = await import('@/lib/firebaseAdmin');
+                                if (firebaseAdmin && firebaseAdmin.initFirebaseAdmin && firebaseAdmin.initFirebaseAdmin()) {
+                                    const resp: any = await firebaseAdmin.sendMulticast(fcmTokens, {
+                                        notification: { title, body: message },
+                                        data: (metadata as any) || {}
                                     });
+                                    const toRemove: string[] = [];
+                                    resp.responses.forEach((r: any, idx: number) => {
+                                        if (!r.success) {
+                                            const errCode = (r.error && (r.error as any).code) || '';
+                                            if (errCode === 'messaging/registration-token-not-registered' || errCode === 'messaging/invalid-registration-token') {
+                                                toRemove.push(fcmTokens[idx]);
+                                            }
+                                        }
+                                    });
+                                    if (toRemove.length) {
+                                        await supabase.from('user_push_tokens').delete().in('token', toRemove as any[]);
+                                    }
+                                } else if (FCM_SERVER_KEY) {
+                                    for (const t of fcmTokens) {
+                                        await fetch(FCM_API_URL, {
+                                            method: 'POST',
+                                            headers: { 'Authorization': `key=${FCM_SERVER_KEY}`, 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ to: t, notification: { title, body: message }, data: metadata }),
+                                        });
+                                    }
                                 }
-                            } else {
-                                lastError = (lastError ? lastError + '; ' : '') + `Push(Admin): ${errAdmin instanceof Error ? errAdmin.message : String(errAdmin)}`;
-                                errors.push(lastError);
+                            } catch (errAdmin) {
+                                console.error('[Notification Trigger] firebase-admin error', errAdmin);
                             }
                         }
                     }

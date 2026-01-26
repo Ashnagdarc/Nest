@@ -88,9 +88,8 @@ export default function UserSettingsPage() {
             push: {},
         }
     );
-    const [pushEnabled, setPushEnabled] = useState(false);
-    const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
-    const { enable: enablePush, isSupported: isPushSupported } = usePushNotifications();
+    const { enable: enablePush, isSupported: isPushSupported, permission: pushPermission, subscription: pushSubscription } = usePushNotifications();
+    const [isTestingPush, setIsTestingPush] = useState(false);
     const [isLoadingUser, setIsLoadingUser] = useState(true);
     const [showCropper, setShowCropper] = useState(false);
     const [rawImage, setRawImage] = useState<string | null>(null);
@@ -127,20 +126,19 @@ export default function UserSettingsPage() {
     // Load notification preferences from database
     useEffect(() => {
         if (!currentUserData?.id) return;
-        
+
         const loadNotificationPreferences = async () => {
             try {
-                setIsLoadingNotifications(true);
                 const { data, error } = await supabase
                     .from('profiles')
                     .select('notification_preferences')
                     .eq('id', currentUserData.id)
                     .single();
-                
+
                 if (error) throw error;
-                
+
                 const prefs = data?.notification_preferences || {};
-                
+
                 // Initialize default structure if empty
                 if (Object.keys(prefs).length === 0) {
                     const defaultPrefs = {
@@ -181,11 +179,9 @@ export default function UserSettingsPage() {
                 }
             } catch (err) {
                 console.error('Failed to load notification preferences:', err);
-            } finally {
-                setIsLoadingNotifications(false);
             }
         };
-        
+
         loadNotificationPreferences();
     }, [currentUserData?.id]);
 
@@ -350,7 +346,7 @@ export default function UserSettingsPage() {
             console.error("Supabase password update error:", error);
             if (typeof (error as Error).message === 'string' && (error as Error).message.includes("Password should be stronger")) {
                 passwordForm.setError("newPassword", { message: "Password is too weak." });
-                throw new Error("New password is too weak.");
+                throw new Error("Password is too weak.");
             } else if (typeof (error as Error).message === 'string' && (error as Error).message.includes("requires recent login")) {
                 throw new Error("Please log out and log back in to change password.");
             } else {
@@ -392,15 +388,39 @@ export default function UserSettingsPage() {
 
     const handleEnablePush = async () => {
         try {
-            await enablePush();
-            setPushEnabled(true);
-            toast({ title: "Push Notifications Enabled", description: "You will receive push notifications." });
-        } catch (err) {
+            setLoading(true);
+            const result = await enablePush();
+            if (result.success) {
+                toast({ title: "Push Notifications Enabled", description: "You will now receive high-priority alerts on this device." });
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (err: any) {
             console.error('Failed to enable push notifications:', err);
-            toast({ title: "Push Failed", description: "Could not enable push notifications.", variant: "destructive" });
+            toast({ title: "Push Activation Failed", description: err.message || "Please check your browser settings.", variant: "destructive" });
+        } finally {
+            setLoading(false);
         }
     };
 
+    const handleTestPush = async () => {
+        try {
+            setIsTestingPush(true);
+            const res = await fetch('/api/notifications/test-push', { method: 'POST' });
+            const data = await res.json();
+
+            if (data.success) {
+                toast({ title: "Test Sent!", description: "You should receive a notification on this device shortly." });
+            } else {
+                throw new Error(data.error || "Failed to send test push.");
+            }
+        } catch (err: any) {
+            console.error('Test push error:', err);
+            toast({ title: "Test Failed", description: err.message, variant: "destructive" });
+        } finally {
+            setIsTestingPush(false);
+        }
+    };
     const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
 
     const cardVariants = { hidden: { opacity: 0, y: 20 }, visible: (i: number = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5, ease: "easeOut" }, }), };
@@ -641,27 +661,52 @@ export default function UserSettingsPage() {
                             <h3 className="text-sm font-semibold text-foreground">📱 Push Notifications</h3>
                             {isPushSupported ? (
                                 <div className="space-y-2 pl-2">
-                                    {!pushEnabled && (
-                                        <Button onClick={handleEnablePush} variant="outline" className="w-full mb-3">
+                                    {pushPermission === 'granted' && pushSubscription ? (
+                                        <div className="space-y-4 mb-4">
+                                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-600">
+                                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                                <span>Active: This device is registered to receive notifications.</span>
+                                            </div>
+                                            <Button
+                                                onClick={handleTestPush}
+                                                variant="outline"
+                                                className="w-full text-xs h-9 border-dashed border-primary/30 hover:bg-primary/5 gap-2"
+                                                loading={isTestingPush}
+                                            >
+                                                <Bell className="h-3.5 w-3.5" />
+                                                Send Test Notification
+                                            </Button>
+                                        </div>
+                                    ) : pushPermission === 'granted' && !pushSubscription ? (
+                                        <div className="space-y-4 mb-4">
+                                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600">
+                                                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                                                <span>Permission is granted, but subscription is missing.</span>
+                                            </div>
+                                            <Button onClick={handleEnablePush} variant="outline" className="w-full border-primary/20 hover:bg-primary/5 hover:text-primary transition-all gap-2 h-11 rounded-xl">
+                                                <Bell className="h-4 w-4" />
+                                                Fix / Re-enable Push
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <Button onClick={handleEnablePush} variant="outline" className="w-full mb-4 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all gap-2 h-11 rounded-xl">
+                                            <Bell className="h-4 w-4" />
                                             Enable Push Notifications
                                         </Button>
-                                    )}
-                                    {pushEnabled && (
-                                        <div className="text-xs text-green-600 mb-2">✓ Push notifications enabled</div>
                                     )}
                                     <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
                                         <Label htmlFor="push-gear-requests" className="flex flex-col space-y-1 cursor-pointer">
                                             <span className="text-sm font-medium">Gear Requests</span>
                                             <span className="font-normal text-muted-foreground text-xs">Push notifications for gear requests</span>
                                         </Label>
-                                        <Switch id="push-gear-requests" checked={notificationSettings.push?.gear_requests ?? true} onCheckedChange={(checked) => handleNotificationChange('push', 'gear_requests', checked)} disabled={!pushEnabled} />
+                                        <Switch id="push-gear-requests" checked={notificationSettings.push?.gear_requests ?? true} onCheckedChange={(checked) => handleNotificationChange('push', 'gear_requests', checked)} disabled={pushPermission !== 'granted' || !pushSubscription} />
                                     </div>
                                     <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
                                         <Label htmlFor="push-approvals" className="flex flex-col space-y-1 cursor-pointer">
                                             <span className="text-sm font-medium">Request Approvals</span>
                                             <span className="font-normal text-muted-foreground text-xs">When your request is approved</span>
                                         </Label>
-                                        <Switch id="push-approvals" checked={notificationSettings.push?.gear_approvals ?? true} onCheckedChange={(checked) => handleNotificationChange('push', 'gear_approvals', checked)} disabled={!pushEnabled} />
+                                        <Switch id="push-approvals" checked={notificationSettings.push?.gear_approvals ?? true} onCheckedChange={(checked) => handleNotificationChange('push', 'gear_approvals', checked)} disabled={pushPermission !== 'granted' || !pushSubscription} />
                                     </div>
                                 </div>
                             ) : (
