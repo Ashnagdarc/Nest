@@ -7,15 +7,34 @@ export function usePushNotifications() {
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
 
+  const syncSubscription = useCallback(async (sub: PushSubscription) => {
+    try {
+      await fetch('/api/notifications/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscription: sub,
+          client_info: { ua: navigator.userAgent, synced_at: new Date().toISOString() }
+        }),
+      });
+    } catch (err) {
+      console.error('[Push Hook] Sync error:', err);
+    }
+  }, []);
+
   const checkSubscription = useCallback(async () => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
-      setSubscription(sub);
+      if (sub) {
+        setSubscription(sub);
+        // Proactively sync with server just in case DB was cleared
+        await syncSubscription(sub);
+      }
       return sub;
     }
     return null;
-  }, []);
+  }, [syncSubscription]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

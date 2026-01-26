@@ -88,8 +88,9 @@ export default function UserSettingsPage() {
             push: {},
         }
     );
-    const { enable: enablePush, isSupported: isPushSupported, permission: pushPermission, subscription: pushSubscription } = usePushNotifications();
+    const { enable: enablePush, isSupported: isPushSupported, permission: pushPermission, subscription: pushSubscription, checkSubscription } = usePushNotifications();
     const [isTestingPush, setIsTestingPush] = useState(false);
+    const [isSyncingPush, setIsSyncingPush] = useState(false);
     const [isLoadingUser, setIsLoadingUser] = useState(true);
     const [showCropper, setShowCropper] = useState(false);
     const [rawImage, setRawImage] = useState<string | null>(null);
@@ -122,6 +123,14 @@ export default function UserSettingsPage() {
 
     // Clear draft on submit
     const clearProfileDraft = () => localStorage.removeItem(PROFILE_FORM_DRAFT_KEY);
+
+    // Verify push sync on mount
+    useEffect(() => {
+        if (pushPermission === 'granted') {
+            setIsSyncingPush(true);
+            checkSubscription().finally(() => setIsSyncingPush(false));
+        }
+    }, [pushPermission, checkSubscription]);
 
     // Load notification preferences from database
     useEffect(() => {
@@ -680,7 +689,12 @@ export default function UserSettingsPage() {
                             <h3 className="text-sm font-semibold text-foreground">📱 Push Notifications</h3>
                             {isPushSupported ? (
                                 <div className="space-y-2 pl-2">
-                                    {pushPermission === 'granted' && pushSubscription ? (
+                                    {isSyncingPush ? (
+                                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-600 mb-4 transition-all">
+                                            <div className="w-2 h-2 rounded-full bg-blue-500 animate-spin" />
+                                            <span>Verifying push registration with server...</span>
+                                        </div>
+                                    ) : pushPermission === 'granted' && pushSubscription ? (
                                         <div className="space-y-4 mb-4">
                                             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-600">
                                                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
