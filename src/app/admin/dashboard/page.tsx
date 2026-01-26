@@ -3,7 +3,6 @@
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
     Package,
@@ -12,8 +11,6 @@ import {
     AlertTriangle,
     Bell,
     Activity,
-    Settings,
-    BarChart3,
     Plus,
     ArrowUpRight,
     RefreshCcw,
@@ -100,7 +97,7 @@ export default function AdminDashboardPage() {
     };
 
     // Use unified dashboard data
-    const { data: dashboardData, loading: isLoading, error: dashboardError, refetch } = useUnifiedDashboard();
+    const { data: dashboardData, loading: isLoading, error: dashboardError } = useUnifiedDashboard();
 
     // Fetch pending items that need admin attention
     useEffect(() => {
@@ -355,24 +352,6 @@ export default function AdminDashboardPage() {
         }),
     };
 
-    const getPriorityColor = (priority: string) => {
-        switch (priority) {
-            case 'high': return 'bg-red-100 text-red-800 border-red-200';
-            case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-            case 'low': return 'bg-green-100 text-green-800 border-green-200';
-            default: return 'bg-gray-100 text-gray-800 border-gray-200';
-        }
-    };
-
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'Pending Admin Approval': return 'bg-orange-100 text-orange-800';
-            case 'Completed': return 'bg-green-100 text-green-800';
-            case 'System': return 'bg-blue-100 text-blue-800';
-            case 'Request': return 'bg-purple-100 text-purple-800';
-            default: return 'bg-gray-100 text-gray-800';
-        }
-    };
 
     const formatTimeAgo = (timestamp: string) => {
         const now = new Date();
@@ -393,19 +372,15 @@ export default function AdminDashboardPage() {
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 sm:gap-8"
+                    className="space-y-2"
                 >
-                    <div className="flex-1 min-w-0">
-                        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground truncate leading-tight">
-                            Admin Dashboard
-                        </h1>
-                        <p className="text-muted-foreground mt-2 text-base sm:text-lg lg:text-xl leading-relaxed">
-                            Manage equipment, users, and system operations
-                        </p>
-                    </div>
-                    {/* Header actions removed as requested */}
+                    <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-foreground">
+                        Admin Dashboard
+                    </h1>
+                    <p className="text-muted-foreground text-base sm:text-lg max-w-2xl">
+                        Monitor equipment status, oversee user activity, and manage system operations from a single view.
+                    </p>
                 </motion.div>
-
                 {/* Error Display */}
                 {dashboardError && (
                     <div className="text-red-500 font-bold text-center py-4 px-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
@@ -417,7 +392,7 @@ export default function AdminDashboardPage() {
                 {isLoading ? (
                     <LoadingState variant="cards" count={3} />
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {mainStats.map((stat, i) => (
                             <motion.div
                                 key={stat.title}
@@ -425,36 +400,25 @@ export default function AdminDashboardPage() {
                                 initial="hidden"
                                 animate="visible"
                                 variants={cardVariants}
-                                className="w-full"
                             >
-                                <Card className="h-full hover:shadow-lg transition-all duration-300 border-border/50">
-                                    <CardHeader className="flex flex-row items-center justify-between pb-3 p-6">
-                                        <CardTitle className="text-base sm:text-lg lg:text-xl font-semibold flex items-center gap-3 truncate">
-                                            {React.createElement(stat.icon, { className: `h-6 w-6 sm:h-7 sm:w-7 ${stat.color} flex-shrink-0` })}
-                                            <span className="truncate">{stat.title}</span>
-                                        </CardTitle>
-                                        <Badge
-                                            className={
-                                                'text-sm sm:text-base px-3 sm:px-4 py-1.5 font-bold shadow-none flex-shrink-0 rounded-lg ' +
-                                                (stat.title === 'Equipment' ? 'bg-blue-600 text-white' :
-                                                    stat.title === 'Users' ? 'bg-green-600 text-white' :
-                                                        stat.title === 'Pending Actions' ? 'bg-orange-600 text-white' :
-                                                            'bg-gray-600 text-white')
-                                            }
-                                        >
-                                            {stat.value}
-                                        </Badge>
+                                <Card className="relative overflow-hidden border-none bg-accent/10 hover:bg-accent/20 transition-all duration-300 rounded-2xl group">
+                                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                        <div className={`p-2 rounded-xl ${stat.bgColor}`}>
+                                            {React.createElement(stat.icon, { className: `h-5 w-5 ${stat.color}` })}
+                                        </div>
+                                        <span className="text-2xl font-semibold tracking-tight">{stat.value}</span>
                                     </CardHeader>
-                                    <CardContent className="p-6 pt-0">
-                                        <p className="text-sm sm:text-base text-muted-foreground mb-4 line-clamp-2 leading-relaxed">
-                                            {stat.description}
-                                        </p>
-                                        {stat.value === 0 && (
-                                            <div className="text-sm text-muted-foreground italic">No {stat.title.toLowerCase()}.</div>
-                                        )}
-                                        <Link href={stat.link} className="text-blue-500 hover:underline text-sm sm:text-base inline-flex items-center gap-2">
+                                    <CardContent>
+                                        <div className="space-y-1">
+                                            <h3 className="font-medium text-sm text-foreground">{stat.title}</h3>
+                                            <p className="text-sm text-muted-foreground/70">{stat.description}</p>
+                                        </div>
+                                        <Link
+                                            href={stat.link}
+                                            className="mt-4 inline-flex items-center text-sm font-medium text-primary hover:gap-2 transition-all"
+                                        >
                                             View details
-                                            <ArrowUpRight className="h-4 w-4" />
+                                            <ArrowUpRight className="h-4 w-4 ml-1" />
                                         </Link>
                                     </CardContent>
                                 </Card>
@@ -463,53 +427,49 @@ export default function AdminDashboardPage() {
                     </div>
                 )}
 
-                {/* Quick Actions */}
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.2 }}
                 >
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Plus className="h-5 w-5" />
+                    <Card className="border-none bg-accent/5 rounded-2xl">
+                        <CardHeader className="pb-4">
+                            <CardTitle className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 flex items-center gap-2">
+                                <Plus className="h-4 w-4" />
                                 Quick Actions
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <div className="flex flex-wrap gap-3">
                                 <Dialog open={addGearOpen} onOpenChange={setAddGearOpen}>
                                     <DialogTrigger asChild>
-                                        <Button className="gap-2 h-12">
-                                            <Plus className="h-4 w-4" />
+                                        <Button className="h-12 px-6 rounded-full bg-primary text-primary-foreground shadow-sm hover:scale-105 transition-all gap-2 text-sm font-semibold">
+                                            <Plus className="h-5 w-5" />
                                             Add Equipment
                                         </Button>
                                     </DialogTrigger>
-                                    <DialogContent className="sm:max-w-md">
+                                    <DialogContent className="sm:max-w-md rounded-3xl border-none">
                                         <DialogHeader>
-                                            <DialogTitle>Add New Equipment</DialogTitle>
+                                            <DialogTitle className="text-2xl font-semibold tracking-tight">Add New Equipment</DialogTitle>
                                         </DialogHeader>
                                         <AddGearForm onSubmit={() => setAddGearOpen(false)} />
                                     </DialogContent>
                                 </Dialog>
-
-                                <Button asChild variant="outline" className="gap-2 h-12">
+                                <Button asChild variant="secondary" className="h-12 px-6 rounded-full transition-all gap-2 bg-background hover:bg-background/80 text-sm font-semibold">
                                     <Link href="/admin/manage-requests">
-                                        <CheckCircle2 className="h-4 w-4" />
+                                        <CheckCircle2 className="h-5 w-5 text-primary" />
                                         Manage Requests
                                     </Link>
                                 </Button>
-
-                                <Button asChild variant="outline" className="gap-2 h-12">
+                                <Button asChild variant="secondary" className="h-12 px-6 rounded-full transition-all gap-2 bg-background hover:bg-background/80 text-sm font-semibold">
                                     <Link href="/admin/manage-checkins">
-                                        <CheckCircle2 className="h-4 w-4" />
+                                        <RefreshCcw className="h-5 w-5 text-primary" />
                                         Manage Check-ins
                                     </Link>
                                 </Button>
-
-                                <Button asChild variant="outline" className="gap-2 h-12">
+                                <Button asChild variant="secondary" className="h-12 px-6 rounded-full transition-all gap-2 bg-background hover:bg-background/80 text-sm font-semibold">
                                     <Link href="/admin/manage-users">
-                                        <Users className="h-4 w-4" />
+                                        <Users className="h-5 w-5 text-primary" />
                                         User Management
                                     </Link>
                                 </Button>
@@ -527,70 +487,62 @@ export default function AdminDashboardPage() {
                         transition={{ duration: 0.5, delay: 0.3 }}
                         className="space-y-6 sm:space-y-8"
                     >
-                        <Card>
-                            <CardHeader className="flex items-center justify-between">
-                                <CardTitle className="flex items-center gap-2">
-                                    <AlertTriangle className="h-5 w-5" />
+                        <Card className="border-none bg-accent/5 rounded-2xl h-full">
+                            <CardHeader className="flex flex-row items-center justify-between pb-4">
+                                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4" />
                                     Needs Attention
                                 </CardTitle>
-                                <Badge variant="secondary" className="text-xs">
+                                <div className="px-3 py-1 rounded-full bg-primary/10 text-[10px] font-bold text-primary tracking-widest uppercase">
                                     {pendingItems.length} items
-                                </Badge>
+                                </div>
                             </CardHeader>
                             <CardContent>
                                 {isLoading ? (
-                                    <div className="space-y-3">
+                                    <div className="space-y-4">
                                         {[...Array(3)].map((_, i) => (
-                                            <div key={i} className="flex items-center space-x-3">
-                                                <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
-                                                <div className="flex-1 space-y-2">
-                                                    <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
-                                                    <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
-                                                </div>
-                                            </div>
+                                            <div key={i} className="h-16 w-full bg-accent/20 rounded-xl animate-pulse" />
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="space-y-3">
+                                    <div className="space-y-2">
                                         {pendingItems.length === 0 ? (
-                                            <div className="text-center py-8">
-                                                <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                                                <p className="text-muted-foreground">All caught up! No pending items.</p>
+                                            <div className="text-center py-12">
+                                                <div className="w-16 h-16 rounded-full bg-primary/5 flex items-center justify-center mx-auto mb-4">
+                                                    <CheckCircle2 className="h-8 w-8 text-primary/40" />
+                                                </div>
+                                                <p className="text-sm text-muted-foreground">Everything looks good!</p>
                                             </div>
                                         ) : (
                                             pendingItems.map((item) => (
                                                 <div
                                                     key={item.id}
-                                                    className="flex items-center space-x-3 p-3 rounded-lg bg-card border hover:bg-accent cursor-pointer"
+                                                    className="group relative flex items-center gap-4 p-5 rounded-xl bg-background/40 hover:bg-background transition-all cursor-pointer border border-transparent hover:border-border/40 hover:shadow-sm"
                                                     onClick={() => { if (item.type === 'notification') markNotificationRead(item.id, true); }}
                                                 >
-                                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center ${item.type === 'checkin' ? 'bg-orange-100' :
-                                                        item.type === 'request' ? 'bg-purple-100' :
-                                                            'bg-blue-100'
+                                                    <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${item.type === 'checkin' ? 'bg-orange-500/10' :
+                                                        item.type === 'request' ? 'bg-purple-500/10' :
+                                                            'bg-blue-500/10'
                                                         }`}>
-                                                        {item.type === 'checkin' ? (
-                                                            <CheckCircle2 className="h-4 w-4 text-orange-600" />
-                                                        ) : item.type === 'request' ? (
-                                                            <Clock className="h-4 w-4 text-purple-600" />
-                                                        ) : (
-                                                            <Bell className="h-4 w-4 text-blue-600" />
-                                                        )}
+                                                        {item.type === 'checkin' ? <CheckCircle2 className="h-5 w-5 text-orange-500" /> :
+                                                            item.type === 'request' ? <Clock className="h-5 w-5 text-purple-500" /> :
+                                                                <Bell className="h-5 w-5 text-blue-500" />}
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
-                                                        <p className="text-xs text-muted-foreground truncate">{item.user_name}</p>
-                                                        <p className="text-xs text-muted-foreground">{formatTimeAgo(item.created_at)}</p>
-                                                    </div>
-                                                    <div className="flex flex-col gap-1">
-                                                        <Badge className={`text-xs ${getPriorityColor(item.priority)}`}>
-                                                            {item.priority}
-                                                        </Badge>
-                                                        <Badge
-                                                            onClick={(e) => { e.stopPropagation(); if (item.type === 'notification') markNotificationRead(item.id, true); }}
-                                                            className={`text-xs ${getStatusColor(item.status)} cursor-pointer`}
-                                                        >
-                                                            {item.status}
-                                                        </Badge>
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <h4 className="text-sm font-semibold text-foreground truncate">{item.title}</h4>
+                                                            <span className="text-xs text-muted-foreground font-medium shrink-0">
+                                                                {formatTimeAgo(item.created_at)}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className="text-xs text-muted-foreground/80 font-medium">{item.user_name}</span>
+                                                            <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                                            <span className={`text-[10px] font-bold uppercase tracking-widest ${item.priority === 'high' ? 'text-red-500' :
+                                                                item.priority === 'medium' ? 'text-orange-500' :
+                                                                    'text-green-500'
+                                                                }`}>{item.priority}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))
@@ -608,30 +560,24 @@ export default function AdminDashboardPage() {
                         transition={{ duration: 0.5, delay: 0.4 }}
                         className="space-y-6 sm:space-y-8"
                     >
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Activity className="h-5 w-5" />
+                        <Card className="border-none bg-accent/5 rounded-2xl h-full">
+                            <CardHeader className="pb-4">
+                                <CardTitle className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 flex items-center gap-2">
+                                    <Activity className="h-4 w-4" />
                                     Recent Activity
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
                                 {isLoading ? (
-                                    <div className="space-y-3">
+                                    <div className="space-y-4">
                                         {[...Array(5)].map((_, i) => (
-                                            <div key={i} className="flex items-center space-x-3">
-                                                <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
-                                                <div className="flex-1 space-y-2">
-                                                    <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
-                                                    <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
-                                                </div>
-                                            </div>
+                                            <div key={i} className="h-12 w-full bg-accent/20 rounded-xl animate-pulse" />
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="space-y-3">
+                                    <div className="space-y-5">
                                         {(() => {
-                                            if (recentActivity.length === 0) return <p className="text-muted-foreground text-sm">No recent activity</p>;
+                                            if (recentActivity.length === 0) return <p className="text-sm text-muted-foreground py-10 text-center">No recent activity detected.</p>;
                                             const groups = new Map<string, RecentActivity[]>();
                                             for (const a of recentActivity) {
                                                 const d = new Date(a.timestamp);
@@ -646,31 +592,30 @@ export default function AdminDashboardPage() {
                                                 const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
                                                 if (k === today) return 'Today';
                                                 if (k === y) return 'Yesterday';
-                                                const d = new Date(k); return d.toLocaleDateString();
+                                                const d = new Date(k); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                                             };
                                             return ordered.map(([k, arr]) => (
-                                                <details key={k} className="rounded border">
-                                                    <summary className="cursor-pointer select-none px-3 py-2 text-sm font-semibold flex items-center justify-between">
-                                                        <span>{pretty(k)}</span>
-                                                        <span className="text-muted-foreground text-xs">{arr.length}</span>
-                                                    </summary>
-                                                    <div className="space-y-2 p-2 pt-0">
-                                                        {arr.slice(0, 20).map((activity) => (
-                                                            <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
-                                                                <div className="h-8 w-8 rounded-full flex items-center justify-center bg-primary/15">
-                                                                    <Activity className="h-4 w-4 text-primary" />
+                                                <div key={k} className="space-y-3">
+                                                    <h5 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40 px-2">{pretty(k)}</h5>
+                                                    <div className="space-y-1">
+                                                        {arr.slice(0, 5).map((activity) => (
+                                                            <div key={activity.id} className="flex items-center gap-4 p-4 rounded-xl bg-background/40 hover:bg-background transition-all hover:shadow-sm group">
+                                                                <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-primary/5 group-hover:bg-primary/10 transition-colors">
+                                                                    <Activity className="h-4 w-4 text-primary/60" />
                                                                 </div>
-                                                                <div className="flex-1">
-                                                                    <p className="text-sm font-medium text-foreground">
-                                                                        {activity.user_name} {activity.action.toLowerCase()} {activity.item}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm text-foreground/80 font-medium leading-tight">
+                                                                        <span className="text-muted-foreground font-normal">{activity.user_name}</span> {activity.action.toLowerCase()} <span className="text-primary/70">{activity.item}</span>
                                                                     </p>
-                                                                    <p className="text-xs text-muted-foreground">{formatTimeAgo(activity.timestamp)}</p>
+                                                                    <p className="text-xs text-muted-foreground/40 mt-1 font-medium">{formatTimeAgo(activity.timestamp)}</p>
                                                                 </div>
-                                                                <Badge variant="secondary" className="text-xs">{activity.status}</Badge>
+                                                                <div className="px-3 py-1 rounded-full bg-accent/30 text-[10px] font-bold text-muted-foreground/60 tracking-tight uppercase">
+                                                                    {activity.status}
+                                                                </div>
                                                             </div>
                                                         ))}
                                                     </div>
-                                                </details>
+                                                </div>
                                             ));
                                         })()}
                                     </div>
@@ -686,35 +631,35 @@ export default function AdminDashboardPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.5 }}
                 >
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>System Overview</CardTitle>
+                    <Card className="border-none bg-accent/5 rounded-2xl">
+                        <CardHeader className="pb-4">
+                            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">System Overview</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
-                                <div className="text-center">
-                                    <div className="text-2xl font-bold text-blue-600">{stats.available_equipment}</div>
-                                    <div className="text-sm text-muted-foreground">Available</div>
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-8">
+                                <div className="space-y-2">
+                                    <div className="text-2xl font-semibold text-blue-500 tracking-tight">{stats.available_equipment}</div>
+                                    <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/40 px-0.5">Available</div>
                                 </div>
-                                <div className="text-center">
-                                    <div className="text-2xl font-bold text-orange-600">{stats.checked_out_equipment}</div>
-                                    <div className="text-sm text-muted-foreground">Checked Out</div>
+                                <div className="space-y-2">
+                                    <div className="text-2xl font-semibold text-orange-500 tracking-tight">{stats.checked_out_equipment}</div>
+                                    <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/40 px-0.5">Checked Out</div>
                                 </div>
-                                <div className="text-center">
-                                    <div className="text-2xl font-bold text-green-600">{stats.approved_requests}</div>
-                                    <div className="text-sm text-muted-foreground">Approved</div>
+                                <div className="space-y-2">
+                                    <div className="text-2xl font-semibold text-green-500 tracking-tight">{stats.approved_requests}</div>
+                                    <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/40 px-0.5">Approved</div>
                                 </div>
-                                <div className="text-center">
-                                    <div className="text-2xl font-bold text-red-600">{stats.rejected_requests}</div>
-                                    <div className="text-sm text-muted-foreground">Rejected</div>
+                                <div className="space-y-2">
+                                    <div className="text-2xl font-semibold text-red-500 tracking-tight">{stats.rejected_requests}</div>
+                                    <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/40 px-0.5">Rejected</div>
                                 </div>
-                                <div className="text-center">
-                                    <div className="text-2xl font-bold text-purple-600">{stats.total_notifications}</div>
-                                    <div className="text-sm text-muted-foreground">Notifications</div>
+                                <div className="space-y-2">
+                                    <div className="text-2xl font-semibold text-purple-500 tracking-tight">{stats.total_notifications}</div>
+                                    <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/40 px-0.5">Alerts</div>
                                 </div>
-                                <div className="text-center">
-                                    <div className="text-2xl font-bold text-yellow-600">{stats.unread_notifications}</div>
-                                    <div className="text-sm text-muted-foreground">Unread</div>
+                                <div className="space-y-2">
+                                    <div className="text-2xl font-semibold text-yellow-500 tracking-tight">{stats.unread_notifications}</div>
+                                    <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/40 px-0.5">Unread</div>
                                 </div>
                             </div>
                         </CardContent>
