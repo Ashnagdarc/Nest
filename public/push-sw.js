@@ -32,8 +32,11 @@ self.addEventListener('push', function (event) {
         icon: '/icons/icon-192x192.png',
         badge: '/icons/icon-128x128.png',
         data: payload.data || payload,
-        vibrate: [100, 50, 100],
+        vibrate: [200, 100, 200],
         requireInteraction: true,
+        tag: 'nest-urgent',
+        renotify: true,
+        silent: false,
     };
 
     event.waitUntil(
@@ -41,7 +44,6 @@ self.addEventListener('push', function (event) {
             .then(() => console.log('[Push SW] Notification shown successfully'))
             .catch((err) => {
                 console.error('[Push SW] Failed to show notification:', err);
-                // Last ditch effort: Try minimal options if assets failed to load
                 return self.registration.showNotification(title, { body: options.body });
             })
     );
