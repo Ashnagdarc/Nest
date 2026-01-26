@@ -4,7 +4,6 @@
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { motion } from 'framer-motion';
-import { format } from 'date-fns';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -12,20 +11,19 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Image from 'next/image';
-import { Send, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { createSystemNotification } from '@/lib/notifications';
 import { createClient } from '@/lib/supabase/client';
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { apiGet } from '@/lib/apiClient';
-import { Skeleton } from "@/components/ui/skeleton";
 
 type Profile = {
   id: string;
