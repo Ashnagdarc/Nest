@@ -19,18 +19,21 @@ export function ThemeLogo({
     alt = "Nest Logo",
     priority = false
 }: ThemeLogoProps) {
-    const { theme, resolvedTheme } = useTheme()
+    const { resolvedTheme } = useTheme()
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
         setMounted(true)
     }, [])
 
+    // Use standard Nest-logo.png for both since other assets were unavailable
+    // This resolves 400 Bad Request errors locally and in production.
+    const logoSrc = "/Nest-logo.png"
+
     if (!mounted) {
-        // Return light logo as default during SSR
         return (
             <Image
-                src="/Logo/Logo Light.png"
+                src={logoSrc}
                 alt={alt}
                 width={width}
                 height={height}
@@ -39,9 +42,6 @@ export function ThemeLogo({
             />
         )
     }
-
-    const isDark = resolvedTheme === 'dark'
-    const logoSrc = isDark ? '/Logo/Logo Dark.png' : '/Logo/Logo Light.png'
 
     return (
         <Image
