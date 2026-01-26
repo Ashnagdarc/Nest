@@ -90,7 +90,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
-      { url: "/Favicon.png?v=5", sizes: "64x64", type: "image/png" }
+      { url: "/favicon.png", sizes: "64x64", type: "image/png" }
     ],
     apple: [
       { url: "/icons/apple-touch-icon.png", sizes: "180x180" }
@@ -142,8 +142,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* PWA iOS meta tags for better mobile experience */}
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Nest" />
         {/* Prevent zoom on input focus for iOS */}
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
