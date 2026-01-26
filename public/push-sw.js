@@ -30,7 +30,7 @@ self.addEventListener('push', function (event) {
     const options = {
         body: payload.body || '',
         icon: '/icons/icon-192x192.png',
-        badge: '/favicon.png', // Fallback to icon that usually exists
+        badge: '/icons/icon-128x128.png',
         data: payload.data || payload,
         vibrate: [100, 50, 100],
         requireInteraction: true,
@@ -39,7 +39,11 @@ self.addEventListener('push', function (event) {
     event.waitUntil(
         self.registration.showNotification(title, options)
             .then(() => console.log('[Push SW] Notification shown successfully'))
-            .catch((err) => console.error('[Push SW] Failed to show notification:', err))
+            .catch((err) => {
+                console.error('[Push SW] Failed to show notification:', err);
+                // Last ditch effort: Try minimal options if assets failed to load
+                return self.registration.showNotification(title, { body: options.body });
+            })
     );
 });
 
