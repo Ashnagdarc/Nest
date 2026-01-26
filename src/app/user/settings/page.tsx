@@ -421,6 +421,25 @@ export default function UserSettingsPage() {
             setIsTestingPush(false);
         }
     };
+    const handleResetPush = async () => {
+        try {
+            setLoading(true);
+            const res = await fetch('/api/notifications/reset-tokens', { method: 'POST' });
+            if (res.ok) {
+                // Now unregister service worker
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const reg of registrations) {
+                    await reg.unregister();
+                }
+                toast({ title: "Local Data Cleared", description: "Old registrations removed. You can now enable push again." });
+                window.location.reload();
+            }
+        } catch (err: any) {
+            toast({ title: "Reset Failed", description: err.message, variant: "destructive" });
+        } finally {
+            setLoading(false);
+        }
+    };
     const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
 
     const cardVariants = { hidden: { opacity: 0, y: 20 }, visible: (i: number = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5, ease: "easeOut" }, }), };
@@ -683,10 +702,15 @@ export default function UserSettingsPage() {
                                                 <div className="w-2 h-2 rounded-full bg-amber-500" />
                                                 <span>Permission is granted, but subscription is missing.</span>
                                             </div>
-                                            <Button onClick={handleEnablePush} variant="outline" className="w-full border-primary/20 hover:bg-primary/5 hover:text-primary transition-all gap-2 h-11 rounded-xl">
-                                                <Bell className="h-4 w-4" />
-                                                Fix / Re-enable Push
-                                            </Button>
+                                            <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                                                <Button onClick={handleEnablePush} variant="outline" className="flex-1 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all gap-2 h-11 rounded-xl">
+                                                    <Bell className="h-4 w-4" />
+                                                    Re-register Device
+                                                </Button>
+                                                <Button onClick={handleResetPush} variant="ghost" className="flex-1 text-xs text-muted-foreground hover:text-destructive">
+                                                    Reset All Push Data
+                                                </Button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <Button onClick={handleEnablePush} variant="outline" className="w-full mb-4 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all gap-2 h-11 rounded-xl">
