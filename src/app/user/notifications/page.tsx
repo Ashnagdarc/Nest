@@ -40,7 +40,7 @@ type TabValue = 'all' | 'system' | 'announcements';
 const supabase: SupabaseClient = createClient();
 
 export default function UserNotificationsPage() {
-  const { notifications, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, markAsRead, markAllAsRead, deleteNotification: apiDeleteNotification } = useNotifications();
   const [filter, setFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -272,10 +272,12 @@ export default function UserNotificationsPage() {
   const deleteNotification = async (id: string) => {
     setLoading(true);
     try {
-      // TODO: Call API to delete notification
-      showSuccessFeedback({
-        toast: { title: "Notification deleted" },
-      });
+      const success = await apiDeleteNotification(id);
+      if (success) {
+        showSuccessFeedback({
+          toast: { title: "Notification deleted" },
+        });
+      }
     } catch (error) {
       showErrorFeedback({
         toast: { title: "Error", description: error instanceof Error ? error.message : JSON.stringify(error) },
