@@ -88,7 +88,7 @@ export default function UserSettingsPage() {
             push: {},
         }
     );
-    const { enable: enablePush, isSupported: isPushSupported, permission: pushPermission, subscription: pushSubscription, checkSubscription } = usePushNotifications();
+    const { enable: enablePush, isSupported: isPushSupported, permission: pushPermission, subscription: pushSubscription, isRegisteredOnServer, checkSubscription } = usePushNotifications();
     const [isTestingPush, setIsTestingPush] = useState(false);
     const [isSyncingPush, setIsSyncingPush] = useState(false);
     const [isLoadingUser, setIsLoadingUser] = useState(true);
@@ -692,9 +692,9 @@ export default function UserSettingsPage() {
                                     {isSyncingPush ? (
                                         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-600 mb-4 transition-all">
                                             <div className="w-2 h-2 rounded-full bg-blue-500 animate-spin" />
-                                            <span>Verifying push registration with server...</span>
+                                            <span>Verifying secure link with server...</span>
                                         </div>
-                                    ) : pushPermission === 'granted' && pushSubscription ? (
+                                    ) : pushPermission === 'granted' && isRegisteredOnServer ? (
                                         <div className="space-y-4 mb-4">
                                             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-600">
                                                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -710,19 +710,19 @@ export default function UserSettingsPage() {
                                                 Send Test Notification
                                             </Button>
                                         </div>
-                                    ) : pushPermission === 'granted' && !pushSubscription ? (
+                                    ) : pushPermission === 'granted' && !isRegisteredOnServer ? (
                                         <div className="space-y-4 mb-4">
                                             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600">
                                                 <div className="w-2 h-2 rounded-full bg-amber-500" />
-                                                <span>Permission is granted, but subscription is missing.</span>
+                                                <span>Browser is ready, but server registration is missing.</span>
                                             </div>
                                             <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                                                <Button onClick={handleEnablePush} variant="outline" className="flex-1 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all gap-2 h-11 rounded-xl">
+                                                <Button onClick={handleEnablePush} variant="outline" className="flex-1 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all gap-2 h-11 rounded-xl shadow-sm">
                                                     <Bell className="h-4 w-4" />
-                                                    Re-register Device
+                                                    Sync Device Now
                                                 </Button>
                                                 <Button onClick={handleResetPush} variant="ghost" className="flex-1 text-xs text-muted-foreground hover:text-destructive">
-                                                    Reset All Push Data
+                                                    Full Reset
                                                 </Button>
                                             </div>
                                         </div>

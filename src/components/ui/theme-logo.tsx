@@ -19,7 +19,7 @@ export function ThemeLogo({
     alt = "Nest Logo",
     priority = false
 }: ThemeLogoProps) {
-    const { resolvedTheme } = useTheme()
+    useTheme()
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
