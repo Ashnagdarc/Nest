@@ -1,55 +1,75 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+
 import { Button } from '@/components/ui/button';
 import { listCarBookings, approveCarBooking, rejectCarBooking, assignCar, listCars } from '@/services/car-bookings';
-import type { CarBooking } from '@/types/car-bookings';
+import type { CarBooking, PaginatedCarBookings } from '@/types/car-bookings';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
 import { apiGet } from '@/lib/apiClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { MapPin, Car, AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import Image from 'next/image';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 
 function StatusPill({ status, updatedAt }: { status: string; updatedAt?: string }) {
     const getStatusStyles = (status: string) => {
         switch (status) {
             case 'Approved':
-                return { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-300', label: '• Approved' };
+                return {
+                    bg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400',
+                    icon: <CheckCircle2 className="w-3 h-3" />,
+                    label: 'Approved'
+                };
             case 'Pending':
-                return { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300', label: '◦ Pending' };
+                return {
+                    bg: 'bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-400',
+                    icon: <Clock className="w-3 h-3" />,
+                    label: 'Pending'
+                };
             case 'Rejected':
-                return { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-300', label: '✕ Rejected' };
+                return {
+                    bg: 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400',
+                    icon: <XCircle className="w-3 h-3" />,
+                    label: 'Rejected'
+                };
             case 'Cancelled':
-                return { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-700 dark:text-gray-300', label: '— Cancelled' };
+                return {
+                    bg: 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400',
+                    icon: <AlertCircle className="w-3 h-3" />,
+                    label: 'Cancelled'
+                };
             case 'Completed':
-                return { bg: 'bg-emerald-100 dark:bg-emerald-900/30', text: 'text-emerald-700 dark:text-emerald-300', label: '✓ Completed' };
+                return {
+                    bg: 'bg-primary/10 border-primary/20 text-primary',
+                    icon: <CheckCircle2 className="w-3 h-3" />,
+                    label: 'Completed'
+                };
             default:
-                return { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-700 dark:text-gray-300', label: status };
+                return {
+                    bg: 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400',
+                    icon: <AlertCircle className="w-3 h-3" />,
+                    label: status
+                };
         }
     };
-    
+
     const styles = getStatusStyles(status);
     return (
-        <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium ${styles.bg} ${styles.text}`}>
+        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm ${styles.bg}`}>
+            {styles.icon}
             <span>{styles.label}</span>
-            {updatedAt && <span className="opacity-60">({(updatedAt || '').slice(11, 16)}Z)</span>}
+            {updatedAt && <span className="opacity-40 ml-0.5 tracking-normal lowercase font-medium">({(updatedAt || '').slice(11, 16)})</span>}
         </div>
     );
 }
 
-function ReturnedTag({ visible }: { visible: boolean }) {
-    if (!visible) return null;
-    return <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 ml-2">Returned</span>;
-}
 
-// helper animation class toggle based on in_use
-function cardAnim(inUse: boolean) {
-    return inUse ? 'transition-opacity duration-500 opacity-50' : 'transition-opacity duration-500 opacity-100';
-}
+
 
 export default function AdminManageCarBookingsPage() {
     const [pending, setPending] = useState<CarBooking[]>([]);
@@ -81,15 +101,18 @@ export default function AdminManageCarBookingsPage() {
 
     const load = async () => {
         setSectionLoading({ pending: true, approved: true, history: true, cars: true });
-        
+
+        let p: PaginatedCarBookings = { data: [], total: 0 };
+        let a: PaginatedCarBookings = { data: [], total: 0 };
+
         try {
-            const [p, a] = await Promise.all([
+            [p, a] = await Promise.all([
                 listCarBookings({ page: 1, pageSize: 100, status: 'Pending' }).catch(() => ({ data: [], total: 0 })),
                 listCarBookings({ page: 1, pageSize: 100, status: 'Approved' }).catch(() => ({ data: [], total: 0 })),
             ]);
             setPending(p.data);
             setApproved(a.data);
-            
+
             // Load history with pagination
             await loadHistoryPage(historyPage, historyFilter);
         } catch (error) {
@@ -127,13 +150,13 @@ export default function AdminManageCarBookingsPage() {
             console.warn('Failed to load car status:', error);
             setCarStatus([]);
         }
-        
+
         setSectionLoading(prev => ({ ...prev, pending: false, approved: false, cars: false }));
     };
 
     const loadHistoryPage = async (page: number, filter: 'All' | 'Completed' | 'Rejected' | 'Cancelled' = 'All') => {
         setSectionLoading(prev => ({ ...prev, history: true }));
-        
+
         try {
             // Get all history items first to calculate proper pagination
             const [cAll, rAll, cancelledAll] = await Promise.all([
@@ -141,40 +164,40 @@ export default function AdminManageCarBookingsPage() {
                 listCarBookings({ page: 1, pageSize: 1000, status: 'Rejected' }).catch(() => ({ data: [], total: 0 })),
                 listCarBookings({ page: 1, pageSize: 1000, status: 'Cancelled' }).catch(() => ({ data: [], total: 0 })),
             ]);
-        
-        // Combine all history items and sort by date (most recent first)
-        let allHist = [...(cAll.data || []), ...(rAll.data || []), ...(cancelledAll.data || [])]
-            .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime());
-        
-        // Filter by status if not 'All'
-        if (filter !== 'All') {
-            allHist = allHist.filter(item => item.status === filter);
-        }
-        
-        const total = allHist.length;
-        const startIndex = (page - 1) * historyPageSize;
-        const endIndex = startIndex + historyPageSize;
-        const paginatedHist = allHist.slice(startIndex, endIndex);
-        
-        setHistory(paginatedHist);
-        setHistoryTotal(total);
-        setHistoryPage(page);
-        setHistoryFilter(filter);
-        
-        // Update car assignments for paginated history items
-        const histIds = paginatedHist.map(b => b.id).join(',');
-        if (histIds && paginatedHist.length > 0) {
-            try {
-                const assigned = await apiGet<{ data: Array<{ booking_id: string; car_id?: string; label?: string; plate?: string }> }>(`/api/cars/assigned?bookingIds=${encodeURIComponent(histIds)}`);
-                const newMap: Record<string, { car_id?: string; label?: string; plate?: string }> = {};
-                (assigned.data || []).forEach((a) => { newMap[a.booking_id] = { car_id: a.car_id, label: a.label, plate: a.plate }; });
-                setBookingCarMap(prev => ({ ...prev, ...newMap }));
-            } catch (error) {
-                console.warn('Failed to load car assignments for history:', error);
-                // Continue without car assignments - not critical
+
+            // Combine all history items and sort by date (most recent first)
+            let allHist = [...(cAll.data || []), ...(rAll.data || []), ...(cancelledAll.data || [])]
+                .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime());
+
+            // Filter by status if not 'All'
+            if (filter !== 'All') {
+                allHist = allHist.filter(item => item.status === filter);
             }
-        }
-        
+
+            const total = allHist.length;
+            const startIndex = (page - 1) * historyPageSize;
+            const endIndex = startIndex + historyPageSize;
+            const paginatedHist = allHist.slice(startIndex, endIndex);
+
+            setHistory(paginatedHist);
+            setHistoryTotal(total);
+            setHistoryPage(page);
+            setHistoryFilter(filter);
+
+            // Update car assignments for paginated history items
+            const histIds = paginatedHist.map(b => b.id).join(',');
+            if (histIds && paginatedHist.length > 0) {
+                try {
+                    const assigned = await apiGet<{ data: Array<{ booking_id: string; car_id?: string; label?: string; plate?: string }> }>(`/api/cars/assigned?bookingIds=${encodeURIComponent(histIds)}`);
+                    const newMap: Record<string, { car_id?: string; label?: string; plate?: string }> = {};
+                    (assigned.data || []).forEach((a) => { newMap[a.booking_id] = { car_id: a.car_id, label: a.label, plate: a.plate }; });
+                    setBookingCarMap(prev => ({ ...prev, ...newMap }));
+                } catch (error) {
+                    console.warn('Failed to load car assignments for history:', error);
+                    // Continue without car assignments - not critical
+                }
+            }
+
         } catch (error) {
             console.error('Failed to load history:', error);
             // Set empty state on error
@@ -205,17 +228,7 @@ export default function AdminManageCarBookingsPage() {
         return () => { supabase.removeChannel(bookings); supabase.removeChannel(assignments); };
     }, []);
 
-    const bySlot = (rows: CarBooking[]) => {
-        const m = new Map<string, CarBooking[]>();
-        for (const r of rows) {
-            const label = r.start_time && r.end_time ? `${r.start_time.slice(0, 5)}-${r.end_time.slice(0, 5)}` : (r.time_slot || '');
-            const key = `${r.date_of_use}|${label}`;
-            const a = m.get(key) || [];
-            a.push(r);
-            m.set(key, a);
-        }
-        return m;
-    };
+    // bySlot removed
 
     const to12h = (hhmm: string | null | undefined): string => {
         if (!hhmm) return '';
@@ -227,6 +240,17 @@ export default function AdminManageCarBookingsPage() {
         if (s && e) return `${to12h(s)}-${to12h(e)}`;
         if (fallback) return fallback;
         return '';
+    };
+
+    const checkOverlap = (b: CarBooking) => {
+        const timeKey = b.start_time && b.end_time ? `${b.start_time.slice(0, 5)}-${b.end_time.slice(0, 5)}` : (b.time_slot || '');
+        // We'll count overlaps from the relevant set of bookings
+        // For simplicity, checking overlaps within pending + approved for this slot
+        const allRelevant = [...pending, ...approved];
+        return allRelevant.filter(x => {
+            const xTimeKey = x.start_time && x.end_time ? `${x.start_time.slice(0, 5)}-${x.end_time.slice(0, 5)}` : (x.time_slot || '');
+            return x.id !== b.id && x.date_of_use === b.date_of_use && xTimeKey === timeKey && x.status === 'Approved';
+        }).length;
     };
 
     const openCarDialog = async (car: { id: string; label: string; plate?: string }) => {
@@ -255,7 +279,7 @@ export default function AdminManageCarBookingsPage() {
             rows: pending,
             renderActions: (b) => (
                 <div className="flex items-center gap-2">
-                    <Select defaultValue={bookingCarMap[b.id]?.car_id} disabled={assigningId === b.id} onValueChange={async (carId) => {
+                    <Select value={bookingCarMap[b.id]?.car_id || ''} disabled={assigningId === b.id} onValueChange={async (carId) => {
                         setAssigningId(b.id);
                         try {
                             const r = await assignCar(b.id, carId);
@@ -292,13 +316,21 @@ export default function AdminManageCarBookingsPage() {
                         try {
                             const res = await approveCarBooking(b.id);
                             if (!res?.success) {
-                                toast({ title: 'Approval conflict', description: 'Failed to approve booking. Car may already be assigned.', variant: 'destructive' });
+                                toast({
+                                    title: 'Approval blocked',
+                                    description: (res as any)?.error || 'Failed to approve booking. Car may already be assigned or in use.',
+                                    variant: 'destructive'
+                                });
                             } else {
                                 toast({ title: 'Approved', description: 'Booking approved.' });
                                 await load();
                             }
-                        } catch {
-                            toast({ title: 'Error', description: 'Failed to approve', variant: 'destructive' });
+                        } catch (err: any) {
+                            toast({
+                                title: 'Error',
+                                description: err.message || 'Failed to approve',
+                                variant: 'destructive'
+                            });
                         } finally {
                             setApprovingId(null);
                         }
@@ -328,10 +360,37 @@ export default function AdminManageCarBookingsPage() {
                 if (reassignId === b.id) {
                     return (
                         <div className="flex items-center gap-2">
-                            <Select defaultValue={carInfo?.car_id} disabled={assigningId === b.id} onValueChange={async (carId) => { setAssigningId(b.id); try { const r = await assignCar(b.id, carId); if (r.conflict) { toast({ title: 'Overlap detected', description: 'Assigned car overlaps another approved booking in this slot.', variant: 'destructive' }); } else { toast({ title: 'Reassigned', description: 'Car reassigned to booking.' }); await load(); } } finally { setAssigningId(null); } }}>
+                            <Select value={carInfo?.car_id || ''} disabled={assigningId === b.id} onValueChange={async (carId) => {
+                                setAssigningId(b.id);
+                                try {
+                                    const r = await assignCar(b.id, carId);
+                                    if (r.conflict) {
+                                        toast({ title: 'Overlap detected', description: 'Assigned car overlaps another approved booking in this slot.', variant: 'destructive' });
+                                    } else {
+                                        toast({ title: 'Reassigned', description: 'Car reassigned to booking.' });
+                                        await load();
+                                    }
+                                } finally {
+                                    setAssigningId(null);
+                                }
+                            }}>
                                 <SelectTrigger className="w-[180px]"><SelectValue placeholder="Select car" /></SelectTrigger>
                                 <SelectContent>
-                                    {cars.map(c => <SelectItem key={c.id} value={c.id}>{c.label}{c.plate ? ` (${c.plate})` : ''}</SelectItem>)}
+                                    {cars.map(c => {
+                                        const statusObj = carStatus.find(cs => cs.id === c.id);
+                                        const isCheckedOut = statusObj?.in_use && carInfo?.car_id !== c.id; // Allow selecting current car
+                                        const carStatusText = statusObj?.status || 'Unavailable';
+                                        const isAvailable = carStatusText === 'Available' && !isCheckedOut;
+                                        let statusLabel = '';
+                                        if (isCheckedOut) statusLabel = '(Checked out)';
+                                        else if (carStatusText !== 'Available') statusLabel = `(${carStatusText})`;
+
+                                        return (
+                                            <SelectItem key={c.id} value={c.id} disabled={!isAvailable}>
+                                                {c.label}{c.plate ? ` (${c.plate})` : ''} {statusLabel && <span className="text-xs ml-2 opacity-70">{statusLabel}</span>}
+                                            </SelectItem>
+                                        );
+                                    })}
                                 </SelectContent>
                             </Select>
                             <Button size="sm" variant="outline" onClick={() => setReassignId(null)}>Done</Button>
@@ -355,79 +414,134 @@ export default function AdminManageCarBookingsPage() {
     ];
 
     return (
-        <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manage Bookings</h1>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Car booking approvals and check-ins</p>
+        <div className="mx-auto max-w-7xl space-y-12 px-2 sm:px-6 py-10 min-h-screen bg-transparent relative">
+            {/* Background decorative elements */}
+            <div className="absolute top-0 right-0 -z-10 w-96 h-96 bg-primary/10 blur-[120px] rounded-full opacity-50 pointer-events-none" />
+            <div className="absolute bottom-40 left-0 -z-10 w-80 h-80 bg-orange-500/10 blur-[100px] rounded-full opacity-30 pointer-events-none" />
+
+            {/* Premium Page Header */}
+            <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex flex-col md:flex-row md:items-end justify-between gap-6"
+            >
+                <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-4xl font-bold tracking-tight text-foreground">Manage Bookings</h1>
+                    </div>
+                    <p className="text-muted-foreground font-medium max-w-md">Fleet oversight, approval workflows, and booking history tracking.</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => { load(); toast({ title: 'Refreshed', description: 'Data reloaded.' }); }} className="flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4" />
-                    <span>Refresh</span>
-                </Button>
-            </div>
-            {/* Cars Overview */}
-            <Card className="border-0 shadow-sm bg-white dark:bg-gray-900">
-                <CardHeader className="pb-4">
-                    <CardTitle className="text-lg font-semibold">Vehicles</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {sectionLoading.cars && [0, 1, 2].map(i => (
-                            <div key={i} className="border rounded-lg overflow-hidden animate-pulse">
-                                <div className="h-32 bg-gray-100 dark:bg-gray-800" />
-                                <div className="p-3">
-                                    <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-2/3 mb-2" />
-                                    <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/3" />
+
+                <div className="flex items-center gap-3">
+                    <Button
+                        variant="secondary"
+                        size="lg"
+                        onClick={() => { load(); toast({ title: 'System Updated', description: 'Fleet status synchronized successfully.' }); }}
+                        className="h-12 px-6 rounded-xl font-bold bg-secondary/80 backdrop-blur-md hover:bg-secondary transition-all border border-border/10 shadow-lg"
+                    >
+                        <span>Refresh Fleet</span>
+                    </Button>
+                </div>
+            </motion.div>
+
+            {/* Cars Overview Section */}
+            <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+            >
+                <div className="flex items-center gap-2 mb-6 px-1">
+                    <div className="w-1.5 h-6 bg-primary rounded-full" />
+                    <h2 className="text-lg font-bold tracking-tight uppercase text-muted-foreground/80">Active Fleet</h2>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {sectionLoading.cars && [0, 1, 2, 3].map(i => (
+                        <div key={i} className="rounded-3xl overflow-hidden border border-border/50 animate-pulse bg-secondary/20">
+                            <div className="h-44 bg-muted/30" />
+                            <div className="p-5 space-y-3">
+                                <div className="h-5 bg-muted/30 rounded-lg w-2/3" />
+                                <div className="h-4 bg-muted/30 rounded-lg w-1/3" />
+                            </div>
+                        </div>
+                    ))}
+                    {!sectionLoading.cars && carStatus.map((c) => (
+                        <motion.div
+                            key={c.id}
+                            whileHover={{ y: -8, transition: { duration: 0.2 } }}
+                            className={`group  h-full relative glass rounded-3xl overflow-hidden border border-border/20 bg-secondary/10 flex flex-col ${c.in_use ? 'ring-2 ring-primary/20' : ''}`}
+                        >
+                            <div className="relative h-48 w-full bg-slate-900/40">
+                                {c.image_url ? (
+                                    <Image src={c.image_url} alt={c.label} fill className="object-cover transition-transform duration-700 group-hover:scale-110" unoptimized />
+                                ) : (
+                                    <div className="h-full w-full flex flex-col items-center justify-center text-muted-foreground/20 bg-secondary/5">
+                                        <span className="text-[10px] uppercase font-bold tracking-widest opacity-50">No Fleet Media</span>
+                                    </div>
+                                )}
+
+                                {/* Status Tags */}
+                                <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
+                                    {c.in_use && (
+                                        <div className="bg-orange-600 text-[10px] font-bold uppercase text-white px-3 py-1 rounded-full shadow-2xl flex items-center gap-1.5">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                            Checked Out
+                                        </div>
+                                    )}
+                                    {c.status !== 'Available' && (
+                                        <div className="bg-rose-600 text-[10px] font-bold uppercase text-white px-3 py-1 rounded-full shadow-2xl">
+                                            {c.status}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Overlay Controls */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-end p-5 backdrop-blur-[2px]">
+                                    <div className="grid grid-cols-2 gap-3 w-full translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            className="h-9 text-xs font-bold rounded-xl bg-white/10 hover:bg-primary hover:text-white backdrop-blur-xl border border-white/10 transition-all"
+                                            onClick={() => openEdit(c)}
+                                        >
+                                            EDIT
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            className="h-9 text-xs font-bold rounded-xl bg-white/10 hover:bg-primary hover:text-white backdrop-blur-xl border border-white/10 transition-all"
+                                            onClick={() => { setEditStatusCar(c); setNewStatus(c.status || 'Available'); setEditStatusOpen(true); }}
+                                        >
+                                            STATUS
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
-                        ))}
-                        {carStatus.map(c => (
-                            <div key={c.id} className={`border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden hover:shadow-md transition-shadow duration-200 ${cardAnim(c.in_use)}`}>
-                                <button onClick={() => openCarDialog(c)} className="block w-full">
-                                    <div className="relative h-32 w-full bg-gray-100 dark:bg-gray-800">
-                                        {c.image_url ? (
-                                            <Image src={c.image_url} alt={c.label} fill className="object-cover" unoptimized />
-                                        ) : (
-                                            <div className="h-full w-full flex items-center justify-center text-gray-400 dark:text-gray-500">
-                                                <Car className="w-6 h-6" />
-                                            </div>
-                                        )}
-                                        {/* Status overlay */}
-                                        {(c.status === 'Unavailable' || c.status === 'Maintenance') && (
-                                            <div className={`absolute inset-0 flex items-center justify-center backdrop-blur-sm ${
-                                                c.status === 'Unavailable' 
-                                                    ? 'bg-red-600/80' 
-                                                    : 'bg-yellow-500/80'
-                                            }`}>
-                                                <span className="text-white text-xs font-semibold px-2 py-1 rounded-md bg-black/30">
-                                                    {c.status}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="p-3 space-y-2">
-                                        <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{c.label}</div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">{c.plate || '—'}</div>
-                                        <div className={`text-xs font-medium ${
-                                            c.in_use ? 'text-amber-600 dark:text-amber-400' : 
-                                            c.status === 'Available' ? 'text-green-600 dark:text-green-400' : 
-                                            'text-gray-500 dark:text-gray-400'
-                                        }`}>
-                                            {c.in_use ? 'Checked out' : (c.status || 'Unavailable')}
-                                        </div>
+
+                            <div className="p-5 flex flex-col gap-1 flex-1">
+                                <button onClick={() => openCarDialog(c)} className="text-left group/btn">
+                                    <div className="font-bold text-lg group-hover/btn:text-primary transition-colors line-clamp-1">{c.label}</div>
+                                    <div className="text-[11px] font-mono font-bold text-muted-foreground bg-secondary/40 inline-block px-2 py-0.5 rounded-md mt-1 tracking-wider">
+                                        {c.plate || 'V-NEST'}
                                     </div>
                                 </button>
-                                <div className="p-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-2 bg-gray-50 dark:bg-gray-800/50">
-                                    <Button size="sm" variant="outline" className="text-xs" onClick={() => openEdit(c)}>Edit</Button>
-                                    <Button size="sm" variant="outline" className="text-xs" onClick={() => { setEditStatusCar(c); setNewStatus(c.status || 'Available'); setEditStatusOpen(true); }}>Status</Button>
+
+                                <div className="mt-auto pt-4 flex items-center justify-between border-t border-border/5">
+                                    <span className={`text-[10px] font-bold uppercase tracking-[0.15em] ${c.in_use ? 'text-orange-500' : c.status === 'Available' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                        {c.in_use ? 'CURRENTLY IN TRIP' : c.status || 'OFFLINE'}
+                                    </span>
+                                    <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_12px] ${c.in_use ? 'bg-orange-500 shadow-orange-500/50 animate-pulse' : c.status === 'Available' ? 'bg-emerald-500 shadow-emerald-500/50' : 'bg-rose-500 shadow-rose-500/50'}`} />
                                 </div>
                             </div>
-                        ))}
-                        {!sectionLoading.cars && carStatus.length === 0 && <div className="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">No vehicles available</div>}
-                    </div>
-                </CardContent>
-            </Card>
+                        </motion.div>
+                    ))}
+                    {!sectionLoading.cars && carStatus.length === 0 && (
+                        <div className="col-span-full text-center py-20 text-muted-foreground bg-secondary/5 rounded-[40px] border-2 border-dashed border-border/10">
+                            <p className="font-bold uppercase tracking-widest opacity-30">No vehicles in fleet</p>
+                        </div>
+                    )}
+                </div>
+            </motion.div>
 
             {/* Edit Status Dialog */}
             <Dialog open={editStatusOpen} onOpenChange={setEditStatusOpen}>
@@ -499,123 +613,117 @@ export default function AdminManageCarBookingsPage() {
                 </DialogContent>
             </Dialog>
 
-            {sections.map(section => {
-                const grouped = bySlot(section.rows);
-                return (
-                    <Card key={section.key} className="border-0 shadow-sm bg-white dark:bg-gray-900">
-                        <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="text-lg font-semibold">{section.title}</CardTitle>
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-300">
-                                    {section.rows.length}
-                                </span>
+            {/* Active Monitoring Sections */}
+            <div className="grid grid-cols-1 gap-12 pt-8">
+                {sections.map((section, sIdx) => (
+                    <motion.div
+                        key={section.key}
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6, delay: 0.2 + (sIdx * 0.1) }}
+                        className="space-y-6"
+                    >
+                        <div className="flex items-center justify-between px-1">
+                            <div className="flex items-center gap-3">
+                                <div className="w-1.5 h-6 bg-primary rounded-full" />
+                                <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">{section.title}</h2>
                             </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-2">
-                                {sectionLoading[section.key] && [0, 1, 2].map(i => (
-                                    <div key={i} className="flex items-center justify-between border border-gray-100 dark:border-gray-800 rounded-lg p-4 animate-pulse">
-                                        <div className="space-y-2 w-full mr-4">
-                                            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-2/3" />
-                                            <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
-                                        </div>
-                                        <div className="h-8 w-24 bg-gray-100 dark:bg-gray-800 rounded" />
-                                    </div>
-                                ))}
-                                {section.rows.map(b => {
-                                    const label = b.start_time && b.end_time ? `${b.start_time.slice(0, 5)}-${b.end_time.slice(0, 5)}` : (b.time_slot || '');
-                                    const overlaps = (grouped.get(`${b.date_of_use}|${label}`) || []).filter(x => x.status === 'Approved' && x.id !== b.id).length;
-                                    const isReturned = (section.key === 'history' && b.status === 'Completed');
-                                    const carInfo = bookingCarMap[b.id];
-                                    const getStatusColor = (status: string) => {
-                                        switch (status) {
-                                            case 'Completed': return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800';
-                                            case 'Rejected': return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
-                                            case 'Cancelled': return 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800';
-                                            case 'Pending': return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
-                                            case 'Approved': return 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800';
-                                            default: return 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700';
-                                        }
-                                    };
-                                    
-                                    return (
-                                        <div key={b.id} className={`border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-all duration-200 ${getStatusColor(b.status)}`}>
-                                            <div className="space-y-3">
-                                                {/* Header: Name and Date */}
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="font-semibold text-gray-900 dark:text-gray-100 text-base truncate">
-                                                            {b.employee_name}
+                            <Badge variant="outline" className="bg-secondary/40 text-[11px] font-bold px-3 py-0.5 rounded-full border-border/10">
+                                {section.rows.length} {section.rows.length === 1 ? 'Entry' : 'Entries'}
+                            </Badge>
+                        </div>
+
+                        <div className="space-y-4">
+                            {sectionLoading[section.key as keyof typeof sectionLoading] && [0, 1].map(i => (
+                                <div key={i} className="h-32 bg-secondary/10 rounded-3xl animate-pulse border border-border/10" />
+                            ))}
+
+                            {!sectionLoading[section.key as keyof typeof sectionLoading] && section.rows.map((b, bIdx) => {
+                                const carInfo = bookingCarMap[b.id];
+                                const overlaps = checkOverlap(b);
+
+                                return (
+                                    <motion.div
+                                        key={b.id}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: bIdx * 0.05 }}
+                                        className="relative group bg-secondary/5 hover:bg-secondary/10 border border-border/10 rounded-[32px] p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-primary/5"
+                                    >
+                                        <div className="flex flex-col md:flex-row gap-6">
+                                            {/* Left Info: Requester & Time */}
+                                            <div className="flex-1 space-y-4">
+                                                <div className="flex items-start justify-between">
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                                                <span className="text-xs font-bold text-primary">{b.employee_name.slice(0, 1).toUpperCase()}</span>
+                                                            </div>
+                                                            <h3 className="text-lg font-bold tracking-tight">{b.employee_name}</h3>
                                                         </div>
-                                                        <div className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                                                            {b.date_of_use}
+                                                        <div className="flex items-center gap-3 text-muted-foreground ml-10">
+                                                            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider">
+                                                                {b.date_of_use} • {b.time_slot}
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                    <div>
-                                                        <StatusPill status={b.status} updatedAt={b.updated_at || undefined} />
-                                                    </div>
+                                                    <StatusPill status={b.status} updatedAt={b.updated_at} />
                                                 </div>
 
-                                                {/* Details Section */}
-                                                <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-                                                    {/* Time Slot */}
-                                                    <div className="flex items-center gap-2 text-sm">
-                                                        <span className="text-gray-500 dark:text-gray-400 min-w-fit">Time:</span>
-                                                        <span className="font-medium text-gray-900 dark:text-gray-100 px-2 py-1 rounded bg-gray-50 dark:bg-gray-800 text-xs">
-                                                            {range12h(b.start_time, b.end_time, b.time_slot || '')}
-                                                        </span>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 ml-10">
+                                                    <div className="flex items-center gap-2.5 text-sm font-medium text-foreground/80 bg-background/40 backdrop-blur-sm p-3 rounded-2xl border border-border/5">
+                                                        <span className="line-clamp-1">{b.destination || 'Internal Mission'}</span>
                                                     </div>
 
-                                                    {/* Destination */}
-                                                    <div className="flex items-start gap-2 text-sm">
-                                                        <MapPin className="w-4 h-4 text-gray-500 dark:text-gray-400 mt-0.5 flex-shrink-0" />
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="font-medium text-gray-900 dark:text-gray-100">{b.destination}</div>
-                                                            {b.purpose && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{b.purpose}</div>}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Car Assignment */}
-                                                    {carInfo && (section.key === 'approved' || section.key === 'history') && (
-                                                        <div className="flex items-center gap-2 text-sm px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
-                                                            <Car className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                                                            <span className="font-medium text-blue-700 dark:text-blue-300 text-xs">
-                                                                {carInfo.label || '—'}{carInfo.plate ? ` • ${carInfo.plate}` : ''}
+                                                    {carInfo && (
+                                                        <div className="flex items-center gap-2.5 text-sm font-medium text-primary bg-primary/5 p-3 rounded-2xl border border-primary/10">
+                                                            <span className="font-bold underline decoration-primary/30 underline-offset-4">
+                                                                {carInfo.label} {carInfo.plate ? `(${carInfo.plate})` : ''}
                                                             </span>
                                                         </div>
                                                     )}
-
-                                                    {/* Overlap Warning */}
-                                                    {overlaps > 0 && (
-                                                        <div className="flex items-center gap-2 text-xs px-2 py-1.5 rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 text-amber-700 dark:text-amber-300">
-                                                            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                                                            <span className="font-medium">{overlaps} time slot conflict{overlaps !== 1 ? 's' : ''}</span>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Returned Tag */}
-                                                    {isReturned && (
-                                                        <div className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 text-xs font-medium text-green-700 dark:text-green-300">
-                                                            ✓ Returned
-                                                        </div>
-                                                    )}
                                                 </div>
 
-                                                {/* Actions Section */}
-                                                <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
-                                                    {section.renderActions(b)}
-                                                </div>
+                                                {/* Critical Warnings */}
+                                                {(overlaps > 0 || b.purpose) && (
+                                                    <div className="flex flex-wrap gap-2 ml-10">
+                                                        {b.purpose && (
+                                                            <div className="text-[11px] font-bold text-muted-foreground italic bg-secondary/10 px-3 py-1 rounded-lg">
+                                                                "{b.purpose}"
+                                                            </div>
+                                                        )}
+                                                        {overlaps > 0 && (
+                                                            <div className="animate-pulse bg-orange-500/10 text-orange-500 border border-orange-500/20 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5">
+                                                                {overlaps} Slot Conflict
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Right Actions: Dedicated Box */}
+                                            <div className="flex flex-col justify-center items-end gap-3 min-w-[200px]">
+                                                {section.renderActions(b)}
                                             </div>
                                         </div>
-                                    );
-                                })}
-                                {!sectionLoading[section.key] && section.rows.length === 0 && <div className="text-sm text-muted-foreground">No items.</div>}
-                            </div>
-                            {section.key === 'history' && (
-                                <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                                    {/* Filter Section */}
-                                    <div className="mb-4">
-                                        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-3">Filter</div>
+                                    </motion.div>
+                                );
+                            })}
+
+                            {!sectionLoading[section.key as keyof typeof sectionLoading] && section.rows.length === 0 && (
+                                <div className="text-center py-20 bg-secondary/5 rounded-[40px] border border-border/10 border-dashed">
+                                    <Clock className="w-12 h-12 mx-auto mb-4 opacity-10" />
+                                    <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">No active requests found</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* History Specialized Controls */}
+                        {section.key === 'history' && (
+                            <div className="bg-secondary/10 backdrop-blur-xl rounded-[40px] p-8 border border-border/20 space-y-6">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                                    <div className="space-y-4">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Intelligence Filters</span>
                                         <div className="flex flex-wrap gap-2">
                                             {(['All', 'Completed', 'Rejected', 'Cancelled'] as const).map((filterOption) => {
                                                 const isActive = historyFilter === filterOption;
@@ -624,12 +732,8 @@ export default function AdminManageCarBookingsPage() {
                                                         key={filterOption}
                                                         size="sm"
                                                         variant={isActive ? "default" : "outline"}
-                                                        disabled={sectionLoading.history}
-                                                        onClick={() => {
-                                                            setHistoryPage(1);
-                                                            loadHistoryPage(1, filterOption);
-                                                        }}
-                                                        className="text-xs"
+                                                        onClick={() => { setHistoryPage(1); loadHistoryPage(1, filterOption); }}
+                                                        className={`rounded-full px-5 font-bold text-xs h-9 transition-all ${isActive ? 'bg-primary hover:bg-primary shadow-lg shadow-primary/20' : 'bg-transparent border-border/10 hover:bg-white/5'}`}
                                                     >
                                                         {filterOption}
                                                     </Button>
@@ -638,69 +742,40 @@ export default function AdminManageCarBookingsPage() {
                                         </div>
                                     </div>
 
-                                    {/* Pagination Section */}
                                     {historyTotal > historyPageSize && (
-                                        <div className="pt-4 space-y-3">
-                                            <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
-                                                Showing <span className="font-semibold text-gray-900 dark:text-gray-100">{Math.min((historyPage - 1) * historyPageSize + 1, historyTotal)}</span> of <span className="font-semibold text-gray-900 dark:text-gray-100">{historyTotal}</span>
+                                        <div className="flex items-center gap-3 bg-background/40 p-2 rounded-2xl border border-border/5">
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                disabled={historyPage <= 1 || sectionLoading.history}
+                                                onClick={() => loadHistoryPage(historyPage - 1)}
+                                                className="w-10 h-10 p-0 rounded-xl hover:bg-primary/10 hover:text-primary font-bold"
+                                            >
+                                                ←
+                                            </Button>
+                                            <div className="text-xs font-bold px-4 bg-primary text-white h-7 rounded-lg flex items-center shadow-lg shadow-primary/20">
+                                                PAGE {historyPage}
                                             </div>
-                                            <div className="flex items-center justify-between flex-wrap gap-3">
-                                                <div className="flex items-center gap-1">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={historyPage <= 1 || sectionLoading.history}
-                                                        onClick={() => loadHistoryPage(historyPage - 1, historyFilter)}
-                                                        className="text-xs"
-                                                    >
-                                                        ← Prev
-                                                    </Button>
-                                                    <div className="flex items-center gap-0.5 mx-1">
-                                                        {Array.from({ length: Math.min(5, Math.ceil(historyTotal / historyPageSize)) }, (_, i) => {
-                                                            const totalPages = Math.ceil(historyTotal / historyPageSize);
-                                                            let pageNum;
-                                                            if (totalPages <= 5) {
-                                                                pageNum = i + 1;
-                                                            } else if (historyPage <= 3) {
-                                                                pageNum = i + 1;
-                                                            } else if (historyPage >= totalPages - 2) {
-                                                                pageNum = totalPages - 4 + i;
-                                                            } else {
-                                                                pageNum = historyPage - 2 + i;
-                                                            }
-                                                            return (
-                                                                <Button
-                                                                    key={pageNum}
-                                                                    size="sm"
-                                                                    variant={historyPage === pageNum ? "default" : "outline"}
-                                                                    disabled={sectionLoading.history}
-                                                                    onClick={() => loadHistoryPage(pageNum, historyFilter)}
-                                                                    className="w-8 h-8 p-0 text-xs font-medium"
-                                                                >
-                                                                    {pageNum}
-                                                                </Button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={historyPage >= Math.ceil(historyTotal / historyPageSize) || sectionLoading.history}
-                                                        onClick={() => loadHistoryPage(historyPage + 1, historyFilter)}
-                                                        className="text-xs"
-                                                    >
-                                                        Next →
-                                                    </Button>
-                                                </div>
-                                            </div>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                disabled={historyPage >= Math.ceil(historyTotal / historyPageSize) || sectionLoading.history}
+                                                onClick={() => loadHistoryPage(historyPage + 1)}
+                                                className="w-10 h-10 p-0 rounded-xl hover:bg-primary/10 hover:text-primary font-bold"
+                                            >
+                                                →
+                                            </Button>
                                         </div>
                                     )}
                                 </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                );
-            })}
+                            </div>
+                        )}
+                    </motion.div>
+                ))}
+            </div>
+
+            {/* Global Modals Overlays */}
+            <div className="pointer-events-none fixed inset-0 z-0 h-full w-full bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px]" />
         </div>
     );
 }

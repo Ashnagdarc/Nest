@@ -62,18 +62,26 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'timeSlot is required' }, { status: 400 });
         }
 
-        // Basic same-day time_slot duplicate warning (legacy)
-        await supabase
-            .from('car_bookings')
-            .select('id')
-            .eq('date_of_use', dateOfUse)
-            .eq('time_slot', timeSlot)
-            .in('status', ['Pending', 'Approved']);
-
         // Rate limit: configurable
         const maxPending = Number(process.env.CAR_BOOKINGS_MAX_PENDING || MAX_PENDING_DEFAULT);
         const { data: me } = await supabase.auth.getUser();
         const requesterId = me.user?.id || null;
+
+        // Prevent exact duplicate bookings (same user, date, and slot)
+        if (requesterId) {
+            const { data: existing } = await supabase
+                .from('car_bookings')
+                .select('id')
+                .eq('requester_id', requesterId)
+                .eq('date_of_use', dateOfUse)
+                .eq('time_slot', timeSlot)
+                .in('status', ['Pending', 'Approved'])
+                .maybeSingle();
+
+            if (existing) {
+                return NextResponse.json({ success: false, error: 'You already have a booking for this date and time slot.' }, { status: 409 });
+            }
+        }
         if (requesterId && Number.isFinite(maxPending)) {
             const { count: pendingCount } = await supabase
                 .from('car_bookings')
@@ -138,9 +146,9 @@ export async function POST(request: NextRequest) {
                 .select('email, full_name')
                 .eq('role', 'Admin')
                 .eq('status', 'Active');
-            
+
             console.log(`[Car Booking] Found ${admins?.length || 0} admins to notify`);
-            
+
             if (admins && Array.isArray(admins)) {
                 for (const admin of admins) {
                     console.log(`[Car Booking] Processing admin: ${admin.email}`);

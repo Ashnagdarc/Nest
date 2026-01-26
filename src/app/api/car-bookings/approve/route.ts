@@ -46,12 +46,28 @@ export async function POST(request: NextRequest) {
                 .select('id, date_of_use, time_slot, status')
                 .in('id', ids)
                 .eq('date_of_use', booking.date_of_use)
-                .eq('time_slot', booking.time_slot)
-                .not('status', 'in', ['Completed', 'Cancelled'])
+                .neq('status', 'Completed')
+                .neq('status', 'Cancelled')
                 .neq('id', bookingId);
-            const hasConflict = (bookings || []).some(b => b.status === 'Approved');
-            if (hasConflict) {
-                return NextResponse.json({ success: false, error: 'Car is already assigned to another approved booking for this date and time slot.' }, { status: 409 });
+
+            if (bErr) return NextResponse.json({ success: false, error: bErr.message }, { status: 400 });
+
+            // Check for exact slot conflict (Slot overlap)
+            const slotConflict = (bookings || []).find(b => b.time_slot === booking.time_slot && b.status === 'Approved');
+            if (slotConflict) {
+                return NextResponse.json({ success: false, error: 'Car is already assigned and approved for this specific time slot.' }, { status: 409 });
+            }
+
+            // Check for Physical Handover conflict (Car not returned yet - only for today)
+            const today = new Date().toISOString().slice(0, 10);
+            if (booking.date_of_use === today) {
+                const checkedOut = (bookings || []).find(b => b.status === 'Approved');
+                if (checkedOut) {
+                    return NextResponse.json({
+                        success: false,
+                        error: 'Vehicle is currently checked out by another user. It must be returned (marked as Completed) before this booking can be approved.'
+                    }, { status: 400 });
+                }
             }
         }
 
@@ -129,7 +145,7 @@ export async function POST(request: NextRequest) {
                 .select('email, full_name')
                 .eq('role', 'Admin')
                 .eq('status', 'Active');
-            
+
             if (admins && Array.isArray(admins)) {
                 for (const adminProfile of admins) {
                     if (adminProfile.email) {
