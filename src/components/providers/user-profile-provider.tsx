@@ -50,6 +50,10 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: unknown) => {
             if (event === 'USER_UPDATED' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 fetchProfile();
+                if (event === 'SIGNED_IN') {
+                    // Trigger login notification
+                    fetch('/api/notifications/login', { method: 'POST' }).catch(console.error);
+                }
             } else if (event === 'SIGNED_OUT') {
                 setProfile(null);
             }

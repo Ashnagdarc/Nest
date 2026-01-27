@@ -441,11 +441,31 @@ export async function POST(req: NextRequest) {
         }
 
         // --- Profile Updates ---
-        if (table === 'profiles' && type === 'UPDATE') {
-            // Sync or notify on profile update (example: notify user)
-            title = 'Profile Updated';
-            message = 'Your profile has been updated.';
-            emailHtml = `
+        if (table === 'profiles') {
+            if (type === 'INSERT') {
+                // Welcome message for new users
+                title = 'Welcome to Nest!';
+                message = `Welcome ${record.full_name || 'to Nest'}! We're glad to have you.`;
+                emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+        <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
+        <h2 style="color: ${BRAND_COLOR};">Welcome to Nest!</h2>
+        <p>Hi ${record.full_name || 'there'},</p>
+        <p>Welcome to <strong>Nest</strong>, your asset management system. We're excited to have you on board.</p>
+        <p>You can now request gear, manage checking out assets, and more.</p>
+        <p><a href="https://nestbyeden.app">Get Started</a></p>
+        <hr>
+        <small style="color: #888;">Nest by Eden Oasis Team</small>
+      </div>
+    `;
+                userId = record.id;
+                category = 'welcome';
+                metadata = { profile_id: record.id };
+            } else if (type === 'UPDATE') {
+                // Sync or notify on profile update (example: notify user)
+                title = 'Profile Updated';
+                message = 'Your profile has been updated.';
+                emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
         <img src="${BRAND_LOGO_URL}" alt="Eden Oasis Realty" style="height: 40px; margin-bottom: 16px;">
         <h2 style="color: ${BRAND_COLOR};">Profile Updated</h2>
@@ -454,9 +474,10 @@ export async function POST(req: NextRequest) {
         <small style="color: #888;">Eden Oasis Nest System</small>
       </div>
     `;
-            userId = record.id;
-            category = 'profile_update';
-            metadata = { profile_id: record.id };
+                userId = record.id;
+                category = 'profile_update';
+                metadata = { profile_id: record.id };
+            }
         }
 
         // --- Announcements ---
