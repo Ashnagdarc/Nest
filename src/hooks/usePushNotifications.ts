@@ -52,11 +52,32 @@ export function usePushNotifications() {
         const sub = await pushReg.pushManager.getSubscription();
         if (sub) {
           setSubscription(sub);
-          // Check if server actually has this token - use a lightweight check, NOT test-push
-          // We'll assume it's registered on server if we have a local sub for now, 
-          // or we could add a dedicated /api/notifications/verify-token endpoint later.
-          // For now, let's just mark it as potentially registered.
-          setIsRegisteredOnServer(true);
+
+          // Verify with server
+          try {
+            const res = await fetch('/api/notifications/check-subscription', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ subscription: sub })
+            });
+            const data = await res.json();
+            if (res.ok && data.exists) {
+              setIsRegisteredOnServer(true);
+            } else {
+              console.warn('[Push Hook] Subscription exists locally but not on server.');
+              setIsRegisteredOnServer(false);
+              // Optional: Automatically re-sync? 
+              // For now, we leave it as false so UI shows "Sync" or "Enable" state, 
+              // or the user can manually re-enable.
+              // To auto-heal: await syncSubscription(sub);
+            }
+          } catch (e) {
+            console.error('[Push Hook] Server check failed:', e);
+            // Fallback: assume true if network fail? Or false? 
+            // False is safer to prompt retry.
+            setIsRegisteredOnServer(false);
+          }
+
           return sub;
         }
       }

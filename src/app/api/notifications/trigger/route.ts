@@ -20,8 +20,7 @@ import {
     sendApprovalEmail,
     sendRejectionEmail,
     sendCheckinApprovalEmail,
-    sendCheckinRejectionEmail,
-    sendOverdueReminderEmail
+    sendCheckinRejectionEmail
 } from '@/lib/email';
 import type { Database } from '@/types/supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
