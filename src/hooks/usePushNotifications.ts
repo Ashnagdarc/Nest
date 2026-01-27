@@ -41,7 +41,7 @@ export function usePushNotifications() {
 
   // 2. Check local and server status
   const checkSubscription = useCallback(async () => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return null;
 
     try {
       // First, find our specific push SW
@@ -52,15 +52,11 @@ export function usePushNotifications() {
         const sub = await pushReg.pushManager.getSubscription();
         if (sub) {
           setSubscription(sub);
-          // Check if server actually has this token
-          const checkRes = await fetch('/api/notifications/test-push', { method: 'POST' });
-          const data = await checkRes.json();
-          setIsRegisteredOnServer(data.success === true);
-
-          if (!data.success) {
-            // Browser has it, server doesn't. Sync now.
-            await syncSubscription(sub);
-          }
+          // Check if server actually has this token - use a lightweight check, NOT test-push
+          // We'll assume it's registered on server if we have a local sub for now, 
+          // or we could add a dedicated /api/notifications/verify-token endpoint later.
+          // For now, let's just mark it as potentially registered.
+          setIsRegisteredOnServer(true);
           return sub;
         }
       }
@@ -71,7 +67,7 @@ export function usePushNotifications() {
       console.error('[Push Hook] Error checking subscription:', err);
       return null;
     }
-  }, [syncSubscription]);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

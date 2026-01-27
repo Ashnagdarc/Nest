@@ -351,7 +351,7 @@ function MyRequestsContent() {
       }
 
       // Check if request can be cancelled
-      if (!request || request.status !== 'Pending') {
+      if (!request || request.status?.toLowerCase() !== 'pending') {
         toast({
           title: "Cannot Cancel Request",
           description: "Only pending requests can be cancelled.",
@@ -624,7 +624,7 @@ function MyRequestsContent() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {req.status === 'Pending' && (
+                        {req.status?.toLowerCase() === 'pending' && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -696,7 +696,7 @@ function MyRequestsContent() {
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              {req.status === 'Pending' && (
+                              {req.status?.toLowerCase() === 'pending' && (
                                 <Button
                                   variant="outline"
                                   size="sm"
