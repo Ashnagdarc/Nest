@@ -1,6 +1,6 @@
 import webPush from 'web-push';
 
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 const VAPID_MAILTO = process.env.VAPID_MAILTO || 'mailto:noreply@nestbyeden.app';
 
@@ -20,7 +20,7 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
  * @param payload The notification content (title, body, data, etc.)
  */
 export async function sendWebPush(
-    subscription: webPush.PushSubscription,
+    subscription: PushSubscription,
     payload: { title: string; body: string; data?: any }
 ) {
     if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
@@ -29,7 +29,7 @@ export async function sendWebPush(
 
     try {
         const response = await webPush.sendNotification(
-            subscription,
+            subscription as any,
             JSON.stringify(payload)
         );
         return response;
