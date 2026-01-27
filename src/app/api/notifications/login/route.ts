@@ -4,17 +4,24 @@ import { sendWebPush } from '@/lib/webPush';
 
 export async function POST(_req: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient(true);
+        console.log('[Login Push] Request received');
+        // Use standard client to identify user from cookies
+        const supabase = await createSupabaseServerClient();
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 
         if (authError || !user) {
+            console.error('[Login Push] Auth error:', authError);
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
+        console.log('[Login Push] User authenticated:', user.id);
+
         const now = new Date();
-        const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
+        // const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
 
         // Check if we already notified the user about this login session recently
+        // TEMPORARILY DISABLED FOR DEBUGGING
+        /*
         const { data: existing } = await supabase.from('notifications')
             .select('id')
             .eq('user_id', user.id)
@@ -23,14 +30,16 @@ export async function POST(_req: NextRequest) {
             .limit(1);
 
         if (existing && existing.length > 0) {
+            console.log('[Login Push] Skipped due to idempotency');
             return NextResponse.json({ success: true, message: 'Login notification already sent recently' });
         }
+        */
 
         const title = 'New Login Detected';
         const message = `A new login to your account was detected on ${now.toLocaleString()}. If this wasn't you, please contact support.`;
 
         // 1. Insert In-App Notification
-        await supabase.from('notifications').insert({
+        const { error: insertError } = await supabase.from('notifications').insert({
             user_id: user.id,
             type: 'Login Alert',
             title,
@@ -39,12 +48,25 @@ export async function POST(_req: NextRequest) {
             category: 'Security',
         });
 
+        if (insertError) {
+            console.error('[Login Push] Failed to insert in-app notification:', insertError);
+        } else {
+            console.log('[Login Push] In-app notification inserted');
+        }
+
         // 2. Send Push Notification
-        // Fetch tokens
-        const { data: tokenRows } = await supabase
+        // Use admin client to ensure we can read tokens if RLS is strict
+        const adminSupabase = await createSupabaseServerClient(true);
+        const { data: tokenRows, error: tokenError } = await adminSupabase
             .from('user_push_tokens')
             .select('token')
             .eq('user_id', user.id);
+
+        if (tokenError) {
+            console.error('[Login Push] Error fetching tokens:', tokenError);
+        }
+
+        console.log(`[Login Push] Found ${tokenRows?.length || 0} tokens`);
 
         if (tokenRows && tokenRows.length > 0) {
             const payload = {
@@ -57,17 +79,20 @@ export async function POST(_req: NextRequest) {
                 try {
                     const sub = typeof row.token === 'string' ? JSON.parse(row.token) : row.token;
                     if (sub && sub.endpoint) {
+                        console.log('[Login Push] Sending to endpoint:', sub.endpoint.split('/').pop());
                         await sendWebPush(sub, payload);
                     }
                 } catch (err) {
-                    console.error('Failed to send login push:', err);
+                    console.error('[Login Push] Failed to send login push:', err);
                 }
             }
+        } else {
+            console.warn('[Login Push] No tokens found for user');
         }
 
         return NextResponse.json({ success: true, message: 'Login notification sent' });
     } catch (err: any) {
-        console.error('[Login Notification Error]', err);
+        console.error('[Login Push] Error:', err);
         return NextResponse.json({ success: false, error: err.message }, { status: 500 });
     }
 }
