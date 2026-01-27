@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
   CheckCircle, Clock, XCircle, AlertCircle, Package,
-  RotateCcw, Loader2, Search, Filter, Eye, Calendar,
-  BarChart3, Users
+  RotateCcw, Loader2, Search, Filter, Eye
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -17,9 +16,8 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-// Removed unused import
-import { apiGet } from '@/lib/apiClient';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
 
 interface GearState {
   status: string;
@@ -309,23 +307,55 @@ function MyRequestsContent() {
   const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
       case 'pending':
-        return <Badge variant="outline"><Clock className="mr-1 h-3 w-3" /> {status}</Badge>;
+        return (
+          <Badge variant="outline" className="rounded-full bg-amber-500/10 text-amber-600 border-amber-200 hover:bg-amber-500/20 px-3 py-1 transition-colors">
+            <Clock className="mr-1.5 h-3.5 w-3.5" /> Pending Review
+          </Badge>
+        );
       case 'approved':
-        return <Badge variant="default"><CheckCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
+        return (
+          <Badge variant="secondary" className="rounded-full bg-green-500/10 text-green-600 hover:bg-green-500/20 px-3 py-1 transition-colors">
+            <CheckCircle className="mr-1.5 h-3.5 w-3.5" /> Approved
+          </Badge>
+        );
       case 'checked out':
-        return <Badge variant="secondary"><Package className="mr-1 h-3 w-3" /> {status}</Badge>;
+        return (
+          <Badge variant="secondary" className="rounded-full bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 px-3 py-1 transition-colors">
+            <Package className="mr-1.5 h-3.5 w-3.5" /> Checked Out
+          </Badge>
+        );
       case 'checked in':
       case 'completed':
       case 'returned':
-        return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white"><CheckCircle className="mr-1 h-3 w-3" /> Completed</Badge>;
+        return (
+          <Badge variant="outline" className="rounded-full bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200/50 px-3 py-1 transition-colors dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
+            <CheckCircle className="mr-1.5 h-3.5 w-3.5" /> Returned
+          </Badge>
+        );
       case 'rejected':
-        return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
+        return (
+          <Badge variant="destructive" className="rounded-full bg-red-500/10 text-red-600 border-red-200 hover:bg-red-500/20 px-3 py-1 shadow-none transition-colors">
+            <XCircle className="mr-1.5 h-3.5 w-3.5" /> Rejected
+          </Badge>
+        );
       case 'overdue':
-        return <Badge variant="destructive"><AlertCircle className="mr-1 h-3 w-3" /> {status}</Badge>;
+        return (
+          <Badge variant="destructive" className="rounded-full bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1 border border-red-200 transition-colors">
+            <AlertCircle className="mr-1.5 h-3.5 w-3.5" /> Overdue
+          </Badge>
+        );
       case 'cancelled':
-        return <Badge variant="outline" className="text-muted-foreground border-dashed"><RotateCcw className="mr-1 h-3 w-3" /> Cancelled</Badge>;
+        return (
+          <Badge variant="outline" className="rounded-full text-muted-foreground border-dashed bg-muted/50 px-3 py-1 transition-colors">
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Cancelled
+          </Badge>
+        );
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return (
+          <Badge variant="outline" className="rounded-full px-3 py-1 transition-colors">
+            {status}
+          </Badge>
+        );
     }
   };
 
@@ -418,15 +448,7 @@ function MyRequestsContent() {
   };
 
   // Helpers for rendering
-  const formatTeamMembers = (request: GearRequestWithExtras) => {
-    if (!request.teamMemberProfiles || request.teamMemberProfiles.length === 0) {
-      return 'None';
-    }
 
-    return request.teamMemberProfiles.map((member: { full_name?: string; email?: string }) =>
-      member.full_name || member.email || 'Unknown user'
-    ).join(', ');
-  };
 
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
@@ -474,238 +496,196 @@ function MyRequestsContent() {
     setShowDetailsModal(true);
   };
 
-
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="space-y-6"
+      className="w-full min-h-screen"
     >
-      <>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <h1 className="text-3xl font-bold text-foreground">My Gear Requests</h1>
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-2">
+          <div className="space-y-1">
+            <h1 className="text-4xl font-semibold tracking-tight text-foreground">My Requests</h1>
+            <p className="text-muted-foreground text-lg">Manage and track your equipment usage.</p>
+          </div>
           <Button
             onClick={() => router.push('/user/request')}
-            className="flex items-center gap-2"
+            className="h-10 px-6 rounded-full bg-primary text-primary-foreground hover:scale-105 transition-all shadow-md"
           >
-            <Package className="h-4 w-4" />
+            <Package className="mr-2 h-4 w-4" />
             New Request
           </Button>
         </div>
 
-
-
-        {/* Summary Cards (minimal: Pending, Approved) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
-          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800 rounded-lg shadow-sm w-full max-w-full">
-            <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
-              <Package className="h-6 w-6 text-blue-400 dark:text-blue-300 flex-shrink-0" />
-              <div className="flex flex-col items-start justify-center">
-                <div className="text-base sm:text-2xl font-bold text-blue-600 dark:text-blue-400">{requestStats.total}</div>
-                <div className="text-xs sm:text-sm text-blue-700 dark:text-blue-300">Total Requests</div>
+        {/* Stats Grid - Minimalist & Clean */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-background via-background to-accent/20 p-6 shadow-sm border border-border/40 hover:shadow-md transition-all duration-300">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                <Package className="h-6 w-6" />
               </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800 rounded-lg shadow-sm w-full max-w-full">
-            <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
-              <Clock className="h-6 w-6 text-amber-400 dark:text-amber-300 flex-shrink-0" />
-              <div className="flex flex-col items-start justify-center">
-                <div className="text-base sm:text-2xl font-bold text-amber-600 dark:text-amber-400">{requestStats.pending}</div>
-                <div className="text-xs sm:text-sm text-amber-700 dark:text-amber-300">Pending</div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Requests</p>
+                <h3 className="text-3xl font-bold tracking-tight text-foreground">{requestStats.total}</h3>
               </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800 rounded-lg shadow-sm w-full max-w-full">
-            <CardContent className="py-2 px-3 sm:p-4 flex flex-row items-center gap-3">
-              <CheckCircle className="h-6 w-6 text-green-400 dark:text-green-300 flex-shrink-0" />
-              <div className="flex flex-col items-start justify-center">
-                <div className="text-base sm:text-2xl font-bold text-green-600 dark:text-green-400">{requestStats.approved}</div>
-                <div className="text-xs sm:text-sm text-green-700 dark:text-green-300">Approved</div>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-blue-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
 
+          <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-background via-background to-accent/20 p-6 shadow-sm border border-border/40 hover:shadow-md transition-all duration-300">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <Clock className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
+                <h3 className="text-3xl font-bold tracking-tight text-foreground">{requestStats.pending}</h3>
+              </div>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-amber-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+
+          <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-background via-background to-accent/20 p-6 shadow-sm border border-border/40 hover:shadow-md transition-all duration-300">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-green-500/10 text-green-600 dark:text-green-400">
+                <CheckCircle className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Approved</p>
+                <h3 className="text-3xl font-bold tracking-tight text-foreground">{requestStats.approved}</h3>
+              </div>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-green-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Request Status</CardTitle>
-            <CardDescription>Track the status of your gear checkout requests.</CardDescription>
-
-            {/* Filters */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 mt-4">
-              <div className="relative flex-grow">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search gear, location, reason..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 w-full"
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4" />
-                    <SelectValue placeholder="Filter by status" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="checked out">Checked Out</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="returned">Completed</SelectItem>
-                </SelectContent>
-              </Select>
+        {/* Content Section */}
+        <div className="space-y-6">
+          {/* Controls Bar */}
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-accent/5 p-2 rounded-2xl border border-border/20 backdrop-blur-sm">
+            <div className="relative w-full sm:max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search requests..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 h-10 rounded-xl bg-background border-none shadow-sm focus-visible:ring-1 focus-visible:ring-primary/20"
+              />
             </div>
-          </CardHeader>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-[200px] h-10 rounded-xl bg-background border-none shadow-sm">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <SelectValue placeholder="All Statuses" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="checked out">Checked Out</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="returned">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          <CardContent>
+          {/* List/Table View */}
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="space-y-4"
+          >
             {loading ? (
-              <div className="flex items-center justify-center py-10">
-                <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
-                <p>Loading your requests...</p>
+              <div className="flex flex-col items-center justify-center py-20 space-y-4 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p>Loading requests...</p>
               </div>
             ) : filteredRequests.length > 0 ? (
               <>
-                {/* Card/List view for mobile, table for sm+ */}
-                <div className="block sm:hidden space-y-3 mt-4">
-                  {filteredRequests.map((req) => (
-                    <Card key={req.id} className="rounded-lg shadow-sm p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="font-semibold text-base truncate max-w-[60%]">
-                          {req.gears && req.gears.length > 0 && req.gears.some(gear => (gear.name || gear.id)) ? (
-                            <div className="space-y-1">
-                              {req.gears.map((gear, idx) => (
-                                <div key={gear.id ?? idx} className="space-y-1">
-                                  <div>
-                                    {gear.name || 'Unnamed Gear'}
-                                    <span className="font-bold text-primary">
-                                      x {gear.quantity}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    {gear.category && (
-                                      <Badge variant="outline" className="text-xs">
-                                        {gear.category}
-                                      </Badge>
-                                    )}
-                                    {gear.currentState && (
-                                      <Badge variant="secondary" className="text-xs">
-                                        {gear.currentState.status} • {gear.currentState.available_quantity} available
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            'No gear selected'
-                          )}
-                        </div>
-                        {getStatusBadge(req.status || 'Unknown')}
-                      </div>
-                      <div className="text-xs text-muted-foreground mb-1">Requested: {formatDate(req.created_at)}</div>
-                      <div className="text-xs text-muted-foreground mb-1">Duration: {formatDuration(req)}</div>
-                      <div className="text-xs text-muted-foreground mb-1">Destination: {req.destination || 'N/A'}</div>
-                      <div className="text-xs text-muted-foreground mb-1">Team: {formatTeamMembers(req)}</div>
-                      <div className="flex justify-end gap-2 mt-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => viewRequestDetails(req)}
-                          className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {req.status?.toLowerCase() === 'pending' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCancelRequest(req.id)}
-                            className="hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
-                            loading={cancellingRequestId === req.id}
-                            disabled={cancellingRequestId === req.id}
-                          >
-                            <RotateCcw className="mr-1 h-4 w-4" /> Cancel
-                          </Button>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-                {/* Table view for larger screens */}
-                <div className="hidden sm:block">
+                {/* Desktop View */}
+                <div className="hidden sm:block rounded-3xl border border-border/40 overflow-hidden bg-background/50 backdrop-blur-md shadow-sm">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Requested Gear(s)</TableHead>
-                        <TableHead>Requested On</TableHead>
-                        <TableHead>Duration</TableHead>
-                        <TableHead>Destination</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Team Members</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                    <TableHeader className="bg-accent/10">
+                      <TableRow className="border-border/40 hover:bg-transparent">
+                        <TableHead className="font-semibold text-xs uppercase tracking-wider text-muted-foreground pl-6 h-12">Gear Items</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wider text-muted-foreground h-12">Request Date</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wider text-muted-foreground h-12">Details</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wider text-muted-foreground h-12">Status</TableHead>
+                        <TableHead className="font-semibold text-xs uppercase tracking-wider text-muted-foreground pr-6 text-right h-12">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredRequests.map((req) => (
-                        <TableRow key={req.id}>
-                          <TableCell className="font-medium">
-                            {req.gears && req.gears.length > 0 && req.gears.some(gear => (gear.name || gear.id)) ? (
-                              <div className="space-y-1">
-                                {req.gears.map((gear, idx) => (
-                                  <div key={gear.id ?? idx} className="flex items-center gap-1">
-                                    <span>{gear.name || 'Unnamed Gear'}</span>
-                                    <span className="font-bold text-primary">x {gear.quantity}</span>
-                                  </div>
-                                ))}
+                      {filteredRequests.map((req, idx) => (
+                        <TableRow
+                          key={req.id}
+                          className={`border-border/40 hover:bg-accent/5 transition-colors duration-200 cursor-pointer ${idx % 2 === 0 ? 'bg-background/20' : ''}`}
+                          onClick={() => viewRequestDetails(req)}
+                        >
+                          <TableCell className="pl-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center text-muted-foreground">
+                                <Package className="h-5 w-5" />
                               </div>
-                            ) : (
-                              'No gear selected'
-                            )}
+                              <div className="flex flex-col">
+                                {req.gears && req.gears.length > 0 && req.gears.some(g => (g.name || g.id)) ? (
+                                  <>
+                                    <span className="font-medium text-sm text-foreground">
+                                      {req.gears[0].name || 'Unnamed Gear'}
+                                      {req.gears[0].quantity > 1 && <span className="ml-1 text-xs text-muted-foreground">×{req.gears[0].quantity}</span>}
+                                    </span>
+                                    {req.gears.length > 1 && (
+                                      <span className="text-xs text-muted-foreground">
+                                        + {req.gears.length - 1} more items
+                                      </span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground italic">No gear details</span>
+                                )}
+                              </div>
+                            </div>
                           </TableCell>
-                          <TableCell>
-                            {formatDate(req.created_at)}
+                          <TableCell className="py-4">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium text-foreground">{formatDate(req.created_at)}</span>
+                              <span className="text-xs text-muted-foreground">{formatDuration(req)}</span>
+                            </div>
                           </TableCell>
-                          <TableCell>
-                            {formatDuration(req)}
+                          <TableCell className="py-4">
+                            <div className="flex flex-col max-w-[200px]">
+                              <span className="text-sm truncate font-medium text-foreground">{req.destination || 'No location'}</span>
+                              <span className="text-xs text-muted-foreground truncate">{req.reason || 'No reason specified'}</span>
+                            </div>
                           </TableCell>
-                          <TableCell>
-                            {req.destination || 'N/A'}
-                          </TableCell>
-                          <TableCell>
+                          <TableCell className="py-4">
                             {getStatusBadge(req.status || 'Unknown')}
                           </TableCell>
-                          <TableCell>
-                            {formatTeamMembers(req)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => viewRequestDetails(req)}
-                                className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                          <TableCell className="pr-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-end items-center gap-2">
                               {req.status?.toLowerCase() === 'pending' && (
                                 <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleCancelRequest(req.id)}
-                                  className="hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-full text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                  onClick={(e) => { e.stopPropagation(); handleCancelRequest(req.id); }}
                                   loading={cancellingRequestId === req.id}
                                   disabled={cancellingRequestId === req.id}
                                 >
-                                  <RotateCcw className="mr-1 h-3 w-3" /> Cancel
+                                  <XCircle className="h-4 w-4" />
                                 </Button>
                               )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                onClick={(e) => { e.stopPropagation(); viewRequestDetails(req); }}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -713,198 +693,216 @@ function MyRequestsContent() {
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Mobile Card View */}
+                <div className="block sm:hidden space-y-4">
+                  {filteredRequests.map((req) => (
+                    <motion.div
+                      key={req.id}
+                      variants={itemVariants}
+                      className="rounded-2xl bg-background/50 border border-border/40 p-5 shadow-sm active:scale-[0.98] transition-all"
+                      onClick={() => viewRequestDetails(req)}
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-muted-foreground">
+                            <Package className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-sm text-foreground">
+                              {req.gears && req.gears.length > 0 ? req.gears[0].name : 'Request'}
+                              {req.gears && req.gears.length > 1 && <span className="text-xs text-muted-foreground ml-1">(+{req.gears.length - 1} more)</span>}
+                            </h4>
+                            <p className="text-xs text-muted-foreground">{formatDate(req.created_at)}</p>
+                          </div>
+                        </div>
+                        {getStatusBadge(req.status || 'Unknown')}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-y-2 text-sm text-muted-foreground mb-4 pl-13">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] uppercase tracking-wider opacity-70">Duration</span>
+                          <span className="text-foreground">{formatDuration(req)}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] uppercase tracking-wider opacity-70">Location</span>
+                          <span className="text-foreground truncate">{req.destination || '-'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 mt-2">
+                        <Button
+                          className="flex-1 h-9 rounded-xl bg-accent/10 hover:bg-accent/20 text-muted-foreground hover:text-foreground border-none"
+                          variant="outline"
+                          onClick={(e) => { e.stopPropagation(); viewRequestDetails(req); }}
+                        >
+                          View Details
+                        </Button>
+                        {req.status?.toLowerCase() === 'pending' && (
+                          <Button
+                            className="flex-1 h-9 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 hover:text-red-700 border-none"
+                            variant="outline"
+                            onClick={(e) => { e.stopPropagation(); handleCancelRequest(req.id); }}
+                            disabled={!!cancellingRequestId}
+                          >
+                            {cancellingRequestId === req.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Cancel'}
+                          </Button>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
               </>
             ) : (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                className="text-center py-12 px-4"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-center py-24 px-4 bg-accent/5 rounded-3xl border border-dashed border-border/40"
               >
-                <div className="bg-muted/30 inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
-                  <Package className="h-8 w-8 text-muted-foreground" />
+                <div className="bg-background inline-flex items-center justify-center w-20 h-20 rounded-full mb-6 shadow-sm ring-1 ring-border/20">
+                  <Package className="h-8 w-8 text-muted-foreground/40" />
                 </div>
-                <h3 className="text-lg font-medium mb-2">No gear requests found</h3>
-                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                <h3 className="text-xl font-semibold mb-2">No requests found</h3>
+                <p className="text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
                   {searchTerm || statusFilter !== "all"
-                    ? "Try adjusting your search filters to find what you're looking for."
-                    : "You haven't made any gear requests yet. Get started by requesting the gear you need."}
+                    ? "Try adjusting your search criteria to find what you're looking for."
+                    : "You haven't made any requests yet. Start by selecting gear for your next project."}
                 </p>
-
-
-
                 {searchTerm || statusFilter !== "all" ? (
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      setSearchTerm("");
-                      setStatusFilter("all");
-                    }}
+                    onClick={() => { setSearchTerm(""); setStatusFilter("all"); }}
+                    className="rounded-full px-6 h-10 border-border/40 hover:bg-background"
                   >
                     Clear Filters
                   </Button>
                 ) : (
-                  <Button onClick={() => router.push('/user/request')}>
-                    Request Gear
+                  <Button
+                    onClick={() => router.push('/user/request')}
+                    className="rounded-full px-8 h-10 bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                  >
+                    New Request
                   </Button>
                 )}
               </motion.div>
             )}
-          </CardContent>
+          </motion.div>
+        </div>
+      </div>
 
-          {!loading && filteredRequests.length > 0 && (
-            <CardFooter className="flex justify-between items-center border-t px-6 py-4">
-              <div className="text-sm text-muted-foreground">
-                Showing {filteredRequests.length} of {requests.length} requests
+      {/* Details Modal - Clean & Modern */}
+      <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+        <DialogContent className="max-w-xl p-0 overflow-hidden border-none shadow-2xl bg-background/80 backdrop-blur-xl sm:rounded-3xl">
+          {selectedRequest && (
+            <>
+              <div className="p-6 border-b border-border/40">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-semibold flex items-center gap-3">
+                    Request Details
+                    {getStatusBadge(selectedRequest.status || 'Unknown')}
+                  </DialogTitle>
+                  <DialogDescription className="text-base mt-2">
+                    ID: <span className="font-mono text-xs bg-accent/20 px-2 py-0.5 rounded">{selectedRequest.id?.substring(0, 8)}...</span>
+                  </DialogDescription>
+                </DialogHeader>
               </div>
-              <Button variant="outline" size="sm" onClick={() => router.push('/user/request')}>
-                <Package className="mr-2 h-4 w-4" />
-                New Request
-              </Button>
-            </CardFooter>
-          )}
-        </Card>
 
-        {/* Request Details Modal */}
-        <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Request Details</DialogTitle>
-              <DialogDescription>
-                Detailed information about your gear request.
-              </DialogDescription>
-            </DialogHeader>
-
-            {selectedRequest && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="text-sm font-semibold mb-1 flex items-center">
-                      <Calendar className="h-4 w-4 mr-1 text-muted-foreground" /> Request Information
-                    </h4>
-                    <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-                      <div className="grid grid-cols-3 gap-1 text-sm">
-                        <span className="text-muted-foreground">Status:</span>
-                        <span className="col-span-2">{getStatusBadge(selectedRequest.status)}</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1 text-sm">
-                        <span className="text-muted-foreground">Requested:</span>
-                        <span className="col-span-2">{formatDate(selectedRequest.created_at)}</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1 text-sm">
-                        <span className="text-muted-foreground">Duration:</span>
-                        <span className="col-span-2">{selectedRequest.expected_duration}</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1 text-sm">
-                        <span className="text-muted-foreground">Location:</span>
-                        <span className="col-span-2">{selectedRequest.destination || 'Not specified'}</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1 text-sm">
-                        <span className="text-muted-foreground">Reason:</span>
-                        <span className="col-span-2">{selectedRequest.reason || 'Not specified'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-sm font-semibold mb-1 flex items-center">
-                      <Package className="h-4 w-4 mr-1 text-muted-foreground" /> Requested Gear
-                    </h4>
-                    <div className="bg-muted/30 rounded-lg p-3">
-                      {selectedRequest.gears && selectedRequest.gears.length > 0 ? (
-                        <div className="space-y-3">
-                          {selectedRequest.gears?.map((gear, index) => (
-                            <div key={gear.id ?? index} className={`${index > 0 ? 'pt-2 border-t border-muted' : ''}`}>
-                              <div className="space-y-1">
-                                <div className="font-medium">
-                                  {gear.name}
-                                  <span className="font-bold text-primary">
-                                    x {gear.quantity}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-xs">
-                                    {gear.category || 'No category'}
-                                  </Badge>
-                                  {gear.currentState && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      {gear.currentState.status} • {gear.currentState.available_quantity} available
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  ID: {gear.id}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+              <div className="p-6 space-y-8 overflow-y-auto max-h-[60vh]">
+                {/* Gear Section */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Requested Equipment</h4>
+                  {selectedRequest.gears && selectedRequest.gears.length > 0 ? (
+                    <div className="grid gap-3">
+                      {selectedRequest.gears.map((gear, idx) => (
+                        <div key={idx} className="flex items-center gap-4 p-3 rounded-2xl bg-accent/5 border border-border/30">
+                          <div className="w-12 h-12 rounded-xl bg-background flex items-center justify-center shadow-sm">
+                            <Package className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h5 className="font-medium text-sm truncate">{gear.name || 'Unknown Item'}</h5>
+                            <p className="text-xs text-muted-foreground">{gear.category || 'Gear'}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="bg-background text-foreground shadow-sm">x{gear.quantity}</Badge>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">No gear information available</div>
-                      )}
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No equipment listed.</p>
+                  )}
+                </div>
+
+                {/* Details Grid */}
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Timeline</h4>
+                    <p className="text-sm font-medium">{formatDate(selectedRequest.created_at)}</p>
+                    <p className="text-xs text-muted-foreground">{selectedRequest.expected_duration || 'Duration not set'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Destination</h4>
+                    <p className="text-sm font-medium">{selectedRequest.destination || 'Not specified'}</p>
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Reason</h4>
+                    <p className="text-sm text-foreground/80 leading-relaxed bg-accent/5 p-3 rounded-xl border border-border/20">
+                      {selectedRequest.reason || 'No reason provided.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Team Section */}
+                {selectedRequest.teamMemberProfiles && selectedRequest.teamMemberProfiles.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Team Members</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedRequest.teamMemberProfiles.map((m, i) => (
+                        <div key={i} className="flex items-center gap-2 pr-3 py-1 pl-1 rounded-full bg-accent/10 border border-border/20">
+                          <div className="w-6 h-6 rounded-full bg-background flex items-center justify-center text-[10px] font-bold shadow-sm">
+                            {(m.full_name || m.email || '?')[0].toUpperCase()}
+                          </div>
+                          <span className="text-xs font-medium">{m.full_name || m.email}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-semibold mb-1 flex items-center">
-                    <Users className="h-4 w-4 mr-1 text-muted-foreground" /> Team Members
-                  </h4>
-                  <div className="bg-muted/30 rounded-lg p-3">
-                    {selectedRequest.teamMemberProfiles && selectedRequest.teamMemberProfiles.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {selectedRequest.teamMemberProfiles.map((member: { id?: string; full_name?: string; email?: string }) => (
-                          <Badge key={member.id} variant="secondary">
-                            {member.full_name || member.email || 'Unknown user'}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-muted-foreground">No team members assigned</div>
-                    )}
-                  </div>
-                </div>
+                )}
               </div>
-            )}
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDetailsModal(false)}>Close</Button>
-              {selectedRequest?.status === 'Pending' && (
-                <Button
-                  variant="destructive"
-                  onClick={() => {
-                    handleCancelRequest(selectedRequest.id);
-                    setShowDetailsModal(false);
-                  }}
-                  loading={cancellingRequestId === selectedRequest.id}
-                  disabled={cancellingRequestId === selectedRequest.id}
-                >
-                  Cancel Request
+              <div className="p-6 bg-accent/5 border-t border-border/40 flex justify-end gap-3">
+                <Button variant="ghost" onClick={() => setShowDetailsModal(false)} className="rounded-full hover:bg-background">
+                  Dismiss
                 </Button>
-              )}
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </>
+                {selectedRequest?.status?.toLowerCase() === 'pending' && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      handleCancelRequest(selectedRequest.id);
+                      setShowDetailsModal(false);
+                    }}
+                    disabled={cancellingRequestId === selectedRequest.id}
+                    className="rounded-full shadow-lg shadow-red-500/10"
+                  >
+                    {cancellingRequestId === selectedRequest.id ? 'Cancelling...' : 'Cancel Request'}
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }
 
 function LoadingFallback() {
   return (
-    <div className="container mx-auto py-6 px-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>My Requests</CardTitle>
-          <CardDescription>Loading your gear requests...</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin mr-2" />
-            <span>Loading...</span>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="w-full min-h-screen flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-muted-foreground font-medium">Loading your dashboard...</p>
+      </div>
     </div>
   );
 }
