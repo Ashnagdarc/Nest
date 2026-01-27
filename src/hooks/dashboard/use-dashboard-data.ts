@@ -7,7 +7,7 @@
  * - Providing a single source of truth for dashboard data
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { logger } from '@/utils/logger';
 import { createSupabaseSubscription } from '@/utils/supabase-subscription';
@@ -119,16 +119,14 @@ export function useDashboardData() {
                 // User stats
                 (async () => {
                     // Fetch gears with different statuses
-                    const [checkoutsRes, partiallyCheckedOutRes, availableRes, allGearsRes] = await Promise.all([
+                    const [checkoutsRes, partiallyCheckedOutRes, allGearsRes] = await Promise.all([
                         apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Checked%20Out`),
                         apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Partially%20Checked%20Out`),
-                        apiGet<{ data: any[]; error: string | null }>(`/api/gears?status=Available&pageSize=1000`),
                         apiGet<{ data: any[]; error: string | null }>(`/api/gears?pageSize=1000`)
                     ]);
 
                     const checkouts = checkoutsRes.data || [];
                     const partiallyCheckedOut = partiallyCheckedOutRes.data || [];
-                    const available = availableRes.data || [];
                     const allGears = allGearsRes.data || [];
                     const now = new Date();
 
@@ -170,11 +168,11 @@ export function useDashboardData() {
                 (async () => {
                     const { data: checkoutRequests } = await supabase
                         .from('gear_requests')
-                        .select('id, gear_ids, created_at, status, due_date, approved_at')
+                        .select('id, created_at, status, due_date, approved_at, gear_request_gears(gear_id)')
                         .eq('user_id', session.user.id)
                         .in('status', ['Approved', 'Pending', 'CheckedOut']);
 
-                    const { data: maintenanceEvents } = await supabase
+                    await supabase
                         .from('gear_maintenance')
                         .select('id, gear_id, performed_at, maintenance_type, performed_by, status')
                         .eq('performed_by', session.user.id);
@@ -186,11 +184,11 @@ export function useDashboardData() {
                     const tomorrow = new Date(today);
                     tomorrow.setDate(tomorrow.getDate() + 1);
 
-                    const events = [];
+                    const events: any[] = [];
                     // Process checkout events
                     (checkoutRequests || []).forEach((req: any) => {
                         if (req.status === 'CheckedOut') {
-                            const gearIdList = Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids];
+                            const gearIdList = req.gear_request_gears?.map((grg: any) => grg.gear_id) || [];
                             gearIdList.filter(Boolean).forEach((gearId: string) => {
                                 const eventDate = new Date(req.due_date);
                                 let status: "upcoming" | "overdue" | "today" = "upcoming";
@@ -218,7 +216,7 @@ export function useDashboardData() {
                     const [requestsResponse, checkinsResponse] = await Promise.all([
                         supabase
                             .from('gear_requests')
-                            .select('id, gear_ids, user_id, created_at, status')
+                            .select('id, user_id, created_at, status, gear_request_gears(gear_id)')
                             .eq('user_id', session.user.id)
                             .order('created_at', { ascending: false })
                             .limit(5),
@@ -230,11 +228,11 @@ export function useDashboardData() {
                             .limit(5)
                     ]);
 
-                    const activities = [];
+                    const activities: any[] = [];
 
                     // Process requests
                     (requestsResponse.data || []).forEach((req: any) => {
-                        const gearIdList = Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids];
+                        const gearIdList = req.gear_request_gears?.map((grg: any) => grg.gear_id) || [];
                         gearIdList.filter(Boolean).forEach((gearId: string) => {
                             activities.push({
                                 id: `request-${req.id}-${gearId}`,
@@ -313,7 +311,7 @@ export function useDashboardData() {
     }, [supabase, fetchGearDetails]);
 
     useEffect(() => {
-        fetchAllData();
+        void fetchAllData();
 
         // Single subscription for all dashboard changes
         const subscription = createSupabaseSubscription({

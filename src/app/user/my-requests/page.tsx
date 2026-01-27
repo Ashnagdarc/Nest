@@ -36,7 +36,6 @@ interface GearRequest {
   expected_duration?: string;
   status: string;
   user_id: string;
-  gear_ids?: string[];
   team_members?: string;
   gear_request_gears?: Array<{
     quantity?: number;
@@ -339,7 +338,6 @@ function MyRequestsContent() {
         .select(`
           id,
           status,
-          gear_ids,
           user_id
         `)
         .eq('id', requestId)

@@ -27,28 +27,14 @@ import {
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { subDays, format, getISOWeek, formatDistanceToNow } from 'date-fns';
+import { subDays } from 'date-fns';
 import PageHeader from '@/components/foundation/PageHeader';
-import FiltersBar from '@/components/foundation/FiltersBar';
-import TableToolbar from '@/components/foundation/TableToolbar';
-
-interface Gear {
-  id: string;
-  name: string;
-  full_name?: string;
-  category?: string;
-}
-
-interface GearRequest {
-  id?: string;
-  gear_ids?: string[];
-  gears?: Gear[];
-}
 
 interface PopularGear {
   name: string;
   count: number;
   fullName: string;
+  category?: string;
 }
 
 interface WeeklyTrend {
@@ -78,36 +64,6 @@ interface AnalyticsData {
   popularGears: Array<PopularGear>;
   weeklyTrends: Array<WeeklyTrend>;
   recentActivity: Array<ActivityLogEntry>;
-}
-
-interface RequestData {
-  created_at: string;
-}
-
-interface GearData {
-  id: string;
-  name: string;
-  category?: string;
-  image_url?: string;
-  full_name?: string;
-}
-
-interface ProfileData {
-  id: string;
-  full_name?: string;
-  avatar_url?: string;
-}
-
-interface ActivityData {
-  id: string;
-  gear_id?: string;
-  user_id?: string;
-  activity_type: string;
-  status?: string;
-  notes?: string;
-  details?: Record<string, unknown>;
-  created_at: string;
-  updated_at?: string;
 }
 
 export default function ReportsPage() {
@@ -148,11 +104,6 @@ export default function ReportsPage() {
     return Object.entries(groups).sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime());
   }, [filteredActivity]);
   const { toast } = useToast();
-  // Note: Supabase client removed - now using API for data fetching
-
-  // Note: fetchPopularGears function removed - now handled by API
-
-  // Note: fetchWeeklyTrends function removed - now handled by API
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -178,22 +129,8 @@ export default function ReportsPage() {
         throw new Error('No data received from analytics API');
       }
 
-      // Validate that we have the expected data structure
-      if (typeof result.data.totalRequests !== 'number' ||
-        typeof result.data.totalDamageReports !== 'number') {
-        throw new Error('Invalid data structure received from analytics API');
-      }
-
       // Update analytics state with the API response
       setAnalytics(result.data);
-
-      console.log('Analytics data updated successfully with the following data:',
-        `- Total Requests: ${result.data.totalRequests}`,
-        `- Total Damage Reports: ${result.data.totalDamageReports}`,
-        `- Popular Gears: ${result.data.popularGears.length}`,
-        `- Weekly Trends: ${result.data.weeklyTrends.length}`,
-        `- Recent Activity: ${result.data.recentActivity.length}`
-      );
 
       // Show success toast if this was a manual refresh
       if (!isLoading) {
@@ -229,13 +166,6 @@ export default function ReportsPage() {
     fetchData();
   }, [dateRange]);
 
-  // Note: Realtime subscriptions disabled to prevent errors
-  // Users can manually refresh data using the refresh button
-  // useEffect(() => {
-  //   // Realtime subscriptions temporarily disabled due to table access issues
-  //   // This prevents the "[object Object]" errors from realtime client
-  // }, []);
-
   return (
     <TooltipProvider>
       <motion.div
@@ -244,7 +174,6 @@ export default function ReportsPage() {
         transition={{ duration: 0.5 }}
         className="space-y-6 container mx-auto py-8"
       >
-        {/* Enhanced Header with Help */}
         <PageHeader
           title="Reports & Analytics"
           actions={(
@@ -277,7 +206,6 @@ export default function ReportsPage() {
           )}
         />
 
-        {/* Help Section */}
         {showHelp && (
           <Alert className="mb-6">
             <Info className="h-4 w-4" />
@@ -302,7 +230,6 @@ export default function ReportsPage() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          {/* Total Requests Card */}
           <Card className="relative overflow-hidden">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
@@ -316,7 +243,6 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          {/* Total Damage Reports Card */}
           <Card className="relative overflow-hidden">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Damage Reports</CardTitle>
@@ -330,7 +256,6 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          {/* Most Popular Gear Card */}
           <Card className="relative overflow-hidden">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Most Popular Gear</CardTitle>
@@ -356,7 +281,6 @@ export default function ReportsPage() {
           </Card>
         </div>
 
-        {/* Categorized Reports per HIG: Overview, Trends, Activity */}
         <Tabs defaultValue="overview" className="mb-6">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -366,7 +290,6 @@ export default function ReportsPage() {
 
           <TabsContent value="overview">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              {/* Total Requests Card */}
               <Card className="relative overflow-hidden">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
@@ -380,7 +303,6 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              {/* Total Damage Reports Card */}
               <Card className="relative overflow-hidden">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium">Damage Reports</CardTitle>
@@ -394,7 +316,6 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              {/* Most Popular Gear Card */}
               <Card className="relative overflow-hidden">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium">Most Popular Gear</CardTitle>
@@ -421,16 +342,11 @@ export default function ReportsPage() {
 
           <TabsContent value="trends">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              {/* Weekly Usage Trends */}
               <Card className="overflow-hidden">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="18" y1="20" x2="18" y2="10"></line>
-                        <line x1="12" y1="20" x2="12" y2="4"></line>
-                        <line x1="6" y1="20" x2="6" y2="14"></line>
-                      </svg>
+                      <BarChart3 className="icon-16" />
                       <CardTitle className="text-base">Weekly Usage Trends</CardTitle>
                     </div>
                   </div>
@@ -440,10 +356,7 @@ export default function ReportsPage() {
                   {isLoading ? (
                     <div className="h-[300px] flex items-center justify-center bg-muted/20 p-6">
                       <div className="flex flex-col items-center gap-2">
-                        <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
+                        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
                         <p className="text-sm text-muted-foreground">Loading chart data...</p>
                       </div>
                     </div>
@@ -487,17 +400,10 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              {/* Most Popular Gears */}
               <Card className="overflow-hidden">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                      </svg>
                       <CardTitle className="text-base">Most Popular Gears</CardTitle>
                     </div>
                   </div>
@@ -515,7 +421,7 @@ export default function ReportsPage() {
                     </div>
                   ) : analytics.popularGears.length > 0 ? (
                     <div className="space-y-4">
-                      {analytics.popularGears.map((gear, index) => (
+                      {analytics.popularGears.map((gear: any, index: number) => (
                         <div key={index} className="flex items-center justify-between group hover:bg-muted/50 p-2 rounded-md transition-colors">
                           <div className="flex flex-col">
                             <span className="font-medium">{gear.name}</span>
@@ -538,30 +444,20 @@ export default function ReportsPage() {
           </TabsContent>
 
           <TabsContent value="activity">
-            {/* Simple Report */}
             <Card className="overflow-hidden mb-6">
               <SimpleReport dateRange={dateRange} />
             </Card>
 
-            {/* Recent Activity Log */}
             <Card className="overflow-hidden">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 7.8L8 5v10l4 2.8L16 15V5l-4 2.8z" />
-                      <path d="M8 15l4 2.8" />
-                      <path d="M16 15l-4 2.8" />
-                      <path d="M12 4v3.8" />
-                      <path d="M12 15v4" />
-                    </svg>
                     <CardTitle className="text-base">Recent Activity Log</CardTitle>
                   </div>
                 </div>
                 <CardDescription>Latest gear activities from the system</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                {/* Filters */}
                 <div className="p-4 flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
                   <Select value={activityType} onValueChange={(v) => setActivityType(v as any)}>
                     <SelectTrigger className="w-[180px]">
@@ -584,7 +480,6 @@ export default function ReportsPage() {
                   />
                 </div>
 
-                {/* Grouped list by day */}
                 {isLoading ? (
                   <div className="p-6 space-y-4">
                     {[1, 2, 3].map(i => (
@@ -597,7 +492,7 @@ export default function ReportsPage() {
                       <div key={day} className="mb-4">
                         <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">{day}</div>
                         <div className="divide-y divide-border rounded-md border">
-                          {items.map((activity) => (
+                          {items.map((activity: any) => (
                             <div key={activity.id} className="py-3 px-3 flex items-start gap-3">
                               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
                                 {activity.userName.charAt(0).toUpperCase()}
