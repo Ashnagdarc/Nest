@@ -33,17 +33,30 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setIsLoading(true);
         setError(null);
         try {
+            // Check for active session first to avoid 401
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                setProfile(null);
+                setIsLoading(false);
+                return;
+            }
+
             // Fetch profile from API
             const { data: profileData, error: profileError } = await apiGet<{ data: UserProfile | null; error: string | null }>(`/api/users/profile`);
             if (profileError && profileError !== '') throw new Error(profileError);
             setProfile(profileData);
         } catch (err: any) {
-            setError(err.message || 'Failed to load user profile');
-            setProfile(null);
+            // Check if error is 401 (Unauthorized) which might happen if session is barely expired
+            if (err.message && err.message.includes('401')) {
+                setProfile(null);
+            } else {
+                setError(err.message || 'Failed to load user profile');
+                setProfile(null);
+            }
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [supabase]);
 
     useEffect(() => {
         fetchProfile();
