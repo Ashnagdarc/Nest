@@ -7,6 +7,7 @@ export async function POST(_req: NextRequest) {
     try {
         console.log('[Login Push] Request received');
 
+        let supabase;
         let user = null;
         let authError = null;
 
@@ -14,18 +15,19 @@ export async function POST(_req: NextRequest) {
         const authHeader = _req.headers.get('authorization');
         if (authHeader) {
             console.log('[Login Push] Using Authorization header');
-            const token = authHeader.replace('Bearer ', '');
-            const supabase = createClient(
+            // Create a client compliant with RLS using the user's token
+            supabase = createClient(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
                 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
                 { global: { headers: { Authorization: authHeader } } }
             );
-            const { data } = await supabase.auth.getUser(token);
+            const { data, error } = await supabase.auth.getUser();
             user = data.user;
+            authError = error;
         } else {
             // Fallback to cookies
             console.log('[Login Push] Using Cookies');
-            const supabase = await createSupabaseServerClient();
+            supabase = await createSupabaseServerClient();
             const { data, error } = await supabase.auth.getUser();
             user = data.user;
             authError = error;
@@ -38,32 +40,11 @@ export async function POST(_req: NextRequest) {
 
         console.log('[Login Push] User authenticated:', user.id);
 
-        // Use Admin client for DB operations to ensure success
-        const supabase = await createSupabaseServerClient(true);
-
         const now = new Date();
-        // const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
-
-        // Check if we already notified the user about this login session recently
-        // TEMPORARILY DISABLED FOR DEBUGGING
-        /*
-        const { data: existing } = await supabase.from('notifications')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('type', 'Login Alert')
-            .gte('created_at', tenMinutesAgo)
-            .limit(1);
-
-        if (existing && existing.length > 0) {
-            console.log('[Login Push] Skipped due to idempotency');
-            return NextResponse.json({ success: true, message: 'Login notification already sent recently' });
-        }
-        */
-
         const title = 'New Login Detected';
         const message = `A new login to your account was detected on ${now.toLocaleString()}. If this wasn't you, please contact support.`;
 
-        // 1. Insert In-App Notification
+        // 1. Insert In-App Notification using User Client (RLS should allow inserting own notifications)
         const { error: insertError } = await supabase.from('notifications').insert({
             user_id: user.id,
             type: 'Login Alert',
@@ -80,9 +61,8 @@ export async function POST(_req: NextRequest) {
         }
 
         // 2. Send Push Notification
-        // Use admin client to ensure we can read tokens if RLS is strict
-        const adminSupabase = await createSupabaseServerClient(true);
-        const { data: tokenRows, error: tokenError } = await adminSupabase
+        // Fetch tokens using User Client (RLS allows select own tokens)
+        const { data: tokenRows, error: tokenError } = await supabase
             .from('user_push_tokens')
             .select('token')
             .eq('user_id', user.id);
@@ -110,10 +90,12 @@ export async function POST(_req: NextRequest) {
                 } catch (unknownErr) {
                     const err = unknownErr as any;
                     console.error('[Login Push] Failed to send login push:', err?.message || err);
-                    // If subscription is gone, delete it
+                    // For cleanup, we need a client. User client allows delete own? 
+                    // Usually yes. If not, we just log and skip delete for now to avoid breaking flow.
                     if (err?.statusCode === 410 || err?.statusCode === 404) {
-                        console.log('[Login Push] Removing expired token');
-                        await adminSupabase.from('user_push_tokens').delete().eq('token', row.token);
+                        console.log('[Login Push] Attempting to remove expired token');
+                        const { error: delError } = await supabase.from('user_push_tokens').delete().eq('token', row.token);
+                        if (delError) console.error('[Login Push] Failed to cleanup token:', delError);
                     }
                 }
             }
