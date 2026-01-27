@@ -150,7 +150,6 @@ export async function POST(req: NextRequest) {
                                     to: user.email,
                                     userName: user.full_name || 'there',
                                     gearList: record.gear_name || 'equipment',
-                                    requestId: record.id,
                                 });
                             } catch (err: any) {
                                 console.error('[Email Notification Error]', err);
@@ -183,7 +182,6 @@ export async function POST(req: NextRequest) {
                                 userName: user.full_name || record.requester_name || 'there',
                                 gearList: record.gear_name || 'equipment',
                                 dueDate: record.due_date || new Date().toISOString(),
-                                requestId: record.id,
                             });
                         } catch (err: any) {
                             console.error('[Email Notification Error]', err);
@@ -217,7 +215,6 @@ export async function POST(req: NextRequest) {
                                 userName: user.full_name || record.requester_name || 'there',
                                 gearList: record.gear_name || 'equipment',
                                 reason: record.admin_notes || 'No specific reason provided',
-                                requestId: record.id,
                             });
                         } catch (err: any) {
                             console.error('[Email Notification Error]', err);
@@ -591,78 +588,61 @@ export async function POST(req: NextRequest) {
             }
 
             // Push notification: prefer firebase-admin (service account) when available; fall back to legacy FCM key
+            // Push notification
             if (sendPush) {
                 try {
+                    // Fetch token raw strings to ensure we can delete exact matches on 410
                     const { data: tokenRows } = await supabase.from('user_push_tokens').select('token').eq('user_id', targetId);
-                    const tokens = (tokenRows || []).map((r: any) => r.token).filter(Boolean);
-                    if (tokens.length === 0) {
-                        // nothing to send
-                    } else {
-                        const webPushLib = await import('@/lib/webPush');
-                        const fcmTokens: string[] = [];
-                        const webPushSubscriptions: any[] = [];
 
-                        // Categorize tokens (Web Push vs FCM)
-                        for (const t of tokens) {
+                    if (tokenRows && tokenRows.length > 0) {
+                        const webPushLib = await import('@/lib/webPush');
+                        // Optional: Load Firebase only if needed
+                        let firebaseAdmin: any = null;
+
+                        for (const row of tokenRows) {
+                            const rawToken = row.token;
+                            let sub: any = null;
+                            let isVapid = false;
+
                             try {
-                                const parsed = JSON.parse(t);
+                                // Try to parse as Web Push subscription
+                                const parsed = typeof rawToken === 'string' ? JSON.parse(rawToken) : rawToken;
                                 if (parsed && parsed.endpoint) {
-                                    webPushSubscriptions.push(parsed);
-                                } else {
-                                    fcmTokens.push(t);
+                                    sub = parsed;
+                                    isVapid = true;
                                 }
                             } catch (e) {
-                                fcmTokens.push(t);
+                                // Not JSON, likely FCM string
                             }
-                        }
 
-                        // 1. Send via Web Push (VAPID)
-                        if (webPushSubscriptions.length > 0) {
-                            for (const sub of webPushSubscriptions) {
+                            if (isVapid) {
                                 try {
                                     await webPushLib.sendWebPush(sub, { title, body: message, data: (metadata as any) || {} });
                                 } catch (err: any) {
-                                    console.error('[Notification Trigger] WebPush individual error', err.statusCode, err.message);
+                                    console.error('[Notification Trigger] WebPush error:', err.statusCode);
+                                    // If 410 Gone or 404 Not Found, delete the token using the EXACT stored string
                                     if (err.statusCode === 410 || err.statusCode === 404) {
-                                        // Expired or invalid subscription
-                                        await supabase.from('user_push_tokens').delete().eq('token', JSON.stringify(sub));
+                                        await supabase.from('user_push_tokens').delete().eq('token', typeof rawToken === 'string' ? rawToken : JSON.stringify(rawToken));
                                     }
                                 }
                             }
-                        }
+                            // Fallback for Legacy FCM
+                            else {
+                                if (!firebaseAdmin) firebaseAdmin = await import('@/lib/firebaseAdmin').catch(() => null);
 
-                        // 2. Send via Firebase (Legacy / Fallback)
-                        if (fcmTokens.length > 0) {
-                            try {
-                                const firebaseAdmin = await import('@/lib/firebaseAdmin');
                                 if (firebaseAdmin && firebaseAdmin.initFirebaseAdmin && firebaseAdmin.initFirebaseAdmin()) {
-                                    const resp: any = await firebaseAdmin.sendMulticast(fcmTokens, {
-                                        notification: { title, body: message },
-                                        data: (metadata as any) || {}
-                                    });
-                                    const toRemove: string[] = [];
-                                    resp.responses.forEach((r: any, idx: number) => {
-                                        if (!r.success) {
-                                            const errCode = (r.error && (r.error as any).code) || '';
-                                            if (errCode === 'messaging/registration-token-not-registered' || errCode === 'messaging/invalid-registration-token') {
-                                                toRemove.push(fcmTokens[idx]);
-                                            }
-                                        }
-                                    });
-                                    if (toRemove.length) {
-                                        await supabase.from('user_push_tokens').delete().in('token', toRemove as any[]);
-                                    }
+                                    try {
+                                        await firebaseAdmin.sendMulticast([rawToken], { notification: { title, body: message }, data: (metadata as any) || {} });
+                                    } catch (e) { }
                                 } else if (FCM_SERVER_KEY) {
-                                    for (const t of fcmTokens) {
+                                    try {
                                         await fetch(FCM_API_URL, {
                                             method: 'POST',
                                             headers: { 'Authorization': `key=${FCM_SERVER_KEY}`, 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ to: t, notification: { title, body: message }, data: metadata }),
+                                            body: JSON.stringify({ to: rawToken, notification: { title, body: message }, data: metadata }),
                                         });
-                                    }
+                                    } catch (e) { console.error('FCM Error', e); }
                                 }
-                            } catch (errAdmin) {
-                                console.error('[Notification Trigger] firebase-admin error', errAdmin);
                             }
                         }
                     }
