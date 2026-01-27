@@ -1,13 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { sendWebPush } from '@/lib/webPush';
 
 export async function POST(_req: NextRequest) {
     try {
         console.log('[Login Push] Request received');
-        // Use standard client to identify user from cookies
-        const supabase = await createSupabaseServerClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+        let user = null;
+        let authError = null;
+
+        // Check for Authorization header first (more reliable for immediate post-login)
+        const authHeader = _req.headers.get('authorization');
+        if (authHeader) {
+            console.log('[Login Push] Using Authorization header');
+            const token = authHeader.replace('Bearer ', '');
+            const supabase = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                { global: { headers: { Authorization: authHeader } } }
+            );
+            const { data } = await supabase.auth.getUser(token);
+            user = data.user;
+        } else {
+            // Fallback to cookies
+            console.log('[Login Push] Using Cookies');
+            const supabase = await createSupabaseServerClient();
+            const { data, error } = await supabase.auth.getUser();
+            user = data.user;
+            authError = error;
+        }
 
         if (authError || !user) {
             console.error('[Login Push] Auth error:', authError);
@@ -15,6 +37,9 @@ export async function POST(_req: NextRequest) {
         }
 
         console.log('[Login Push] User authenticated:', user.id);
+
+        // Use Admin client for DB operations to ensure success
+        const supabase = await createSupabaseServerClient(true);
 
         const now = new Date();
         // const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
