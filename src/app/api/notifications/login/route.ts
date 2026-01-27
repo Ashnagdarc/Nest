@@ -107,8 +107,14 @@ export async function POST(_req: NextRequest) {
                         console.log('[Login Push] Sending to endpoint:', sub.endpoint.split('/').pop());
                         await sendWebPush(sub, payload);
                     }
-                } catch (err) {
-                    console.error('[Login Push] Failed to send login push:', err);
+                } catch (unknownErr) {
+                    const err = unknownErr as any;
+                    console.error('[Login Push] Failed to send login push:', err?.message || err);
+                    // If subscription is gone, delete it
+                    if (err?.statusCode === 410 || err?.statusCode === 404) {
+                        console.log('[Login Push] Removing expired token');
+                        await adminSupabase.from('user_push_tokens').delete().eq('token', row.token);
+                    }
                 }
             }
         } else {
