@@ -219,6 +219,24 @@ export async function POST(request: NextRequest) {
                     destination: req.destination || undefined,
                 });
 
+                // Queue push notification for the user
+                const gearNames = gearListFormatted.map(g => `${g.name} (x${g.quantity})`).join(', ') || 'Equipment';
+                const pushTitle = 'Your Gear Request Was Approved!';
+                const pushMessage = `Your request for ${gearNames} has been approved. Due back: ${new Date(calculatedDueDate).toLocaleDateString()}.`;
+
+                const { error: queueError } = await supabase.from('push_notification_queue').insert({
+                    user_id: req.user_id,
+                    title: pushTitle,
+                    body: pushMessage,
+                    data: { request_id: requestId, type: 'gear_approval' }
+                });
+
+                if (queueError) {
+                    console.error('[Gear Approval] Failed to queue push notification:', queueError);
+                } else {
+                    console.log('[Gear Approval] Push notification queued for user');
+                }
+
                 // Send notification email to all admins about the approval
                 try {
                     const { data: admins } = await supabase

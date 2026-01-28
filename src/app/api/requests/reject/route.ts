@@ -83,6 +83,24 @@ export async function POST(req: Request) {
                         destination: requestData.destination || undefined,
                     });
 
+                    // Queue push notification for the user
+                    const gearNames = gearListFormatted.map((g: { name: string; quantity: number }) => `${g.name} (x${g.quantity})`).join(', ') || 'Equipment';
+                    const pushTitle = 'Your Gear Request Was Rejected';
+                    const pushMessage = `Your request for ${gearNames} has been rejected.${reason ? ` Reason: ${reason}` : ''}`;
+
+                    const { error: queueError } = await adminSupabase.from('push_notification_queue').insert({
+                        user_id: requestData.user_id,
+                        title: pushTitle,
+                        body: pushMessage,
+                        data: { request_id: requestId, type: 'gear_rejection' }
+                    });
+
+                    if (queueError) {
+                        console.error('[Gear Rejection] Failed to queue push notification:', queueError);
+                    } else {
+                        console.log('[Gear Rejection] Push notification queued for user');
+                    }
+
                     // Send notification email to all admins about the rejection
                     try {
                         const { data: admins } = await adminSupabase

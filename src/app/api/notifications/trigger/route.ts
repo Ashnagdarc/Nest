@@ -73,10 +73,8 @@ export async function POST(req: NextRequest) {
                             subject,
                             html,
                         });
-                    }
-                }
-            }
-        }
+              }
+          }
 
         type NotificationTarget = { id: string; email?: string; preferences?: Record<string, unknown> };
         let notificationTargets: NotificationTarget[] = [];
@@ -87,77 +85,94 @@ export async function POST(req: NextRequest) {
         let metadata: Record<string, unknown> = {};
         let category = '';
 
-        // --- Gear Requests ---
-        if (table === 'gear_requests') {
-            if (type === 'INSERT') {
-                title = 'New Gear Request Submitted';
-                message = `A new gear request has been submitted by ${record.requester_name || 'a user'} for ${record.gear_name || 'equipment'}.`;
-                emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-          <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
-          <h2 style="color: ${BRAND_COLOR};">New Gear Request</h2>
-          <p><strong>User:</strong> ${record.requester_name || 'N/A'}</p>
-          <p><strong>Gear:</strong> ${record.gear_name || 'N/A'}</p>
-          <p><strong>Reason:</strong> ${record.reason || 'N/A'}</p>
-          <p>View request in <a href="https://nestbyeden.app/admin/manage-requests">Nest by Eden Oasis</a>.</p>
-          <hr>
-          <small style="color: #888;">Nest by Eden Oasis Team</small>
-        </div>
-      `;
-                category = 'request';
-                metadata = { gear_id: record.gear_id, request_id: record.id };
-                // Find all admin users and their preferences
-                const { data: admins } = await supabase.from('profiles').select('id,email,notification_preferences,role').eq('role', 'Admin');
-                notificationTargets = (admins || [])
-                    .filter(a => !!a.email)
-                    .map(a => ({
-                        id: a.id,
-                        email: a.email,
-                        preferences: a.notification_preferences
-                    }));
-                // ALSO notify the user who made the request
-                if (record.user_id) {
-                    const { data: user } = await supabase.from('profiles').select('email,full_name,notification_preferences').eq('id', record.user_id).single();
-                    if (user?.email) {
-                        const userTitle = 'Your Gear Request Was Received!';
-                        const userMessage = `Hi ${user.full_name || 'there'}, your request for ${record.gear_name || 'equipment'} has been received and is pending approval.`;
+         // --- Gear Requests ---
+         if (table === 'gear_requests') {
+             if (type === 'INSERT') {
+                 title = 'New Gear Request Submitted';
+                 message = `A new gear request has been submitted by ${record.requester_name || 'a user'} for ${record.gear_name || 'equipment'}.`;
+                 emailHtml = `
+         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+           <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
+           <h2 style="color: ${BRAND_COLOR};">New Gear Request</h2>
+           <p><strong>User:</strong> ${record.requester_name || 'N/A'}</p>
+           <p><strong>Gear:</strong> ${record.gear_name || 'N/A'}</p>
+           <p><strong>Reason:</strong> ${record.reason || 'N/A'}</p>
+           <p>View request in <a href="https://nestbyeden.app/admin/manage-requests">Nest by Eden Oasis</a>.</p>
+           <hr>
+           <small style="color: #888;">Nest by Eden Oasis Team</small>
+         </div>
+       `;
+                 category = 'request';
+                 metadata = { gear_id: record.gear_id, request_id: record.id };
+                 // Find all admin users and their preferences
+                 const { data: admins } = await supabase.from('profiles').select('id,email,notification_preferences,role').eq('role', 'Admin');
+                 notificationTargets = (admins || [])
+                     .filter(a => !!a.email)
+                     .map(a => ({
+                         id: a.id,
+                         email: a.email,
+                         preferences: a.notification_preferences
+                     }));
+                 // ALSO notify the user who made the request
+                 if (record.user_id) {
+                     const { data: user } = await supabase.from('profiles').select('email,full_name,notification_preferences').eq('id', record.user_id).single();
+                     if (user?.email) {
+                         const userTitle = 'Your Gear Request Was Received!';
+                         const userMessage = `Hi ${user.full_name || 'there'}, your request for ${record.gear_name || 'equipment'} has been received and is pending approval.`;
 
-                        // Respect user preferences for confirmation
-                        const prefs = user.notification_preferences || {};
-                        const sendEmail = prefs.email?.gear_requests ?? notificationDefaults.email;
-                        const sendInApp = prefs.in_app?.gear_requests ?? notificationDefaults.in_app;
+                         // Respect user preferences for confirmation
+                         const prefs = user.notification_preferences || {};
+                         const sendEmail = prefs.email?.gear_requests ?? notificationDefaults.email;
+                         const sendInApp = prefs.in_app?.gear_requests ?? notificationDefaults.in_app;
 
-                        if (sendInApp) {
-                            await supabase.from('notifications').insert([
-                                {
-                                    user_id: record.user_id,
-                                    type: 'Request',
-                                    title: userTitle,
-                                    message: userMessage,
-                                    is_read: false,
-                                    created_at: new Date().toISOString(),
-                                    updated_at: new Date().toISOString(),
-                                    metadata,
-                                    category,
-                                }
-                            ]);
-                        }
+                         if (sendInApp) {
+                             await supabase.from('notifications').insert([
+                                 {
+                                     user_id: record.user_id,
+                                     type: 'Request',
+                                     title: userTitle,
+                                     message: userMessage,
+                                     is_read: false,
+                                     created_at: new Date().toISOString(),
+                                     updated_at: new Date().toISOString(),
+                                     metadata,
+                                     category,
+                                 }
+                             ]);
+                         }
 
-                        if (sendEmail) {
-                            try {
-                                await sendRequestReceivedEmail({
-                                    to: user.email,
-                                    userName: user.full_name || 'there',
-                                    gearList: record.gear_name || 'equipment',
-                                });
-                            } catch (err: any) {
-                                console.error('[Email Notification Error]', err);
-                            }
-                        }
-                    }
-                }
-                // After user email, also notify admins by email
-                 await notifyAdminsByEmail(title, emailHtml);
+                         if (sendEmail) {
+                             try {
+                                 await sendRequestReceivedEmail({
+                                     to: user.email,
+                                     userName: user.full_name || 'there',
+                                     gearList: record.gear_name || 'equipment',
+                                 });
+                             } catch (err: any) {
+                                 console.error('[Email Notification Error]', err);
+                             }
+                         }
+                     }
+                 }
+                 // After user email, also notify admins by email
+                  await notifyAdminsByEmail(title, emailHtml);
+              } else if (type === 'UPDATE' && old_record.status !== record.status) {
+                 // Handle approval/rejection notifications
+                 if (record.status === 'Approved') {
+                     title = 'Your Gear Request Was Approved';
+                     message = `Your gear request has been approved and is ready for pickup.`;
+                     userId = record.user_id;
+                     category = 'request';
+                     metadata = { request_id: record.id };
+                 } else if (record.status === 'Rejected') {
+                     title = 'Your Gear Request Was Rejected';
+                     message = `Your gear request has been rejected.${record.admin_notes ? ` Reason: ${record.admin_notes}` : ''}`;
+                     userId = record.user_id;
+                     category = 'request';
+                     metadata = { request_id: record.id };
+                 }
+             }
+         }
              }
          }
 

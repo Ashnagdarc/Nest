@@ -110,6 +110,51 @@ export async function POST(request: NextRequest) {
             });
         }
 
+        // Queue push notification for the user
+        if (booking.requester_id) {
+            const pushTitle = 'Your Car Booking Was Cancelled';
+            const pushMessage = `Your car booking for ${booking.date_of_use} (${booking.time_slot}) has been cancelled.${reason ? ` Reason: ${reason}` : ''}`;
+
+            const { error: queueError } = await admin.from('push_notification_queue').insert({
+                user_id: booking.requester_id,
+                title: pushTitle,
+                body: pushMessage,
+                data: { booking_id: bookingId, type: 'car_booking_cancelled' }
+            });
+
+            if (queueError) {
+                console.error('[Car Booking Cancel] Failed to queue push notification for user:', queueError);
+            } else {
+                console.log('[Car Booking Cancel] Push notification queued for user');
+            }
+        }
+
+        // Queue push notification for all admins
+        const { data: admins } = await admin
+            .from('profiles')
+            .select('id')
+            .eq('role', 'Admin')
+            .eq('status', 'Active');
+
+        if (admins && admins.length > 0) {
+            const pushTitle = 'Car Booking Cancelled';
+            const pushMessage = `A car booking has been cancelled ${isAdmin ? 'by an administrator' : 'by the user'}.`;
+
+            for (const adminProfile of admins) {
+                const { error: queueError } = await admin.from('push_notification_queue').insert({
+                    user_id: adminProfile.id,
+                    title: pushTitle,
+                    body: pushMessage,
+                    data: { booking_id: bookingId, type: 'car_booking_cancelled_admin' }
+                });
+
+                if (queueError) {
+                    console.error(`[Car Booking Cancel] Failed to queue push notification for admin ${adminProfile.id}:`, queueError);
+                }
+            }
+            console.log(`[Car Booking Cancel] Push notifications queued for ${admins.length} admins`);
+        }
+
         // Get user email for notification
         let userEmail = '';
         if (booking.requester_id) {

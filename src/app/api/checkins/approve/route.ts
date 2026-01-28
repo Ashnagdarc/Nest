@@ -77,6 +77,23 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        // Queue push notification for the user
+        const pushTitle = 'Your Check-in Was Approved!';
+        const pushMessage = `Your check-in for ${gearName} has been approved. Thank you for returning the equipment.`;
+
+        const { error: queueError } = await supabase.from('push_notification_queue').insert({
+            user_id: userId,
+            title: pushTitle,
+            body: pushMessage,
+            data: { checkin_id: checkinId, type: 'checkin_approval' }
+        });
+
+        if (queueError) {
+            console.error('[Check-in Approve] Failed to queue push notification:', queueError);
+        } else {
+            console.log('[Check-in Approve] Push notification queued for user');
+        }
+
         // Notify all admins of the approval action
         try {
             const { data: admins } = await supabase

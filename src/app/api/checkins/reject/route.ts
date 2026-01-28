@@ -78,6 +78,23 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        // Queue push notification for the user
+        const pushTitle = 'Your Check-in Was Rejected';
+        const pushMessage = `Your check-in for ${gearName} has been rejected. Reason: ${reason}. Please contact support for assistance.`;
+
+        const { error: queueError } = await supabase.from('push_notification_queue').insert({
+            user_id: userId,
+            title: pushTitle,
+            body: pushMessage,
+            data: { checkin_id: checkinId, type: 'checkin_rejection' }
+        });
+
+        if (queueError) {
+            console.error('[Check-in Reject] Failed to queue push notification:', queueError);
+        } else {
+            console.log('[Check-in Reject] Push notification queued for user');
+        }
+
         // Notify all admins of the rejection action
         try {
             const { data: admins } = await supabase
