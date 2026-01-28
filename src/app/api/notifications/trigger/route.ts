@@ -239,67 +239,29 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            // Push notification
+            // Push notification - queue for async processing
             if (sendPush) {
                 try {
-                    // Fetch token raw strings to ensure we can delete exact matches on 410
-                    const { data: tokenRows } = await supabase.from('user_push_tokens').select('token').eq('user_id', targetId);
-
-                    if (tokenRows && tokenRows.length > 0) {
-                        const webPushLib = await import('@/lib/webPush');
-
-                        for (const row of tokenRows) {
-                            const rawToken = row.token;
-                            let sub: any = null;
-                            let isVapid = false;
-
-                            try {
-                                // Try to parse as Web Push subscription
-                                const parsed = typeof rawToken === 'string' ? JSON.parse(rawToken) : rawToken;
-                                if (parsed && parsed.endpoint) {
-                                    sub = parsed;
-                                    isVapid = true;
-                                }
-                            } catch (e) {
-                                // Not JSON, likely FCM string
-                            }
-
-                            if (isVapid) {
-                                try {
-                                    // Use enhanced web push for Edge Runtime compatibility
-                                    await webPushLib.sendWebPush(sub, { title, body: message, data: (metadata as any) || {} });
-                                    console.log('[Notification Trigger] WebPush sent successfully to:', sub.endpoint?.split('/').pop());
-                                } catch (err: any) {
-                                    console.error('[Notification Trigger] WebPush error:', {
-                                        statusCode: err.statusCode,
-                                        message: err.message,
-                                        endpoint: sub?.endpoint?.split('/').pop(),
-                                        environment: process.env.NODE_ENV,
-                                        vapidConfigured: webPushLib.vapidConfigured
-                                    });
-
-                                    // If 410 Gone or 404 Not Found, delete the token using the EXACT stored string
-                                    if (err.statusCode === 410 || err.statusCode === 404) {
-                                        await supabase.from('user_push_tokens').delete().eq('token', typeof rawToken === 'string' ? rawToken : JSON.stringify(rawToken));
-                                        console.log('[Notification Trigger] Cleaned invalid token');
-                                    }
-
-                                    lastError = `WebPush: ${err.message}`;
-                                    errors.push({ endpoint: sub.endpoint?.split('/').pop(), error: err.message });
-                                }
-                            } else {
-                                console.warn('[Notification Trigger] Legacy FCM token detected but Firebase fallback is disabled');
-                            }
+                    // Queue notification for async processing instead of sending immediately
+                    const { error: queueError } = await supabase.from('push_notification_queue').insert([
+                        {
+                            user_id: targetId,
+                            title,
+                            body: message,
+                            data: (metadata as any) || {},
+                            status: 'pending'
                         }
+                    ]);
 
-                        // Update notification with last_error if any
-                        if (lastError && notificationId) {
-                            await supabase.from('notifications').update({ last_error: lastError }).eq('id', notificationId);
-                        }
+                    if (queueError) {
+                        console.error('[Notification Trigger] Failed to queue push notification:', queueError);
+                        errors.push(`Queue push: ${queueError.message}`);
+                    } else {
+                        console.log('[Notification Trigger] Push notification queued for user:', targetId);
                     }
                 } catch (err: any) {
-                    console.error('[Notification Trigger] Push processing error:', err);
-                    lastError = `Push processing: ${err.message}`;
+                    console.error('[Notification Trigger] Push queue error:', err);
+                    lastError = `Push queue: ${err.message}`;
                     errors.push(lastError);
                 }
             }

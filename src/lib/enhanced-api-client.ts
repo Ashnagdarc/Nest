@@ -75,28 +75,28 @@ async function fetchWithRetry(
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       console.log(`[API Client] Attempt ${attempt + 1}/${retries + 1} for ${method} ${url}`);
-      
+
       const response = await fetch(url, fetchOptions);
-      
+
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
-      
+
       return response;
     } catch (error: any) {
       lastError = error;
-      
+
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
-      
+
       console.warn(`[API Client] Attempt ${attempt + 1} failed:`, error.message);
-      
+
       // Don't retry on last attempt
       if (attempt === retries) {
         break;
       }
-      
+
       // Only retry on network/timeout errors
       if (
         error.name === 'AbortError' ||
@@ -108,8 +108,89 @@ async function fetchWithRetry(
         await new Promise(resolve => setTimeout(resolve, retryDelay));
         continue;
       }
-      
+
       // Don't retry on other errors
       break;
     }
-  }\n\n  throw lastError || new Error('All retry attempts failed');\n}\n\n/**\n * Enhanced API client with retry logic\n */\nexport async function apiRequest<T = any>(\n  url: string,\n  options: ApiRequestOptions = {}\n): Promise<ApiResponse<T>> {\n  const startTime = Date.now();\n  let attempts = 0;\n  \n  try {\n    const response = await fetchWithRetry(url, options);\n    attempts = (options.retries || 2) + 1; // Total attempts made\n    \n    const duration = Date.now() - startTime;\n    \n    let data: T | null = null;\n    let error: string | null = null;\n    \n    // Handle different response types\n    const contentType = response.headers.get('content-type');\n    if (contentType?.includes('application/json')) {\n      const jsonResponse = await response.json();\n      \n      if (response.ok) {\n        data = jsonResponse.data || jsonResponse;\n        error = jsonResponse.error || null;\n      } else {\n        error = jsonResponse.error || jsonResponse.message || `HTTP ${response.status}`;\n      }\n    } else {\n      if (response.ok) {\n        const text = await response.text();\n        data = (text as unknown) as T;\n      } else {\n        error = `HTTP ${response.status}: ${response.statusText}`;\n      }\n    }\n    \n    return {\n      data,\n      error,\n      status: response.status,\n      timing: { duration, attempts }\n    };\n    \n  } catch (err: any) {\n    const duration = Date.now() - startTime;\n    \n    console.error('[API Client] Request failed:', {\n      url,\n      error: err.message,\n      duration,\n      attempts\n    });\n    \n    let errorMessage = 'Request failed';\n    let status = 500;\n    \n    if (err.name === 'AbortError') {\n      errorMessage = 'Request timed out. Please check your connection.';\n      status = 408;\n    } else if (err.message?.includes('fetch failed')) {\n      errorMessage = 'Network error. Please check your connection and try again.';\n      status = 503;\n    } else {\n      errorMessage = err.message || 'Unknown error occurred';\n    }\n    \n    return {\n      data: null,\n      error: errorMessage,\n      status,\n      timing: { duration, attempts }\n    };\n  }\n}\n\n// Specific methods for common operations\nexport const api = {\n  get: <T = any>(url: string, options?: Omit<ApiRequestOptions, 'method'>) =>\n    apiRequest<T>(url, { ...options, method: 'GET' }),\n    \n  post: <T = any>(url: string, body?: any, options?: Omit<ApiRequestOptions, 'method' | 'body'>) =>\n    apiRequest<T>(url, { ...options, method: 'POST', body }),\n    \n  put: <T = any>(url: string, body?: any, options?: Omit<ApiRequestOptions, 'method' | 'body'>) =>\n    apiRequest<T>(url, { ...options, method: 'PUT', body }),\n    \n  delete: <T = any>(url: string, options?: Omit<ApiRequestOptions, 'method'>) =>\n    apiRequest<T>(url, { ...options, method: 'DELETE' }),\n};
+  }
+
+  throw lastError || new Error('All retry attempts failed');
+}
+
+/**
+ * Enhanced API client with retry logic
+ */
+export async function apiRequest<T = any>(
+  url: string,
+  options: ApiRequestOptions = {}
+): Promise<ApiResponse<T>> {
+  const startTime = Date.now();
+  let attempts = 0;
+
+  try {
+    const response = await fetchWithRetry(url, options);
+    attempts = (options.retries || 2) + 1; // Total attempts made
+
+    const duration = Date.now() - startTime;
+
+    let data: T | null = null;
+    let error: string | null = null;
+
+    // Handle different response types
+    const contentType = response.headers.get('content-type');
+    if (contentType?.includes('application/json')) {
+      const jsonResponse = await response.json();
+
+      if (response.ok) {
+        data = jsonResponse.data || jsonResponse;
+        error = jsonResponse.error || null;
+      } else {
+        error = jsonResponse.error || jsonResponse.message || `HTTP ${response.status}`;
+      }
+    } else {
+      if (response.ok) {
+        const text = await response.text();
+        data = (text as unknown) as T;
+      } else {
+        error = `HTTP ${response.status}: ${response.statusText}`;
+      }
+    }
+
+    return {
+      data,
+      error,
+      status: response.status,
+      timing: { duration, attempts }
+    };
+
+  } catch (err: any) {
+    const duration = Date.now() - startTime;
+
+    console.error('[API Client] Request failed:', {
+      url,
+      error: err.message,
+      duration,
+      attempts
+    });
+
+    let errorMessage = 'Request failed';
+    let status = 500;
+
+    if (err.name === 'AbortError') {
+      errorMessage = 'Request timed out. Please check your connection.';
+      status = 408;
+    } else if (err.message?.includes('fetch failed')) {
+      errorMessage = 'Network error. Please check your connection and try again.';
+      status = 503;
+    } else {
+      errorMessage = err.message || 'Unknown error occurred';
+    }
+
+    return {
+      data: null,
+      error: errorMessage,
+      status,
+      timing: { duration, attempts }
+    };
+  }
+}
