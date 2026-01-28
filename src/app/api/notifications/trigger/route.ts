@@ -617,12 +617,22 @@ export async function POST(req: NextRequest) {
 
                             if (isVapid) {
                                 try {
+                                    // Use enhanced web push for Edge Runtime compatibility
                                     await webPushLib.sendWebPush(sub, { title, body: message, data: (metadata as any) || {} });
+                                    console.log('[Notification Trigger] WebPush sent successfully to:', sub.endpoint?.split('/').pop());
                                 } catch (err: any) {
-                                    console.error('[Notification Trigger] WebPush error:', err.statusCode);
+                                    console.error('[Notification Trigger] WebPush error:', {
+                                        statusCode: err.statusCode,
+                                        message: err.message,
+                                        endpoint: sub?.endpoint?.split('/').pop(),
+                                        environment: process.env.NODE_ENV,
+                                        vapidConfigured: webPushLib.vapidConfigured
+                                    });
+                                    
                                     // If 410 Gone or 404 Not Found, delete the token using the EXACT stored string
                                     if (err.statusCode === 410 || err.statusCode === 404) {
                                         await supabase.from('user_push_tokens').delete().eq('token', typeof rawToken === 'string' ? rawToken : JSON.stringify(rawToken));
+                                        console.log('[Notification Trigger] Cleaned invalid token');
                                     }
                                 }
                             }
