@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/client';
 
+export async function GET(req: NextRequest) {
+    return POST(req);
+}
+
 export async function POST(req: NextRequest) {
     // Secure with CRON_SECRET
     if (process.env.CRON_SECRET && req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
