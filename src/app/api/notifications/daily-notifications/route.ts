@@ -103,6 +103,19 @@ async function handleGearOverdue() {
                 is_read: false,
                 category: 'System',
             });
+
+            // Queue push notification
+            const { error: pushError } = await supabase.from('push_notification_queue').insert([
+                {
+                    user_id: userId,
+                    title: 'Overdue Gear Notification',
+                    body: `Overdue gear: ${userGearMap[userId].gearNames.join(', ')}`,
+                    data: { type: 'overdue', gear_names: userGearMap[userId].gearNames },
+                    status: 'pending'
+                }
+            ]);
+            if (pushError) console.error('[Daily Notifications] Failed to queue overdue push:', pushError);
+
             notificationsSent++;
         }
         return { message: 'Overdue notifications sent.', sent: notificationsSent };
@@ -161,6 +174,19 @@ async function handleDueSoon() {
                 is_read: false,
                 category: 'System',
             });
+
+            // Queue push notification
+            const { error: pushError } = await supabase.from('push_notification_queue').insert([
+                {
+                    user_id: userId,
+                    title: 'Gear Due Tomorrow',
+                    body: message,
+                    data: { type: 'due_soon', gear_list: gearList },
+                    status: 'pending'
+                }
+            ]);
+            if (pushError) console.error('[Daily Notifications] Failed to queue due soon push:', pushError);
+
             sent++;
         }
         return { message: 'Due Soon notifications sent.', sent };
@@ -281,6 +307,17 @@ async function handleOfficeClosing() {
         // Batch insert
         const { error: insertError } = await supabase.from('notifications').insert(notifications);
         if (insertError) throw insertError;
+
+        // Queue push notifications for all users
+        const pushNotifications = users.map(u => ({
+            user_id: u.id,
+            title: 'Office Closing Soon',
+            body: 'It is 6 PM. The office is now closing. Please ensure all gear is returned or secured.',
+            data: { type: 'office_closing' },
+            status: 'pending'
+        }));
+        const { error: pushError } = await supabase.from('push_notification_queue').insert(pushNotifications);
+        if (pushError) console.error('[Daily Notifications] Failed to queue office closing pushes:', pushError);
 
         return { message: 'Office closing notifications sent.', sent: users.length };
     } catch (err: any) {
