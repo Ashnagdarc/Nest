@@ -161,21 +161,21 @@ export async function POST(req: NextRequest) {
              }
          }
 
-         // --- Check-in Status Updates (Approvals/Rejections) ---
-         if (table === 'checkins' && type === 'UPDATE') {
+         // --- Car Booking Approvals/Rejections ---
+         if (table === 'car_bookings' && type === 'UPDATE') {
              if (old_record.status !== record.status) {
                  if (record.status === 'Approved') {
-                     title = 'Your Check-in Was Approved';
-                     message = `Your check-in request has been approved.`;
+                     title = 'Your Car Booking Was Approved';
+                     message = `Your car booking request has been approved.`;
                      userId = record.user_id;
-                     category = 'checkin';
-                     metadata = { checkin_id: record.id };
+                     category = 'car_booking';
+                     metadata = { booking_id: record.id };
                  } else if (record.status === 'Rejected') {
-                     title = 'Your Check-in Was Rejected';
-                     message = `Your check-in request has been rejected.`;
+                     title = 'Your Car Booking Was Rejected';
+                     message = `Your car booking request has been rejected.`;
                      userId = record.user_id;
-                     category = 'checkin';
-                     metadata = { checkin_id: record.id };
+                     category = 'car_booking';
+                     metadata = { booking_id: record.id };
                  }
              }
          }
