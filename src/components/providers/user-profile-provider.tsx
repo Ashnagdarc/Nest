@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { apiGet } from '@/lib/apiClient';
 import { Session } from '@supabase/supabase-js';
@@ -28,6 +28,7 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const loginPushSent = useRef(false);
 
     const fetchProfile = useCallback(async () => {
         setIsLoading(true);
@@ -64,7 +65,8 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: unknown) => {
             if (event === 'USER_UPDATED' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
                 fetchProfile();
-                if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && !loginPushSent.current) {
+                    loginPushSent.current = true;
                     // Trigger login notification with token
                     const userSession = session as Session | null;
                     if (userSession?.access_token) {
@@ -78,6 +80,7 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 }
             } else if (event === 'SIGNED_OUT') {
                 setProfile(null);
+                loginPushSent.current = false; // Reset on sign out
             }
         });
         return () => {

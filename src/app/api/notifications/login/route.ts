@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
-import { sendWebPush } from '@/lib/webPush';
 
 export async function POST(_req: NextRequest) {
     try {
@@ -60,47 +59,18 @@ export async function POST(_req: NextRequest) {
             console.log('[Login Push] In-app notification inserted');
         }
 
-        // 2. Send Push Notification
-        // Fetch tokens using User Client (RLS allows select own tokens)
-        const { data: tokenRows, error: tokenError } = await supabase
-            .from('user_push_tokens')
-            .select('token')
-            .eq('user_id', user.id);
+        // 2. Queue Push Notification
+        const { error: queueError } = await supabase.from('push_notification_queue').insert({
+            user_id: user.id,
+            title,
+            message,
+            data: { url: '/user/settings' }
+        });
 
-        if (tokenError) {
-            console.error('[Login Push] Error fetching tokens:', tokenError);
-        }
-
-        console.log(`[Login Push] Found ${tokenRows?.length || 0} tokens`);
-
-        if (tokenRows && tokenRows.length > 0) {
-            const payload = {
-                title,
-                body: message,
-                data: { url: '/user/settings' } // Redirect to settings or security page
-            };
-
-            for (const row of tokenRows) {
-                try {
-                    const sub = typeof row.token === 'string' ? JSON.parse(row.token) : row.token;
-                    if (sub && sub.endpoint) {
-                        console.log('[Login Push] Sending to endpoint:', sub.endpoint.split('/').pop());
-                        await sendWebPush(sub, payload);
-                    }
-                } catch (unknownErr) {
-                    const err = unknownErr as any;
-                    console.error('[Login Push] Failed to send login push:', err?.message || err);
-                    // For cleanup, we need a client. User client allows delete own? 
-                    // Usually yes. If not, we just log and skip delete for now to avoid breaking flow.
-                    if (err?.statusCode === 410 || err?.statusCode === 404) {
-                        console.log('[Login Push] Attempting to remove expired token');
-                        const { error: delError } = await supabase.from('user_push_tokens').delete().eq('token', row.token);
-                        if (delError) console.error('[Login Push] Failed to cleanup token:', delError);
-                    }
-                }
-            }
+        if (queueError) {
+            console.error('[Login Push] Failed to queue push notification:', queueError);
         } else {
-            console.warn('[Login Push] No tokens found for user');
+            console.log('[Login Push] Push notification queued');
         }
 
         return NextResponse.json({ success: true, message: 'Login notification sent' });
