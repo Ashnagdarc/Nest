@@ -1,12 +1,1 @@
-{
-    "crons": [
-        {
-            "path": "/api/notifications/daily-notifications",
-            "schedule": "0 8 * * *"
-        },
-        {
-            "path": "/api/notifications/good-morning",
-            "schedule": "0 9 * * *"
-        }
-    ]
-}
+{}
