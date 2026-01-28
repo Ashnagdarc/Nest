@@ -161,21 +161,21 @@ export async function POST(req: NextRequest) {
              }
          }
 
-         // --- Gear Request Status Updates (Approvals/Rejections) ---
-         if (table === 'gear_requests' && type === 'UPDATE') {
+         // --- Check-in Status Updates (Approvals/Rejections) ---
+         if (table === 'checkins' && type === 'UPDATE') {
              if (old_record.status !== record.status) {
                  if (record.status === 'Approved') {
-                     title = 'Your Gear Request Was Approved';
-                     message = `Great news! Your request for ${record.gear_name || 'equipment'} has been approved.`;
+                     title = 'Your Check-in Was Approved';
+                     message = `Your check-in request has been approved.`;
                      userId = record.user_id;
-                     category = 'request';
-                     metadata = { gear_id: record.gear_id, request_id: record.id };
+                     category = 'checkin';
+                     metadata = { checkin_id: record.id };
                  } else if (record.status === 'Rejected') {
-                     title = 'Your Gear Request Was Rejected';
-                     message = `Your request for ${record.gear_name || 'equipment'} has been rejected.`;
+                     title = 'Your Check-in Was Rejected';
+                     message = `Your check-in request has been rejected.`;
                      userId = record.user_id;
-                     category = 'request';
-                     metadata = { gear_id: record.gear_id, request_id: record.id };
+                     category = 'checkin';
+                     metadata = { checkin_id: record.id };
                  }
              }
          }
