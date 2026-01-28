@@ -157,9 +157,28 @@ export async function POST(req: NextRequest) {
                     }
                 }
                 // After user email, also notify admins by email
-                await notifyAdminsByEmail(title, emailHtml);
-            }
-        }
+                 await notifyAdminsByEmail(title, emailHtml);
+             }
+         }
+
+         // --- Gear Request Status Updates (Approvals/Rejections) ---
+         if (table === 'gear_requests' && type === 'UPDATE') {
+             if (old_record.status !== record.status) {
+                 if (record.status === 'Approved') {
+                     title = 'Your Gear Request Was Approved';
+                     message = `Great news! Your request for ${record.gear_name || 'equipment'} has been approved.`;
+                     userId = record.user_id;
+                     category = 'request';
+                     metadata = { gear_id: record.gear_id, request_id: record.id };
+                 } else if (record.status === 'Rejected') {
+                     title = 'Your Gear Request Was Rejected';
+                     message = `Your request for ${record.gear_name || 'equipment'} has been rejected.`;
+                     userId = record.user_id;
+                     category = 'request';
+                     metadata = { gear_id: record.gear_id, request_id: record.id };
+                 }
+             }
+         }
 
         // --- Send Notifications ---
         let targets: NotificationTarget[] = [];
