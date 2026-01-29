@@ -63,19 +63,31 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
         fetchProfile();
         // Listen for auth state changes
         const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: unknown) => {
+            console.log('[UserProfileProvider] Auth event:', event, session ? 'has session' : 'no session');
             if (event === 'USER_UPDATED' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
                 fetchProfile();
                 if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && !loginPushSent.current) {
+                    console.log('[UserProfileProvider] Triggering login notification');
                     loginPushSent.current = true;
                     // Trigger login notification with token
                     const userSession = session as Session | null;
                     if (userSession?.access_token) {
+                        console.log('[UserProfileProvider] Making fetch to login API');
                         fetch('/api/notifications/login', {
                             method: 'POST',
                             headers: {
                                 'Authorization': `Bearer ${userSession.access_token}`
                             }
-                        }).catch(console.error);
+                        }).then(response => {
+                            console.log('[UserProfileProvider] Login API response:', response.status);
+                            return response.json();
+                        }).then(data => {
+                            console.log('[UserProfileProvider] Login API data:', data);
+                        }).catch(error => {
+                            console.error('[UserProfileProvider] Login API error:', error);
+                        });
+                    } else {
+                        console.log('[UserProfileProvider] No access token available');
                     }
                 }
             } else if (event === 'SIGNED_OUT') {
