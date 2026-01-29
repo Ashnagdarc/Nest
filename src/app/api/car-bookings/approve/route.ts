@@ -89,6 +89,23 @@ export async function POST(request: NextRequest) {
                 message: `Your car booking for ${booking.date_of_use} (${booking.time_slot}) has been approved.`,
                 link: '/user/car-booking'
             });
+
+            // Queue push notification for the user
+            const pushTitle = 'Your Car Booking Was Approved!';
+            const pushMessage = `Your car booking for ${booking.date_of_use} (${booking.time_slot}) has been approved. ${carDetails ? `Assigned vehicle: ${carDetails}` : ''}`;
+
+            const { error: queueError } = await admin.from('push_notification_queue').insert({
+                user_id: booking.requester_id,
+                title: pushTitle,
+                body: pushMessage,
+                data: { booking_id: bookingId, type: 'car_booking_approved' }
+            });
+
+            if (queueError) {
+                console.error('[Car Booking Approve] Failed to queue push notification for user:', queueError);
+            } else {
+                console.log('[Car Booking Approve] Push notification queued for user');
+            }
         }
 
         // Get user email for notification

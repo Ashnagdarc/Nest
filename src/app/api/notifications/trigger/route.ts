@@ -172,11 +172,38 @@ export async function POST(req: NextRequest) {
                      metadata = { request_id: record.id };
                  }
              }
-         }
-             }
-         }
+          // --- Check-ins ---
+          if (table === 'checkins') {
+              if (type === 'INSERT') {
+                  title = 'New Equipment Check-In';
+                  message = `Equipment has been checked in by a user.`;
+                  emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+            <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
+            <h2 style="color: ${BRAND_COLOR};">New Equipment Check-In</h2>
+            <p>A piece of equipment has been checked in and is now available.</p>
+            <p>View check-ins in <a href="https://nestbyeden.app/admin/checkins">Nest by Eden Oasis</a>.</p>
+            <hr>
+            <small style="color: #888;">Nest by Eden Oasis Team</small>
+          </div>
+        `;
+                  category = 'system';
+                  metadata = { checkin_id: record.id, gear_id: record.gear_id };
+                  // Notify all admin users
+                  const { data: admins } = await supabase.from('profiles').select('id,email,notification_preferences,role').eq('role', 'Admin');
+                  notificationTargets = (admins || [])
+                      .filter(a => !!a.email)
+                      .map(a => ({
+                          id: a.id,
+                          email: a.email,
+                          preferences: a.notification_preferences
+                      }));
+                  // Also notify admins by email
+                  await notifyAdminsByEmail(title, emailHtml);
+              }
+          }
 
-         // --- Car Booking Approvals/Rejections ---
+          // --- Car Booking Approvals/Rejections ---
          if (table === 'car_bookings' && type === 'UPDATE') {
              if (old_record.status !== record.status) {
                  if (record.status === 'Approved') {

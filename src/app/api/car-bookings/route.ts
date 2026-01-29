@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
             const adminSupabase = await createSupabaseServerClient(true);
             const { data: admins } = await adminSupabase
                 .from('profiles')
-                .select('email, full_name')
+                .select('id, email, full_name')
                 .eq('role', 'Admin')
                 .eq('status', 'Active');
 
@@ -227,6 +227,21 @@ export async function POST(request: NextRequest) {
                         console.warn(`[Car Booking] ⚠️ Admin has no email: ${admin.full_name}`);
                     }
                 }
+
+                // Queue push notifications for all admins
+                for (const admin of admins) {
+                    const { error: queueError } = await adminSupabase.from('push_notification_queue').insert({
+                        user_id: admin.id,
+                        title: 'New Car Booking Request',
+                        body: `${employeeName} requested a car booking for ${dateOfUse} (${timeSlot}). Please review.`,
+                        data: { booking_id: data.id, type: 'car_booking_request' }
+                    });
+
+                    if (queueError) {
+                        console.error(`[Car Booking] Failed to queue push notification for admin ${admin.id}:`, queueError);
+                    }
+                }
+                console.log(`[Car Booking] Push notifications queued for ${admins.length} admins`);
             } else {
                 console.warn('[Car Booking] No admins found or admins is not an array');
             }
