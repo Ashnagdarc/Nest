@@ -162,6 +162,43 @@ export default function RootLayout({
               <SupabaseErrorBoundary>
                 {children}
                 <Toaster />
+                {/* Temporary test button for login notifications */}
+                <div style={{
+                  position: 'fixed',
+                  bottom: '20px',
+                  right: '20px',
+                  zIndex: 9999
+                }}>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch('/api/notifications/login', {
+                          method: 'POST',
+                          headers: {
+                            'Authorization': `Bearer ${(await (window as any).supabase?.auth.getSession())?.data?.session?.access_token}`
+                          }
+                        });
+                        if (response.ok) {
+                          alert('Login notification triggered! Check your device.');
+                        } else {
+                          alert(`Failed: ${response.status}`);
+                        }
+                      } catch (error) {
+                        alert(`Error: ${error}`);
+                      }
+                    }}
+                    style={{
+                      background: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      padding: '10px 15px',
+                      borderRadius: '5px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Test Login Push
+                  </button>
+                </div>
               </SupabaseErrorBoundary>
             </NotificationProvider>
           </UserProfileProvider>

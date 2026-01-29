@@ -19,6 +19,7 @@ interface UserProfileContextType {
     error: string | null;
     refreshProfile: () => Promise<void>;
     setProfile: React.Dispatch<React.SetStateAction<UserProfile | null>>;
+    triggerLoginNotification: () => Promise<void>;
 }
 
 const UserProfileContext = createContext<UserProfileContextType | undefined>(undefined);
@@ -78,13 +79,17 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
                             headers: {
                                 'Authorization': `Bearer ${userSession.access_token}`
                             }
-                        }).then(response => {
+                        }).then(async response => {
                             console.log('[UserProfileProvider] Login API response:', response.status);
-                            return response.json();
-                        }).then(data => {
-                            console.log('[UserProfileProvider] Login API data:', data);
+                            if (!response.ok) {
+                                const errorText = await response.text();
+                                console.error('[UserProfileProvider] Login API error:', errorText);
+                            } else {
+                                const data = await response.json();
+                                console.log('[UserProfileProvider] Login API success:', data);
+                            }
                         }).catch(error => {
-                            console.error('[UserProfileProvider] Login API error:', error);
+                            console.error('[UserProfileProvider] Login API fetch error:', error);
                         });
                     } else {
                         console.log('[UserProfileProvider] No access token available');
@@ -100,15 +105,81 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
         };
     }, [fetchProfile, supabase]);
 
+    const triggerLoginNotification = useCallback(async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+                console.log('[UserProfileProvider] Manual trigger: Making fetch to login API');
+                const response = await fetch('/api/notifications/login', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${session.access_token}`
+                    }
+                });
+                console.log('[UserProfileProvider] Manual trigger response:', response.status);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('[UserProfileProvider] Manual trigger error:', errorText);
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                } else {
+                    const data = await response.json();
+                    console.log('[UserProfileProvider] Manual trigger success:', data);
+                    alert('Login notification triggered successfully! Check for push notification.');
+                }
+            } else {
+                console.log('[UserProfileProvider] Manual trigger: No access token');
+                alert('No active session - please log in first');
+            }
+        } catch (error) {
+            console.error('[UserProfileProvider] Manual trigger failed:', error);
+            alert(`Failed to trigger login notification: ${error}`);
+        }
+    }, [supabase]);
+
+    const value = {
+        profile,
+        isLoading,
+        error,
+        refreshProfile: fetchProfile,
+        setProfile,
+        triggerLoginNotification // Add this to context
+    };
+
     return (
-        <UserProfileContext.Provider value={{ profile, isLoading, error, refreshProfile: fetchProfile, setProfile }}>
+        <UserProfileContext.Provider value={value}>
             {children}
         </UserProfileContext.Provider>
     );
-};
 
 export function useUserProfile() {
     const ctx = useContext(UserProfileContext);
     if (!ctx) throw new Error('useUserProfile must be used within a UserProfileProvider');
     return ctx;
-} 
+}
+
+// Debug component for testing login notifications
+export function LoginNotificationTest() {
+    const { triggerLoginNotification, profile } = useUserProfile();
+
+    if (!profile) return null; // Only show when logged in
+
+    return (
+        <button
+            onClick={triggerLoginNotification}
+            style={{
+                position: 'fixed',
+                bottom: '20px',
+                right: '20px',
+                background: '#007bff',
+                color: 'white',
+                border: 'none',
+                padding: '10px 15px',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                zIndex: 9999
+            }}
+        >
+            Test Login Push
+        </button>
+    );
+}
