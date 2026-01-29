@@ -151,35 +151,10 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
         </UserProfileContext.Provider>
     );
 
+}
+
 export function useUserProfile() {
     const ctx = useContext(UserProfileContext);
     if (!ctx) throw new Error('useUserProfile must be used within a UserProfileProvider');
     return ctx;
-}
-
-// Debug component for testing login notifications
-export function LoginNotificationTest() {
-    const { triggerLoginNotification, profile } = useUserProfile();
-
-    if (!profile) return null; // Only show when logged in
-
-    return (
-        <button
-            onClick={triggerLoginNotification}
-            style={{
-                position: 'fixed',
-                bottom: '20px',
-                right: '20px',
-                background: '#007bff',
-                color: 'white',
-                border: 'none',
-                padding: '10px 15px',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                zIndex: 9999
-            }}
-        >
-            Test Login Push
-        </button>
-    );
 }

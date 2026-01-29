@@ -42,6 +42,29 @@ async function getAppSettings(supabase: SupabaseClient<Database>) {
 }
 
 export async function POST(req: NextRequest) {
+    const supabase = await createSupabaseServerClient(true) as SupabaseClient<Database>;
+    const appSettings = await getAppSettings(supabase);
+    const BRAND_LOGO_URL = appSettings['brand_logo_url'] || 'https://nestbyeden.app/logo.png';
+    const BRAND_COLOR = appSettings['brand_primary_color'] || '#ff6300';
+    const notificationDefaults = appSettings['notification_defaults'] ? JSON.parse(appSettings['notification_defaults']) : { email: true, push: true, in_app: true };
+
+    const notifyAdminsByEmail = async (subject: string, html: string) => {
+        const { data: admins } = await supabase.from('profiles').select('email').eq('role', 'Admin').eq('status', 'Active');
+        if (admins && Array.isArray(admins)) {
+            for (const admin of admins) {
+                if (admin.email) {
+                    await sendGearRequestEmail({
+                        to: admin.email,
+                        subject,
+                        html,
+                    });
+                }
+            }
+        }
+    };
+
+    type NotificationTarget = { id: string; email?: string; preferences?: Record<string, unknown> };
+
     try {
         const payload = await req.json();
         const { type, table, record, old_record } = payload;
@@ -63,7 +86,7 @@ export async function POST(req: NextRequest) {
         const notificationDefaults = appSettings['notification_defaults'] ? JSON.parse(appSettings['notification_defaults']) : { email: true, push: true, in_app: true };
 
         // Helper to send email to all admins
-        async function notifyAdminsByEmail(subject: string, html: string) {
+        const notifyAdminsByEmail = async (subject: string, html: string) => {
             const { data: admins } = await supabase.from('profiles').select('email').eq('role', 'Admin').eq('status', 'Active');
             if (admins && Array.isArray(admins)) {
                 for (const admin of admins) {
@@ -335,6 +358,7 @@ export async function POST(req: NextRequest) {
             pushSent: targets.length > 0,
             errors: errors.length > 0 ? errors : undefined
         });
+
     } catch (error: any) {
         console.error('[Notification Trigger Error]:', error);
         return NextResponse.json(
