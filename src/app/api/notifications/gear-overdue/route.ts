@@ -11,28 +11,35 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     try {
         // Find all checked out gear that is overdue
-        const { data: overdueGears, error } = await supabase
-            .from('gears')
-            .select('id, name, due_date, checked_out_to')
-            .in('status', ['Checked Out', 'Partially Checked Out'])
+        const { data: overdueGearStates, error } = await supabase
+            .from('gear_states')
+            .select(`
+                id, 
+                gear_id,
+                due_date,
+                checked_out_to,
+                gears!inner(name)
+            `)
+            .eq('status', 'Checked Out')
+            .not('checked_out_to', 'is', null)
             .lt('due_date', now.toISOString());
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
-        if (!overdueGears || overdueGears.length === 0) {
+        if (!overdueGearStates || overdueGearStates.length === 0) {
             return NextResponse.json({ message: 'No overdue gear found.' });
         }
 
         // Group by user
         const userGearMap: Record<string, { userId: string; gearNames: string[]; dueDates: string[] }> = {};
-        for (const gear of overdueGears) {
-            if (!gear.checked_out_to) continue;
-            if (!userGearMap[gear.checked_out_to]) {
-                userGearMap[gear.checked_out_to] = { userId: gear.checked_out_to, gearNames: [], dueDates: [] };
+        for (const gearState of overdueGearStates) {
+            if (!gearState.checked_out_to) continue;
+            if (!userGearMap[gearState.checked_out_to]) {
+                userGearMap[gearState.checked_out_to] = { userId: gearState.checked_out_to, gearNames: [], dueDates: [] };
             }
-            userGearMap[gear.checked_out_to].gearNames.push(gear.name);
-            userGearMap[gear.checked_out_to].dueDates.push(gear.due_date);
+            userGearMap[gearState.checked_out_to].gearNames.push(gearState.gears.name);
+            userGearMap[gearState.checked_out_to].dueDates.push(gearState.due_date);
         }
 
         // For each user, send a notification
