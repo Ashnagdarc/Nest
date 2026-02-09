@@ -107,6 +107,36 @@ export async function POST(request: NextRequest) {
 
         if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
 
+        // Create in-app notification for user
+        if (requesterId) {
+            await supabase.from('notifications').insert({
+                user_id: requesterId,
+                type: 'Request',
+                title: 'Car booking request submitted',
+                message: `Your car booking request for ${dateOfUse} (${timeSlot}) has been submitted and is pending approval.`,
+                link: '/user/car-booking'
+            });
+        }
+
+        // Queue push notification for the user
+        if (requesterId) {
+            const pushTitle = 'Car Booking Request Submitted';
+            const pushMessage = `Your request for a car on ${dateOfUse} (${timeSlot}) has been submitted. You will be notified when the admin approves or rejects it.`;
+
+            const { error: queueError } = await supabase.from('push_notification_queue').insert({
+                user_id: requesterId,
+                title: pushTitle,
+                body: pushMessage,
+                data: { booking_id: data.id, type: 'car_booking_request' }
+            });
+
+            if (queueError) {
+                console.error('[Car Booking Request] Failed to queue push notification for user:', queueError);
+            } else {
+                console.log('[Car Booking Request] Push notification queued for user');
+            }
+        }
+
         // Fire-and-forget notifications
         try {
             await notifyGoogleChat(NotificationEventType.USER_REQUEST, {
