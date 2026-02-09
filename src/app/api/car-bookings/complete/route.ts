@@ -109,13 +109,6 @@ export async function POST(request: NextRequest) {
             };
         }
 
-        // Defensive: ensure any timeblock row is removed if your sync trigger missed it
-        try {
-            await admin.from('car_timeblocks').delete().eq('booking_id', bookingId);
-        } catch (e) {
-            console.error('cleanup car_timeblocks failed', e);
-        }
-
         // Lookup assigned car and plate if any
         let plateInfo = '';
         const { data: assign } = await admin

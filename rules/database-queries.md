@@ -8,25 +8,24 @@
 
 ## Current Database Schema (as of 2026-01-26)
 
-### Tables (16 total)
+### Tables (15 total)
 All tables have Row Level Security (RLS) enabled ✅
 
 1. **announcements** - System announcements
 2. **app_settings** - Application settings
 3. **car_assignment** - Car assignments to users
 4. **car_bookings** - Car booking records
-5. **car_timeblocks** - Car availability time blocks
-6. **cars** - Car inventory
-7. **checkins** - User check-in records
-8. **gear_maintenance** - Gear maintenance records
-9. **gear_request_gears** - Junction table for gear requests
-10. **gear_requests** - Gear request records
-11. **gear_states** - Gear state tracking
-12. **gears** - Gear inventory
-13. **notifications** - User notifications
-14. **profiles** - User profiles
-15. **read_announcements** - Announcement read tracking
-16. **user_push_tokens** - Push notification tokens
+5. **cars** - Car inventory
+6. **checkins** - User check-in records
+7. **gear_maintenance** - Gear maintenance records
+8. **gear_request_gears** - Junction table for gear requests
+9. **gear_requests** - Gear request records
+10. **gear_states** - Gear state tracking
+11. **gears** - Gear inventory
+12. **notifications** - User notifications
+13. **profiles** - User profiles
+14. **user_push_tokens** - Push notification tokens
+15. **push_notification_queue** - Queue for push notifications
 
 ### Views (5 total)
 1. **gear_maintenance_summary** - Summary of gear maintenance
