@@ -96,8 +96,10 @@ export async function POST(req: NextRequest) {
                             subject,
                             html,
                         });
-              }
-          }
+                    }
+                }
+            }
+        };
 
         type NotificationTarget = { id: string; email?: string; preferences?: Record<string, unknown> };
         let notificationTargets: NotificationTarget[] = [];
