@@ -196,9 +196,11 @@ export async function POST(req: NextRequest) {
                      category = 'request';
                      metadata = { request_id: record.id };
                  }
-             }
-          // --- Check-ins ---
-          if (table === 'checkins') {
+	             }
+	         }
+
+	         // --- Check-ins ---
+	         if (table === 'checkins') {
               if (type === 'INSERT') {
                   title = 'New Equipment Check-In';
                   message = `Equipment has been checked in by a user.`;
@@ -253,19 +255,24 @@ export async function POST(req: NextRequest) {
             targets = notificationTargets;
         } else if (userId) {
             // Fetch user preferences for this user
-            const { data: user } = await supabase.from('profiles').select('email,notification_preferences').eq('id', userId).single();
+            const { data: user } = await supabase
+                .from('profiles')
+                .select('email,notification_preferences')
+                .eq('id', userId)
+                .single();
             if (user) {
                 targets = [{ id: userId, email: user.email ?? undefined, preferences: user.notification_preferences }];
             }
         }
 
-        const errors = [];
+        const errors: string[] = [];
         for (const target of targets) {
             const targetId = target.id;
             const targetEmail = target.email;
-            let notificationId = null;
-            let lastError = null;
+            let notificationId: string | null = null;
+            let lastError: string | null = null;
             const prefs = target.preferences || {};
+
             // Determine channels for this event
             const sendInApp = (prefs as any).in_app?.[table] ?? notificationDefaults.in_app;
             const sendEmail = (prefs as any).email?.[table] ?? notificationDefaults.email;
@@ -274,21 +281,24 @@ export async function POST(req: NextRequest) {
             // In-app notification
             if (sendInApp) {
                 try {
-                    const { data, error } = await supabase.from('notifications').insert([
-                        {
-                            user_id: targetId,
-                            type: getNotificationType(table),
-                            title,
-                            message,
-                            is_read: false,
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString(),
-                            metadata,
-                            category,
-                        }
-                    ]).select('id');
+                    const { data, error } = await supabase
+                        .from('notifications')
+                        .insert([
+                            {
+                                user_id: targetId,
+                                type: getNotificationType(table),
+                                title,
+                                message,
+                                is_read: false,
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString(),
+                                metadata,
+                                category,
+                            },
+                        ])
+                        .select('id');
                     if (error) throw error;
-                    notificationId = data?.[0]?.id;
+                    notificationId = data?.[0]?.id ?? null;
                 } catch (err: any) {
                     errors.push(`In-app: ${err.message}`);
                 }
@@ -316,7 +326,6 @@ export async function POST(req: NextRequest) {
                     const errorMessage = err instanceof Error ? err.message : 'Unknown email error';
                     lastError = `Email: ${errorMessage}`;
                     errors.push(lastError);
-                    // Add detailed logging for debugging
                     console.error('[Email Notification Error]', {
                         error: err,
                         targetEmail,
@@ -328,15 +337,14 @@ export async function POST(req: NextRequest) {
             // Push notification - queue for async processing
             if (sendPush) {
                 try {
-                    // Queue notification for async processing instead of sending immediately
                     const { error: queueError } = await supabase.from('push_notification_queue').insert([
                         {
                             user_id: targetId,
                             title,
                             body: message,
                             data: (metadata as any) || {},
-                            status: 'pending'
-                        }
+                            status: 'pending',
+                        },
                     ]);
 
                     if (queueError) {
@@ -358,16 +366,15 @@ export async function POST(req: NextRequest) {
             message: 'Notification processed successfully',
             emailSent: targets.some(t => t.email),
             pushSent: targets.length > 0,
-            errors: errors.length > 0 ? errors : undefined
+            errors: errors.length > 0 ? errors : undefined,
         });
-
     } catch (error: any) {
         console.error('[Notification Trigger Error]:', error);
         return NextResponse.json(
             {
                 success: false,
                 error: error.message || 'Unknown error occurred',
-                details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+                details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
             },
             { status: 500 }
         );
