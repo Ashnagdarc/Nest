@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import type { Database } from '@/types/supabase';
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     try {
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
         const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 10;
         const page = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
         const userId = searchParams.get('userId');
@@ -78,7 +77,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
         const { user_id, gear_id, condition, notes } = await request.json();
 
         if (!user_id || !gear_id) {
