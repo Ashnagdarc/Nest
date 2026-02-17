@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, XCircle, AlertTriangle, AlertCircle, Calendar } from 'lucide-react';
+import { CheckCircle, AlertTriangle, AlertCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from 'react';
@@ -12,7 +12,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createSystemNotification } from '@/lib/notifications';
-import { PostgrestError } from '@supabase/supabase-js';
 import { groupBy } from 'lodash';
 
 type CheckinData = {
@@ -27,7 +26,7 @@ type CheckinData = {
   gears: {
     name: string;
     current_request_id: string | null;
-  } | null;
+  }[];
 };
 
 type ProfileData = {
@@ -53,7 +52,6 @@ export default function ManageCheckinsPage() {
   const supabase = createClient();
   const { toast } = useToast();
   const [checkins, setCheckins] = useState<Checkin[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedCheckin, setSelectedCheckin] = useState<Checkin | null>(null);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
@@ -66,7 +64,6 @@ export default function ManageCheckinsPage() {
   }, []);
 
   async function fetchCheckins() {
-    setLoading(true);
     try {
       console.log('Fetching checkins...');
 
@@ -100,14 +97,12 @@ export default function ManageCheckinsPage() {
           description: `Failed to load check-ins: ${checkinsError.message || 'Unknown error'}`,
           variant: "destructive",
         });
-        setLoading(false);
         return;
       }
 
       if (!checkinsData) {
         console.log('No checkins found');
         setCheckins([]);
-        setLoading(false);
         return;
       }
 
@@ -131,7 +126,6 @@ export default function ManageCheckinsPage() {
           description: `Failed to load user profiles: ${profilesError.message || 'Unknown error'}`,
           variant: "destructive",
         });
-        setLoading(false);
         return;
       }
 
@@ -140,19 +134,19 @@ export default function ManageCheckinsPage() {
         (profilesData as ProfileData[] || []).map(p => [p.id, p.full_name])
       );
 
-      const processedCheckins = (checkinsData as any[]).map((c: any) => {
+      const processedCheckins = (checkinsData as CheckinData[]).map((c) => {
         const checkin = {
           id: c.id,
           userId: c.user_id,
           userName: userNameMap.get(c.user_id) || 'Unknown User',
           gearId: c.gear_id,
-          gearName: c.gears?.name || 'Unknown Gear',
+          gearName: c.gears?.[0]?.name || 'Unknown Gear',
           checkinDate: c.checkin_date ? new Date(c.checkin_date) : null,
           notes: c.notes || '',
           status: c.status,
           condition: c.condition,
           damageNotes: null, // Set to null since we're not fetching it yet
-          requestId: c.gears?.current_request_id || null
+          requestId: c.gears?.[0]?.current_request_id || null
         };
         console.log('Processed checkin:', checkin);
         return checkin;
@@ -167,8 +161,6 @@ export default function ManageCheckinsPage() {
         description: error instanceof Error ? error.message : "An unexpected error occurred",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -196,8 +188,6 @@ export default function ManageCheckinsPage() {
       const gearNames = (group as Checkin[]).map((c: Checkin) => c.gearName);
       // Collect checkin IDs
       const checkinIds = (group as Checkin[]).map((c: Checkin) => c.id);
-      // Collect gear IDs
-      const gearIdList = (group as Checkin[]).map((c: Checkin) => c.gearId);
       // Collect condition
       const hasDamaged = (group as Checkin[]).some((c: Checkin) => c.condition === 'Damaged');
       // Collect notes
@@ -358,7 +348,7 @@ export default function ManageCheckinsPage() {
 
       // Send Google Chat notification for check-in rejection
       // Fetch admin profile
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       const { data: adminProfile } = await supabase
         .from('profiles')
         .select('full_name, email')
