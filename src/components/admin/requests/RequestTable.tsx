@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { Clock, ExternalLink, CheckCircle, XCircle } from "lucide-react";
+import { Clock, ExternalLink, CheckCircle, XCircle, Loader2 } from "lucide-react";
 
 export interface GearRequest {
     id: string;
@@ -27,12 +27,13 @@ interface RequestTableProps {
     onReject: (id: string) => void;
     onView: (req: GearRequest) => void;
     isProcessing: boolean;
+    processingRequestId: string | null;
     getStatusBadge: (status: string) => React.ReactNode;
 }
 
 const RequestTable: React.FC<RequestTableProps> = ({
     requests, loading, selectedRequests, setSelectedRequests,
-    onApprove, onReject, onView, isProcessing, getStatusBadge
+    onApprove, onReject, onView, isProcessing, processingRequestId, getStatusBadge
 }) => {
     if (loading) return <div className="p-20 text-center text-muted-foreground animate-pulse">Loading data...</div>;
     if (requests.length === 0) return null;
@@ -133,10 +134,26 @@ const RequestTable: React.FC<RequestTableProps> = ({
                                     <div className="flex items-center justify-end gap-2 pr-2">
                                         {req.status.toLowerCase() === 'pending' && (
                                             <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
-                                                <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full text-green-600 hover:bg-green-50" onClick={() => onApprove(req.id)}>
-                                                    <CheckCircle className="h-4 w-4" />
+                                                <Button 
+                                                    size="icon" 
+                                                    variant="ghost" 
+                                                    className="h-8 w-8 rounded-full text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed" 
+                                                    onClick={() => onApprove(req.id)}
+                                                    disabled={isProcessing}
+                                                >
+                                                    {processingRequestId === req.id ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                    ) : (
+                                                        <CheckCircle className="h-4 w-4" />
+                                                    )}
                                                 </Button>
-                                                <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full text-red-600 hover:bg-red-50" onClick={() => onReject(req.id)}>
+                                                <Button 
+                                                    size="icon" 
+                                                    variant="ghost" 
+                                                    className="h-8 w-8 rounded-full text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed" 
+                                                    onClick={() => onReject(req.id)}
+                                                    disabled={isProcessing}
+                                                >
                                                     <XCircle className="h-4 w-4" />
                                                 </Button>
                                             </div>

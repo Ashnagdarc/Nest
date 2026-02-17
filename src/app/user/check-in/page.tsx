@@ -161,7 +161,7 @@ export default function CheckInGearPage() {
   const [scannedCode, setScannedCode] = useState<string | null>(null);
 
   // Use the new custom hook for checked out gears
-  const { checkedOutGears, fetchCheckedOutGear, listContainerRef, scrollPositionRef, isLoading } = useCheckedOutGears(userId, toast);
+  const { checkedOutGears, pendingCheckInCount, fetchCheckedOutGear, listContainerRef, scrollPositionRef, isLoading } = useCheckedOutGears(userId, toast);
 
   /**
    * User Authentication Effect
@@ -738,6 +738,17 @@ export default function CheckInGearPage() {
 
       {/* Main Content - Apple HIG inspired layout */}
       <div className="container max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        {/* Pending Check-ins Banner */}
+        {pendingCheckInCount > 0 && (
+          <Alert className="mb-6 border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-900 dark:text-amber-600">Pending Admin Approval</AlertTitle>
+            <AlertDescription className="text-amber-800 dark:text-amber-700">
+              You have {pendingCheckInCount} item{pendingCheckInCount > 1 ? 's' : ''} awaiting admin approval. These items won't appear below until approved or rejected.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <Tabs defaultValue="check-in" className="space-y-8">
           <TabsList className="grid w-full grid-cols-2 max-w-md">
             <TabsTrigger value="check-in" className="flex items-center gap-2">

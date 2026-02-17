@@ -74,6 +74,7 @@ function ManageRequestsContent() {
   const [selectedRequest, setSelectedRequest] = useState<GearRequest | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [requestToReject, setRequestToReject] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -162,7 +163,11 @@ function ManageRequestsContent() {
   const forceRefresh = () => { setPage(1); fetchRequests(); };
 
   const handleApprove = async (requestId: string) => {
+    if (isProcessing || processingRequestId) return; // Prevent duplicate clicks
+    
     setIsProcessing(true);
+    setProcessingRequestId(requestId);
+    
     try {
       const resp = await fetch('/api/requests/approve', {
         method: 'POST',
@@ -177,7 +182,10 @@ function ManageRequestsContent() {
       fetchRequests();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally { setIsProcessing(false); }
+    } finally { 
+      setIsProcessing(false);
+      setProcessingRequestId(null);
+    }
   };
 
   const handleReject = async () => {
@@ -313,6 +321,7 @@ function ManageRequestsContent() {
               onReject={(id) => setRequestToReject(id)}
               onView={(req: any) => { setSelectedRequest(req); setIsDetailsOpen(true); }}
               isProcessing={isProcessing}
+              processingRequestId={processingRequestId}
               getStatusBadge={getStatusBadge}
             />
           )}

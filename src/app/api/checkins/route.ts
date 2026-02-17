@@ -88,7 +88,30 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create the check-in record
+        // Check if a pending check-in already exists for this gear+user combo
+        // This prevents duplicate submissions and racing condition issues
+        const { data: existingCheckin, error: checkError } = await supabase
+            .from('checkins')
+            .select('id')
+            .eq('gear_id', gear_id)
+            .eq('user_id', user_id)
+            .eq('status', 'Pending Admin Approval')
+            .single();
+
+        // If we got a record (not a 404 error), this gear is already being checked in
+        if (existingCheckin && !checkError) {
+            return NextResponse.json(
+                { 
+                    error: 'This gear is already pending check-in approval',
+                    code: 'DUPLICATE_PENDING_CHECKIN',
+                    checkinId: existingCheckin.id
+                },
+                { status: 409 } // 409 Conflict
+            );
+        }
+
+        // Create the check-in record with status 'Pending Admin Approval'
+        // The database trigger will update available_quantity automatically
         const { data, error } = await supabase
             .from('checkins')
             .insert([{
@@ -97,70 +120,52 @@ export async function POST(request: NextRequest) {
                 action: 'Check In',
                 condition: condition || 'Good',
                 notes,
-                status: 'Completed'
+                status: 'Pending Admin Approval'
             }])
             .select();
 
         if (error) {
+            // Handle unique constraint violation from the database
+            if (error.code === '23505' || error.message?.includes('idx_unique_pending_checkin_per_gear')) {
+                return NextResponse.json(
+                    { 
+                        error: 'This gear is already pending check-in approval from you',
+                        code: 'DUPLICATE_PENDING_CHECKIN'
+                    },
+                    { status: 409 }
+                );
+            }
+
             console.error('Error creating check-in:', error);
             return NextResponse.json(
-                { error: 'Failed to create check-in' },
+                { error: 'Failed to create check-in', details: error.message },
                 { status: 500 }
             );
         }
 
-        // Notify admins via API trigger
-        if (data && data[0]) {
-            await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifications/trigger`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: 'INSERT',
-                    table: 'checkins',
-                    record: data[0],
-                }),
-            });
-        }
-
-        // Get the gear's total quantity
-        const { data: gearData, error: gearError } = await supabase
-            .from('gears')
-            .select('quantity')
-            .eq('id', gear_id)
-            .single();
-
-        if (gearError) {
-            console.error('Error fetching gear quantity:', gearError);
+        if (!data || data.length === 0) {
             return NextResponse.json(
-                { error: 'Failed to fetch gear quantity' },
+                { error: 'Check-in created but no data returned' },
                 { status: 500 }
             );
         }
 
-        // Insert new gear state
-        const { error: stateError } = await supabase
-            .from('gear_states')
-            .insert({
-                gear_id,
-                status: 'Available',
-                available_quantity: gearData.quantity,
-                checked_out_to: null,
-                due_date: null
-            });
+        // Notify admins asynchronously — don't block on this
+        fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifications/trigger`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'INSERT',
+                table: 'checkins',
+                record: data[0],
+            }),
+        }).catch(err => console.error('Failed to send checkin notification:', err));
 
-        if (stateError) {
-            console.error('Error updating gear state:', stateError);
-            return NextResponse.json(
-                { error: 'Failed to update gear state' },
-                { status: 500 }
-            );
-        }
-
-        return NextResponse.json({ checkin: data[0] });
+        return NextResponse.json({ checkin: data[0] }, { status: 201 });
     } catch (error) {
         console.error('Unexpected error creating check-in:', error);
         return NextResponse.json(
-            { error: 'An unexpected error occurred' },
+            { error: 'An unexpected error occurred', details: String(error) },
             { status: 500 }
         );
     }
