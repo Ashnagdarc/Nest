@@ -30,12 +30,10 @@ export async function GET() {
                         description,
                         serial_number,
                         quantity,
-                        gear_states (
-                            status,
-                            available_quantity,
-                            checked_out_to,
-                            due_date
-                        )
+                        available_quantity,
+                        status,
+                        checked_out_to,
+                        due_date
                     )
                 )
             `)

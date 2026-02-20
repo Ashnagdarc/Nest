@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { enqueuePushNotification } from '@/lib/push-queue';
 
 // Helper function to map table names to valid notification types
 function getNotificationType(table: string): string {
@@ -337,19 +338,23 @@ export async function POST(req: NextRequest) {
             // Push notification - queue for async processing
             if (sendPush) {
                 try {
-                    const { error: queueError } = await supabase.from('push_notification_queue').insert([
+                    const queueResult = await enqueuePushNotification(
+                        supabase,
                         {
-                            user_id: targetId,
+                            userId: targetId,
                             title,
                             body: message,
-                            data: (metadata as any) || {},
-                            status: 'pending',
+                            data: (metadata as Record<string, unknown>) || {},
                         },
-                    ]);
+                        {
+                            requestUrl: req.url,
+                            context: 'Notification Trigger',
+                        }
+                    );
 
-                    if (queueError) {
-                        console.error('[Notification Trigger] Failed to queue push notification:', queueError);
-                        errors.push(`Queue push: ${queueError.message}`);
+                    if (!queueResult.success) {
+                        console.error('[Notification Trigger] Failed to queue push notification:', queueResult.error);
+                        errors.push(`Queue push: ${queueResult.error}`);
                     } else {
                         console.log('[Notification Trigger] Push notification queued for user:', targetId);
                     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { sendCheckinApprovalEmail, sendGearRequestEmail } from '@/lib/email';
+import { enqueuePushNotification } from '@/lib/push-queue';
 
 /**
  * POST /api/checkins/approve
@@ -23,9 +24,13 @@ import { sendCheckinApprovalEmail, sendGearRequestEmail } from '@/lib/email';
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { checkinId, userId, gearName } = body;
+        const { checkinId, userId, gearName, gearNames } = body;
 
-        if (!checkinId || !userId || !gearName) {
+        const normalizedGearNames: string[] = Array.isArray(gearNames)
+            ? gearNames.filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0)
+            : (typeof gearName === 'string' && gearName.trim().length > 0 ? [gearName] : []);
+
+        if (!checkinId || !userId || normalizedGearNames.length === 0) {
             return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
         }
 
@@ -61,13 +66,15 @@ export async function POST(request: NextRequest) {
         const userPrefs = (user as any).notification_preferences || {};
         const shouldSendUserEmail = userPrefs.email?.gear_checkins !== false;
 
+        const gearLabel = normalizedGearNames.join(', ');
+
         // Send approval email to user
         if (shouldSendUserEmail) {
             try {
                 await sendCheckinApprovalEmail({
                     to: user.email,
                     userName: user.full_name || 'there',
-                    gearList: [{ name: gearName, condition: 'Good' }],
+                    gearList: normalizedGearNames.map((name) => ({ name, condition: 'Good' })),
                     checkinDate: new Date().toISOString(),
                     condition: 'Good'
                 });
@@ -79,17 +86,24 @@ export async function POST(request: NextRequest) {
 
         // Queue push notification for the user
         const pushTitle = 'Your Check-in Was Approved!';
-        const pushMessage = `Your check-in for ${gearName} has been approved. Thank you for returning the equipment.`;
+        const pushMessage = `Your check-in for ${gearLabel} has been approved. Thank you for returning the equipment.`;
 
-        const { error: queueError } = await supabase.from('push_notification_queue').insert({
-            user_id: userId,
-            title: pushTitle,
-            body: pushMessage,
-            data: { checkin_id: checkinId, type: 'checkin_approval' }
-        });
+        const queueResult = await enqueuePushNotification(
+            supabase,
+            {
+                userId,
+                title: pushTitle,
+                body: pushMessage,
+                data: { checkin_id: checkinId, type: 'checkin_approval' }
+            },
+            {
+                requestUrl: request.url,
+                context: 'Check-in Approve'
+            }
+        );
 
-        if (queueError) {
-            console.error('[Check-in Approve] Failed to queue push notification:', queueError);
+        if (!queueResult.success) {
+            console.error('[Check-in Approve] Failed to queue push notification:', queueResult.error);
         } else {
             console.log('[Check-in Approve] Push notification queued for user');
         }
@@ -136,7 +150,7 @@ export async function POST(request: NextRequest) {
                                                         </tr>
                                                         <tr>
                                                             <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Item:</td>
-                                                            <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${gearName}</td>
+                                                            <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${gearLabel}</td>
                                                         </tr>
                                                         <tr>
                                                             <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Status:</td>

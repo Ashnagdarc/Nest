@@ -35,13 +35,15 @@ export async function GET(req: NextRequest) {
 
         console.log('[Push Worker] Starting queue processing...');
 
+        const batchSize = Math.max(1, Math.min(100, Number(process.env.PUSH_WORKER_BATCH_SIZE || 50)));
+
         // Get pending notifications (limit to prevent timeouts)
         const { data: pendingNotifications, error: fetchError } = await supabase
             .from('push_notification_queue')
             .select('*')
             .eq('status', 'pending')
             .order('created_at', { ascending: true })
-            .limit(10); // Process in batches
+            .limit(batchSize); // Process in batches
 
         if (fetchError) {
             console.error('[Push Worker] Error fetching pending notifications:', fetchError);
@@ -63,14 +65,29 @@ export async function GET(req: NextRequest) {
             try {
                 console.log(`[Push Worker] Processing notification ${notification.id} for user ${notification.user_id}`);
 
-                // Mark as processing
-                await supabase
+                // Claim this notification row for processing.
+                // If another worker already claimed it, skip.
+                const { data: claimedRows, error: claimError } = await supabase
                     .from('push_notification_queue')
                     .update({
                         status: 'processing',
                         retry_count: notification.retry_count + 1
                     })
-                    .eq('id', notification.id);
+                    .eq('id', notification.id)
+                    .eq('status', 'pending')
+                    .select('id');
+
+                if (claimError) {
+                    console.error('[Push Worker] Claim failed:', claimError);
+                    failed++;
+                    processed++;
+                    continue;
+                }
+
+                if (!claimedRows || claimedRows.length === 0) {
+                    console.log(`[Push Worker] Notification ${notification.id} already claimed by another worker`);
+                    continue;
+                }
 
                 // Get user's push subscriptions
                 const { data: tokenRows, error: tokenError } = await supabase

@@ -19,13 +19,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 
-interface GearState {
-  status: string;
-  available_quantity: number;
-  checked_out_to?: string | null;
-  due_date?: string | null;
-}
-
 interface GearRequest {
   id: string;
   created_at: string;
@@ -45,7 +38,6 @@ interface GearRequest {
       description?: string | null;
       serial_number?: string | null;
       quantity: number;
-      gear_states?: GearState[];
     };
   }>;
 }
@@ -58,7 +50,6 @@ type GearWithExtras = {
   name?: string;
   category?: string;
   quantity: number;
-  currentState?: GearState;
 };
 interface TeamMemberProfile {
   id?: string;

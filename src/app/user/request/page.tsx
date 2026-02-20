@@ -42,6 +42,8 @@ type Profile = {
   is_banned: boolean;
 };
 
+type SelectableUser = Pick<Profile, 'id' | 'full_name' | 'email' | 'role'>;
+
 type Gear = {
   id: string;
   name?: string;
@@ -130,7 +132,7 @@ function RequestGearContent() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [availableGears, setAvailableGears] = useState<Gear[]>([]);
-  const [availableUsers, setAvailableUsers] = useState<Profile[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<SelectableUser[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -210,7 +212,7 @@ function RequestGearContent() {
           .is('deleted_at', null)
           .order('full_name');
         if (!error) {
-          setAvailableUsers((data || []).map((u: any) => ({ ...u, status: 'Active' })));
+          setAvailableUsers((data || []) as SelectableUser[]);
         }
       } catch (error) {
         console.error('Exception fetching users:', error);
@@ -255,28 +257,24 @@ function RequestGearContent() {
         expected_duration: data.duration || '',
         due_date: calculateDueDate(data.duration || ''),
         team_members: data.teamMembers.length ? data.teamMembers.join(',') : null,
-        status: 'Pending'
-      };
-
-      const { data: requestData, error } = await supabase.from('gear_requests').insert(requestPayload).select();
-      if (error) throw error;
-
-      if (requestData && requestData[0] && data.selectedGears.length > 0) {
-        const requestId = requestData[0].id as string;
-        const gearRequestGearsData = data.selectedGears.map(gearId => ({
-          gear_request_id: requestId,
+        status: 'Pending',
+        gear_request_gears: data.selectedGears.map((gearId) => ({
           gear_id: gearId,
           quantity: (data.quantities && typeof data.quantities[gearId] === 'number' ? data.quantities[gearId] : 1)
-        }));
+        }))
+      };
 
-        const resp = await fetch('/api/requests/add-lines', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requestId, lines: gearRequestGearsData }),
-        });
-        const resJson = await resp.json();
-        if (!resp.ok || !resJson?.success) throw new Error(resJson?.error || 'Failed to record quantities.');
+      const requestResp = await fetch('/api/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestPayload),
+      });
+      const requestJson = await requestResp.json().catch(() => null);
+      if (!requestResp.ok || requestJson?.error) {
+        throw new Error(requestJson?.error || 'Failed to submit request.');
       }
+
+      const requestId = requestJson?.data?.id as string | undefined;
 
       const { data: userProfile } = await supabase.from('profiles').select('full_name, email').eq('id', userId).single();
       const gearNames = availableGears.filter(g => data.selectedGears.includes(g.id)).map(g => g.name).join(', ');
@@ -285,7 +283,7 @@ function RequestGearContent() {
 
       try {
         await notifyGoogleChat(NotificationEventType.USER_REQUEST, {
-          requestId: requestData?.[0]?.id || '',
+          requestId: requestId || '',
           userId: userId,
           userName: userProfile?.full_name || 'Unknown User',
           userEmail: userProfile?.email || '',
@@ -295,7 +293,7 @@ function RequestGearContent() {
           duration: data.duration,
           teamMembers: data.teamMembers
         });
-      } catch (e) { console.error('Chat notification failed'); }
+      } catch { console.error('Chat notification failed'); }
 
       form.reset();
       localStorage.removeItem(REQUEST_FORM_DRAFT_KEY);
@@ -377,9 +375,26 @@ function RequestGearContent() {
                             <div className="space-y-0.5">
                               <h4 className={`text-sm font-medium transition-colors ${isSelected ? 'text-foreground' : 'text-muted-foreground'}`}>{g.name}</h4>
                               <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">{g.category}</p>
+                              {Math.max((g.quantity || 0) - (g.available_quantity || 0), 0) > 0 && (
+                                <p className="text-[10px] text-amber-600">
+                                  {Math.max((g.quantity || 0) - (g.available_quantity || 0), 0)} currently booked
+                                </p>
+                              )}
                             </div>
-                            <div className="text-[11px] font-medium text-muted-foreground opacity-60">
-                              {g.available_quantity} avail.
+                            <div className="text-right">
+                              <div className="text-[11px] font-medium text-muted-foreground opacity-60">
+                                {g.available_quantity} avail.
+                              </div>
+                              {g.status === 'Partially Available' && (
+                                <Badge variant="secondary" className="mt-1 text-[10px]">
+                                  Partial
+                                </Badge>
+                              )}
+                              {g.status === 'Pending Check-in' && (
+                                <Badge variant="outline" className="mt-1 text-[10px] border-amber-500 text-amber-600">
+                                  Pending Return
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </div>

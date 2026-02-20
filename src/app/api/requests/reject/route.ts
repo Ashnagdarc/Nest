@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestRejectionEmail, sendGearRequestEmail } from '@/lib/email';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
+import { enqueuePushNotification } from '@/lib/push-queue';
 
 export async function POST(req: Request) {
     try {
@@ -88,15 +89,22 @@ export async function POST(req: Request) {
                     const pushTitle = 'Your Gear Request Was Rejected';
                     const pushMessage = `Your request for ${gearNames} has been rejected.${reason ? ` Reason: ${reason}` : ''}`;
 
-                    const { error: queueError } = await adminSupabase.from('push_notification_queue').insert({
-                        user_id: requestData.user_id,
-                        title: pushTitle,
-                        body: pushMessage,
-                        data: { request_id: requestId, type: 'gear_rejection' }
-                    });
+                    const queueResult = await enqueuePushNotification(
+                        adminSupabase,
+                        {
+                            userId: requestData.user_id,
+                            title: pushTitle,
+                            body: pushMessage,
+                            data: { request_id: requestId, type: 'gear_rejection' }
+                        },
+                        {
+                            requestUrl: req.url,
+                            context: 'Gear Rejection'
+                        }
+                    );
 
-                    if (queueError) {
-                        console.error('[Gear Rejection] Failed to queue push notification:', queueError);
+                    if (!queueResult.success) {
+                        console.error('[Gear Rejection] Failed to queue push notification:', queueResult.error);
                     } else {
                         console.log('[Gear Rejection] Push notification queued for user');
                     }

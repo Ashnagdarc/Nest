@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { sendGearRequestApprovalEmail, sendGearRequestEmail } from '@/lib/email';
+import { enqueuePushNotification } from '@/lib/push-queue';
 
 /**
  * Calculates due date based on request duration
@@ -224,15 +225,22 @@ export async function POST(request: NextRequest) {
                 const pushTitle = 'Your Gear Request Was Approved!';
                 const pushMessage = `Your request for ${gearNames} has been approved. Due back: ${new Date(calculatedDueDate).toLocaleDateString()}.`;
 
-                const { error: queueError } = await supabase.from('push_notification_queue').insert({
-                    user_id: req.user_id,
-                    title: pushTitle,
-                    body: pushMessage,
-                    data: { request_id: requestId, type: 'gear_approval' }
-                });
+                const queueResult = await enqueuePushNotification(
+                    supabase,
+                    {
+                        userId: req.user_id,
+                        title: pushTitle,
+                        body: pushMessage,
+                        data: { request_id: requestId, type: 'gear_approval' }
+                    },
+                    {
+                        requestUrl: request.url,
+                        context: 'Gear Approval'
+                    }
+                );
 
-                if (queueError) {
-                    console.error('[Gear Approval] Failed to queue push notification:', queueError);
+                if (!queueResult.success) {
+                    console.error('[Gear Approval] Failed to queue push notification:', queueResult.error);
                 } else {
                     console.log('[Gear Approval] Push notification queued for user');
                 }
@@ -338,5 +346,4 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: msg }, { status: 500 });
     }
 }
-
 

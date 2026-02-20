@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import type { Database } from '@/types/supabase';
 import { sendGearRequestEmail } from '@/lib/email';
+import { enqueuePushNotification, triggerPushWorker } from '@/lib/push-queue';
 
 export async function GET(request: NextRequest) {
     try {
@@ -35,8 +36,7 @@ export async function GET(request: NextRequest) {
 
         console.log('🔍 Query params:', { status, userId, page, pageSize, from, to });
 
-        // Build the query - get requests first, then gear data separately
-        // This avoids the multiple rows issue from gear_states
+        // Build the query - get requests first, then gear data separately.
         let query = supabase
             .from('gear_requests')
             .select(`
@@ -103,24 +103,15 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ data: null, total: 0, error: `Gear data error: ${gearError.message}` }, { status: 500 });
         }
 
-        // Note: We no longer use gear_states table due to data integrity issues
-        // All availability data now comes from the gears table directly
-
         // Combine the data
         const enrichedRequests = requests.map(request => {
             const requestGears = gearRequestGears?.filter(grg => grg.gear_request_id === request.id) || [];
 
             // Add gear data to the request
-            const gear_request_gears = requestGears.map(grg => {
-                return {
-                    ...grg,
-                    gears: {
-                        ...grg.gears,
-                        // No longer using gear_states due to data integrity issues
-                        gear_states: []
-                    }
-                };
-            });
+            const gear_request_gears = requestGears.map(grg => ({
+                ...grg,
+                gears: grg.gears
+            }));
 
             return {
                 ...request,
@@ -159,6 +150,72 @@ export async function POST(request: NextRequest) {
                 );
             }
 
+            const rawLines = Array.isArray(body.gear_request_gears)
+                ? body.gear_request_gears
+                    .map((line: { gear_id?: string; quantity?: number }) => ({
+                        gear_id: String(line.gear_id || '').trim(),
+                        quantity: Math.max(1, Number(line.quantity ?? 1))
+                    }))
+                    .filter((line: { gear_id: string; quantity: number }) => line.gear_id && Number.isFinite(line.quantity))
+                : [];
+
+            if (rawLines.length === 0) {
+                return NextResponse.json(
+                    { data: null, error: 'At least one equipment line is required' },
+                    { status: 400 }
+                );
+            }
+
+            // Aggregate repeated gear lines and validate availability upfront.
+            const requestedByGear = new Map<string, number>();
+            rawLines.forEach((line: { gear_id: string; quantity: number }) => {
+                requestedByGear.set(line.gear_id, (requestedByGear.get(line.gear_id) || 0) + line.quantity);
+            });
+            const normalizedLines = Array.from(requestedByGear.entries()).map(([gear_id, quantity]) => ({ gear_id, quantity }));
+
+            const uniqueGearIds = normalizedLines.map((line) => line.gear_id);
+            const { data: gears, error: gearsError } = await supabase
+                .from('gears')
+                .select('id, name, quantity, available_quantity, status')
+                .in('id', uniqueGearIds);
+
+            if (gearsError) {
+                clearTimeout(timeoutId);
+                return NextResponse.json(
+                    { data: null, error: `Failed to validate gear availability: ${gearsError.message}` },
+                    { status: 500 }
+                );
+            }
+
+            const gearMap = new Map((gears || []).map((g) => [g.id, g]));
+            for (const line of normalizedLines) {
+                const gear = gearMap.get(line.gear_id);
+                if (!gear) {
+                    clearTimeout(timeoutId);
+                    return NextResponse.json(
+                        { data: null, error: `Unknown gear item: ${line.gear_id}` },
+                        { status: 400 }
+                    );
+                }
+                const availableQty = Math.max(0, Number(gear.available_quantity ?? gear.quantity ?? 0));
+                if (availableQty < line.quantity) {
+                    clearTimeout(timeoutId);
+                    return NextResponse.json(
+                        {
+                            data: null,
+                            error: `Insufficient quantity for ${gear.name}. Requested ${line.quantity}, available ${availableQty}.`,
+                            details: {
+                                gear_id: line.gear_id,
+                                requested: line.quantity,
+                                available: availableQty,
+                                status: gear.status
+                            }
+                        },
+                        { status: 409 }
+                    );
+                }
+            }
+
             // Insert the request - keep this simple and fast
             const { data: requestData, error: requestError } = await supabase
                 .from('gear_requests')
@@ -184,9 +241,9 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            // If gear_request_gears data is provided, insert it
-            if (body.gear_request_gears && Array.isArray(body.gear_request_gears) && body.gear_request_gears.length > 0) {
-                const gearLines = body.gear_request_gears.map((line: { gear_id: string; quantity?: number }) => ({
+            // Insert gear lines (validated above)
+            if (normalizedLines.length > 0) {
+                const gearLines = normalizedLines.map((line: { gear_id: string; quantity?: number }) => ({
                     gear_request_id: requestData.id,
                     gear_id: line.gear_id,
                     quantity: Math.max(1, line.quantity || 1) // Ensure quantity >= 1
@@ -224,7 +281,7 @@ export async function POST(request: NextRequest) {
                     // Fetch simplified admin data
                     const { data: admins } = await notificationSupabase
                         .from('profiles')
-                        .select('email, full_name')
+                        .select('id, email, full_name')
                         .eq('role', 'Admin')
                         .eq('status', 'Active');
 
@@ -236,10 +293,10 @@ export async function POST(request: NextRequest) {
                             .eq('id', body.user_id)
                             .single();
 
-                        let gearSummary = 'Equipment requested';
-                        if (body.gear_request_gears && body.gear_request_gears.length > 0) {
-                            gearSummary = `${body.gear_request_gears.length} equipment item(s)`;
-                        }
+                        const totalRequestedUnits = normalizedLines.reduce((sum, line) => sum + line.quantity, 0);
+                        const gearSummary = totalRequestedUnits > 0
+                            ? `${totalRequestedUnits} equipment unit(s)`
+                            : 'Equipment requested';
 
                         const userName = userData?.full_name || 'User';
                         const userEmail = userData?.email || '';
@@ -305,6 +362,33 @@ export async function POST(request: NextRequest) {
                         });
 
                         await Promise.allSettled(emailPromises);
+
+                        const pushTitle = 'New Gear Request Submitted';
+                        const pushMessage = `${userName} submitted a new gear request for ${gearSummary}.`;
+                        const pushPromises = admins.map((admin) => {
+                            if (!admin.id) return Promise.resolve();
+                            return enqueuePushNotification(
+                                notificationSupabase,
+                                {
+                                    userId: admin.id,
+                                    title: pushTitle,
+                                    body: pushMessage,
+                                    data: {
+                                        type: 'gear_request_created',
+                                        request_id: requestData.id,
+                                        requester_id: body.user_id,
+                                    },
+                                },
+                                {
+                                    requestUrl: request.url,
+                                    triggerWorker: false,
+                                    context: 'Gear Request Create',
+                                }
+                            );
+                        });
+
+                        await Promise.allSettled(pushPromises);
+                        await triggerPushWorker({ requestUrl: request.url, context: 'Gear Request Create' });
                     }
                 } catch (notificationError) {
                     console.error('Error sending notifications:', notificationError);

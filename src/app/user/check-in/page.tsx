@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/client';
 import { createSystemNotification } from '@/lib/notifications';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle, Loader2, Package, QrCode } from 'lucide-react';
+import { AlertCircle, CheckCircle, Loader2, QrCode } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +18,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from '@/components/ui/label';
 import { PackageCheck } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import Image from 'next/image';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
@@ -74,6 +73,23 @@ type ProcessedGear = {
   due_date: string | null;
   /** Equipment image URL */
   image_url: string | null;
+  /** Requested quantity on the active request */
+  requested_quantity: number;
+  /** Already approved returns */
+  completed_return_quantity: number;
+  /** Pending admin-approval returns */
+  pending_return_quantity: number;
+  /** Quantity user can currently return */
+  returnable_quantity: number;
+};
+
+type GearReturnGroup = {
+  key: string;
+  requestId: string | null;
+  bookingDate: string | null;
+  dueDate: string | null;
+  gears: ProcessedGear[];
+  totalUnits: number;
 };
 
 /**
@@ -140,6 +156,7 @@ export default function CheckInGearPage() {
 
   // Equipment and user state
   const [selectedGears, setSelectedGears] = useState<string[]>([]);
+  const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
   const [userId, setUserId] = useState<string | null>(null);
   const [checkInHistory, setCheckInHistory] = useState<CheckInHistory[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
@@ -161,7 +178,51 @@ export default function CheckInGearPage() {
   const [scannedCode, setScannedCode] = useState<string | null>(null);
 
   // Use the new custom hook for checked out gears
-  const { checkedOutGears, pendingCheckInCount, fetchCheckedOutGear, listContainerRef, scrollPositionRef, isLoading } = useCheckedOutGears(userId, toast);
+  const { checkedOutGears, pendingCheckInCount, fetchCheckedOutGear, isLoading } = useCheckedOutGears(userId, toast);
+
+  const groupedCheckedOutGears = useMemo<GearReturnGroup[]>(() => {
+    const groups = new Map<string, GearReturnGroup>();
+
+    checkedOutGears.forEach((gear) => {
+      const fallbackDate = gear.last_checkout_date || gear.due_date || null;
+      const fallbackDayKey = fallbackDate ? new Date(fallbackDate).toDateString() : 'no-date';
+      const key = gear.current_request_id ? `req::${gear.current_request_id}` : `day::${fallbackDayKey}`;
+
+      const existing = groups.get(key);
+      if (!existing) {
+        groups.set(key, {
+          key,
+          requestId: gear.current_request_id || null,
+          bookingDate: gear.last_checkout_date || null,
+          dueDate: gear.due_date || null,
+          gears: [gear],
+          totalUnits: Math.max(1, gear.returnable_quantity || 1),
+        });
+        return;
+      }
+
+      existing.gears.push(gear);
+      existing.totalUnits += Math.max(1, gear.returnable_quantity || 1);
+
+      if (!existing.bookingDate && gear.last_checkout_date) {
+        existing.bookingDate = gear.last_checkout_date;
+      }
+      if (!existing.dueDate && gear.due_date) {
+        existing.dueDate = gear.due_date;
+      }
+    });
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        gears: [...group.gears].sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+      .sort((a, b) => {
+        const aTime = a.bookingDate ? new Date(a.bookingDate).getTime() : 0;
+        const bTime = b.bookingDate ? new Date(b.bookingDate).getTime() : 0;
+        return bTime - aTime;
+      });
+  }, [checkedOutGears]);
 
   /**
    * User Authentication Effect
@@ -266,7 +327,15 @@ export default function CheckInGearPage() {
       for (const gearId of selectedGears) {
         const gear = checkedOutGears.find(g => g.id === gearId);
         if (!gear) continue;
-        checkedInGearNames.push(gear.name);
+        const maxReturnableQuantity = Math.max(1, gear.returnable_quantity || 1);
+        const returnQuantity = Math.max(1, Number(selectedQuantities[gearId] ?? maxReturnableQuantity));
+        if (!Number.isFinite(returnQuantity) || returnQuantity < 1) {
+          throw new Error(`Invalid return quantity for ${gear.name}`);
+        }
+        if (returnQuantity > maxReturnableQuantity) {
+          throw new Error(`Return quantity for ${gear.name} exceeds outstanding amount.`);
+        }
+        checkedInGearNames.push(`${gear.name} (x${returnQuantity})`);
 
         // Create a pending check-in record
         const { error: checkinError } = await supabase
@@ -276,6 +345,7 @@ export default function CheckInGearPage() {
             gear_id: gearId,
             request_id: gear.current_request_id,
             action: 'Check In',
+            quantity: returnQuantity,
             status: 'Pending Admin Approval',
             condition: isDamaged ? 'Damaged' : 'Good',
             damage_notes: isDamaged ? damageDescription : null,
@@ -289,20 +359,6 @@ export default function CheckInGearPage() {
 
         // Note: Activity logging removed - the checkins table serves as the audit trail
 
-        // Update gear status to "Pending Check-in"
-        const { error: gearUpdateError } = await supabase
-          .from('gears')
-          .update({
-            status: 'Pending Check-in',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', gearId);
-
-        if (gearUpdateError) {
-          console.error("Error updating gear status:", gearUpdateError);
-          throw new Error(`Failed to update gear status: ${gearUpdateError.message}`);
-        }
-
         // Send email notifications for check-in submission
         try {
           await fetch('/api/checkins/notify', {
@@ -311,7 +367,7 @@ export default function CheckInGearPage() {
             body: JSON.stringify({
               userId,
               gearId,
-              gearName: gear.name,
+              gearName: `${gear.name} (x${returnQuantity})`,
               condition: isDamaged ? 'Damaged' : 'Good',
               notes: checkinNotes || undefined,
               damageNotes: isDamaged ? damageDescription : undefined
@@ -377,6 +433,7 @@ export default function CheckInGearPage() {
         delay: 1500,
         onSuccess: () => {
           setSelectedGears([]);
+          setSelectedQuantities({});
           setIsDamaged(false);
           setDamageDescription('');
           setCheckinNotes('');
@@ -443,95 +500,109 @@ export default function CheckInGearPage() {
     }
   };
 
-  // Update the gear card rendering
-  const renderGearCard = (gear: ProcessedGear) => {
-    const isOverdueDate = gear.due_date && new Date(gear.due_date) < new Date();
-    const dueDate = gear.due_date ? format(new Date(gear.due_date), 'MMM d, yyyy') : 'No due date';
-    const isSelected = selectedGears.includes(gear.id);
+  const isGroupSelected = (group: GearReturnGroup) => {
+    return group.gears.every((gear) => selectedGears.includes(gear.id));
+  };
+
+  const setGroupSelection = (group: GearReturnGroup, shouldSelect: boolean) => {
+    const groupGearIds = group.gears.map((gear) => gear.id);
+
+    setSelectedGears((prev) => {
+      if (shouldSelect) {
+        return Array.from(new Set([...prev, ...groupGearIds]));
+      }
+      return prev.filter((id) => !groupGearIds.includes(id));
+    });
+
+    setSelectedQuantities((prev) => {
+      const next = { ...prev };
+      if (shouldSelect) {
+        group.gears.forEach((gear) => {
+          next[gear.id] = Math.max(1, gear.returnable_quantity || 1);
+        });
+      } else {
+        group.gears.forEach((gear) => {
+          delete next[gear.id];
+        });
+      }
+      return next;
+    });
+  };
+
+  const selectedGroupCount = useMemo(() => {
+    return groupedCheckedOutGears.filter((group) => isGroupSelected(group)).length;
+  }, [groupedCheckedOutGears, selectedGears]);
+
+  const renderGroupCard = (group: GearReturnGroup) => {
+    const selected = isGroupSelected(group);
+    const groupHasOverdue = group.gears.some((gear) => isOverdue(gear.due_date));
+    const bookingDateLabel = group.bookingDate ? format(new Date(group.bookingDate), 'MMM d, yyyy') : null;
+    const dueDateLabel = group.dueDate ? format(new Date(group.dueDate), 'MMM d, yyyy') : null;
+    const groupLabel = group.requestId ? `Booking ${group.requestId.slice(0, 8)}` : `Booking Group`;
 
     return (
       <motion.div
-        key={gear.id}
+        key={group.key}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         className={cn(
-          "group relative rounded-xl border-2 p-6 transition-all duration-200",
-          isSelected
+          "rounded-xl border-2 p-6 transition-all duration-200",
+          selected
             ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
             : "border-border hover:border-primary/50 hover:shadow-md bg-card"
         )}
       >
-        <div className="flex items-start gap-4">
-          <div className="flex-shrink-0">
-            <Checkbox
-              id={`gear-${gear.id}`}
-              checked={isSelected}
-              onCheckedChange={(checked) => {
-                if (checked) {
-                  setSelectedGears(prev => [...prev, gear.id]);
-                } else {
-                  setSelectedGears(prev => prev.filter(id => id !== gear.id));
-                }
-              }}
-              className="h-5 w-5"
-            />
-          </div>
-
-          <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border-2 bg-muted/50">
-            {gear.image_url ? (
-              <Image
-                src={gear.image_url}
-                alt={gear.name}
-                fill
-                className="object-cover"
-                sizes="80px"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <Package className="h-10 w-10 text-muted-foreground" />
-              </div>
-            )}
-          </div>
-
-          <div className="flex-1 min-w-0 space-y-3">
-            <div
-              className="flex-1 cursor-pointer"
-              onClick={() => {
-                if (isSelected) {
-                  setSelectedGears(prev => prev.filter(id => id !== gear.id));
-                } else {
-                  setSelectedGears(prev => [...prev, gear.id]);
-                }
-              }}
-            >
-              <Label
-                htmlFor={`gear-${gear.id}`}
-                className="text-lg font-semibold cursor-pointer block leading-tight"
-              >
-                {gear.name}
-              </Label>
-              <p className="text-sm text-muted-foreground mt-1">
-                {gear.category}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Badge
-                variant={isOverdueDate ? "destructive" : "secondary"}
-                className={cn(
-                  "text-xs font-medium px-3 py-1",
-                  isOverdueDate && "bg-destructive/10 text-destructive border-destructive/20"
-                )}
-              >
-                Due: {dueDate}
-              </Badge>
-              {isOverdueDate && (
-                <Badge variant="destructive" className="text-xs font-medium px-3 py-1">
+        <div
+          className="flex items-start justify-between gap-4 cursor-pointer"
+          onClick={() => setGroupSelection(group, !selected)}
+        >
+          <div className="space-y-2">
+            <h3 className="text-lg font-semibold">{groupLabel}</h3>
+            <p className="text-sm text-muted-foreground">
+              {group.gears.length} gear type{group.gears.length > 1 ? 's' : ''} • {group.totalUnits} total item{group.totalUnits > 1 ? 's' : ''}
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {bookingDateLabel && (
+                <Badge variant="secondary" className="text-xs">
+                  Booked: {bookingDateLabel}
+                </Badge>
+              )}
+              {dueDateLabel && (
+                <Badge variant={groupHasOverdue ? "destructive" : "secondary"} className="text-xs">
+                  Due: {dueDateLabel}
+                </Badge>
+              )}
+              {groupHasOverdue && (
+                <Badge variant="destructive" className="text-xs">
                   Overdue
                 </Badge>
               )}
             </div>
           </div>
+          <Checkbox
+            id={`group-${group.key}`}
+            checked={selected}
+            onCheckedChange={(checked) => setGroupSelection(group, checked === true)}
+            onClick={(event) => event.stopPropagation()}
+            className="h-5 w-5 mt-1"
+          />
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {group.gears.map((gear) => {
+            const returnableQuantity = Math.max(1, gear.returnable_quantity || 1);
+            return (
+              <div key={gear.id} className="rounded-lg border px-3 py-2 bg-background/40">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{gear.name}</p>
+                    <p className="text-xs text-muted-foreground">{gear.category}</p>
+                  </div>
+                  <Badge variant="outline">x{returnableQuantity}</Badge>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </motion.div>
     );
@@ -719,7 +790,7 @@ export default function CheckInGearPage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Check-in Gear</h1>
-              <p className="text-muted-foreground mt-1">Return equipment you've checked out</p>
+              <p className="text-muted-foreground mt-1">Return equipment you&apos;ve checked out</p>
             </div>
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <Button
@@ -744,7 +815,7 @@ export default function CheckInGearPage() {
             <AlertCircle className="h-4 w-4 text-amber-600" />
             <AlertTitle className="text-amber-900 dark:text-amber-600">Pending Admin Approval</AlertTitle>
             <AlertDescription className="text-amber-800 dark:text-amber-700">
-              You have {pendingCheckInCount} item{pendingCheckInCount > 1 ? 's' : ''} awaiting admin approval. These items won't appear below until approved or rejected.
+              You have {pendingCheckInCount} item{pendingCheckInCount > 1 ? 's' : ''} awaiting admin approval. These items won&apos;t appear below until approved or rejected.
             </AlertDescription>
           </Alert>
         )}
@@ -788,20 +859,29 @@ export default function CheckInGearPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <h2 className="text-xl font-semibold">Select Items to Return</h2>
-                          <p className="text-muted-foreground mt-1">Choose the equipment you're returning</p>
+                          <p className="text-muted-foreground mt-1">Choose the equipment you&apos;re returning</p>
                         </div>
                         <div className="flex items-center gap-3">
                           <Badge variant="outline" className="px-3 py-1">
-                            {selectedGears.length} of {checkedOutGears.length} selected
+                            {selectedGroupCount} of {groupedCheckedOutGears.length} bookings selected
                           </Badge>
-                          {checkedOutGears.length > 0 && (
+                          {groupedCheckedOutGears.length > 0 && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setSelectedGears(checkedOutGears.map(g => g.id))}
+                              onClick={() => {
+                                setSelectedGears(checkedOutGears.map(g => g.id));
+                                setSelectedQuantities(prev => {
+                                  const next = { ...prev };
+                                  checkedOutGears.forEach((gear) => {
+                                    next[gear.id] = Math.max(1, gear.returnable_quantity || 1);
+                                  });
+                                  return next;
+                                });
+                              }}
                               className="text-sm"
                             >
-                              Select All
+                              Select All Bookings
                             </Button>
                           )}
                         </div>
@@ -816,7 +896,7 @@ export default function CheckInGearPage() {
                             </div>
                           </div>
                         ) : (
-                          checkedOutGears.map((gear) => renderGearCard(gear))
+                          groupedCheckedOutGears.map((group) => renderGroupCard(group))
                         )}
                       </div>
                     </div>
@@ -934,7 +1014,7 @@ export default function CheckInGearPage() {
                               ) : (
                                 <>
                                   <CheckCircle className="mr-2 h-4 w-4" />
-                                  Check In Selected Gear
+                                  Check In Selected Bookings
                                 </>
                               )}
                             </Button>
@@ -1016,4 +1096,3 @@ export default function CheckInGearPage() {
     </motion.div>
   );
 }
-

@@ -28,7 +28,13 @@ export async function GET(request: NextRequest) {
         const limit = pageSize;
 
         // Helper to build query with search (now only name and serial_number)
-        function applySearch(query: any, search: string | null) {
+        type SearchQueryable<T> = T & { or: (filters: string) => T };
+        type ExclusionQueryable<T> = T & {
+            neq: (column: string, value: string) => T;
+            not: (column: string, operator: string, value: string) => T;
+        };
+
+        function applySearch<T>(query: SearchQueryable<T>, search: string | null): SearchQueryable<T> {
             if (search && search.trim() !== '') {
                 const searchTerm = `%${search.trim()}%`;
                 return query.or(`name.ilike.${searchTerm},serial_number.ilike.${searchTerm}`);
@@ -36,7 +42,7 @@ export async function GET(request: NextRequest) {
             return query;
         }
 
-        const applyExclusions = (query: any) => {
+        const applyExclusions = <T,>(query: ExclusionQueryable<T>): ExclusionQueryable<T> => {
             if (excludeCategories) {
                 const list = excludeCategories.split(',').map(s => s.trim()).filter(Boolean);
                 if (list.length === 1) {
@@ -158,14 +164,20 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { data, error } = await supabase.from('gears').insert(body).select().single();
+        const normalizedQuantity = Math.max(1, Number(body?.quantity ?? 1));
+        const payload = {
+            ...body,
+            quantity: normalizedQuantity,
+            available_quantity: body?.available_quantity ?? normalizedQuantity,
+        };
+        const { data, error } = await supabase.from('gears').insert(payload).select().single();
 
         if (error) {
             return NextResponse.json({ data: null, error: `Failed to create gear: ${error.message}` }, { status: 500 });
         }
 
         return NextResponse.json({ data, error: null });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ data: null, error: 'Failed to create gear' }, { status: 500 });
     }
-} 
+}

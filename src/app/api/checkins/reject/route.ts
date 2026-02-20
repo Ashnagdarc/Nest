@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { sendCheckinRejectionEmail, sendGearRequestEmail } from '@/lib/email';
+import { enqueuePushNotification } from '@/lib/push-queue';
 
 /**
  * POST /api/checkins/reject
@@ -82,15 +83,22 @@ export async function POST(request: NextRequest) {
         const pushTitle = 'Your Check-in Was Rejected';
         const pushMessage = `Your check-in for ${gearName} has been rejected. Reason: ${reason}. Please contact support for assistance.`;
 
-        const { error: queueError } = await supabase.from('push_notification_queue').insert({
-            user_id: userId,
-            title: pushTitle,
-            body: pushMessage,
-            data: { checkin_id: checkinId, type: 'checkin_rejection' }
-        });
+        const queueResult = await enqueuePushNotification(
+            supabase,
+            {
+                userId,
+                title: pushTitle,
+                body: pushMessage,
+                data: { checkin_id: checkinId, type: 'checkin_rejection' }
+            },
+            {
+                requestUrl: request.url,
+                context: 'Check-in Reject'
+            }
+        );
 
-        if (queueError) {
-            console.error('[Check-in Reject] Failed to queue push notification:', queueError);
+        if (!queueResult.success) {
+            console.error('[Check-in Reject] Failed to queue push notification:', queueResult.error);
         } else {
             console.log('[Check-in Reject] Push notification queued for user');
         }

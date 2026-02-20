@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { enqueuePushNotification } from '@/lib/push-queue';
+import type { Database } from '@/types/supabase';
 
 export async function POST(_req: NextRequest) {
     try {
         console.log('[Login Push] Request received');
 
-        let supabase;
-        let user = null;
-        let authError = null;
+        let supabase: SupabaseClient<Database>;
+        let user: { id: string } | null = null;
+        let authError: { message?: string } | null = null;
 
         // Check for Authorization header first (more reliable for immediate post-login)
         const authHeader = _req.headers.get('authorization');
         if (authHeader) {
             console.log('[Login Push] Using Authorization header');
             // Create a client compliant with RLS using the user's token
-            supabase = createClient(
+            supabase = createClient<Database>(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
                 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
                 { global: { headers: { Authorization: authHeader } } }
@@ -60,22 +62,30 @@ export async function POST(_req: NextRequest) {
         }
 
         // 2. Queue Push Notification
-        const { error: queueError } = await supabase.from('push_notification_queue').insert({
-            user_id: user.id,
-            title,
-            message,
-            data: { url: '/user/settings' }
-        });
+        const queueResult = await enqueuePushNotification(
+            supabase,
+            {
+                userId: user.id,
+                title,
+                body: message,
+                data: { url: '/user/settings' }
+            },
+            {
+                requestUrl: _req.url,
+                context: 'Login Push'
+            }
+        );
 
-        if (queueError) {
-            console.error('[Login Push] Failed to queue push notification:', queueError);
+        if (!queueResult.success) {
+            console.error('[Login Push] Failed to queue push notification:', queueResult.error);
         } else {
             console.log('[Login Push] Push notification queued');
         }
 
         return NextResponse.json({ success: true, message: 'Login notification sent' });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[Login Push] Error:', err);
-        return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+        const message = err instanceof Error ? err.message : 'Unexpected error';
+        return NextResponse.json({ success: false, error: message }, { status: 500 });
     }
 }
