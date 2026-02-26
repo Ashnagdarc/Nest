@@ -56,7 +56,7 @@ export async function listCarBookings(params: {
     return apiGet(`/api/car-bookings?${qs.toString()}`);
 }
 
-export async function approveCarBooking(bookingId: string): Promise<{ success: boolean }> {
+export async function approveCarBooking(bookingId: string): Promise<{ success: boolean; error?: string }> {
     return apiPost('/api/car-bookings/approve', { bookingId });
 }
 
@@ -72,6 +72,6 @@ export async function listCars(): Promise<{ data: Array<{ id: string; label: str
     return apiGet('/api/cars');
 }
 
-export async function assignCar(bookingId: string, carId: string): Promise<{ success: boolean; conflict?: boolean }> {
+export async function assignCar(bookingId: string, carId: string): Promise<{ success: boolean; error?: string }> {
     return apiPost('/api/car-bookings/assign-car', { bookingId, carId });
 }

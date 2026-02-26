@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
+function isCarConflictError(message?: string | null) {
+    const msg = (message || '').toLowerCase();
+    return msg.includes('currently checked out')
+        || msg.includes('already assigned to another approved booking for this date and time slot');
+}
+
 export async function POST(request: NextRequest) {
     try {
         const admin = await createSupabaseServerClient(true);
@@ -25,7 +31,7 @@ export async function POST(request: NextRequest) {
         const { data: booking, error: bErr } = await admin.from('car_bookings').select('*').eq('id', bookingId).maybeSingle();
         if (bErr || !booking) return NextResponse.json({ success: false, error: bErr?.message || 'Booking not found' }, { status: 404 });
 
-        // Prevent double assignment: check for existing approved booking for this car, date, and time slot
+        // Prevent double assignment and hard-lock cars with any active approved booking
         const { data: assignments, error: aErr } = await admin
             .from('car_assignment')
             .select('booking_id, car_id')
@@ -34,23 +40,38 @@ export async function POST(request: NextRequest) {
 
         if ((assignments || []).length > 0) {
             const ids = assignments.map(r => r.booking_id);
-            const { data: bookings, error: bErr } = await admin
+            const { data: relatedBookings, error: relatedErr } = await admin
                 .from('car_bookings')
-                .select('id, date_of_use, time_slot, status')
+                .select('id, date_of_use, time_slot, status, employee_name')
                 .in('id', ids)
-                .eq('date_of_use', booking.date_of_use)
-                .eq('time_slot', booking.time_slot)
-                .not('status', 'in', ['Completed', 'Cancelled'])
                 .neq('id', bookingId);
-            const hasConflict = (bookings || []).some(b => b.status === 'Approved');
-            if (hasConflict) {
+            if (relatedErr) return NextResponse.json({ success: false, error: relatedErr.message }, { status: 400 });
+
+            const approvedConflicts = (relatedBookings || []).filter(b => b.status === 'Approved');
+            const slotConflict = approvedConflicts.find(
+                (b) => b.date_of_use === booking.date_of_use && b.time_slot === booking.time_slot
+            );
+            if (slotConflict) {
                 return NextResponse.json({ success: false, error: 'Car is already assigned to another approved booking for this date and time slot.' }, { status: 409 });
+            }
+
+            const activeLock = approvedConflicts[0];
+            if (activeLock) {
+                return NextResponse.json({
+                    success: false,
+                    error: 'Vehicle is currently checked out by another user. It must be returned (marked as Completed) before it can be assigned to a new booking.'
+                }, { status: 409 });
             }
         }
 
         // Upsert assignment
         const { error } = await admin.from('car_assignment').upsert({ booking_id: bookingId, car_id: carId });
-        if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+        if (error) {
+            return NextResponse.json(
+                { success: false, error: error.message },
+                { status: isCarConflictError(error.message) ? 409 : 400 }
+            );
+        }
 
         return NextResponse.json({ success: true });
     } catch (e) {

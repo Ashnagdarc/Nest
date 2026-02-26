@@ -3,6 +3,13 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { sendGearRequestEmail, sendCarBookingApprovalEmail } from '@/lib/email';
 
+function isCarConflictError(message?: string | null) {
+    const msg = (message || '').toLowerCase();
+    return msg.includes('currently checked out')
+        || msg.includes('already assigned and approved for this specific time slot')
+        || msg.includes('already assigned to another approved booking for this date and time slot');
+}
+
 export async function POST(request: NextRequest) {
     try {
         const admin = await createSupabaseServerClient(true);
@@ -32,7 +39,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Assign a car before approval.' }, { status: 400 });
         }
 
-        // Prevent approval if car is already assigned to another approved booking for this date/time slot
+        // Prevent approval if car is already assigned/checked out by another approved booking
         const { data: assignments, error: aErr } = await admin
             .from('car_assignment')
             .select('booking_id, car_id')
@@ -41,33 +48,30 @@ export async function POST(request: NextRequest) {
 
         if ((assignments || []).length > 0) {
             const ids = assignments.map(r => r.booking_id);
-            const { data: bookings, error: bErr } = await admin
+            const { data: relatedBookings, error: relatedErr } = await admin
                 .from('car_bookings')
-                .select('id, date_of_use, time_slot, status')
+                .select('id, date_of_use, time_slot, status, employee_name')
                 .in('id', ids)
-                .eq('date_of_use', booking.date_of_use)
-                .neq('status', 'Completed')
-                .neq('status', 'Cancelled')
                 .neq('id', bookingId);
 
-            if (bErr) return NextResponse.json({ success: false, error: bErr.message }, { status: 400 });
+            if (relatedErr) return NextResponse.json({ success: false, error: relatedErr.message }, { status: 400 });
 
-            // Check for exact slot conflict (Slot overlap)
-            const slotConflict = (bookings || []).find(b => b.time_slot === booking.time_slot && b.status === 'Approved');
+            const approvedConflicts = (relatedBookings || []).filter(b => b.status === 'Approved');
+
+            // Check for exact slot conflict first for clearer error messaging
+            const slotConflict = approvedConflicts.find(
+                (b) => b.date_of_use === booking.date_of_use && b.time_slot === booking.time_slot
+            );
             if (slotConflict) {
                 return NextResponse.json({ success: false, error: 'Car is already assigned and approved for this specific time slot.' }, { status: 409 });
             }
 
-            // Check for Physical Handover conflict (Car not returned yet - only for today)
-            const today = new Date().toISOString().slice(0, 10);
-            if (booking.date_of_use === today) {
-                const checkedOut = (bookings || []).find(b => b.status === 'Approved');
-                if (checkedOut) {
-                    return NextResponse.json({
-                        success: false,
-                        error: 'Vehicle is currently checked out by another user. It must be returned (marked as Completed) before this booking can be approved.'
-                    }, { status: 400 });
-                }
+            const checkedOut = approvedConflicts[0];
+            if (checkedOut) {
+                return NextResponse.json({
+                    success: false,
+                    error: 'Vehicle is currently checked out by another user. It must be returned (marked as Completed) before this booking can be approved.'
+                }, { status: 409 });
             }
         }
 
@@ -79,7 +83,21 @@ export async function POST(request: NextRequest) {
             approved_by: approverId,
             approved_at: new Date().toISOString()
         }).eq('id', bookingId);
-        if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+        if (error) {
+            return NextResponse.json(
+                { success: false, error: error.message },
+                { status: isCarConflictError(error.message) ? 409 : 400 }
+            );
+        }
+
+        // Get assigned car details early so subsequent notifications can use it safely
+        let carDetails = '';
+        if (assignment?.car_id) {
+            const { data: car } = await admin.from('cars').select('label, plate').eq('id', assignment.car_id).maybeSingle();
+            if (car) {
+                carDetails = `${car.label || ''} ${car.plate ? '(' + car.plate + ')' : ''}`.trim();
+            }
+        }
 
         if (booking.requester_id) {
             await admin.from('notifications').insert({
@@ -117,15 +135,6 @@ export async function POST(request: NextRequest) {
                 .eq('id', booking.requester_id)
                 .single();
             userEmail = profile?.email || '';
-        }
-
-        // Get assigned car details
-        let carDetails = '';
-        if (assignment?.car_id) {
-            const { data: car } = await admin.from('cars').select('label, plate').eq('id', assignment.car_id).maybeSingle();
-            if (car) {
-                carDetails = `${car.label || ''} ${car.plate ? '(' + car.plate + ')' : ''}`.trim();
-            }
         }
 
         // Send approval email to user

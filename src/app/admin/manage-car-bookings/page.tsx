@@ -68,6 +68,28 @@ function StatusPill({ status, updatedAt }: { status: string; updatedAt?: string 
     );
 }
 
+type CarStatusRow = {
+    id: string;
+    label: string;
+    plate?: string;
+    status?: string;
+    in_use: boolean;
+    image_url?: string;
+    locked_by_booking_id?: string | null;
+    lock_reason?: string | null;
+};
+
+function getApiErrorMessage(error: unknown, fallback: string) {
+    const raw = error instanceof Error ? error.message : String(error || '');
+    try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.error === 'string' && parsed.error.trim()) return parsed.error;
+        if (parsed && typeof parsed.message === 'string' && parsed.message.trim()) return parsed.message;
+    } catch {
+        // Non-JSON response; use raw text below.
+    }
+    return raw.trim() || fallback;
+}
 
 
 
@@ -76,7 +98,7 @@ export default function AdminManageCarBookingsPage() {
     const [approved, setApproved] = useState<CarBooking[]>([]);
     const [history, setHistory] = useState<CarBooking[]>([]);
     const [cars, setCars] = useState<Array<{ id: string; label: string; plate?: string }>>([]);
-    const [carStatus, setCarStatus] = useState<Array<{ id: string; label: string; plate?: string; status?: string; in_use: boolean; image_url?: string }>>([]);
+    const [carStatus, setCarStatus] = useState<CarStatusRow[]>([]);
     const [carDialogOpen, setCarDialogOpen] = useState(false);
     const [carDialogData, setCarDialogData] = useState<{ label: string; plate?: string; rows: CarBooking[] } | null>(null);
     const [editImageOpen, setEditImageOpen] = useState(false);
@@ -144,7 +166,7 @@ export default function AdminManageCarBookingsPage() {
         }
 
         try {
-            const status = await apiGet<{ data: Array<{ id: string; label: string; plate?: string; in_use: boolean; image_url?: string }> }>(`/api/cars/status`);
+            const status = await apiGet<{ data: CarStatusRow[] }>(`/api/cars/status`);
             setCarStatus(status.data || []);
         } catch (error) {
             console.warn('Failed to load car status:', error);
@@ -282,13 +304,15 @@ export default function AdminManageCarBookingsPage() {
                     <Select value={bookingCarMap[b.id]?.car_id || ''} disabled={assigningId === b.id} onValueChange={async (carId) => {
                         setAssigningId(b.id);
                         try {
-                            const r = await assignCar(b.id, carId);
-                            if (r.conflict) {
-                                toast({ title: 'Assignment conflict', description: 'Car is unavailable or already assigned.', variant: 'destructive' });
-                            } else {
-                                toast({ title: 'Assigned', description: 'Car assigned to booking.' });
-                                await load();
-                            }
+                            await assignCar(b.id, carId);
+                            toast({ title: 'Assigned', description: 'Car assigned to booking.' });
+                            await load();
+                        } catch (err) {
+                            toast({
+                                title: 'Assignment blocked',
+                                description: getApiErrorMessage(err, 'Car is unavailable or still checked out.'),
+                                variant: 'destructive'
+                            });
                         } finally {
                             setAssigningId(null);
                         }
@@ -301,10 +325,11 @@ export default function AdminManageCarBookingsPage() {
                                 const carStatusText = statusObj?.status || 'Unavailable';
                                 const isAvailable = carStatusText === 'Available' && !isCheckedOut;
                                 let statusLabel = '';
-                                if (isCheckedOut) statusLabel = '(Checked out)';
+                                if (isCheckedOut) statusLabel = '(Checked out - return pending)';
                                 else if (carStatusText !== 'Available') statusLabel = `(${carStatusText})`;
+                                const unavailableTitle = statusObj?.lock_reason || `Car is ${carStatusText.toLowerCase()}`;
                                 return (
-                                    <SelectItem key={c.id} value={c.id} disabled={!isAvailable} title={!isAvailable ? `Car is ${carStatusText.toLowerCase()}` : ''}>
+                                    <SelectItem key={c.id} value={c.id} disabled={!isAvailable} title={!isAvailable ? unavailableTitle : ''}>
                                         {c.label}{c.plate ? ` (${c.plate})` : ''} {statusLabel && <span className={`text-xs ml-2 ${isCheckedOut ? 'text-rose-500' : 'text-gray-500'}`}>{statusLabel}</span>}
                                     </SelectItem>
                                 );
@@ -318,7 +343,7 @@ export default function AdminManageCarBookingsPage() {
                             if (!res?.success) {
                                 toast({
                                     title: 'Approval blocked',
-                                    description: (res as any)?.error || 'Failed to approve booking. Car may already be assigned or in use.',
+                                    description: res.error || 'Failed to approve booking. Car may still be checked out and not yet returned.',
                                     variant: 'destructive'
                                 });
                             } else {
@@ -328,7 +353,7 @@ export default function AdminManageCarBookingsPage() {
                         } catch (err: any) {
                             toast({
                                 title: 'Error',
-                                description: err.message || 'Failed to approve',
+                                description: getApiErrorMessage(err, 'Failed to approve booking. Car may still be checked out and not yet returned.'),
                                 variant: 'destructive'
                             });
                         } finally {
@@ -363,13 +388,15 @@ export default function AdminManageCarBookingsPage() {
                             <Select value={carInfo?.car_id || ''} disabled={assigningId === b.id} onValueChange={async (carId) => {
                                 setAssigningId(b.id);
                                 try {
-                                    const r = await assignCar(b.id, carId);
-                                    if (r.conflict) {
-                                        toast({ title: 'Overlap detected', description: 'Assigned car overlaps another approved booking in this slot.', variant: 'destructive' });
-                                    } else {
-                                        toast({ title: 'Reassigned', description: 'Car reassigned to booking.' });
-                                        await load();
-                                    }
+                                    await assignCar(b.id, carId);
+                                    toast({ title: 'Reassigned', description: 'Car reassigned to booking.' });
+                                    await load();
+                                } catch (err) {
+                                    toast({
+                                        title: 'Reassignment blocked',
+                                        description: getApiErrorMessage(err, 'Car is unavailable or still checked out.'),
+                                        variant: 'destructive'
+                                    });
                                 } finally {
                                     setAssigningId(null);
                                 }
@@ -382,11 +409,12 @@ export default function AdminManageCarBookingsPage() {
                                         const carStatusText = statusObj?.status || 'Unavailable';
                                         const isAvailable = carStatusText === 'Available' && !isCheckedOut;
                                         let statusLabel = '';
-                                        if (isCheckedOut) statusLabel = '(Checked out)';
+                                        if (isCheckedOut) statusLabel = '(Checked out - return pending)';
                                         else if (carStatusText !== 'Available') statusLabel = `(${carStatusText})`;
+                                        const unavailableTitle = statusObj?.lock_reason || `Car is ${carStatusText.toLowerCase()}`;
 
                                         return (
-                                            <SelectItem key={c.id} value={c.id} disabled={!isAvailable}>
+                                            <SelectItem key={c.id} value={c.id} disabled={!isAvailable} title={!isAvailable ? unavailableTitle : ''}>
                                                 {c.label}{c.plate ? ` (${c.plate})` : ''} {statusLabel && <span className="text-xs ml-2 opacity-70">{statusLabel}</span>}
                                             </SelectItem>
                                         );
