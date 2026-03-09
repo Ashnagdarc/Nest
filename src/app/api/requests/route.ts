@@ -257,11 +257,13 @@ export async function POST(request: NextRequest) {
                     console.error('Error inserting gear lines:', linesError);
                     clearTimeout(timeoutId);
                     // Delete the request if lines insertion fails
-                    await supabase
+                    const { error: deleteError } = await supabase
                         .from('gear_requests')
                         .delete()
-                        .eq('id', requestData.id)
-                        .catch(err => console.error('Failed to rollback request:', err));
+                        .eq('id', requestData.id);
+                    if (deleteError) {
+                        console.error('Failed to rollback request:', deleteError);
+                    }
 
                     return NextResponse.json(
                         { data: null, error: `Failed to add equipment to request: ${linesError.message}` },
