@@ -249,26 +249,30 @@ export async function POST(request: NextRequest) {
                     quantity: Math.max(1, line.quantity || 1) // Ensure quantity >= 1
                 }));
 
-                const { error: linesError } = await supabase
+                const { error: linesError, data: linesData } = await supabase
                     .from('gear_request_gears')
                     .insert(gearLines);
 
                 if (linesError) {
-                    console.error('Error inserting gear lines:', linesError);
+                    console.error('Error inserting gear lines:', linesError, 'Payload:', gearLines, 'Request ID:', requestData.id);
                     clearTimeout(timeoutId);
                     // Delete the request if lines insertion fails
-                    const { error: deleteError } = await supabase
+                    const { error: deleteError, data: deleteData } = await supabase
                         .from('gear_requests')
                         .delete()
                         .eq('id', requestData.id);
                     if (deleteError) {
-                        console.error('Failed to rollback request:', deleteError);
+                        console.error('Failed to rollback request:', deleteError, 'Request ID:', requestData.id);
+                    } else {
+                        console.log('Rollback successful:', deleteData, 'Request ID:', requestData.id);
                     }
 
                     return NextResponse.json(
-                        { data: null, error: `Failed to add equipment to request: ${linesError.message}` },
+                        { data: null, error: `Failed to add equipment to request: ${linesError.message}`, details: { linesError, gearLines, requestId: requestData.id } },
                         { status: 500 }
                     );
+                } else {
+                    console.log('Gear lines inserted successfully:', linesData, 'Payload:', gearLines, 'Request ID:', requestData.id);
                 }
             }
 
