@@ -62,6 +62,19 @@ export async function POST(request: NextRequest) {
 
             if (existingProfile) {
                 profileCreated = true;
+
+                // Queue welcome push notification
+                const { error: pushError } = await supabase.from('push_notification_queue').insert([
+                    {
+                        user_id: data.user.id,
+                        title: 'Welcome to Nest!',
+                        body: `Hi ${fullName}, welcome to the Nest by Eden Oasis system. Your account has been created successfully.`,
+                        data: { type: 'welcome' },
+                        status: 'pending'
+                    }
+                ]);
+                if (pushError) console.error('[Signup] Failed to queue welcome push:', pushError);
+
                 break;
             }
 
@@ -83,6 +96,18 @@ export async function POST(request: NextRequest) {
 
                 if (!profileCreateError) {
                     profileCreated = true;
+
+                    // Queue welcome push notification
+                    const { error: pushError } = await supabase.from('push_notification_queue').insert([
+                        {
+                            user_id: data.user.id,
+                            title: 'Welcome to Nest!',
+                            body: `Hi ${fullName}, welcome to the Nest by Eden Oasis system. Your account has been created successfully.`,
+                            data: { type: 'welcome' },
+                            status: 'pending'
+                        }
+                    ]);
+                    if (pushError) console.error('[Signup] Failed to queue welcome push:', pushError);
                 }
             } else {
                 // Wait a bit before next attempt

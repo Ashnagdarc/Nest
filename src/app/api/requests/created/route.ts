@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
         const { data: user } = await supabase
             .from('profiles')
-            .select('email, full_name')
+            .select('email, full_name, notification_preferences')
             .eq('id', req.user_id)
             .single();
 
@@ -79,16 +79,22 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Email service not configured' });
         }
 
-        // User email
+        // User email - respect notification preferences (default: enabled)
         if (user?.email) {
-            await sendGearRequestEmail({
-                to: user.email,
-                subject: '✅ We received your gear request',
-                html: `<p>Hi ${user.full_name || 'there'},</p>
-                       <p>We received your request for: <strong>${gearList}</strong>.</p>
-                       <p>Reason: ${req.reason || '-'} | Destination: ${req.destination || '-'} | Duration: ${req.expected_duration || '-'}</p>
-                       <p>We will notify you when it is approved.</p>`
-            });
+            // Get user's notification preferences - default to true if not explicitly disabled
+            const userPrefs = (user as any).notification_preferences || {};
+            const shouldSendEmail = userPrefs.email?.gear_requests !== false; // Default true
+            
+            if (shouldSendEmail) {
+                await sendGearRequestEmail({
+                    to: user.email,
+                    subject: '✅ We received your gear request',
+                    html: `<p>Hi ${user.full_name || 'there'},</p>
+                           <p>We received your request for: <strong>${gearList}</strong>.</p>
+                           <p>Reason: ${req.reason || '-'} | Destination: ${req.destination || '-'} | Duration: ${req.expected_duration || '-'}</p>
+                           <p>We will notify you when it is approved.</p>`
+                });
+            }
         }
 
         // Admin email(s): find admins from profiles

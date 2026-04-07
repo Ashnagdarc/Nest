@@ -6,7 +6,7 @@ export function Favicon() {
 
     useEffect(() => {
         const updateFavicon = () => {
-            const faviconSrc = '/Favicon.png'
+            const faviconSrc = '/favicon.png'
 
             // Remove all existing favicon links
             const existingLinks = document.querySelectorAll("link[rel*='icon']")
@@ -30,5 +30,5 @@ export function Favicon() {
         updateFavicon()
     }, [])
 
-    return null // This component doesn't render anything
+    return null
 }

@@ -329,6 +329,7 @@ export default function ManageGearsPage() {
         serial_number: data.serial_number,
         status: data.status,
         quantity: data.quantity || 1,
+        available_quantity: data.quantity || 1,
         owner_id: user.id,
         created_at: new Date().toISOString(),
         image_url: imageUrl,
@@ -1193,6 +1194,7 @@ export default function ManageGearsPage() {
 
       // Create a minimal update object with only essential fields
       // to avoid any potential schema issues
+      const normalizedQuantity = data.quantity || 1;
       const minimalUpdate = {
         name: data.name || "",
         category: data.category || "",
@@ -1200,7 +1202,8 @@ export default function ManageGearsPage() {
         description: data.description || null,
         serial_number: data.serial_number || null,
         condition: data.condition || null,
-        quantity: data.quantity || 1,
+        quantity: normalizedQuantity,
+        available_quantity: (data.status || "Available") === "Available" ? normalizedQuantity : undefined,
         image_url: imageUrl
       };
 

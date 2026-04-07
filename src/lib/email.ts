@@ -1131,6 +1131,696 @@ export async function sendOverdueReminderEmail({
   });
 }
 
+// Car booking email templates
+export async function sendCarBookingRequestEmail({
+  to,
+  userName,
+  dateOfUse,
+  timeSlot,
+  destination,
+  purpose,
+}: {
+  to: string;
+  userName: string;
+  dateOfUse: string;
+  timeSlot: string;
+  destination?: string;
+  purpose?: string;
+}) {
+  const formattedDate = formatDate(dateOfUse);
+
+  const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Car Booking Request Received</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>🚗 Car Booking Request Received</h1>
+              <p class="subtitle">Your request is under review</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName},</h2>
+              
+              <div class="info-note">
+                <strong>Confirmation:</strong> We've received your car booking request and it's now under review.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Booking Details:</h3>
+                <div class="gear-item">
+                  <span class="gear-name">Date of Use:</span>
+                  <span>${formattedDate}</span>
+                </div>
+                <div class="gear-item">
+                  <span class="gear-name">Time Slot:</span>
+                  <span>${timeSlot}</span>
+                </div>
+                ${destination ? `
+                <div class="gear-item">
+                  <span class="gear-name">Destination:</span>
+                  <span>${destination}</span>
+                </div>
+                ` : ''}
+                ${purpose ? `
+                <div class="gear-item">
+                  <span class="gear-name">Purpose:</span>
+                  <span>${purpose}</span>
+                </div>
+                ` : ''}
+              </div>
+              
+              <p><strong>What happens next?</strong></p>
+              <ul>
+                <li>Your request will be reviewed by the admin team</li>
+                <li>You'll receive an email notification once a decision is made</li>
+                <li>If approved, you'll get pickup instructions and car assignment details</li>
+                <li>If rejected, you'll receive the reason and can submit a new request</li>
+              </ul>
+              
+              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
+                Track Your Booking
+              </a>
+              
+              <div class="info-note">
+                <strong>Processing Time:</strong> Most requests are processed within 24 hours during business days.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>We'll notify you as soon as your request is reviewed</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+  return sendGearRequestEmail({
+    to,
+    subject: '🚗 Car Booking Request Received - Under Review',
+    html,
+  });
+}
+
+export async function sendCarBookingApprovalEmail({
+  to,
+  userName,
+  dateOfUse,
+  timeSlot,
+  destination,
+  carDetails,
+}: {
+  to: string;
+  userName: string;
+  dateOfUse: string;
+  timeSlot: string;
+  destination?: string;
+  carDetails?: string;
+}) {
+  const formattedDate = formatDate(dateOfUse);
+
+  const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Car Booking Approved</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>🎉 Car Booking Approved!</h1>
+              <p class="subtitle">Your vehicle is ready for pickup</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName},</h2>
+              
+              <div class="success-note">
+                <strong>Great news!</strong> Your car booking has been approved and is ready for your scheduled date.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Approved Booking:</h3>
+                <div class="gear-item">
+                  <span class="gear-name">Date of Use:</span>
+                  <span>${formattedDate}</span>
+                </div>
+                <div class="gear-item">
+                  <span class="gear-name">Time Slot:</span>
+                  <span>${timeSlot}</span>
+                </div>
+                ${destination ? `
+                <div class="gear-item">
+                  <span class="gear-name">Destination:</span>
+                  <span>${destination}</span>
+                </div>
+                ` : ''}
+                ${carDetails ? `
+                <div class="gear-item">
+                  <span class="gear-name">Assigned Vehicle:</span>
+                  <span>${carDetails}</span>
+                </div>
+                ` : ''}
+              </div>
+              
+              <p><strong>Pickup Instructions:</strong></p>
+              <ul>
+                <li>Collect the vehicle at your scheduled time</li>
+                <li>Bring your ID for verification</li>
+                <li>Inspect the vehicle before leaving</li>
+                <li>Return the vehicle on time as per your booking</li>
+              </ul>
+              
+              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
+                View Booking Details
+              </a>
+              
+              <div class="important-note">
+                <strong>Important:</strong> Please ensure the vehicle is returned in the same condition. Report any issues immediately.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>Drive safely!</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+  return sendGearRequestEmail({
+    to,
+    subject: '🎉 Car Booking Approved - Ready for Pickup!',
+    html,
+  });
+}
+
+export async function sendCarBookingRejectionEmail({
+  to,
+  userName,
+  dateOfUse,
+  timeSlot,
+  reason,
+}: {
+  to: string;
+  userName: string;
+  dateOfUse: string;
+  timeSlot: string;
+  reason?: string;
+}) {
+  const formattedDate = formatDate(dateOfUse);
+
+  const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Car Booking Update</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>📋 Car Booking Update</h1>
+              <p class="subtitle">Your booking request status has been updated</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName},</h2>
+              
+              <div class="important-note">
+                <strong>Request Status:</strong> Your car booking request has been reviewed and cannot be approved at this time.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Booking Details:</h3>
+                <div class="gear-item">
+                  <span class="gear-name">Date of Use:</span>
+                  <span>${formattedDate}</span>
+                </div>
+                <div class="gear-item">
+                  <span class="gear-name">Time Slot:</span>
+                  <span>${timeSlot}</span>
+                </div>
+              </div>
+              
+              ${reason ? `
+              <p><strong>Reason for Rejection:</strong></p>
+              <div style="background-color: #fed7d7; padding: 12px; border-radius: 4px; margin: 12px 0;">
+                ${reason}
+              </div>
+              ` : ''}
+              
+              <p><strong>Next Steps:</strong></p>
+              <ul>
+                <li>Review the reason provided above</li>
+                <li>If you believe this is an error, please contact the admin team</li>
+                <li>You may submit a new request with different dates or corrected information</li>
+              </ul>
+              
+              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
+                View Booking Details
+              </a>
+              
+              <div class="info-note">
+                <strong>Need Help?</strong> If you have questions about this decision, please contact the admin team.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>We appreciate your understanding</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+  return sendGearRequestEmail({
+    to,
+    subject: '📋 Car Booking Update - Status Changed',
+    html,
+  });
+}
+
+export async function sendCarReturnConfirmationEmail({
+  to,
+  userName,
+  dateOfUse,
+  timeSlot,
+  carDetails,
+  returnedAt,
+}: {
+  to: string;
+  userName: string;
+  dateOfUse: string;
+  timeSlot: string;
+  carDetails?: string;
+  returnedAt: string;
+}) {
+  const formattedDate = formatDate(dateOfUse);
+  const formattedReturnDate = formatDate(returnedAt);
+
+  const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Car Return Confirmed</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>✅ Car Return Confirmed!</h1>
+              <p class="subtitle">Your vehicle has been successfully returned</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName},</h2>
+              
+              <div class="success-note">
+                <strong>Thank you!</strong> Your car has been successfully returned and checked in.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Return Details:</h3>
+                <div class="gear-item">
+                  <span class="gear-name">Original Booking Date:</span>
+                  <span>${formattedDate}</span>
+                </div>
+                <div class="gear-item">
+                  <span class="gear-name">Time Slot:</span>
+                  <span>${timeSlot}</span>
+                </div>
+                ${carDetails ? `
+                <div class="gear-item">
+                  <span class="gear-name">Vehicle:</span>
+                  <span>${carDetails}</span>
+                </div>
+                ` : ''}
+                <div class="gear-item">
+                  <span class="gear-name">Return Date:</span>
+                  <span>${formattedReturnDate}</span>
+                </div>
+              </div>
+              
+              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
+                View Booking History
+              </a>
+              
+              <div class="info-note">
+                <strong>Thank you!</strong> We appreciate you returning the vehicle on time and in good condition.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>Your booking has been successfully completed</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+  return sendGearRequestEmail({
+    to,
+    subject: '✅ Car Return Confirmed - Thank You!',
+    html,
+  });
+}
+
+export async function sendCarBookingCancellationEmail({
+  to,
+  userName,
+  dateOfUse,
+  timeSlot,
+  destination,
+  cancelledBy,
+  reason,
+}: {
+  to: string;
+  userName: string;
+  dateOfUse: string;
+  timeSlot: string;
+  destination?: string;
+  cancelledBy: 'user' | 'admin';
+  reason?: string;
+}) {
+  const formattedDate = formatDate(dateOfUse);
+  const isUserCancelled = cancelledBy === 'user';
+  const title = isUserCancelled ? 'Booking Cancelled' : 'Booking Cancelled by Admin';
+
+  const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Car Booking Cancellation</title>
+          ${EMAIL_STYLES}
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>🚫 ${title}</h1>
+              <p class="subtitle">Your car booking has been cancelled</p>
+            </div>
+            
+            <div class="email-body">
+              <h2>Hi ${userName},</h2>
+              
+              <div class="${isUserCancelled ? 'info-note' : 'important-note'}">
+                <strong>${isUserCancelled ? 'Cancellation Confirmed:' : 'Admin Cancellation:'}</strong> 
+                Your car booking has been cancelled ${isUserCancelled ? 'as requested' : 'by an administrator'}.
+              </div>
+              
+              <div class="gear-details">
+                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Cancelled Booking Details:</h3>
+                <div class="gear-item">
+                  <span class="gear-name">Date of Use:</span>
+                  <span>${formattedDate}</span>
+                </div>
+                <div class="gear-item">
+                  <span class="gear-name">Time Slot:</span>
+                  <span>${timeSlot}</span>
+                </div>
+                ${destination ? `
+                <div class="gear-item">
+                  <span class="gear-name">Destination:</span>
+                  <span>${destination}</span>
+                </div>
+                ` : ''}
+                ${reason ? `
+                <div class="gear-item">
+                  <span class="gear-name">Reason:</span>
+                  <span>${reason}</span>
+                </div>
+                ` : ''}
+              </div>
+              
+              ${isUserCancelled ? `
+              <p>Your booking has been successfully cancelled. You can submit a new booking request anytime.</p>
+              ` : `
+              <p>This booking was cancelled by an administrator. If you have any questions, please contact the admin team.</p>
+              `}
+              
+              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
+                View My Bookings
+              </a>
+              
+              <div class="info-note">
+                <strong>Need a car?</strong> You can submit a new booking request at any time through the booking page.
+              </div>
+            </div>
+            
+            <div class="email-footer">
+              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+              <p>We're here to help with your transportation needs</p>
+              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+  return sendGearRequestEmail({
+    to,
+    subject: `🚫 ${title}`,
+    html,
+  });
+}
+
+// Gear Request Approval Email
+export async function sendGearRequestApprovalEmail({
+  to,
+  userName,
+  gearList,
+  dueDate,
+  requestId,
+  reason,
+  destination,
+}: {
+  to: string;
+  userName: string;
+  gearList: Array<{ name: string; quantity: number }>;
+  dueDate: string;
+  requestId?: string;
+  reason?: string;
+  destination?: string;
+}) {
+  const formattedDueDate = formatDate(dueDate);
+  const gearItems = gearList.map(item => `${item.name} (Qty: ${item.quantity})`).join('<br/>');
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+        ${EMAIL_STYLES}
+        <div class="email-container">
+          <div class="email-header" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+            <h1 style="margin: 0; font-size: 24px; font-weight: 600;">✅ Request Approved!</h1>
+            <p class="subtitle" style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95;">Your gear request has been approved</p>
+          </div>
+          
+          <div class="email-body">
+            <p style="font-size: 16px; color: #1f2937; margin: 0 0 24px 0;">Hello <strong>${userName}</strong>,</p>
+            
+            <p style="font-size: 15px; color: #374151; line-height: 1.6; margin: 0 0 24px 0;">
+              Great news! Your gear request has been <strong style="color: #10b981;">approved</strong> and is ready for pickup.
+            </p>
+
+            <div class="info-box" style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 16px; margin: 24px 0; border-radius: 4px;">
+              <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #166534;">📦 Approved Items</h3>
+              <div style="color: #166534; line-height: 1.8;">
+                ${gearItems}
+              </div>
+            </div>
+
+            <div class="info-box">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Due Date:</td>
+                  <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${formattedDueDate}</td>
+                </tr>
+                ${reason ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Purpose:</td>
+                  <td style="padding: 8px 0; color: #1f2937;">${reason}</td>
+                </tr>
+                ` : ''}
+                ${destination ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Destination:</td>
+                  <td style="padding: 8px 0; color: #1f2937;">${destination}</td>
+                </tr>
+                ` : ''}
+              </table>
+            </div>
+
+            <div class="info-note" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 24px 0; border-radius: 4px;">
+              <p style="margin: 0; color: #92400e; font-size: 14px;">
+                <strong>⏰ Important:</strong> Please return all items by <strong>${formattedDueDate}</strong> to avoid late fees.
+              </p>
+            </div>
+
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="https://nestbyeden.app/user/gear-requests${requestId ? '?request=' + requestId : ''}" 
+                 class="action-button"
+                 style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">
+                View Request Details
+              </a>
+            </div>
+
+            <p style="margin-top: 32px; font-size: 14px; color: #6b7280; line-height: 1.6;">
+              If you have any questions or need to modify your request, please contact the equipment management team.
+            </p>
+          </div>
+          
+          <div class="email-footer">
+            <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+            <p>Equipment pickup is available during business hours</p>
+            <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return sendGearRequestEmail({
+    to,
+    subject: '✅ Gear Request Approved - Ready for Pickup!',
+    html,
+  });
+}
+
+// Gear Request Rejection Email
+export async function sendGearRequestRejectionEmail({
+  to,
+  userName,
+  gearList,
+  reason,
+  requestReason,
+  destination,
+}: {
+  to: string;
+  userName: string;
+  gearList: Array<{ name: string; quantity: number }>;
+  reason?: string;
+  requestReason?: string;
+  destination?: string;
+}) {
+  const gearItems = gearList.map(item => `${item.name} (Qty: ${item.quantity})`).join('<br/>');
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+        ${EMAIL_STYLES}
+        <div class="email-container">
+          <div class="email-header" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+            <h1 style="margin: 0; font-size: 24px; font-weight: 600;">❌ Request Update</h1>
+            <p class="subtitle" style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95;">Your gear request status</p>
+          </div>
+          
+          <div class="email-body">
+            <p style="font-size: 16px; color: #1f2937; margin: 0 0 24px 0;">Hello <strong>${userName}</strong>,</p>
+            
+            <p style="font-size: 15px; color: #374151; line-height: 1.6; margin: 0 0 24px 0;">
+              We regret to inform you that your gear request could not be approved at this time.
+            </p>
+
+            <div class="info-box" style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 16px; margin: 24px 0; border-radius: 4px;">
+              <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #991b1b;">📦 Requested Items</h3>
+              <div style="color: #991b1b; line-height: 1.8;">
+                ${gearItems}
+              </div>
+            </div>
+
+            ${reason ? `
+            <div class="info-note" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 24px 0; border-radius: 4px;">
+              <h3 style="margin: 0 0 8px 0; font-size: 15px; color: #92400e;">Reason for Rejection:</h3>
+              <p style="margin: 0; color: #78350f; font-size: 14px; line-height: 1.6;">
+                ${reason}
+              </p>
+            </div>
+            ` : ''}
+
+            ${requestReason || destination ? `
+            <div class="info-box">
+              <h3 style="margin: 0 0 12px 0; font-size: 15px; color: #374151;">Your Request Details:</h3>
+              <table style="width: 100%; border-collapse: collapse;">
+                ${requestReason ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Purpose:</td>
+                  <td style="padding: 8px 0; color: #1f2937;">${requestReason}</td>
+                </tr>
+                ` : ''}
+                ${destination ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Destination:</td>
+                  <td style="padding: 8px 0; color: #1f2937;">${destination}</td>
+                </tr>
+                ` : ''}
+              </table>
+            </div>
+            ` : ''}
+
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="https://nestbyeden.app/user/gear-requests" 
+                 class="action-button"
+                 style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">
+                Submit New Request
+              </a>
+            </div>
+
+            <p style="margin-top: 32px; font-size: 14px; color: #6b7280; line-height: 1.6;">
+              You may submit a new request or contact the equipment management team for more information about equipment availability.
+            </p>
+          </div>
+          
+          <div class="email-footer">
+            <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
+            <p>We're here to help with your equipment needs</p>
+            <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return sendGearRequestEmail({
+    to,
+    subject: '❌ Gear Request Update',
+    html,
+  });
+}
+
 // Backward compatible approval email (keeping for existing integrations)
 export async function sendApprovalEmailLegacy({
   to,

@@ -44,7 +44,7 @@ export function useRecentActivity() {
                 // Gear requests (checkout/returns)
                 createClient()
                     .from('gear_requests')
-                    .select('id, gear_ids, user_id, created_at, status, due_date')
+                    .select('id, user_id, created_at, status, due_date, gear_request_gears(gear_id)')
                     .eq('user_id', session.user.id)
                     .order('created_at', { ascending: false })
                     .limit(5),
@@ -70,8 +70,8 @@ export function useRecentActivity() {
 
             // Get unique gear IDs from both sources
             const gearIds = [
-                ...(requestsResponse.data?.flatMap((req: unknown) =>
-                    Array.isArray((req as { gear_ids?: unknown }).gear_ids) ? (req as { gear_ids: unknown[] }).gear_ids : [(req as { gear_ids?: unknown }).gear_ids]).filter(Boolean) || []),
+                ...(requestsResponse.data?.flatMap((req: any) =>
+                    req.gear_request_gears?.map((grg: any) => grg.gear_id) || []).filter(Boolean) || []),
                 ...(checkinsResponse.data?.map((checkin: unknown) => (checkin as { gear_id?: unknown }).gear_id) || [])
             ].filter(Boolean);
 
@@ -92,8 +92,8 @@ export function useRecentActivity() {
 
             // Process request activities
             const requestActivities = (requestsResponse.data || []).flatMap((request: unknown) => {
-                const req = request as { id: string; gear_ids: unknown[]; user_id: string; created_at: string; status: string };
-                const gearIdList = Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids];
+                const req = request as { id: string; user_id: string; created_at: string; status: string; gear_request_gears?: Array<{ gear_id: string }> };
+                const gearIdList = req.gear_request_gears?.map(grg => grg.gear_id) || [];
 
                 return gearIdList.filter(Boolean).map((gearId) => {
                     const gearIdStr = String(gearId);

@@ -51,7 +51,7 @@ export function useUpcomingEvents() {
             // Fetch checkout requests for the user
             const { data: checkoutRequests, error: checkoutError } = await supabase
                 .from('gear_requests')
-                .select('id, gear_ids, created_at, status, due_date, approved_at')
+                .select('id, created_at, status, due_date, approved_at, gear_request_gears(gear_id)')
                 .eq('user_id', session.user.id)
                 .in('status', ['Approved', 'Pending', 'CheckedOut']);
 
@@ -84,7 +84,7 @@ export function useUpcomingEvents() {
 
             // Get gear details
             const gearIds = [
-                ...(checkoutRequests?.flatMap((req: unknown) => Array.isArray((req as { gear_ids?: unknown }).gear_ids) ? (req as { gear_ids: unknown[] }).gear_ids : [(req as { gear_ids?: unknown }).gear_ids]).filter(Boolean) || []),
+                ...(checkoutRequests?.flatMap((req: any) => req.gear_request_gears?.map((grg: any) => grg.gear_id) || []).filter(Boolean) || []),
                 ...(maintenanceEvents?.map((event: MaintenanceEvent) => event.gear_id) || [])
             ].filter(Boolean);
 
@@ -114,9 +114,9 @@ export function useUpcomingEvents() {
 
             // Process checkout events
             const checkoutEvents = (checkoutRequests || []).flatMap((request: unknown) => {
-                const req = request as { id: string; gear_ids: unknown[]; user_id: string; created_at: string; status: string; due_date: string; approved_at?: string };
+                const req = request as { id: string; user_id: string; created_at: string; status: string; due_date: string; approved_at?: string; gear_request_gears?: Array<{ gear_id: string }> };
                 if (req.status === 'CheckedOut') {
-                    const gearIdList = Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids];
+                    const gearIdList = req.gear_request_gears?.map(grg => grg.gear_id) || [];
                     return gearIdList.filter(Boolean).map((gearId) => {
                         const gearIdStr = String(gearId);
                         const eventDate = new Date(req.due_date);
@@ -135,7 +135,7 @@ export function useUpcomingEvents() {
                     });
                 } else if (req.status === 'Approved') {
                     const pickupDate = req.approved_at || req.created_at;
-                    const gearIdList = Array.isArray(req.gear_ids) ? req.gear_ids : [req.gear_ids];
+                    const gearIdList = req.gear_request_gears?.map(grg => grg.gear_id) || [];
                     return gearIdList.filter(Boolean).map((gearId) => {
                         const gearIdStr = String(gearId);
                         const eventDate = new Date(pickupDate);

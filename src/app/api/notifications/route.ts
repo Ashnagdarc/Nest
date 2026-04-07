@@ -6,8 +6,43 @@ export async function GET(request: NextRequest) {
         // Create and await the Supabase client
         const supabase = await createSupabaseServerClient();
 
-        // Get the authenticated user
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        // Try to get user from auth
+        let { data: { user }, error: authError } = await supabase.auth.getUser();
+
+        // If no user found, try to get from cookies directly
+        if (!user && !authError) {
+            try {
+                const cookies = request.cookies;
+                const sessionCookie = cookies.get('sb-access-token')?.value;
+                const refreshCookie = cookies.get('sb-refresh-token')?.value;
+
+                if (sessionCookie) {
+                    // Set the session manually
+                    const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+                        access_token: sessionCookie,
+                        refresh_token: refreshCookie || '',
+                    });
+
+                    if (sessionData.user) {
+                        user = sessionData.user;
+                        authError = null;
+                    } else {
+                        console.log('[API/notifications] Manual session set failed:', sessionError);
+                    }
+                }
+            } catch (cookieError) {
+                console.log('[API/notifications] Cookie session extraction failed:', cookieError);
+            }
+        }
+
+        // Debug logging
+        console.log('[API/notifications] Auth check:', {
+            hasUser: !!user,
+            userId: user?.id,
+            authError: authError?.message,
+            url: request.url,
+            hasSessionCookie: !!request.cookies.get('sb-access-token')?.value
+        });
 
         // Check for authentication errors
         if (authError) {

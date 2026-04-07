@@ -25,13 +25,6 @@ type Profile = {
     is_banned: boolean;
 };
 
-type GearState = {
-    status: string;
-    available_quantity: number;
-    checked_out_to?: string | null;
-    due_date?: string | null;
-};
-
 type Gear = {
     id: string;
     name: string;
@@ -43,7 +36,8 @@ type Gear = {
     quantity: number;
     created_at: string;
     updated_at: string;
-    gear_states?: GearState[];
+    status?: string;
+    available_quantity?: number;
 };
 
 /**
@@ -122,7 +116,7 @@ export const gearQueries = {
 
     // Get gear utilization stats (optimized for dashboard)
     getGearUtilizationStats: async () => {
-        return await apiGet<{ data: { category: string; gear_states: { status: string }[] }[]; error: string | null }>(`/api/gears?fields=category,gear_states`);
+        return await apiGet<{ data: { category: string; status: string }[]; error: string | null }>(`/api/gears?fields=category,status`);
     }
 };
 

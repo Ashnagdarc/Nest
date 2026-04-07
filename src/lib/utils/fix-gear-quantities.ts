@@ -121,6 +121,120 @@ export async function emergencyFixGearQuantities(): Promise<{
 }
 
 /**
+ * Fix gear status that doesn't match available_quantity
+ * This fixes cases where status is 'Partially Available' but available_quantity = quantity
+ */
+export async function fixGearStatusAvailabilitySync(): Promise<{
+    success: boolean;
+    fixed: number;
+    errors: string[];
+}> {
+    const supabase = await createSupabaseServerClient();
+    const errors: string[] = [];
+    let fixed = 0;
+
+    try {
+        console.log('Starting gear status/availability sync fix...');
+
+        // Get all gears with mismatched status/availability
+        const { data: gears, error: gearsError } = await supabase
+            .from('gears')
+            .select('id, name, status, quantity, available_quantity, checked_out_to, current_request_id');
+
+        if (gearsError) {
+            throw new Error(`Failed to fetch gears: ${gearsError.message}`);
+        }
+
+        if (!gears || gears.length === 0) {
+            return { success: true, fixed: 0, errors: [] };
+        }
+
+        // Get pending check-ins
+        const { data: pendingCheckins } = await supabase
+            .from('checkins')
+            .select('gear_id')
+            .eq('status', 'Pending Admin Approval');
+
+        const pendingGearIds = new Set(pendingCheckins?.map(c => c.gear_id) || []);
+
+        for (const gear of gears) {
+            const quantity = gear.quantity || 1;
+            const availableQty = gear.available_quantity ?? quantity;
+            const hasPendingCheckin = pendingGearIds.has(gear.id);
+            
+            // Fix: Status is 'Partially Available' but all items are available
+            if (gear.status === 'Partially Available' && availableQty === quantity && !hasPendingCheckin) {
+                const { error: updateError } = await supabase
+                    .from('gears')
+                    .update({
+                        status: 'Available',
+                        checked_out_to: null,
+                        current_request_id: null,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', gear.id);
+
+                if (updateError) {
+                    errors.push(`Failed to fix gear ${gear.id} (${gear.name}): ${updateError.message}`);
+                } else {
+                    fixed++;
+                    console.log(`Fixed gear ${gear.name}: Status 'Partially Available' → 'Available' (${availableQty}/${quantity})`);
+                }
+            }
+            
+            // Fix: Status is 'Checked Out' but has available quantity
+            if (gear.status === 'Checked Out' && availableQty === quantity && !hasPendingCheckin) {
+                const { error: updateError } = await supabase
+                    .from('gears')
+                    .update({
+                        status: 'Available',
+                        checked_out_to: null,
+                        current_request_id: null,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', gear.id);
+
+                if (updateError) {
+                    errors.push(`Failed to fix gear ${gear.id} (${gear.name}): ${updateError.message}`);
+                } else {
+                    fixed++;
+                    console.log(`Fixed gear ${gear.name}: Status 'Checked Out' → 'Available' (${availableQty}/${quantity})`);
+                }
+            }
+
+            // Fix: Status is 'Pending Check-in' but all items are available and no pending check-ins
+            if (gear.status === 'Pending Check-in' && availableQty === quantity && !hasPendingCheckin) {
+                const { error: updateError } = await supabase
+                    .from('gears')
+                    .update({
+                        status: 'Available',
+                        checked_out_to: null,
+                        current_request_id: null,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', gear.id);
+
+                if (updateError) {
+                    errors.push(`Failed to fix gear ${gear.id} (${gear.name}): ${updateError.message}`);
+                } else {
+                    fixed++;
+                    console.log(`Fixed gear ${gear.name}: Status 'Pending Check-in' → 'Available' (${availableQty}/${quantity})`);
+                }
+            }
+        }
+
+        console.log(`Status/availability sync fix completed. Fixed ${fixed} gears.`);
+        return { success: true, fixed, errors };
+
+    } catch (error) {
+        const errorMsg = `Status/availability sync fix failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error(errorMsg);
+        errors.push(errorMsg);
+        return { success: false, fixed, errors };
+    }
+}
+
+/**
  * Validate gear quantity consistency
  * This function checks if the database state is consistent
  */
@@ -172,6 +286,12 @@ export async function validateGearQuantities(): Promise<{
             } else if (gear.status === 'Available' && availableQty !== quantity && !gear.checked_out_to) {
                 hasIssue = true;
                 issueDescription = 'Available gear available_quantity does not match total quantity';
+            } else if (gear.status === 'Partially Available' && availableQty === quantity) {
+                hasIssue = true;
+                issueDescription = 'Status is "Partially Available" but all items are available (available_quantity = quantity)';
+            } else if (gear.status === 'Pending Check-in' && availableQty === quantity) {
+                hasIssue = true;
+                issueDescription = 'Status is "Pending Check-in" but all items are available (available_quantity = quantity)';
             }
 
             if (hasIssue) {

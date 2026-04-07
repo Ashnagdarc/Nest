@@ -88,6 +88,15 @@ export async function createSupabaseServerClient(isAdmin = false) {
               cookieStore.set({ name, value: '', ...options });
             },
           },
+          global: {
+            fetch: (url, options = {}) => {
+              return fetch(url, {
+                ...options,
+                // Increase timeout from default 10s to 20s
+                signal: AbortSignal.timeout(20000),
+              });
+            },
+          },
         }
       );
     } catch (error) {

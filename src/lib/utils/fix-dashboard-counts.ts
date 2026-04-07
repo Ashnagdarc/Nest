@@ -127,7 +127,7 @@ export async function updateGearAvailableQuantities(): Promise<void> {
         // Get all gears
         const { data: gears, error: gearsError } = await supabase
             .from('gears')
-            .select('id, status, quantity, checked_out_to');
+            .select('id, status, quantity, checked_out_to, available_quantity');
 
         if (gearsError) {
             console.error('Error fetching gears for quantity update:', gearsError);

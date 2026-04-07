@@ -47,41 +47,6 @@ export interface Database {
                     updated_at?: string
                 }
             }
-            gear_states: {
-                Row: {
-                    id: number
-                    gear_id: string
-                    status: string
-                    available_quantity: number
-                    checked_out_to: string | null
-                    current_request_id: string | null
-                    due_date: string | null
-                    created_at: string
-                    updated_at: string
-                }
-                Insert: {
-                    id?: number
-                    gear_id: string
-                    status: string
-                    available_quantity: number
-                    checked_out_to?: string | null
-                    current_request_id?: string | null
-                    due_date?: string | null
-                    created_at?: string
-                    updated_at?: string
-                }
-                Update: {
-                    id?: number
-                    gear_id?: string
-                    status?: string
-                    available_quantity?: number
-                    checked_out_to?: string | null
-                    current_request_id?: string | null
-                    due_date?: string | null
-                    created_at?: string
-                    updated_at?: string
-                }
-            }
             gear_requests: {
                 Row: {
                     id: string
@@ -191,6 +156,38 @@ export interface Database {
         Enums: {
             [_ in never]: never
         }
+    }
+}
+
+// Helper types
+export type Gear = Database['public']['Tables']['gears']['Row']
+export type GearRequest = Database['public']['Tables']['gear_requests']['Row']
+export type GearRequestGear = Database['public']['Tables']['gear_request_gears']['Row']
+
+// Extended types for UI
+export interface GearWithState extends Gear {
+    currentState?: {
+        status: string
+        available_quantity: number
+        checked_out_to?: string | null
+        due_date?: string | null
+    }
+}
+
+export interface GearRequestWithDetails extends GearRequest {
+    gears?: Array<GearRequestGear & {
+        gear?: Gear
+        state?: {
+            status: string
+            available_quantity: number
+            checked_out_to?: string | null
+            due_date?: string | null
+        }
+    }>
+    user?: {
+        id: string
+        full_name?: string | null
+        email?: string | null
     }
 }
 

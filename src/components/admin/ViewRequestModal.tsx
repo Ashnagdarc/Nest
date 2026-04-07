@@ -36,7 +36,6 @@ interface RequestData {
     due_date?: string | null;
     admin_notes?: string | null;
     profiles?: { full_name?: string; email?: string };
-    gear_ids?: string[];
     lineItems?: LineItem[];
     gearNames?: string[];
 }
@@ -65,11 +64,8 @@ export function ViewRequestModal({ requestId, open, onOpenChange }: ViewRequestM
             if (Array.isArray(requestData?.lineItems) && requestData.lineItems.length > 0) {
                 // Use pre-aggregated line items from API (with quantities)
                 setGearItems(requestData.lineItems);
-            } else if (requestData?.gear_ids && requestData.gear_ids.length > 0) {
-                const idsParam = requestData.gear_ids.join(',');
-                const { data: gearData, error: gearError } = await apiGet<{ data: LineItem[]; error: string | null }>(`/api/gears?ids=${idsParam}`);
-                if (gearError) throw new Error(gearError);
-                setGearItems((gearData || []).map(g => ({ ...g, quantity: 1 })));
+            } else {
+                setGearItems([]);
             }
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Failed to load request details';
@@ -84,27 +80,30 @@ export function ViewRequestModal({ requestId, open, onOpenChange }: ViewRequestM
     }
 
     const getStatusBadge = (status: string) => {
-        switch (String(status || '').toLowerCase()) {
+        const s = String(status || '').toLowerCase();
+        switch (s) {
             case 'new':
-                return <Badge className="bg-green-500">New</Badge>;
+                return <Badge variant="outline" className="rounded-full bg-green-500/10 text-green-600 border-green-200">New</Badge>;
             case 'pending':
-                return <Badge className="bg-blue-500">Pending</Badge>;
+                return <Badge variant="outline" className="rounded-full bg-blue-500/10 text-blue-600 border-blue-200">Pending</Badge>;
             case 'approved':
-                return <Badge className="bg-purple-500">Approved</Badge>;
+                return <Badge variant="outline" className="rounded-full bg-purple-500/10 text-purple-600 border-purple-200">Approved</Badge>;
             case 'checked_out':
-                return <Badge className="bg-orange-500">Checked Out</Badge>;
+            case 'checked out':
+                return <Badge variant="outline" className="rounded-full bg-orange-500/10 text-orange-600 border-orange-200">Checked Out</Badge>;
             case 'returned':
-                return <Badge className="bg-gray-500">Returned</Badge>;
+            case 'completed':
+                return <Badge variant="outline" className="rounded-full bg-slate-100 text-slate-600 border-slate-200">Returned</Badge>;
             case 'partially_returned':
-                return <Badge className="bg-yellow-500">Partially Returned</Badge>;
+                return <Badge variant="outline" className="rounded-full bg-yellow-500/10 text-yellow-600 border-yellow-200">Partially Returned</Badge>;
             case 'cancelled':
-                return <Badge className="bg-red-500">Cancelled</Badge>;
+                return <Badge variant="outline" className="rounded-full bg-red-50 text-red-600 border-red-200">Cancelled</Badge>;
             case 'rejected':
-                return <Badge className="bg-red-500">Rejected</Badge>;
+                return <Badge variant="destructive" className="rounded-full px-3">Rejected</Badge>;
             case 'overdue':
-                return <Badge className="bg-red-500">Overdue</Badge>;
+                return <Badge variant="destructive" className="rounded-full px-3">Overdue</Badge>;
             default:
-                return <Badge>{status}</Badge>;
+                return <Badge variant="outline" className="rounded-full">{status}</Badge>;
         }
     };
 

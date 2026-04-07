@@ -28,7 +28,7 @@ export async function GET() {
         // Get basic data with proper RLS
         const { data: gears, error: gearsError } = await supabase
             .from('gears')
-            .select('id, name, category, quantity')
+            .select('id, name, category, quantity, available_quantity, status')
             .limit(10);
 
         // Only admins can see all profiles
@@ -66,14 +66,16 @@ export async function GET() {
         const totalEquipment = gears?.reduce((sum, gear) => sum + gear.quantity, 0) || 0;
         const totalUsers = isAdmin ? (profiles?.length || 0) : 0;
 
-        // Calculate checked out equipment from approved requests with proper quantities
-        const checkedOutEquipment = requests?.filter(req =>
-            req.status === 'Approved' &&
-            req.due_date &&
-            new Date(req.due_date) > new Date()
-        ).reduce((sum, req) => {
-            const requestGears = gearRequestGears?.filter(grg => grg.gear_request_id === req.id) || [];
-            return sum + requestGears.reduce((gearSum, grg) => gearSum + grg.quantity, 0);
+        // Calculate checked out equipment based on actual gear status and available_quantity
+        // This is the correct way - look at the gears table, not requests
+        const checkedOutEquipment = gears?.filter(gear => {
+            const status = (gear as any).status || 'Available';
+            return status === 'Checked Out' || status === 'Partially Checked Out' || status === 'Partially Available';
+        }).reduce((sum, gear) => {
+            const totalQuantity = gear.quantity ?? 1;
+            const availableQuantity = (gear as any).available_quantity ?? totalQuantity;
+            const checkedOutQuantity = totalQuantity - availableQuantity;
+            return sum + Math.max(0, checkedOutQuantity);
         }, 0) || 0;
 
         // Debug logging
@@ -109,8 +111,8 @@ export async function GET() {
                 gears: gears?.map(gear => ({
                     ...gear,
                     current_state: {
-                        status: 'Available',
-                        available_quantity: gear.quantity,
+                        status: (gear as any).status || 'Available',
+                        available_quantity: (gear as any).available_quantity ?? gear.quantity,
                         checked_out_to: null,
                         current_request_id: null,
                         due_date: null,

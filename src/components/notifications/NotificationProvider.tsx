@@ -11,7 +11,7 @@ import {
     loadSoundPreferences,
     playLoginNotificationSound
 } from '@/lib/soundUtils';
-import { apiGet, apiPut } from '@/lib/apiClient';
+import { apiGet, apiPut, apiDelete } from '@/lib/apiClient';
 
 // Simplified notification type matching our new DB schema
 type Notification = {
@@ -34,6 +34,7 @@ type NotificationContextType = {
     isLoading: boolean;
     error: string | null;
     refresh: () => Promise<void>;
+    deleteNotification: (id: string) => Promise<boolean>;
 };
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -175,6 +176,27 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         }
     }, [userId, notifications, toast]);
 
+    const deleteNotification = useCallback(async (notificationId: string): Promise<boolean> => {
+        if (!userId) {
+            setError("Cannot delete notification: No user ID available");
+            return false;
+        }
+        setError(null);
+        try {
+            // Use centralized API client DELETE endpoint
+            await apiDelete<{ success: boolean; error: string | null }>(`/api/notifications/${notificationId}`);
+
+            setNotifications(prev => prev.filter(n => n.id !== notificationId));
+            toast({ title: "Success", description: "Notification deleted.", variant: "default" });
+            return true;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unexpected error deleting notification";
+            setError(errorMessage);
+            toast({ title: "Error", description: errorMessage, variant: "destructive" });
+            return false;
+        }
+    }, [userId, toast]);
+
     // Refresh function that can be called externally
     const refresh = useCallback(async () => {
         if (userId) {
@@ -229,7 +251,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             unreadCount: notifications.filter(n => !n.is_read).length,
             isLoading,
             error,
-            refresh
+            refresh,
+            deleteNotification
         }}>
             {children}
         </NotificationContext.Provider>

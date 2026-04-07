@@ -18,7 +18,7 @@ interface RequestItem {
     updated_at: string;
     due_date?: string;
     user_id: string;
-    gear_ids: string[];
+    gear_request_gears?: any[];
     profiles?: {
         full_name?: string;
         email?: string;

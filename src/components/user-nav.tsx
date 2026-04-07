@@ -14,10 +14,17 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 
+import { useState, useEffect } from "react";
+
 export function UserNav() {
     const router = useRouter();
     const { toast } = useToast();
     const supabase = createClient();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const handleSignOut = async () => {
         const { error } = await supabase.auth.signOut();
@@ -32,6 +39,16 @@ export function UserNav() {
             window.location.href = "/login";
         }
     };
+
+    if (!mounted) {
+        return (
+            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                <Avatar className="h-8 w-8">
+                    <AvatarFallback className="opacity-0">U</AvatarFallback>
+                </Avatar>
+            </Button>
+        );
+    }
 
     return (
         <DropdownMenu>

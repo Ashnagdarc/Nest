@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/supabase';
+import { enqueuePushNotification, triggerPushWorker } from '@/lib/push-queue';
 
 export async function GET(
     _request: NextRequest,
@@ -143,11 +145,12 @@ export async function GET(
     }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const { id } = await params;
         const supabase = await createSupabaseServerClient();
         const body = await request.json();
-        const { data, error } = await supabase.from('gear_requests').update(body).eq('id', params.id).select().single();
+        const { data, error } = await supabase.from('gear_requests').update(body).eq('id', id).select().single();
         if (error) throw error;
         return NextResponse.json({ data, error: null });
     } catch {
@@ -155,13 +158,125 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const supabase = await createSupabaseServerClient();
-        const { error } = await supabase.from('gear_requests').delete().eq('id', params.id);
+        const { id } = await params;
+        
+        // Create direct Supabase client with service role key to bypass RLS
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+        if (!supabaseUrl || !supabaseServiceKey) {
+            console.error('Missing Supabase environment variables');
+            return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
+        }
+
+        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        });
+
+        // Get request details before deletion for notifications
+        const { data: requestData, error: requestError } = await supabase
+            .from('gear_requests')
+            .select('user_id, status, reason, destination, gear_ids')
+            .eq('id', id)
+            .single();
+
+        if (requestError || !requestData) {
+            console.error('Request not found for cancellation:', requestError);
+            return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+        }
+
+        // Get gear names for notification
+        let gearNames = 'Equipment';
+        if (requestData.gear_ids && Array.isArray(requestData.gear_ids)) {
+            const { data: gears } = await supabase
+                .from('gears')
+                .select('name')
+                .in('id', requestData.gear_ids);
+
+            if (gears && gears.length > 0) {
+                const names = gears.map(g => g.name).filter(Boolean);
+                if (names.length === 1) {
+                    gearNames = names[0];
+                } else if (names.length > 1) {
+                    gearNames = `${names[0]} and ${names.length - 1} other item${names.length > 2 ? 's' : ''}`;
+                }
+            }
+        }
+
+        // Delete the request
+        const { error } = await supabase.from('gear_requests').delete().eq('id', id);
         if (error) throw error;
+
+        // Queue push notification for the user who cancelled
+        if (requestData.user_id) {
+            const pushTitle = 'Your Gear Request Was Cancelled';
+            const pushMessage = `Your request for ${gearNames} has been cancelled.`;
+
+            const queueResult = await enqueuePushNotification(
+                supabase,
+                {
+                    userId: requestData.user_id,
+                    title: pushTitle,
+                    body: pushMessage,
+                    data: { request_id: id, type: 'gear_request_cancelled' }
+                },
+                {
+                    requestUrl: request.url,
+                    triggerWorker: false,
+                    context: 'Gear Request Cancel'
+                }
+            );
+
+            if (!queueResult.success) {
+                console.error('[Gear Request Cancel] Failed to queue push notification for user:', queueResult.error);
+            } else {
+                console.log('[Gear Request Cancel] Push notification queued for user');
+            }
+        }
+
+        // Queue push notification for all admins
+        const { data: admins } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('role', 'Admin')
+            .eq('status', 'Active');
+
+        if (admins && admins.length > 0) {
+            const pushTitle = 'Gear Request Cancelled';
+            const pushMessage = `A gear request has been cancelled by the user.`;
+
+            for (const admin of admins) {
+                const queueResult = await enqueuePushNotification(
+                    supabase,
+                    {
+                        userId: admin.id,
+                        title: pushTitle,
+                        body: pushMessage,
+                        data: { request_id: id, type: 'gear_request_cancelled_admin' }
+                    },
+                    {
+                        requestUrl: request.url,
+                        triggerWorker: false,
+                        context: 'Gear Request Cancel'
+                    }
+                );
+
+                if (!queueResult.success) {
+                    console.error(`[Gear Request Cancel] Failed to queue push notification for admin ${admin.id}:`, queueResult.error);
+                }
+            }
+            await triggerPushWorker({ requestUrl: request.url, context: 'Gear Request Cancel' });
+            console.log(`[Gear Request Cancel] Push notifications queued for ${admins.length} admins`);
+        }
+
         return NextResponse.json({ success: true });
-    } catch {
+    } catch (err) {
+        console.error('Failed to delete request:', err);
         return NextResponse.json({ success: false, error: 'Failed to delete request' }, { status: 500 });
     }
 } 

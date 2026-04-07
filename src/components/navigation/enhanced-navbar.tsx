@@ -55,6 +55,12 @@ const userNavItems: NavItem[] = [
         description: 'Submit new requests'
     },
     {
+        href: '/user/car-booking',
+        label: 'Book a Car',
+        icon: PlusSquare,
+        description: 'Request a car booking'
+    },
+    {
         href: '/user/my-requests',
         label: 'My Requests',
         icon: ListChecks,

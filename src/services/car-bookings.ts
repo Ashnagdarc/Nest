@@ -56,7 +56,7 @@ export async function listCarBookings(params: {
     return apiGet(`/api/car-bookings?${qs.toString()}`);
 }
 
-export async function approveCarBooking(bookingId: string): Promise<{ success: boolean }> {
+export async function approveCarBooking(bookingId: string): Promise<{ success: boolean; error?: string }> {
     return apiPost('/api/car-bookings/approve', { bookingId });
 }
 
@@ -64,10 +64,14 @@ export async function rejectCarBooking(bookingId: string, reason?: string): Prom
     return apiPost('/api/car-bookings/reject', { bookingId, reason });
 }
 
+export async function cancelCarBooking(bookingId: string, reason?: string): Promise<{ success: boolean }> {
+    return apiPost('/api/car-bookings/cancel', { bookingId, reason });
+}
+
 export async function listCars(): Promise<{ data: Array<{ id: string; label: string; plate?: string }> }> {
     return apiGet('/api/cars');
 }
 
-export async function assignCar(bookingId: string, carId: string): Promise<{ success: boolean; conflict?: boolean }> {
+export async function assignCar(bookingId: string, carId: string): Promise<{ success: boolean; error?: string }> {
     return apiPost('/api/car-bookings/assign-car', { bookingId, carId });
 }

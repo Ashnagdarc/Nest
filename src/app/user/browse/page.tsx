@@ -376,9 +376,13 @@ export default function BrowseGearsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Available">Available</SelectItem>
+                        <SelectItem value="Partially Available">Partially Available</SelectItem>
+                        <SelectItem value="Checked Out">Checked Out</SelectItem>
                         <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="Booked">Booked</SelectItem>
+                        <SelectItem value="Under Repair">Under Repair</SelectItem>
+                        <SelectItem value="Maintenance">Maintenance</SelectItem>
                         <SelectItem value="Damaged">Damaged</SelectItem>
+                        <SelectItem value="Retired">Retired</SelectItem>
                         <SelectItem value="New">New</SelectItem>
                       </SelectContent>
                     </Select>

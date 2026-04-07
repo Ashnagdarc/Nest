@@ -73,6 +73,7 @@ Desktop.ini
 *.crt
 *.p12
 *.pfx
+service_key.json
 
 # ===== TYPESCRIPT =====
 *.tsbuildinfo

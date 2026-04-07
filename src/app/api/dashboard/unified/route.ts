@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
             // Gears
             supabase
                 .from('gears')
-                .select('id, name, category, description, quantity, image_url, created_at, status')
+                .select('id, name, category, description, quantity, available_quantity, image_url, created_at, status')
                 .neq('category', 'Cars')
                 .order('created_at', { ascending: false }),
             // Gear requests
@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
             ...gear,
             current_state: {
                 status: gear.status || 'Available',
-                available_quantity: gear.quantity,
+                available_quantity: (gear as any).available_quantity ?? gear.quantity,
                 checked_out_to: null,
                 current_request_id: null,
                 due_date: null,
@@ -160,10 +160,21 @@ export async function GET(request: NextRequest) {
         // Aggregate stats including cars
         const totalGearUnits = gears.reduce((sum, gear) => sum + gear.quantity, 0);
         const totalCars = cars.length;
-        const approvedNotDue = requests
-            .filter(req => req.status === 'Approved' && req.due_date && new Date(req.due_date) > new Date())
-            .reduce((sum, req) => sum + gearRequestGears.filter(grg => grg.gear_request_id === req.id)
-                .reduce((gearSum, grg) => gearSum + grg.quantity, 0), 0);
+        
+        // Calculate checked out equipment based on actual gear status and available_quantity
+        // This is the correct way - look at the gears table, not requests
+        const checkedOutGearUnits = gears
+            .filter(gear => {
+                const status = gear.status || 'Available';
+                return status === 'Checked Out' || status === 'Partially Checked Out' || status === 'Partially Available';
+            })
+            .reduce((sum, gear) => {
+                // Calculate how many units of this gear are actually checked out
+                const totalQuantity = gear.quantity ?? 1;
+                const availableQuantity = (gear as any).available_quantity ?? totalQuantity;
+                const checkedOutQuantity = totalQuantity - availableQuantity;
+                return sum + Math.max(0, checkedOutQuantity);
+            }, 0);
 
         // Treat approved car bookings for today as active "checked out" units
         const todayIso = new Date().toISOString().slice(0, 10);
@@ -171,8 +182,8 @@ export async function GET(request: NextRequest) {
 
         const stats = {
             total_equipment: totalGearUnits + totalCars,
-            checked_out_equipment: approvedNotDue + activeCarsToday,
-            available_equipment: totalGearUnits + totalCars - (approvedNotDue + activeCarsToday),
+            checked_out_equipment: checkedOutGearUnits + activeCarsToday,
+            available_equipment: totalGearUnits + totalCars - (checkedOutGearUnits + activeCarsToday),
             under_repair_equipment: checkins.filter(checkin => checkin.condition === 'Damaged' && checkin.status === 'Completed').length,
             retired_equipment: gears.filter(g => g.status === 'Retired').length,
             total_requests: requests.filter(req => req.user_id === user.id).length,

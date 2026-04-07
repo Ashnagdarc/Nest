@@ -27,49 +27,57 @@ export async function POST(request: NextRequest) {
             return { gear_id, quantity };
         });
 
+        const requestedByGear = new Map<string, number>();
+        for (const line of sanitized) {
+            requestedByGear.set(line.gear_id, (requestedByGear.get(line.gear_id) || 0) + line.quantity);
+        }
+
         const supabase = await createSupabaseServerClient(true);
 
         // Verify gear IDs exist and check available quantities
-        const uniqueIds = Array.from(new Set(sanitized.map(l => l.gear_id)));
+        const uniqueIds = Array.from(requestedByGear.keys());
         const check = await supabase
             .from('gears')
             .select(`
                 id,
+                name,
                 quantity,
-                gear_states!inner (
-                    available_quantity,
-                    status
-                )
+                available_quantity,
+                status
             `)
-            .in('id', uniqueIds)
-            .order('created_at', { foreignTable: 'gear_states', ascending: false })
-            .limit(1, { foreignTable: 'gear_states' });
+            .in('id', uniqueIds);
 
         if (check.error) {
             return NextResponse.json({ success: false, error: `Gear validation failed: ${check.error.message}` }, { status: 500 });
         }
 
         // Verify gears exist and have sufficient quantity
-        const gearMap = new Map(check.data?.map(g => [g.id, g]) || []);
-        for (const line of sanitized) {
-            const gear = gearMap.get(line.gear_id);
+        const gearMap = new Map((check.data || []).map(g => [g.id, g]));
+        for (const [gearId, requestedQty] of requestedByGear.entries()) {
+            const gear = gearMap.get(gearId);
             if (!gear) {
-                return NextResponse.json({ success: false, error: `Unknown gear_id ${line.gear_id}` }, { status: 400 });
+                return NextResponse.json({ success: false, error: `Unknown gear_id ${gearId}` }, { status: 400 });
             }
-            const state = gear.gear_states?.[0];
-            if (!state || state.available_quantity < line.quantity) {
+            const availableQty = Math.max(0, Number(gear.available_quantity ?? gear.quantity ?? 0));
+            if (availableQty < requestedQty) {
                 return NextResponse.json({
                     success: false,
-                    error: `Insufficient quantity for gear ${line.gear_id}. Requested: ${line.quantity}, Available: ${state?.available_quantity || 0}`
+                    error: `Insufficient quantity for ${gear.name || gearId}. Requested: ${requestedQty}, Available: ${availableQty}`,
+                    details: {
+                        gear_id: gearId,
+                        requested: requestedQty,
+                        available: availableQty,
+                        status: gear.status
+                    }
                 }, { status: 400 });
             }
         }
 
         // Insert all lines (primary path)
-        const payload = sanitized.map(l => ({
+        const payload = Array.from(requestedByGear.entries()).map(([gear_id, quantity]) => ({
             gear_request_id: requestId,
-            gear_id: l.gear_id,
-            quantity: l.quantity
+            gear_id,
+            quantity
         })) satisfies Database['public']['Tables']['gear_request_gears']['Insert'][];
 
         console.log('🔍 Inserting gear request lines:', payload);
@@ -104,5 +112,4 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: msg }, { status: 400 });
     }
 }
-
 
