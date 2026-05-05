@@ -180,9 +180,47 @@ export async function GET(request: NextRequest) {
         const todayIso = new Date().toISOString().slice(0, 10);
         const activeCarsToday = carBookings.filter(b => b.status === 'Approved' && (b.date_of_use || '').slice(0, 10) === todayIso).length;
 
+        let userCheckedOutGearUnits = checkedOutGearUnits;
+        if (!isAdmin) {
+            const activeRequestStatuses = new Set(['Approved', 'Checked Out', 'Partially Checked Out', 'Overdue']);
+            const userActiveRequestIds = new Set(
+                requests
+                    .filter(req => req.user_id === user.id && activeRequestStatuses.has(String(req.status || '')))
+                    .map(req => req.id)
+            );
+
+            const requestedByKey = new Map<string, number>();
+            gearRequestGears.forEach((line: { gear_request_id: string; gear_id: string; quantity?: number | null }) => {
+                if (!userActiveRequestIds.has(line.gear_request_id)) return;
+                const key = `${line.gear_request_id}::${line.gear_id}`;
+                requestedByKey.set(key, (requestedByKey.get(key) || 0) + Math.max(1, Number(line.quantity ?? 1)));
+            });
+
+            const completedByKey = new Map<string, number>();
+            const pendingByKey = new Map<string, number>();
+            checkins
+                .filter(checkin => checkin.user_id === user.id && checkin.request_id && (checkin.status === 'Completed' || checkin.status === 'Pending Admin Approval'))
+                .forEach((checkin) => {
+                    const key = `${checkin.request_id}::${checkin.gear_id}`;
+                    const qty = Math.max(1, Number(checkin.quantity ?? 1));
+                    if (checkin.status === 'Completed') {
+                        completedByKey.set(key, (completedByKey.get(key) || 0) + qty);
+                    } else if (checkin.status === 'Pending Admin Approval') {
+                        pendingByKey.set(key, (pendingByKey.get(key) || 0) + qty);
+                    }
+                });
+
+            userCheckedOutGearUnits = Array.from(requestedByKey.entries()).reduce((sum, [key, requestedQty]) => {
+                const completedQty = completedByKey.get(key) || 0;
+                const pendingQty = pendingByKey.get(key) || 0;
+                const returnableQty = Math.max(0, requestedQty - completedQty - pendingQty);
+                return sum + returnableQty;
+            }, 0);
+        }
+
         const stats = {
             total_equipment: totalGearUnits + totalCars,
-            checked_out_equipment: checkedOutGearUnits + activeCarsToday,
+            checked_out_equipment: (isAdmin ? checkedOutGearUnits : userCheckedOutGearUnits) + activeCarsToday,
             available_equipment: totalGearUnits + totalCars - (checkedOutGearUnits + activeCarsToday),
             under_repair_equipment: checkins.filter(checkin => checkin.condition === 'Damaged' && checkin.status === 'Completed').length,
             retired_equipment: gears.filter(g => g.status === 'Retired').length,
