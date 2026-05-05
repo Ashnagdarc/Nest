@@ -3,6 +3,7 @@
 import type { Metadata, Viewport } from "next";
 import { Lato } from "next/font/google";
 import "./globals.css";
+import "leaflet/dist/leaflet.css";
 import { ThemeProvider } from "next-themes";
 import { NotificationProvider } from "@/components/notifications/NotificationProvider";
 import { UserProfileProvider } from "@/components/providers/user-profile-provider";

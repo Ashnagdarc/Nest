@@ -120,6 +120,64 @@ export interface Database {
                     updated_at?: string
                 }
             }
+            live_locations: {
+                Row: {
+                    user_id: string
+                    lat: number
+                    lng: number
+                    accuracy_m: number | null
+                    is_sharing: boolean
+                    updated_at: string
+                }
+                Insert: {
+                    user_id: string
+                    lat: number
+                    lng: number
+                    accuracy_m?: number | null
+                    is_sharing?: boolean
+                    updated_at?: string
+                }
+                Update: {
+                    user_id?: string
+                    lat?: number
+                    lng?: number
+                    accuracy_m?: number | null
+                    is_sharing?: boolean
+                    updated_at?: string
+                }
+            }
+            user_bus_stops: {
+                Row: {
+                    user_id: string
+                    stop_key: 'home' | 'work'
+                    stop_name: string | null
+                    lat: number
+                    lng: number
+                    radius_m: number
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    user_id: string
+                    stop_key: 'home' | 'work'
+                    stop_name?: string | null
+                    lat: number
+                    lng: number
+                    radius_m?: number
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    user_id?: string
+                    stop_key?: 'home' | 'work'
+                    stop_name?: string | null
+                    lat?: number
+                    lng?: number
+                    radius_m?: number
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
         }
         Views: {
             [_ in never]: never

@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LayoutDashboard, Search, PlusSquare, ListChecks, UploadCloud, History, Bell, Settings, LogOut, PanelLeft } from 'lucide-react';
+import { LayoutDashboard, Search, PlusSquare, ListChecks, UploadCloud, History, Bell, Settings, LogOut, PanelLeft, BusFront } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 import { createClient } from '@/lib/supabase/client';
@@ -36,6 +36,7 @@ const userNavItems = [
   { href: '/user/browse', label: 'Browse Gears', icon: Search },
   { href: '/user/request', label: 'Request Gear', icon: PlusSquare },
   { href: '/user/car-booking', label: 'Book a Car', icon: PlusSquare },
+  { href: '/user/live-bus', label: 'Live Bus', icon: BusFront },
   { href: '/user/my-requests', label: 'My Requests', icon: ListChecks },
   { href: '/user/check-in', label: 'Check-in Gear', icon: UploadCloud },
   { href: '/user/history', label: 'History', icon: History },

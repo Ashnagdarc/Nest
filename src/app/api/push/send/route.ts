@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import webPush from 'web-push';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-// Configure VAPID for Edge Runtime
+export const runtime = 'nodejs';
+
+// Configure VAPID for the Node.js route runtime
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 const VAPID_MAILTO = process.env.VAPID_MAILTO || 'mailto:noreply@nestbyeden.app';

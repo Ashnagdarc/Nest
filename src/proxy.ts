@@ -5,7 +5,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { Database } from '@/types/supabase';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   // Quick fixes for password recovery links and tracking rewrites:
   // 1) If the reset flow lands on the root with a `code` query param

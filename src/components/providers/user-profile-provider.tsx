@@ -67,7 +67,7 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
             console.log('[UserProfileProvider] Auth event:', event, session ? 'has session' : 'no session');
             if (event === 'USER_UPDATED' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
                 fetchProfile();
-                if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && !loginPushSent.current) {
+                if (event === 'SIGNED_IN' && !loginPushSent.current) {
                     console.log('[UserProfileProvider] Triggering login notification');
                     loginPushSent.current = true;
                     // Trigger login notification with token

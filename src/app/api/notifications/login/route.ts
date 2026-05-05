@@ -4,6 +4,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import type { Database } from '@/types/supabase';
 
+const LOGIN_NOTIFICATION_DEDUP_WINDOW_MS = 2 * 60 * 1000;
+
 export async function POST(_req: NextRequest) {
     try {
         console.log('[Login Push] Request received');
@@ -41,6 +43,38 @@ export async function POST(_req: NextRequest) {
 
         console.log('[Login Push] User authenticated:', user.id);
 
+        const { data: recentLoginNotifications, error: recentLoginError } = await supabase
+            .from('notifications')
+            .select('id, created_at')
+            .eq('user_id', user.id)
+            .eq('type', 'Login Alert')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (recentLoginError) {
+            console.error('[Login Push] Failed to check recent notifications:', recentLoginError);
+        } else if (recentLoginNotifications?.[0]?.created_at) {
+            const lastLoginAt = new Date(recentLoginNotifications[0].created_at).getTime();
+            if (!Number.isNaN(lastLoginAt) && Date.now() - lastLoginAt < LOGIN_NOTIFICATION_DEDUP_WINDOW_MS) {
+                console.log('[Login Push] Skipping duplicate login notification within dedupe window');
+                return NextResponse.json({
+                    success: true,
+                    message: 'Login notification already sent recently',
+                    deduped: true,
+                });
+            }
+        }
+
+        const { data: userTokens, error: tokenLookupError } = await supabase
+            .from('user_push_tokens')
+            .select('id')
+            .eq('user_id', user.id)
+            .limit(1);
+
+        if (tokenLookupError) {
+            console.error('[Login Push] Failed to check push subscriptions:', tokenLookupError);
+        }
+
         const now = new Date();
         const title = 'New Login Detected';
         const message = `A new login to your account was detected on ${now.toLocaleString()}. If this wasn't you, please contact support.`;
@@ -61,25 +95,29 @@ export async function POST(_req: NextRequest) {
             console.log('[Login Push] In-app notification inserted');
         }
 
-        // 2. Queue Push Notification
-        const queueResult = await enqueuePushNotification(
-            supabase,
-            {
-                userId: user.id,
-                title,
-                body: message,
-                data: { url: '/user/settings' }
-            },
-            {
-                requestUrl: _req.url,
-                context: 'Login Push'
-            }
-        );
-
-        if (!queueResult.success) {
-            console.error('[Login Push] Failed to queue push notification:', queueResult.error);
+        if (!userTokens || userTokens.length === 0) {
+            console.log('[Login Push] No push subscriptions found; skipping queue insert');
         } else {
-            console.log('[Login Push] Push notification queued');
+            // 2. Queue Push Notification
+            const queueResult = await enqueuePushNotification(
+                supabase,
+                {
+                    userId: user.id,
+                    title,
+                    body: message,
+                    data: { url: '/user/settings' }
+                },
+                {
+                    requestUrl: _req.url,
+                    context: 'Login Push'
+                }
+            );
+
+            if (!queueResult.success) {
+                console.error('[Login Push] Failed to queue push notification:', queueResult.error);
+            } else {
+                console.log('[Login Push] Push notification queued');
+            }
         }
 
         return NextResponse.json({ success: true, message: 'Login notification sent' });

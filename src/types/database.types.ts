@@ -104,6 +104,48 @@ export type Database = {
           },
         ]
       }
+      live_locations: {
+        Row: {
+          accuracy_m: number | null
+          is_sharing: boolean
+          lat: number
+          lng: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accuracy_m?: number | null
+          is_sharing?: boolean
+          lat: number
+          lng: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accuracy_m?: number | null
+          is_sharing?: boolean
+          lat?: number
+          lng?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_locations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_locations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user_activity_summary"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       push_notification_queue: {
         Row: {
           body: string | null

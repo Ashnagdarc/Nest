@@ -18,7 +18,8 @@ import {
     LogOut,
     User,
     Package,
-    ChevronDown
+    ChevronDown,
+    BusFront
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -59,6 +60,12 @@ const userNavItems: NavItem[] = [
         label: 'Book a Car',
         icon: PlusSquare,
         description: 'Request a car booking'
+    },
+    {
+        href: '/user/live-bus',
+        label: 'Live Bus',
+        icon: BusFront,
+        description: 'Realtime bus tracking'
     },
     {
         href: '/user/my-requests',
@@ -116,6 +123,12 @@ const adminNavItems: NavItem[] = [
         label: 'Manage Check-ins',
         icon: UploadCloud,
         description: 'Return processing'
+    },
+    {
+        href: '/admin/live-bus',
+        label: 'Live Bus',
+        icon: BusFront,
+        description: 'Realtime tracking map'
     },
     {
         href: '/admin/manage-users',

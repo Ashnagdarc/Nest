@@ -1,6 +1,3 @@
-import '@testing-library/jest-dom';
-import { jest } from '@jest/globals';
-
 // Mock the fs module since we're running in jsdom environment
 jest.mock('fs', () => ({
     existsSync: jest.fn(),
