@@ -421,7 +421,7 @@ export default function ManageCheckinsPage() {
   // Toggle group expansion. When opening, fetch all checkins for the user and
   // filter by requestId (or user+date) so we show all gears checked in by that user
   // for the group, not just the current page's items.
-  const handleToggleGroup = async (groupKey: string, sampleItem: Checkin) => {
+  const handleToggleGroup = (groupKey: string, sampleItem: Checkin) => {
     const isExpanded = !!expandedGroups[groupKey];
     if (isExpanded) {
       setExpandedGroups(prev => ({ ...prev, [groupKey]: false }));
@@ -433,62 +433,9 @@ export default function ManageCheckinsPage() {
       setExpandedGroups(prev => ({ ...prev, [groupKey]: true }));
       return;
     }
-
-  const handleApproveAllInGroup = async (requestId: string) => {
-    const group = groupedByRequest[requestId];
-    if (!group || group.length === 0) return;
-    setIsApproving(true);
-    try {
-      // Fetch a larger set of checkins for this user (server API will handle paging)
-      const res = await fetch(`/api/checkins?limit=200&page=1&userId=${encodeURIComponent(sampleItem.userId)}`);
-      if (!res.ok) throw new Error('Failed to fetch group items');
-      const json = await res.json();
-      const rows = json.checkins || [];
-
-      // Map rows into Checkin shape (same mapping used elsewhere)
-      const mapped: Checkin[] = (rows as ApiCheckinRow[]).map((c) => ({
-        id: c.id,
-        userId: c.user_id,
-        userName: c.profiles?.full_name || 'Unknown User',
-        avatarUrl: c.profiles?.avatar_url || null,
-        gearId: c.gear_id,
-        quantity: Math.max(1, Number(c.quantity ?? 1)),
-        gearName: (Array.isArray(c.gears) ? c.gears[0]?.name : c.gears?.name) || 'Unknown Gear',
-        checkinDate: c.checkin_date ? new Date(c.checkin_date) : (c.created_at ? new Date(c.created_at) : null),
-        notes: c.notes || '',
-        status: c.status,
-        condition: c.condition,
-        damageNotes: null,
-        requestId: c.request_id || (Array.isArray(c.gears) ? c.gears[0]?.current_request_id : c.gears?.current_request_id) || null
-      }));
-
-      let selected: Checkin[] = [];
-      if (groupKey.startsWith('req::')) {
-        const reqId = groupKey.replace('req::', '');
-        selected = mapped.filter(m => m.requestId === reqId);
-      } else if (groupKey.startsWith('user::')) {
-        const [, userId, day] = groupKey.split('::');
-        selected = mapped.filter(m => m.userId === userId && (m.checkinDate ? m.checkinDate.toDateString() === day : false));
-      }
-
-      // Fallback: keep filtering anchored to the same day if key parsing fails.
-      if (selected.length === 0 && sampleItem.checkinDate) {
-        const day = sampleItem.checkinDate.toDateString();
-        selected = mapped.filter(m => m.userId === sampleItem.userId && (m.checkinDate ? m.checkinDate.toDateString() === day : false));
-      }
-      if (selected.length === 0) {
-        selected = mapped.filter(m => m.userId === sampleItem.userId && (!m.requestId || m.requestId === sampleItem.requestId));
-      }
-
-      // Cache and expand
-      setExpandedItems(prev => ({ ...prev, [groupKey]: selected }));
-      setExpandedGroups(prev => ({ ...prev, [groupKey]: true }));
-    } catch (error) {
-      console.error('Failed to load group items:', error);
-    }
+    setExpandedItems(prev => ({ ...prev, [groupKey]: [sampleItem] }));
+    setExpandedGroups(prev => ({ ...prev, [groupKey]: true }));
   };
-
-
 
   const handleApproveAllInGroup = async (groupKey: string) => {
     const loadedGroup = groupedPendingCheckins[groupKey] as Checkin[] | undefined;

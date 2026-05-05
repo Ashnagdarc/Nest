@@ -208,29 +208,6 @@ function RequestGearContent() {
   }, [supabase]);
 
   /**
-   * User Authentication Effect
-   * 
-   * Retrieves current user information for request attribution
-   * and authorization verification.
-   */
-  useEffect(() => {
-    const fetchGears = async () => {
-      try {
-        const { data, error } = await apiGet<{ data: Gear[]; error: string | null }>(`/api/gears/available`);
-        if (error) {
-          toast({ title: "Error loading equipment", description: "Failed to load available equipment.", variant: "destructive" });
-        } else {
-          setAvailableGears(data || []);
-        }
-      } catch (error) {
-        console.error('Exception fetching gears:', error);
-      }
-    };
-
-    getCurrentUser();
-  }, [supabase]);
-
-  /**
    * Data Fetching and Real-time Updates Effect
    * 
    * Fetches equipment and user data with real-time subscriptions
@@ -294,12 +271,6 @@ function RequestGearContent() {
 
     const channel = supabase.channel('public:gears').on('postgres_changes', { event: '*', schema: 'public', table: 'gears' }, () => { fetchGears(); }).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [supabase, toast]);
-
-    // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, [supabase, toast]);
 
   /**

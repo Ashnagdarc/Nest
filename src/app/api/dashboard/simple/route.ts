@@ -66,9 +66,9 @@ export async function GET() {
         const totalEquipment = gears?.reduce((sum, gear) => sum + gear.quantity, 0) || 0;
         const totalUsers = isAdmin ? (profiles?.length || 0) : 0;
 
-        // Calculate checked out equipment based on actual gear status and available_quantity
-        // This is the correct way - look at the gears table, not requests
-        const checkedOutEquipment = gears?.filter(gear => {
+        // For user dashboards, checked-out count must be personal outstanding quantities:
+        // active request lines minus completed/pending check-ins.
+        let checkedOutEquipment = gears?.filter(gear => {
             const status = (gear as any).status || 'Available';
             return status === 'Checked Out' || status === 'Partially Checked Out' || status === 'Partially Available';
         }).reduce((sum, gear) => {
@@ -77,6 +77,43 @@ export async function GET() {
             const checkedOutQuantity = totalQuantity - availableQuantity;
             return sum + Math.max(0, checkedOutQuantity);
         }, 0) || 0;
+
+        if (!isAdmin) {
+            const activeRequestStatuses = new Set(['Approved', 'Checked Out', 'Partially Checked Out', 'Overdue']);
+            const userActiveRequestIds = new Set(
+                (requests || [])
+                    .filter(req => activeRequestStatuses.has(String(req.status || '')))
+                    .map(req => req.id)
+            );
+
+            const requestedByKey = new Map<string, number>();
+            (gearRequestGears || []).forEach((line: { gear_request_id: string; gear_id: string; quantity?: number | null }) => {
+                if (!userActiveRequestIds.has(line.gear_request_id)) return;
+                const key = `${line.gear_request_id}::${line.gear_id}`;
+                requestedByKey.set(key, (requestedByKey.get(key) || 0) + Math.max(1, Number(line.quantity ?? 1)));
+            });
+
+            const completedByKey = new Map<string, number>();
+            const pendingByKey = new Map<string, number>();
+            (checkins || [])
+                .filter(checkin => checkin.request_id && (checkin.status === 'Completed' || checkin.status === 'Pending Admin Approval'))
+                .forEach((checkin) => {
+                    const key = `${checkin.request_id}::${checkin.gear_id}`;
+                    const qty = Math.max(1, Number(checkin.quantity ?? 1));
+                    if (checkin.status === 'Completed') {
+                        completedByKey.set(key, (completedByKey.get(key) || 0) + qty);
+                    } else if (checkin.status === 'Pending Admin Approval') {
+                        pendingByKey.set(key, (pendingByKey.get(key) || 0) + qty);
+                    }
+                });
+
+            checkedOutEquipment = Array.from(requestedByKey.entries()).reduce((sum, [key, requestedQty]) => {
+                const completedQty = completedByKey.get(key) || 0;
+                const pendingQty = pendingByKey.get(key) || 0;
+                const outstandingQty = Math.max(0, requestedQty - completedQty - pendingQty);
+                return sum + outstandingQty;
+            }, 0);
+        }
 
         // Debug logging
         console.log('Simple API Debug:', {
