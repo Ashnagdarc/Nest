@@ -28,15 +28,13 @@ export async function GET() {
         // Get basic data with proper RLS
         const { data: gears, error: gearsError } = await supabase
             .from('gears')
-            .select('id, name, category, quantity, available_quantity, status')
-            .limit(10);
+            .select('id, name, category, quantity, available_quantity, status');
 
         // Only admins can see all profiles
         const { data: profiles, error: profilesError } = isAdmin
             ? await supabase
                 .from('profiles')
                 .select('id, full_name, email, role')
-                .limit(10)
             : { data: [], error: null };
 
         if (gearsError) {
@@ -47,20 +45,35 @@ export async function GET() {
         }
 
         // Get requests and checkins for proper calculations
-        const { data: requests, error: requestsError } = await supabase
+        const requestsQuery = supabase
             .from('gear_requests')
-            .select('*')
-            .eq(isAdmin ? '1' : 'user_id', isAdmin ? '1' : user.id);
-
-        const { data: checkins, error: checkinsError } = await supabase
+            .select('*');
+        const checkinsQuery = supabase
             .from('checkins')
-            .select('*')
-            .eq(isAdmin ? '1' : 'user_id', isAdmin ? '1' : user.id);
+            .select('*');
+
+        const { data: requests, error: requestsError } = isAdmin
+            ? await requestsQuery
+            : await requestsQuery.eq('user_id', user.id);
+
+        const { data: checkins, error: checkinsError } = isAdmin
+            ? await checkinsQuery
+            : await checkinsQuery.eq('user_id', user.id);
 
         // Get gear request gears for proper quantity calculations
         const { data: gearRequestGears, error: gearRequestGearsError } = await supabase
             .from('gear_request_gears')
             .select('*');
+
+        if (requestsError) {
+            console.error('Requests error:', requestsError);
+        }
+        if (checkinsError) {
+            console.error('Checkins error:', checkinsError);
+        }
+        if (gearRequestGearsError) {
+            console.error('Gear request lines error:', gearRequestGearsError);
+        }
 
         // Simple stats with proper role-based access
         const totalEquipment = gears?.reduce((sum, gear) => sum + gear.quantity, 0) || 0;

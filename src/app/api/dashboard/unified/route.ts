@@ -157,9 +157,8 @@ export async function GET(request: NextRequest) {
             }
         }));
 
-        // Aggregate stats including cars
+        // Aggregate gear stats (car metrics remain separate)
         const totalGearUnits = gears.reduce((sum, gear) => sum + gear.quantity, 0);
-        const totalCars = cars.length;
         
         // Calculate checked out equipment based on actual gear status and available_quantity
         // This is the correct way - look at the gears table, not requests
@@ -175,10 +174,6 @@ export async function GET(request: NextRequest) {
                 const checkedOutQuantity = totalQuantity - availableQuantity;
                 return sum + Math.max(0, checkedOutQuantity);
             }, 0);
-
-        // Treat approved car bookings for today as active "checked out" units
-        const todayIso = new Date().toISOString().slice(0, 10);
-        const activeCarsToday = carBookings.filter(b => b.status === 'Approved' && (b.date_of_use || '').slice(0, 10) === todayIso).length;
 
         let userCheckedOutGearUnits = checkedOutGearUnits;
         if (!isAdmin) {
@@ -219,9 +214,9 @@ export async function GET(request: NextRequest) {
         }
 
         const stats = {
-            total_equipment: totalGearUnits + totalCars,
-            checked_out_equipment: (isAdmin ? checkedOutGearUnits : userCheckedOutGearUnits) + activeCarsToday,
-            available_equipment: totalGearUnits + totalCars - (checkedOutGearUnits + activeCarsToday),
+            total_equipment: totalGearUnits,
+            checked_out_equipment: (isAdmin ? checkedOutGearUnits : userCheckedOutGearUnits),
+            available_equipment: totalGearUnits - checkedOutGearUnits,
             under_repair_equipment: checkins.filter(checkin => checkin.condition === 'Damaged' && checkin.status === 'Completed').length,
             retired_equipment: gears.filter(g => g.status === 'Retired').length,
             total_requests: requests.filter(req => req.user_id === user.id).length,
