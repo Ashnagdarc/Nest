@@ -150,7 +150,41 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         const { id } = await params;
         const supabase = await createSupabaseServerClient();
         const body = await request.json();
-        const { data, error } = await supabase.from('gear_requests').update(body).eq('id', id).select().single();
+
+        // Only allow a narrow, explicit set of request fields to be updated from this endpoint.
+        // This prevents accidental/manual lifecycle corruption (e.g., setting status=Completed without check-ins).
+        const allowedStatus = new Set(['Pending', 'Approved', 'Rejected', 'Cancelled']);
+        const rawStatus = typeof body?.status === 'string' ? body.status.trim() : undefined;
+        const normalizedStatus = rawStatus
+            ? rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase()
+            : undefined;
+
+        if (normalizedStatus === 'Completed') {
+            return NextResponse.json(
+                { data: null, error: 'Directly setting request status to Completed is not allowed. Complete via approved check-ins.' },
+                { status: 400 }
+            );
+        }
+
+        if (normalizedStatus && !allowedStatus.has(normalizedStatus)) {
+            return NextResponse.json(
+                { data: null, error: `Invalid status value: ${rawStatus}` },
+                { status: 400 }
+            );
+        }
+
+        const updatePayload: Record<string, unknown> = {};
+        if (normalizedStatus) updatePayload.status = normalizedStatus;
+        if (body?.admin_notes !== undefined) updatePayload.admin_notes = body.admin_notes;
+        if (body?.due_date !== undefined) updatePayload.due_date = body.due_date;
+        updatePayload.updated_at = new Date().toISOString();
+
+        const { data, error } = await supabase
+            .from('gear_requests')
+            .update(updatePayload)
+            .eq('id', id)
+            .select()
+            .single();
         if (error) throw error;
         return NextResponse.json({ data, error: null });
     } catch {
