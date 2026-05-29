@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { sendCheckinApprovalEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
+import { transitionBooking } from '@/lib/bookings-v2/service';
 
 /**
  * POST /api/checkins/approve
@@ -106,6 +107,43 @@ export async function POST(request: NextRequest) {
             console.error('[Check-in Approve] Failed to queue push notification:', queueResult.error);
         } else {
             console.log('[Check-in Approve] Push notification queued for user');
+        }
+
+        try {
+            const { data: checkinRow } = await supabase
+                .from('checkins')
+                .select('request_id')
+                .eq('id', checkinId)
+                .maybeSingle();
+            const legacyRequestId = checkinRow?.request_id;
+            if (legacyRequestId) {
+                const { count: pendingCount } = await supabase
+                    .from('checkins')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('request_id', legacyRequestId)
+                    .eq('status', 'Pending Admin Approval');
+
+                const nextStatus = (pendingCount || 0) > 0 ? 'active' : 'completed';
+                const { data: aggregate } = await (supabase as any)
+                    .from('bookings')
+                    .select('id')
+                    .eq('source_type', 'gear_request')
+                    .eq('source_id', legacyRequestId)
+                    .maybeSingle();
+
+                if (aggregate?.id) {
+                    await transitionBooking({
+                        bookingId: aggregate.id,
+                        nextStatus,
+                        changedBy: null,
+                        reason: 'Legacy check-in approval sync',
+                        metadata: { checkin_id: checkinId, legacy_route: '/api/checkins/approve' },
+                        idempotencyKey: `legacy-checkin-approve:${checkinId}:${nextStatus}`,
+                    });
+                }
+            }
+        } catch (syncError) {
+            console.error('[Check-in Approve] Failed syncing status to v2 booking lifecycle:', syncError);
         }
 
         // Notify all admins of the approval action

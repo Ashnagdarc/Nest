@@ -6,8 +6,8 @@ import { motion } from 'framer-motion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
-  CheckCircle, Clock, XCircle, AlertCircle, Package,
-  RotateCcw, Loader2, Search, Filter, Eye
+  CheckCircle, Clock, XCircle, Package,
+  Loader2, Search, Filter, Eye
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { BookingStatusBadge } from '@/components/ui/booking-status-badge';
 
 
 interface GearRequest {
@@ -296,58 +297,7 @@ function MyRequestsContent() {
   }, [requests, statusFilter, searchTerm]);
 
   const getStatusBadge = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return (
-          <Badge variant="outline" className="rounded-full bg-amber-500/10 text-amber-600 border-amber-200 hover:bg-amber-500/20 px-3 py-1 transition-colors">
-            <Clock className="mr-1.5 h-3.5 w-3.5" /> Pending Review
-          </Badge>
-        );
-      case 'approved':
-        return (
-          <Badge variant="secondary" className="rounded-full bg-green-500/10 text-green-600 hover:bg-green-500/20 px-3 py-1 transition-colors">
-            <CheckCircle className="mr-1.5 h-3.5 w-3.5" /> Approved
-          </Badge>
-        );
-      case 'checked out':
-        return (
-          <Badge variant="secondary" className="rounded-full bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 px-3 py-1 transition-colors">
-            <Package className="mr-1.5 h-3.5 w-3.5" /> Checked Out
-          </Badge>
-        );
-      case 'checked in':
-      case 'completed':
-      case 'returned':
-        return (
-          <Badge variant="outline" className="rounded-full bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200/50 px-3 py-1 transition-colors dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
-            <CheckCircle className="mr-1.5 h-3.5 w-3.5" /> Returned
-          </Badge>
-        );
-      case 'rejected':
-        return (
-          <Badge variant="destructive" className="rounded-full bg-red-500/10 text-red-600 border-red-200 hover:bg-red-500/20 px-3 py-1 shadow-none transition-colors">
-            <XCircle className="mr-1.5 h-3.5 w-3.5" /> Rejected
-          </Badge>
-        );
-      case 'overdue':
-        return (
-          <Badge variant="destructive" className="rounded-full bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1 border border-red-200 transition-colors">
-            <AlertCircle className="mr-1.5 h-3.5 w-3.5" /> Overdue
-          </Badge>
-        );
-      case 'cancelled':
-        return (
-          <Badge variant="outline" className="rounded-full text-muted-foreground border-dashed bg-muted/50 px-3 py-1 transition-colors">
-            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Cancelled
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="outline" className="rounded-full px-3 py-1 transition-colors">
-            {status}
-          </Badge>
-        );
-    }
+    return <BookingStatusBadge status={status} className="px-3 py-1 text-xs" />;
   };
 
   const handleCancelRequest = async (requestId: string) => {
@@ -379,14 +329,14 @@ function MyRequestsContent() {
         return;
       }
 
-      // Start a transaction using RPC
-      const { error: cancelError } = await supabase.rpc('cancel_gear_request', {
-        p_request_id: requestId
+      const res = await fetch('/api/requests/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: requestId }),
       });
-
-      if (cancelError) {
-        console.error('Error in cancel_gear_request RPC:', cancelError);
-        throw new Error(`Failed to cancel request: ${cancelError.message}`);
+      const payload = await res.json();
+      if (!res.ok || payload?.success === false) {
+        throw new Error(payload?.error || 'Failed to cancel request');
       }
 
       // Update local state

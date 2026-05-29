@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { sendCheckinRejectionEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
+import { transitionBooking } from '@/lib/bookings-v2/service';
 
 /**
  * POST /api/checkins/reject
@@ -101,6 +102,35 @@ export async function POST(request: NextRequest) {
             console.error('[Check-in Reject] Failed to queue push notification:', queueResult.error);
         } else {
             console.log('[Check-in Reject] Push notification queued for user');
+        }
+
+        try {
+            const { data: checkinRow } = await supabase
+                .from('checkins')
+                .select('request_id')
+                .eq('id', checkinId)
+                .maybeSingle();
+            const legacyRequestId = checkinRow?.request_id;
+            if (legacyRequestId) {
+                const { data: aggregate } = await (supabase as any)
+                    .from('bookings')
+                    .select('id')
+                    .eq('source_type', 'gear_request')
+                    .eq('source_id', legacyRequestId)
+                    .maybeSingle();
+                if (aggregate?.id) {
+                    await transitionBooking({
+                        bookingId: aggregate.id,
+                        nextStatus: 'active',
+                        changedBy: null,
+                        reason: `Check-in rejected: ${reason}`,
+                        metadata: { checkin_id: checkinId, legacy_route: '/api/checkins/reject' },
+                        idempotencyKey: `legacy-checkin-reject:${checkinId}`,
+                    });
+                }
+            }
+        } catch (syncError) {
+            console.error('[Check-in Reject] Failed syncing status to v2 booking lifecycle:', syncError);
         }
 
         // Notify all admins of the rejection action

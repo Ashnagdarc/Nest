@@ -12,8 +12,9 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create Supabase client with proper server-side auth
+        // Create user-scoped client for auth and admin client for mutations
         const supabase = await createSupabaseServerClient();
+        const admin = await createSupabaseServerClient(true);
 
         // Get the user's session
         const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -26,17 +27,18 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Use the standardized function with proper error handling
-        const { data, error } = await supabase.rpc('mark_notification_as_read', {
-            notification_id: notificationId
-        });
+        const { data, error } = await admin
+            .from('notifications')
+            .update({ is_read: true, updated_at: new Date().toISOString() })
+            .eq('id', notificationId)
+            .eq('user_id', user.id)
+            .eq('is_read', false)
+            .select('id')
+            .maybeSingle();
 
         if (error) {
             console.error('Server: Error marking notification as read:', error);
-            return NextResponse.json(
-                { error: 'Failed to mark notification as read', details: error.message },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: 'Failed to mark notification as read', details: error.message }, { status: 500 });
         }
 
         if (!data) {
@@ -48,7 +50,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            marked: data
+            marked: data?.id
         });
 
     } catch (error) {
@@ -64,6 +66,7 @@ export async function PUT(request: NextRequest) {
     try {
         // Mark all notifications as read
         const supabase = await createSupabaseServerClient();
+        const admin = await createSupabaseServerClient(true);
 
         // Get the user's session
         const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -76,8 +79,12 @@ export async function PUT(request: NextRequest) {
             );
         }
 
-        // Use the standardized function
-        const { data, error } = await supabase.rpc('mark_all_notifications_as_read');
+        const { data, error } = await admin
+            .from('notifications')
+            .update({ is_read: true, updated_at: new Date().toISOString() })
+            .eq('user_id', user.id)
+            .eq('is_read', false)
+            .select('id');
 
         if (error) {
             console.error('Server: Error marking all notifications as read:', error);
@@ -89,7 +96,7 @@ export async function PUT(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            count: data || 0
+            count: Array.isArray(data) ? data.length : 0
         });
 
     } catch (error) {

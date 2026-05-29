@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient(true);
         const { searchParams } = new URL(request.url);
         const startDate = searchParams.get('start_date');
         const endDate = searchParams.get('end_date');

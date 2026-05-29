@@ -25,13 +25,9 @@ export function CategoryAvailabilityChart() {
         try {
             setLoading(true);
 
-            // Call the stored function
-            const { data, error } = await supabase.rpc('get_category_availability');
-
-            if (error) {
-                logger.error("Error calling get_category_availability function:", error);
-                throw error;
-            }
+            const response = await fetch('/api/dashboard/category-availability', { cache: 'no-store' });
+            if (!response.ok) throw new Error('Failed to fetch category availability');
+            const data = await response.json();
 
             // Format data for chart
             const formattedData = (data || []).slice(0, 6).map((category: CategoryData) => ({

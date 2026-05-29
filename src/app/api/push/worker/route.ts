@@ -66,6 +66,28 @@ export async function GET(req: NextRequest) {
         for (const notification of pendingNotifications) {
             try {
                 console.log(`[Push Worker] Processing notification ${notification.id} for user ${notification.user_id}`);
+                const dedupeKey = notification.data?.dedupe_key;
+
+                if (dedupeKey) {
+                    const { data: duplicate } = await supabase
+                        .from('push_notification_queue')
+                        .select('id')
+                        .eq('user_id', notification.user_id)
+                        .eq('status', 'sent')
+                        .contains('data', { dedupe_key: dedupeKey })
+                        .limit(1);
+                    if (duplicate && duplicate.length > 0) {
+                        await supabase
+                            .from('push_notification_queue')
+                            .update({
+                                status: 'failed',
+                                error_message: 'Deduped duplicate notification'
+                            })
+                            .eq('id', notification.id);
+                        processed++;
+                        continue;
+                    }
+                }
 
                 // Claim this notification row for processing.
                 // If another worker already claimed it, skip.

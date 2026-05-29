@@ -5,7 +5,6 @@ import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Megaphone } from 'lucide-react';
 import { format } from 'date-fns';
-import { createClient } from '@/lib/supabase/client';
 
 // Type for announcements
 type Announcement = {
@@ -17,7 +16,6 @@ type Announcement = {
 };
 
 export default function UserAnnouncementsPage() {
-    const supabase = createClient();
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -30,42 +28,15 @@ export default function UserAnnouncementsPage() {
         console.log("User: Fetching announcements...");
 
         try {
-            // Try the RPC function first
-            const { data, error } = await supabase.rpc('get_all_announcements');
-
-            // Fall back to direct query if RPC fails
-            if (error) {
-                console.error("Error using RPC to fetch announcements:", error);
-                console.log("Falling back to direct query...");
-
-                const { data: directData, error: directError } = await supabase
-                    .from('announcements')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (directError) {
-                    console.error("Error fetching announcements:", directError);
-                    setLoading(false);
-                    return;
-                }
-
-                console.log("User: Announcements fetched via direct query:", directData);
-                if (directData) {
-                    setAnnouncements(directData.map((a: any) => ({
-                        id: a.id,
-                        title: a.title,
-                        content: a.content,
-                        createdAt: new Date(a.created_at),
-                        created_by: a.created_by || null,
-                    })));
-                }
+            const res = await fetch('/api/announcements?limit=50&page=1', { cache: 'no-store' });
+            if (!res.ok) {
                 setLoading(false);
                 return;
             }
-
-            console.log("User: Announcements fetched via RPC:", data);
-            if (data) {
-                setAnnouncements(data.map((a: any) => ({
+            const payload = await res.json();
+            const rows = Array.isArray(payload?.announcements) ? payload.announcements : [];
+            if (rows.length) {
+                setAnnouncements(rows.map((a: any) => ({
                     id: a.id,
                     title: a.title,
                     content: a.content,

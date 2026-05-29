@@ -1,4 +1,6 @@
 import { Resend } from 'resend';
+import { createHash } from 'crypto';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 
 
@@ -1846,4 +1848,96 @@ export async function sendApprovalEmailLegacy({
       <p>Thank you,<br/>Nest by Eden Oasis Team</p>
     `,
   });
-} 
+}
+
+export async function sendBookingLifecycleEmail({
+  booking,
+  items,
+  to,
+  userName,
+  transition,
+}: {
+  booking: { id: string; reference: string; status: string; start_at?: string | null; end_at?: string | null };
+  items: Array<{ item_type: 'gear' | 'car'; quantity: number; status: string; metadata?: Record<string, unknown> }>;
+  to: string;
+  userName: string;
+  transition: string;
+}) {
+  const subject = `Booking ${booking.reference} is now ${transition.replace('_', ' ')}`;
+  const payloadHash = createHash('sha256')
+    .update(JSON.stringify({ bookingId: booking.id, to, subject, transition, items }))
+    .digest('hex');
+
+  const itemRows = items.map((item) => {
+    const fallbackName = item.item_type === 'car' ? 'Assigned Car' : 'Gear Item';
+    const itemName = (item.metadata?.display_name as string | undefined) || fallbackName;
+    return `
+      <tr>
+        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${itemName}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${item.quantity}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-transform: capitalize;">${item.status.replace('_', ' ')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const html = `
+    ${EMAIL_STYLES}
+    <div class="email-container">
+      <div class="email-header" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);">
+        <h1>Nest by Eden</h1>
+        <p class="subtitle">Booking lifecycle update</p>
+      </div>
+      <div class="email-body">
+        <h2>Hello ${userName},</h2>
+        <p>Your booking <strong>${booking.reference}</strong> is now <strong style="text-transform: capitalize;">${transition.replace('_', ' ')}</strong>.</p>
+        <div class="info-note">
+          <p><strong>Start:</strong> ${booking.start_at || 'N/A'}</p>
+          <p><strong>Expected Return:</strong> ${booking.end_at || 'N/A'}</p>
+          <p><strong>Final Status:</strong> <span style="text-transform: capitalize;">${booking.status.replace('_', ' ')}</span></p>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+          <thead>
+            <tr>
+              <th style="text-align: left; padding: 10px; background: #f9fafb;">Item</th>
+              <th style="text-align: left; padding: 10px; background: #f9fafb;">Qty</th>
+              <th style="text-align: left; padding: 10px; background: #f9fafb;">Status</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+      </div>
+      <div class="email-footer">
+        <p>Nest by Eden Oasis · Equipment and vehicle operations</p>
+      </div>
+    </div>
+  `;
+
+  const supabase = await createSupabaseServerClient(true);
+  await (supabase as any).from('email_logs').upsert({
+    booking_id: booking.id,
+    provider: 'resend',
+    template_name: 'booking_lifecycle_update',
+    recipient: to,
+    payload_hash: payloadHash,
+    status: 'queued',
+    attempt_count: 1,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'recipient,template_name,payload_hash' });
+
+  const result = await sendGearRequestEmail({ to, subject, html });
+
+  await (supabase as any).from('email_logs').upsert({
+    booking_id: booking.id,
+    provider: 'resend',
+    template_name: 'booking_lifecycle_update',
+    recipient: to,
+    payload_hash: payloadHash,
+    status: result.success ? 'sent' : 'failed',
+    error_message: result.success ? null : result.error || 'Unknown email error',
+    provider_message_id: result.success ? String((result as any).result?.data?.id || '') : null,
+    attempt_count: 1,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'recipient,template_name,payload_hash' });
+
+  return result;
+}

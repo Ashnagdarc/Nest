@@ -4,6 +4,7 @@ import { sendGearRequestRejectionEmail, sendGearRequestEmail } from '@/lib/email
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { enqueuePushNotification } from '@/lib/push-queue';
+import { transitionBooking } from '@/lib/bookings-v2/service';
 
 export async function POST(req: Request) {
     try {
@@ -32,6 +33,27 @@ export async function POST(req: Request) {
 
         if (error) {
             return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+        }
+
+        try {
+            const { data: aggregate } = await (supabase as any)
+                .from('bookings')
+                .select('id')
+                .eq('source_type', 'gear_request')
+                .eq('source_id', requestId)
+                .maybeSingle();
+            if (aggregate?.id) {
+                await transitionBooking({
+                    bookingId: aggregate.id,
+                    nextStatus: 'failed',
+                    changedBy: null,
+                    reason: reason || 'Request rejected via legacy route',
+                    metadata: { legacy_route: '/api/requests/reject' },
+                    idempotencyKey: `legacy-reject:${requestId}`,
+                });
+            }
+        } catch (syncError) {
+            console.error('[Gear Rejection] Failed syncing status to v2 booking lifecycle:', syncError);
         }
 
         // Send rejection email to user

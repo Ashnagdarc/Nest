@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { sendGearRequestApprovalEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
+import { transitionBooking } from '@/lib/bookings-v2/service';
 
 /**
  * Calculates due date based on request duration
@@ -186,6 +187,27 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: `Failed to approve request: ${approveErr.message}` }, { status: 500 });
         }
 
+        try {
+            const { data: aggregate } = await (supabase as any)
+                .from('bookings')
+                .select('id,status')
+                .eq('source_type', 'gear_request')
+                .eq('source_id', requestId)
+                .maybeSingle();
+            if (aggregate?.id) {
+                await transitionBooking({
+                    bookingId: aggregate.id,
+                    nextStatus: 'approved',
+                    changedBy: null,
+                    reason: 'Legacy approval route sync',
+                    metadata: { legacy_route: '/api/requests/approve' },
+                    idempotencyKey: `legacy-approve:${requestId}`,
+                });
+            }
+        } catch (syncError) {
+            console.error('[Gear Approval] Failed syncing status to v2 booking lifecycle:', syncError);
+        }
+
         // Status history table not present; relying on gear_requests.approved_at/updated_at fields
 
         // Send approval email to user
@@ -346,4 +368,3 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: msg }, { status: 500 });
     }
 }
-

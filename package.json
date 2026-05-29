@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit",
     "generate-icons": "node scripts/generate-pwa-icons.js",
     "test": "jest",
+    "test:smoke": "jest --testPathPattern='(booking-v2-smoke|booking-v2-error-states|car-booking|regression|dashboard-metrics)'",
     "test:e2e": "playwright test",
     "test:e2e:livebus": "playwright test tests/e2e/live-bus-multitab.spec.ts",
     "validate-env": "node -e \"console.log('Environment validation passed'); require('./src/lib/env-validation').validateEnvironment();\"",

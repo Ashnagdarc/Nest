@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Database } from '@/types/supabase';
 import { sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification, triggerPushWorker } from '@/lib/push-queue';
+import { createBookingAggregate } from '@/lib/bookings-v2/service';
 
 export async function GET(request: NextRequest) {
     try {
@@ -274,6 +275,30 @@ export async function POST(request: NextRequest) {
                 } else {
                     console.log('Gear lines inserted successfully:', linesData, 'Payload:', gearLines, 'Request ID:', requestData.id);
                 }
+            }
+
+            // Dual-run synchronization: create v2 aggregate booking and line items.
+            try {
+                await createBookingAggregate({
+                    sourceType: 'gear_request',
+                    sourceId: requestData.id,
+                    requesterId: requestData.user_id,
+                    startAt: requestData.created_at,
+                    endAt: body.due_date || null,
+                    idempotencyKey: `legacy-gear-create:${requestData.id}`,
+                    metadata: {
+                        reason: body.reason || null,
+                        destination: body.destination || null,
+                        expected_duration: body.expected_duration || null,
+                    },
+                    items: normalizedLines.map((line) => ({
+                        itemType: 'gear' as const,
+                        gearId: line.gear_id,
+                        quantity: line.quantity,
+                    })),
+                });
+            } catch (syncError) {
+                console.error('[Requests] Failed to sync booking to v2 aggregate:', syncError);
             }
 
             clearTimeout(timeoutId);

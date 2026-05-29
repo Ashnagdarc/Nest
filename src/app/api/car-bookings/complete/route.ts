@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestEmail, sendCarReturnConfirmationEmail } from '@/lib/email';
+import { transitionBooking } from '@/lib/bookings-v2/service';
 
 export async function POST(request: NextRequest) {
     try {
+        const authHeader = request.headers.get('authorization');
+        const isCron = Boolean(process.env.CRON_SECRET) && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+        if (!isCron) {
+            const authClient = await createSupabaseServerClient();
+            const { data: userData } = await authClient.auth.getUser();
+            if (!userData.user) {
+                return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+            }
+            const { data: profile } = await authClient
+                .from('profiles')
+                .select('role,status')
+                .eq('id', userData.user.id)
+                .maybeSingle();
+            if (!profile || profile.role !== 'Admin' || profile.status !== 'Active') {
+                return NextResponse.json({ success: false, error: 'Only admins can complete car bookings manually.' }, { status: 403 });
+            }
+        }
+
         const admin = await createSupabaseServerClient(true);
         const { bookingId } = await request.json();
         if (!bookingId) return NextResponse.json({ success: false, error: 'bookingId is required' }, { status: 400 });
@@ -107,6 +126,27 @@ export async function POST(request: NextRequest) {
                 time_slot: string | null;
                 updated_at: string | null;
             };
+        }
+
+        try {
+            const { data: aggregate } = await (admin as any)
+                .from('bookings')
+                .select('id')
+                .eq('source_type', 'car_booking')
+                .eq('source_id', bookingId)
+                .maybeSingle();
+            if (aggregate?.id) {
+                await transitionBooking({
+                    bookingId: aggregate.id,
+                    nextStatus: 'completed',
+                    changedBy: null,
+                    reason: isCron ? 'Auto check-in completion' : 'Manual completion via legacy route',
+                    metadata: { legacy_route: '/api/car-bookings/complete' },
+                    idempotencyKey: `legacy-car-complete:${bookingId}`,
+                });
+            }
+        } catch (syncError) {
+            console.error('[Car Booking Complete] Failed syncing status to v2 booking lifecycle:', syncError);
         }
 
         // Lookup assigned car and plate if any

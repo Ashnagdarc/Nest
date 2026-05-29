@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { sendGearRequestEmail, sendCarBookingRejectionEmail } from '@/lib/email';
+import { transitionBooking } from '@/lib/bookings-v2/service';
 
 export async function POST(request: NextRequest) {
     try {
@@ -22,6 +23,27 @@ export async function POST(request: NextRequest) {
             rejection_reason: reason || null
         }).eq('id', bookingId);
         if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+
+        try {
+            const { data: aggregate } = await (admin as any)
+                .from('bookings')
+                .select('id')
+                .eq('source_type', 'car_booking')
+                .eq('source_id', bookingId)
+                .maybeSingle();
+            if (aggregate?.id) {
+                await transitionBooking({
+                    bookingId: aggregate.id,
+                    nextStatus: 'failed',
+                    changedBy: actorId,
+                    reason: reason || 'Booking rejected via legacy route',
+                    metadata: { legacy_route: '/api/car-bookings/reject' },
+                    idempotencyKey: `legacy-car-reject:${bookingId}`,
+                });
+            }
+        } catch (syncError) {
+            console.error('[Car Booking Reject] Failed syncing status to v2 booking lifecycle:', syncError);
+        }
 
         if (booking.requester_id) {
             await admin.from('notifications').insert({

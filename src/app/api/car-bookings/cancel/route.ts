@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestEmail, sendCarBookingCancellationEmail } from '@/lib/email';
+import { transitionBooking } from '@/lib/bookings-v2/service';
 
 export async function POST(request: NextRequest) {
     try {
@@ -86,6 +87,27 @@ export async function POST(request: NextRequest) {
 
         if (updateErr) {
             return NextResponse.json({ success: false, error: updateErr.message }, { status: 400 });
+        }
+
+        try {
+            const { data: aggregate } = await (admin as any)
+                .from('bookings')
+                .select('id')
+                .eq('source_type', 'car_booking')
+                .eq('source_id', bookingId)
+                .maybeSingle();
+            if (aggregate?.id) {
+                await transitionBooking({
+                    bookingId: aggregate.id,
+                    nextStatus: 'cancelled',
+                    changedBy: userId,
+                    reason: reason || (isAdmin ? 'admin_cancel' : 'user_cancel'),
+                    metadata: { legacy_route: '/api/car-bookings/cancel' },
+                    idempotencyKey: `legacy-car-cancel:${bookingId}`,
+                });
+            }
+        } catch (syncError) {
+            console.error('[Car Booking Cancel] Failed syncing status to v2 booking lifecycle:', syncError);
         }
 
         // Delete car assignment if exists (frees the car)

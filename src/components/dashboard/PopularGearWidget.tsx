@@ -81,17 +81,13 @@ export function PopularGearWidget() {
             const startDate = new Date();
             startDate.setDate(endDate.getDate() - 7);
 
-            // Use direct Supabase query
+            const response = await fetch(
+                `/api/gears/popular?start_date=${encodeURIComponent(startDate.toISOString())}&end_date=${encodeURIComponent(endDate.toISOString())}&limit=10`,
+                { cache: 'no-store' }
+            );
+            if (!response.ok) throw new Error('Failed to load popular gear');
+            const directData = await response.json();
             const supabase = createClient();
-            const { data: directData, error: directError } = await supabase.rpc('get_popular_gears', {
-                start_date: startDate.toISOString(),
-                end_date: endDate.toISOString(),
-                limit_count: 10
-            });
-
-            if (directError) {
-                throw directError;
-            }
 
             if (Array.isArray(directData) && directData.length > 0) {
                 // Fetch extra details for each gear (category, image_url, status)

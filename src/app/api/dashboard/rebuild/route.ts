@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
     try {
-        // Use proper server client with user authentication
+        // Use user-scoped client for auth checks
         const supabase = await createSupabaseServerClient();
+        const admin = await createSupabaseServerClient(true);
 
         // Get authenticated user
         const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
         const isAdmin = profile?.role === 'Admin';
 
         // Call durable RPC that returns the full dashboard JSON
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_dashboard', { p_user_id: user.id });
+        const { data: rpcData, error: rpcError } = await admin.rpc('get_user_dashboard', { p_user_id: user.id });
         if (rpcError) {
             throw rpcError;
         }

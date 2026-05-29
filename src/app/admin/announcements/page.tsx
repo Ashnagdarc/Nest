@@ -59,45 +59,20 @@ export default function AnnouncementsPage() {
     async function fetchAnnouncements() {
         console.log("Admin: Fetching announcements...");
         try {
-            // Get announcements directly with SQL query for most reliable results
-            const { data, error } = await supabase.rpc('get_all_announcements');
-
-            // If RPC fails, fall back to regular query
-            if (error) {
-                console.error("Error using RPC to fetch announcements:", error);
-                console.log("Falling back to direct query...");
-
-                const { data: directData, error: directError } = await supabase
-                    .from('announcements')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (directError) {
-                    console.error("Error fetching announcements:", directError);
-                    toast({
-                        title: "Error",
-                        description: "Failed to fetch announcements. Please refresh the page.",
-                        variant: "destructive"
-                    });
-                    return;
-                }
-
-                console.log("Admin: Announcements fetched via direct query:", directData);
-                if (directData) {
-                    setAnnouncements(directData.map((a: AnnouncementRow) => ({
-                        id: a.id,
-                        title: a.title,
-                        content: a.content,
-                        createdAt: new Date(a.created_at),
-                        created_by: a.created_by || null,
-                    })));
-                }
+            const response = await fetch('/api/announcements?limit=100&page=1', { cache: 'no-store' });
+            if (!response.ok) {
+                toast({
+                    title: "Error",
+                    description: "Failed to fetch announcements. Please refresh the page.",
+                    variant: "destructive"
+                });
                 return;
             }
 
-            console.log("Admin: Announcements fetched via RPC:", data);
-            if (data) {
-                setAnnouncements(data.map((a: AnnouncementRow) => ({
+            const payload = await response.json();
+            const rows = Array.isArray(payload?.announcements) ? payload.announcements : [];
+            if (rows.length) {
+                setAnnouncements(rows.map((a: AnnouncementRow) => ({
                     id: a.id,
                     title: a.title,
                     content: a.content,

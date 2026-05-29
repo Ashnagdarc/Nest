@@ -154,14 +154,10 @@ export function useDashboardData() {
                     const startDate = new Date();
                     startDate.setDate(endDate.getDate() - 7);
 
-                    const { data: directData, error } = await supabase.rpc('get_popular_gears', {
-                        start_date: startDate.toISOString(),
-                        end_date: endDate.toISOString(),
-                        limit_count: 10
-                    });
-
-                    if (error) throw error;
-                    return directData || [];
+                    const payload = await apiGet<any[]>(
+                        `/api/gears/popular?start_date=${encodeURIComponent(startDate.toISOString())}&end_date=${encodeURIComponent(endDate.toISOString())}&limit=10`
+                    );
+                    return Array.isArray(payload) ? payload : [];
                 })(),
 
                 // Upcoming events

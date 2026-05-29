@@ -1,0 +1,260 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - button "Toggle Sidebar" [ref=e10] [cursor=pointer]:
+            - img
+            - generic [ref=e11]: Toggle Sidebar
+          - link "Nest User" [ref=e12] [cursor=pointer]:
+            - /url: /user/dashboard
+            - generic [ref=e13]: Nest User
+        - button "Toggle theme" [ref=e15] [cursor=pointer]:
+          - img
+          - img
+          - generic [ref=e16]: Toggle theme
+      - list [ref=e21]:
+        - listitem [ref=e22]:
+          - link "Dashboard" [ref=e23] [cursor=pointer]:
+            - /url: /user/dashboard
+            - img [ref=e24]
+            - generic [ref=e29]: Dashboard
+        - listitem [ref=e30]:
+          - link "Browse Gears" [ref=e31] [cursor=pointer]:
+            - /url: /user/browse
+            - img [ref=e32]
+            - generic [ref=e35]: Browse Gears
+        - listitem [ref=e36]:
+          - link "Request Gear" [ref=e37] [cursor=pointer]:
+            - /url: /user/request
+            - img [ref=e38]
+            - generic [ref=e40]: Request Gear
+        - listitem [ref=e41]:
+          - link "Book a Car" [ref=e42] [cursor=pointer]:
+            - /url: /user/car-booking
+            - img [ref=e43]
+            - generic [ref=e45]: Book a Car
+        - listitem [ref=e46]:
+          - link "Live Bus" [ref=e47] [cursor=pointer]:
+            - /url: /user/live-bus
+            - img [ref=e48]
+            - generic [ref=e52]: Live Bus
+        - listitem [ref=e53]:
+          - link "My Requests" [ref=e54] [cursor=pointer]:
+            - /url: /user/my-requests
+            - img [ref=e55]
+            - generic [ref=e58]: My Requests
+        - listitem [ref=e59]:
+          - link "Check-in Gear" [ref=e60] [cursor=pointer]:
+            - /url: /user/check-in
+            - img [ref=e61]
+            - generic [ref=e64]: Check-in Gear
+        - listitem [ref=e65]:
+          - link "History" [ref=e66] [cursor=pointer]:
+            - /url: /user/history
+            - img [ref=e67]
+            - generic [ref=e71]: History
+        - listitem [ref=e72]:
+          - link "Notifications" [ref=e73] [cursor=pointer]:
+            - /url: /user/notifications
+            - img [ref=e74]
+            - generic [ref=e77]: Notifications
+        - listitem [ref=e78]:
+          - link "Settings" [ref=e79] [cursor=pointer]:
+            - /url: /user/settings
+            - img [ref=e80]
+            - generic [ref=e83]: Settings
+      - generic [ref=e84]:
+        - generic [ref=e85]:
+          - generic [ref=e87]: DS
+          - generic [ref=e88]:
+            - generic [ref=e89]: Daniel Samuel
+            - generic [ref=e90]: gfx2@edenoasisrealty.com
+        - button "Logout" [ref=e91] [cursor=pointer]:
+          - img
+          - generic [ref=e92]: Logout
+    - main [ref=e93]:
+      - generic [ref=e94]:
+        - img "Nest Logo" [ref=e96]
+        - generic [ref=e97]:
+          - button "0 unread notifications" [ref=e98] [cursor=pointer]:
+            - img
+          - generic [ref=e100]: DS
+          - button "Logout" [ref=e101] [cursor=pointer]
+      - generic [ref=e105]:
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - heading "Welcome back, Daniel Samuel" [level=1] [ref=e108]
+            - paragraph [ref=e109]: Dashboard
+          - generic [ref=e110]:
+            - link "Browse Gear" [ref=e111] [cursor=pointer]:
+              - /url: /user/browse
+              - button "Browse Gear" [ref=e112]:
+                - img
+                - generic [ref=e113]: Browse Gear
+            - link "Check-in Gear" [ref=e114] [cursor=pointer]:
+              - /url: /user/check-in
+              - button "Check-in Gear" [ref=e115]:
+                - img
+                - generic [ref=e116]: Check-in Gear
+        - generic [ref=e118]:
+          - heading "Quick Actions" [level=3] [ref=e120]
+          - generic [ref=e122]:
+            - link "New Request" [ref=e124] [cursor=pointer]:
+              - /url: /user/request
+              - generic [ref=e125]:
+                - img
+                - generic [ref=e126]:
+                  - generic [ref=e127]: New Request
+                  - generic [ref=e128]: Request equipment checkout
+            - link "Check In" [ref=e130] [cursor=pointer]:
+              - /url: /user/check-in
+              - generic [ref=e131]:
+                - img
+                - generic [ref=e132]:
+                  - generic [ref=e133]: Check In
+                  - generic [ref=e134]: Return equipment
+            - link "Browse" [ref=e136] [cursor=pointer]:
+              - /url: /user/browse
+              - generic [ref=e137]:
+                - img
+                - generic [ref=e138]:
+                  - generic [ref=e139]: Browse
+                  - generic [ref=e140]: Search available equipment
+            - link "My Requests" [ref=e142] [cursor=pointer]:
+              - /url: /user/my-requests
+              - generic [ref=e143]:
+                - img
+                - generic [ref=e144]:
+                  - generic [ref=e145]: My Requests
+                  - generic [ref=e146]: View your requests
+            - link "Report Issue" [ref=e148] [cursor=pointer]:
+              - /url: /user/report
+              - generic [ref=e149]:
+                - img
+                - generic [ref=e150]:
+                  - generic [ref=e151]: Report Issue
+                  - generic [ref=e152]: Report equipment problem
+        - generic [ref=e153]:
+          - generic [ref=e155]:
+            - generic [ref=e156]:
+              - heading "Checked Out Gears" [level=3] [ref=e157]:
+                - img [ref=e158]
+                - generic [ref=e163]: Checked Out Gears
+              - generic [ref=e164]: "0"
+            - generic [ref=e165]:
+              - paragraph [ref=e166]: Currently in your possession
+              - generic [ref=e167]: No checked out gears.
+              - link "View details" [ref=e168] [cursor=pointer]:
+                - /url: /user/my-requests
+                - text: View details
+                - img [ref=e169]
+          - generic [ref=e173]:
+            - generic [ref=e174]:
+              - heading "Overdue Gears" [level=3] [ref=e175]:
+                - img [ref=e176]
+                - generic [ref=e179]: Overdue Gears
+              - generic [ref=e180]: "0"
+            - generic [ref=e181]:
+              - paragraph [ref=e182]: Past due date - please return
+              - generic [ref=e183]: No overdue gears.
+              - link "View details" [ref=e184] [cursor=pointer]:
+                - /url: /user/check-in
+                - text: View details
+                - img [ref=e185]
+          - generic [ref=e189]:
+            - generic [ref=e190]:
+              - heading "Available Gears" [level=3] [ref=e191]:
+                - img [ref=e192]
+                - generic [ref=e195]: Available Gears
+              - generic [ref=e196]: "141"
+            - generic [ref=e197]:
+              - paragraph [ref=e198]: Ready for checkout
+              - link "View details" [ref=e199] [cursor=pointer]:
+                - /url: /user/browse
+                - text: View details
+                - img [ref=e200]
+        - generic [ref=e203]:
+          - generic [ref=e205]:
+            - generic [ref=e206]:
+              - heading "Notifications" [level=3] [ref=e207]:
+                - img [ref=e208]
+                - text: Notifications
+              - generic [ref=e211]:
+                - button "View all" [ref=e212] [cursor=pointer]
+                - button "Mark all as read" [ref=e213] [cursor=pointer]
+            - generic [ref=e215]:
+              - generic [ref=e216]:
+                - heading "Unread" [level=4] [ref=e217]
+                - paragraph [ref=e219]: No unread notifications
+              - generic [ref=e220]:
+                - heading "Read" [level=4] [ref=e221]
+                - generic [ref=e222]:
+                  - generic [ref=e223]:
+                    - img [ref=e225]
+                    - generic [ref=e228]:
+                      - heading "Check-in Approved" [level=4] [ref=e229]
+                      - paragraph [ref=e230]: Your check-in for li-ion Battery (x5), NEEWER NW-P4 (x1), SmallRig V-mount B. (x1), Hollyland Lark MAX 2 Combo-4 (x1), Portkeys LS7P 7″ (x1), SmallRig NP-F970 USB-C (x3) has been approved.
+                    - generic [ref=e231]: Read
+                  - generic [ref=e232]:
+                    - img [ref=e234]
+                    - generic [ref=e237]:
+                      - heading "Check-in Approved" [level=4] [ref=e238]
+                      - paragraph [ref=e239]: Your check-in for Alvins Cable 2.1 Micro Hdmi (x2), C-Stand (x2), Canon LP-E6NH Battery Pack (x6), Canon R5C (x2), DJI RS4Pro (x1), EF 50mm (x2), NP-FW50 Battery 3-Pack (x1), DJI RS2Pro (x1), ATOMOS NINJA V 4K (x1), DJI Air 3S (x1), Canon LP-E6P (x6), 82mm ND Filte (x2), Canon RF 15-35mm f/2.8L (x1), EXTENSION REEL 3X1.50MM 50M (x1), 10mm Laowa Lens (x1) has been approved.
+                    - generic [ref=e240]: Read
+                  - generic [ref=e241]:
+                    - img [ref=e243]
+                    - generic [ref=e246]:
+                      - heading "Car booking approved" [level=4] [ref=e247]
+                      - paragraph [ref=e248]: Your car booking for 2026-05-25 (8:30am) has been approved.
+                    - generic [ref=e249]: Read
+                  - generic [ref=e250]:
+                    - img [ref=e252]
+                    - generic [ref=e255]:
+                      - heading "New Equipment Request" [level=4] [ref=e256]
+                      - paragraph [ref=e257]: "Daniel Samuel requested: Alvins Cable 2.1 Micro Hdmi, Canon LP-E6P, NEEWER NW-P4 , Portkeys LS7P 7″, EXTENSION REEL 3X1.50MM 50M, Hollyland Lark MAX 2 Combo-4, C-Stand, SmallRig NP-F970 USB-C, Canon RF 15-35mm f/2.8L, ATOMOS NINJA V 4K , DJI Air 3S, 10mm Laowa Lens, 82mm ND Filte, NP-FW50 Battery 3-Pack, li-ion Battery, Canon LP-E6NH Battery Pack, SmallRig V-mount B., EF 50mm, Canon R5C, DJI RS2Pro, DJI RS4Pro"
+                    - generic [ref=e258]: Read
+                  - generic [ref=e259]:
+                    - img [ref=e261]
+                    - generic [ref=e264]:
+                      - heading "Car booking request submitted" [level=4] [ref=e265]
+                      - paragraph [ref=e266]: Your car booking request for 2026-05-25 (8:30am) has been submitted and is pending approval.
+                    - generic [ref=e267]: Read
+          - generic [ref=e269]:
+            - heading "Recent Activity" [level=3] [ref=e271]:
+              - img [ref=e272]
+              - text: Recent Activity
+            - generic [ref=e275]:
+              - group [ref=e276]:
+                - generic "2026-05-25 11" [ref=e277] [cursor=pointer]:
+                  - generic [ref=e278]: 2026-05-25
+                  - generic [ref=e279]: "11"
+              - group [ref=e280]:
+                - generic "2026-05-06 1" [ref=e281] [cursor=pointer]:
+                  - generic [ref=e282]: 2026-05-06
+                  - generic [ref=e283]: "1"
+              - group [ref=e284]:
+                - generic "2026-04-17 2" [ref=e285] [cursor=pointer]:
+                  - generic [ref=e286]: 2026-04-17
+                  - generic [ref=e287]: "2"
+              - group [ref=e288]:
+                - generic "2026-04-15 1" [ref=e289] [cursor=pointer]:
+                  - generic [ref=e290]: 2026-04-15
+                  - generic [ref=e291]: "1"
+              - group [ref=e292]:
+                - generic "2026-04-14 2" [ref=e293] [cursor=pointer]:
+                  - generic [ref=e294]: 2026-04-14
+                  - generic [ref=e295]: "2"
+              - group [ref=e296]:
+                - generic "2026-04-09 3" [ref=e297] [cursor=pointer]:
+                  - generic [ref=e298]: 2026-04-09
+                  - generic [ref=e299]: "3"
+  - region "Notifications (F8)":
+    - list
+  - button "Open Next.js Dev Tools" [ref=e305] [cursor=pointer]:
+    - img [ref=e306]
+  - alert [ref=e309]
+```

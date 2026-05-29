@@ -50,31 +50,37 @@ export function hasUserRead(notification: AnyNotification, userId: string): bool
  * Mark a notification as read for the current user (uses standardized function)
  */
 export async function markNotificationAsRead(notificationId: string) {
-    const { createClient } = await import('@/lib/supabase/client');
-    const supabase = createClient();
-    return await supabase.rpc('mark_notification_as_read', {
-        notification_id: notificationId
+    const response = await fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId }),
     });
+    return response.json();
 }
 
 /**
  * Mark all notifications as read for the current user (uses standardized function)
  */
 export async function markAllNotificationsAsRead() {
-    const { createClient } = await import('@/lib/supabase/client');
-    const supabase = createClient();
-    return await supabase.rpc('mark_all_notifications_as_read');
+    const response = await fetch('/api/notifications/mark-read', {
+        method: 'PUT',
+    });
+    return response.json();
 }
 
 /**
  * Create a new announcement
  */
 export async function createAnnouncement(title: string, content: string, createdBy: string) {
-    const { createClient } = await import('@/lib/supabase/client');
-    const supabase = createClient();
-    return await supabase.rpc('create_announcement', {
-        p_title: title,
-        p_content: content,
-        p_created_by: createdBy
+    const response = await fetch('/api/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            title,
+            content,
+            author_id: createdBy,
+            send_notifications: true,
+        }),
     });
+    return response.json();
 }

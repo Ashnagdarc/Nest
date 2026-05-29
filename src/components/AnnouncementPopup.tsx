@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { X, Megaphone } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
 import { playNotificationSound } from '@/lib/soundUtils';
 
@@ -48,7 +47,6 @@ export function AnnouncementPopup() {
     const [isVisible, setIsVisible] = useState(false);
     const [entered, setEntered] = useState(false);
     const [exiting, setExiting] = useState(false);
-    const supabase = createClient();
 
     // ESC to dismiss for quick keyboard handling
     useEffect(() => {
@@ -84,57 +82,15 @@ export function AnnouncementPopup() {
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
             try {
-                // Try to get the most recent announcement using the RPC function
-                const { data, error } = await supabase.rpc('get_recent_announcements', {
-                    max_count: 1
-                });
-
-                // Fall back to direct query if RPC fails
-                if (error) {
-                    console.error("Error using RPC to fetch recent announcement for popup:", error);
-
-                    // Fall back to direct query
-                    const { data: directData, error: directError } = await supabase
-                        .from('announcements')
-                        .select('*')
-                        .gt('created_at', sevenDaysAgo.toISOString())
-                        .order('created_at', { ascending: false })
-                        .limit(1);
-
-                    if (directError || !directData || directData.length === 0) {
-                        return;
-                    }
-
-                    const recentAnnouncement = directData[0];
-                    const id = String(recentAnnouncement.id);
-
-                    // Show if we haven't seen it before
-                    if (!seenAnnouncements.includes(id)) {
-                        setAnnouncement({
-                            id,
-                            title: String(recentAnnouncement.title),
-                            content: String(recentAnnouncement.content),
-                            createdAt: new Date(recentAnnouncement.created_at)
-                        });
-
-                        // Play notification sound when showing announcement
-                        playNotificationSound('login');
-
-                        // Show after a small delay for better UX
-                        setTimeout(() => {
-                            setIsVisible(true);
-                            // allow next frame for transition
-                            requestAnimationFrame(() => setEntered(true));
-                        }, 1000);
-                    }
+                const res = await fetch('/api/announcements?limit=1&page=1', { cache: 'no-store' });
+                if (!res.ok) return;
+                const payload = await res.json();
+                const rows = payload?.announcements ?? [];
+                if (!Array.isArray(rows) || rows.length === 0) {
                     return;
                 }
 
-                if (!data || data.length === 0) {
-                    return;
-                }
-
-                const recentAnnouncement = data[0];
+                const recentAnnouncement = rows[0];
 
                 // Skip if announcement is older than 7 days
                 const announcementDate = new Date((recentAnnouncement as any).created_at || '');
@@ -168,7 +124,7 @@ export function AnnouncementPopup() {
         };
 
         checkRecentAnnouncements();
-    }, [supabase]);
+    }, []);
 
     const persistSeen = (id: string) => {
         // Merge and persist to both localStorage and cookie

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { sendGearRequestEmail, sendCarBookingRequestEmail } from '@/lib/email';
+import { createBookingAggregate } from '@/lib/bookings-v2/service';
 
 const MAX_PENDING_DEFAULT = 2;
 
@@ -106,6 +107,29 @@ export async function POST(request: NextRequest) {
         }).select('*').maybeSingle();
 
         if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+
+        // Dual-run synchronization: keep v2 aggregate in lock-step with legacy row creation.
+        try {
+            if (requesterId && data?.id) {
+                await createBookingAggregate({
+                    sourceType: 'car_booking',
+                    sourceId: data.id,
+                    requesterId,
+                    startAt: `${dateOfUse}T00:00:00.000Z`,
+                    endAt: `${dateOfUse}T23:59:59.000Z`,
+                    idempotencyKey: `legacy-car-create:${data.id}`,
+                    metadata: {
+                        date_of_use: dateOfUse,
+                        time_slot: timeSlot,
+                        destination: destination || null,
+                        purpose: purpose || null,
+                    },
+                    items: [],
+                });
+            }
+        } catch (syncError) {
+            console.error('[Car Booking] Failed to sync booking to v2 aggregate:', syncError);
+        }
 
         // Create in-app notification for user
         if (requesterId) {

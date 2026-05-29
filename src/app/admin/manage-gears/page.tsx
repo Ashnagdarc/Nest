@@ -616,15 +616,17 @@ export default function ManageGearsPage() {
         // If we've already fixed the database permissions, try using the admin function
         if (isDatabaseFixed) {
           console.log("Using admin deletion function...");
-          const { data, error } = await supabase.rpc('delete_gear_by_admin', {
-            p_gear_id: gear.id
+          const response = await fetch('/api/admin/delete-gear', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gearId: gear.id }),
           });
 
-          if (!error && data === true) {
+          if (response.ok) {
             console.log("Admin deletion function succeeded!");
             deletionSucceeded = true;
           } else {
-            console.log("Admin deletion function failed:", error);
+            console.log("Admin deletion function failed");
           }
         }
 
@@ -668,15 +670,17 @@ export default function ManageGearsPage() {
           console.log("Permissions fixed, trying deletion again...");
 
           // Try deletion again with the new permissions
-          const { data, error } = await supabase.rpc('delete_gear_by_admin', {
-            p_gear_id: gear.id
+          const response = await fetch('/api/admin/delete-gear', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gearId: gear.id }),
           });
 
-          if (!error && data === true) {
+          if (response.ok) {
             console.log("Admin deletion after permission fix succeeded!");
             deletionSucceeded = true;
           } else {
-            console.log("Admin deletion after permission fix failed:", error);
+            console.log("Admin deletion after permission fix failed");
           }
         }
       }

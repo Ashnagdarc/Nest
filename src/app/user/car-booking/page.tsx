@@ -13,50 +13,7 @@ import { apiGet } from '@/lib/apiClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-
-function StatusPill({ status }: { status: string }) {
-    const getStatusStyles = (status: string) => {
-        switch (status) {
-            case 'Approved':
-                return {
-                    bg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400',
-                    label: 'Approved'
-                };
-            case 'Pending':
-                return {
-                    bg: 'bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-400',
-                    label: 'Pending'
-                };
-            case 'Rejected':
-                return {
-                    bg: 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400',
-                    label: 'Rejected'
-                };
-            case 'Cancelled':
-                return {
-                    bg: 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400',
-                    label: 'Cancelled'
-                };
-            case 'Completed':
-                return {
-                    bg: 'bg-primary/10 border-primary/20 text-primary',
-                    label: 'Completed'
-                };
-            default:
-                return {
-                    bg: 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400',
-                    label: status
-                };
-        }
-    };
-
-    const styles = getStatusStyles(status);
-    return (
-        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm ${styles.bg}`}>
-            <span>{styles.label}</span>
-        </div>
-    );
-}
+import { BookingStatusBadge } from '@/components/ui/booking-status-badge';
 
 export default function UserCarBookingPage() {
     const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<{ employeeName: string; dateOfUse: string; timeSlot?: string; destination?: string; purpose?: string }>();
@@ -68,7 +25,6 @@ export default function UserCarBookingPage() {
     const [historyLoading, setHistoryLoading] = useState(false);
     const historyPageSize = 10;
     const [assignedMap, setAssignedMap] = useState<Record<string, { label?: string; plate?: string }>>({});
-    const [returningId, setReturningId] = useState<string | null>(null);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
     const [bookingToCancel, setBookingToCancel] = useState<CarBooking | null>(null); // Fixed typo here
@@ -404,7 +360,7 @@ export default function UserCarBookingPage() {
                                                                 <span className="text-sm font-medium">{b.destination || 'Internal Mission'}</span>
                                                             </div>
                                                         </div>
-                                                        <StatusPill status={b.status} />
+                                                        <BookingStatusBadge status={b.status} />
                                                     </div>
 
                                                     <div className="flex flex-wrap gap-4 items-center">
@@ -436,31 +392,9 @@ export default function UserCarBookingPage() {
                                                         </Button>
                                                     )}
                                                     {b.status === 'Approved' && (
-                                                        <Button
-                                                            variant="secondary"
-                                                            size="sm"
-                                                            className="w-full h-10 rounded-xl font-bold bg-primary text-white hover:bg-orange-600 transition-all border-none"
-                                                            onClick={async () => {
-                                                                setReturningId(b.id);
-                                                                try {
-                                                                    const res = await fetch('/api/car-bookings/complete', {
-                                                                        method: 'POST',
-                                                                        headers: { 'Content-Type': 'application/json' },
-                                                                        body: JSON.stringify({ bookingId: b.id }),
-                                                                        credentials: 'include'
-                                                                    });
-                                                                    if ((await res.json()).success) {
-                                                                        toast({ title: 'System Updated', description: 'Vehicle return tracked successfully.' });
-                                                                        load();
-                                                                    }
-                                                                } finally {
-                                                                    setReturningId(null);
-                                                                }
-                                                            }}
-                                                            disabled={returningId === b.id}
-                                                        >
-                                                            {returningId === b.id ? 'Finalizing...' : 'I returned the car'}
-                                                        </Button>
+                                                        <div className="w-full rounded-xl border border-primary/20 bg-primary/5 p-3 text-center text-xs font-semibold text-primary">
+                                                            Auto check-in is enabled. This booking will complete automatically at return time.
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -512,7 +446,7 @@ export default function UserCarBookingPage() {
                                                     {carInfo && <span className="text-primary/60">• {carInfo.label}</span>}
                                                 </div>
                                             </div>
-                                            <StatusPill status={b.status} />
+                                            <BookingStatusBadge status={b.status} />
                                         </motion.div>
                                     );
                                 })}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { sendGearRequestEmail, sendCarBookingApprovalEmail } from '@/lib/email';
+import { transitionBooking } from '@/lib/bookings-v2/service';
 
 function isCarConflictError(message?: string | null) {
     const msg = (message || '').toLowerCase();
@@ -88,6 +89,27 @@ export async function POST(request: NextRequest) {
                 { success: false, error: error.message },
                 { status: isCarConflictError(error.message) ? 409 : 400 }
             );
+        }
+
+        try {
+            const { data: aggregate } = await (admin as any)
+                .from('bookings')
+                .select('id,status')
+                .eq('source_type', 'car_booking')
+                .eq('source_id', bookingId)
+                .maybeSingle();
+            if (aggregate?.id) {
+                await transitionBooking({
+                    bookingId: aggregate.id,
+                    nextStatus: 'approved',
+                    changedBy: approverId,
+                    reason: 'Legacy car approval route sync',
+                    metadata: { legacy_route: '/api/car-bookings/approve' },
+                    idempotencyKey: `legacy-car-approve:${bookingId}`,
+                });
+            }
+        } catch (syncError) {
+            console.error('[Car Booking Approve] Failed syncing status to v2 booking lifecycle:', syncError);
         }
 
         // Get assigned car details early so subsequent notifications can use it safely
