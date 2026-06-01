@@ -967,7 +967,7 @@ function minimalEmailLayout({
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
         ${section.rows.map(row => `
           <tr>
-            <td style="padding:10px 0;border-top:1px solid #d4d4d4;font-size:14px;font-weight:600;vertical-align:top;width:38%;">${escapeHtml(row.label)}</td>
+            <td style="padding:10px 16px 10px 0;border-top:1px solid #d4d4d4;font-size:14px;font-weight:600;vertical-align:top;width:30%;">${escapeHtml(row.label)}</td>
             <td style="padding:10px 0;border-top:1px solid #d4d4d4;font-size:14px;vertical-align:top;">${escapeHtml(row.value)}</td>
           </tr>
         `).join('')}
@@ -1389,7 +1389,15 @@ export async function sendBookingLifecycleEmail({
   userName,
   transition,
 }: {
-  booking: { id: string; reference: string; status: string; start_at?: string | null; end_at?: string | null };
+  booking: {
+    id: string;
+    reference: string;
+    status: string;
+    source_type?: string | null;
+    source_id?: string | null;
+    start_at?: string | null;
+    end_at?: string | null;
+  };
   items: Array<{ item_type: 'gear' | 'car'; quantity: number; status: string; metadata?: Record<string, unknown> }>;
   to: string;
   userName: string;
@@ -1401,7 +1409,45 @@ export async function sendBookingLifecycleEmail({
     .update(JSON.stringify({ bookingId: booking.id, to, subject, transition, items }))
     .digest('hex');
 
-  const itemRows = items.map((item, index) => {
+  let normalizedItems = items;
+  if (normalizedItems.length === 0 && booking.source_type === 'car_booking' && booking.source_id) {
+    try {
+      const supabase = await createSupabaseServerClient(true);
+
+      const { data: assignment } = await (supabase as any)
+        .from('car_assignment')
+        .select('car_id')
+        .eq('booking_id', booking.source_id)
+        .maybeSingle();
+
+      let carLabel = 'Assigned car';
+      if (assignment?.car_id) {
+        const { data: car } = await (supabase as any)
+          .from('cars')
+          .select('label,plate')
+          .eq('id', assignment.car_id)
+          .maybeSingle();
+        if (car?.label && car?.plate) carLabel = `${car.label} (${car.plate})`;
+        else if (car?.label) carLabel = car.label;
+        else if (car?.plate) carLabel = `Car (${car.plate})`;
+      } else {
+        carLabel = 'Car not assigned yet';
+      }
+
+      normalizedItems = [{
+        item_type: 'car',
+        quantity: 1,
+        status: booking.status,
+        metadata: {
+          display_name: carLabel,
+        },
+      }];
+    } catch (fallbackError) {
+      console.warn('[Email Service] Failed to build car fallback items for lifecycle email:', fallbackError);
+    }
+  }
+
+  const itemRows = normalizedItems.map((item, index) => {
     const md = item.metadata || {};
     const rawName =
       (md.display_name as string | undefined) ||
