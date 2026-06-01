@@ -28,8 +28,11 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 }
 
 export async function GET(req: NextRequest) {
-    // Secure with CRON_SECRET
-    if (process.env.CRON_SECRET && req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+    const authHeader = req.headers.get('authorization');
+    const isBearerAuthorized = !!process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+    const isVercelCron = req.headers.has('x-vercel-cron');
+    // Allow either explicit bearer auth or Vercel cron invocations.
+    if (!isBearerAuthorized && !isVercelCron) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     try {
@@ -40,10 +43,12 @@ export async function GET(req: NextRequest) {
         const batchSize = Math.max(1, Math.min(100, Number(process.env.PUSH_WORKER_BATCH_SIZE || 50)));
 
         // Get pending notifications (limit to prevent timeouts)
+        const nowIso = new Date().toISOString();
         const { data: pendingNotifications, error: fetchError } = await supabase
             .from('push_notification_queue')
             .select('*')
             .eq('status', 'pending')
+            .lte('next_attempt_at', nowIso)
             .order('created_at', { ascending: true })
             .limit(batchSize); // Process in batches
 
@@ -95,7 +100,10 @@ export async function GET(req: NextRequest) {
                     .from('push_notification_queue')
                     .update({
                         status: 'processing',
-                        retry_count: notification.retry_count + 1
+                        retry_count: notification.retry_count + 1,
+                        last_attempt_at: new Date().toISOString(),
+                        processing_started_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
                     })
                     .eq('id', notification.id)
                     .eq('status', 'pending')
@@ -185,7 +193,10 @@ export async function GET(req: NextRequest) {
                         .from('push_notification_queue')
                         .update({
                             status: 'sent',
-                            sent_at: new Date().toISOString()
+                            sent_at: new Date().toISOString(),
+                            processed_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                            error_message: null,
                         })
                         .eq('id', notification.id);
 
@@ -194,16 +205,20 @@ export async function GET(req: NextRequest) {
                 } else {
                     // All tokens failed
                     const errorMsg = `All ${tokenRows.length} tokens failed`;
-                    if (notification.retry_count < notification.max_retries) {
-                        // Reset to pending for retry
+                    const attemptsUsed = (notification.retry_count ?? 0) + 1;
+                    if (attemptsUsed < notification.max_retries) {
+                        const backoffMinutes = Math.min(60, Math.max(1, Math.pow(2, attemptsUsed - 1)));
+                        const nextAttemptAt = new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString();
                         await supabase
                             .from('push_notification_queue')
                             .update({
                                 status: 'pending',
-                                error_message: errorMsg
+                                error_message: errorMsg,
+                                next_attempt_at: nextAttemptAt,
+                                updated_at: new Date().toISOString(),
                             })
                             .eq('id', notification.id);
-                        console.log(`[Push Worker] Notification ${notification.id} reset for retry (${notification.retry_count + 1}/${notification.max_retries})`);
+                        console.log(`[Push Worker] Notification ${notification.id} reset for retry (${attemptsUsed}/${notification.max_retries}), next in ${backoffMinutes}m`);
                     } else {
                         await markFailed(supabase, notification.id, errorMsg);
                         failed++;
@@ -239,11 +254,38 @@ export async function GET(req: NextRequest) {
 }
 
 async function markFailed(supabase: any, notificationId: string, errorMessage: string) {
+    const { data: row } = await supabase
+        .from('push_notification_queue')
+        .select('retry_count,max_retries')
+        .eq('id', notificationId)
+        .maybeSingle();
+
+    const retryCount = Number(row?.retry_count || 0);
+    const maxRetries = Number(row?.max_retries || 3);
+    const shouldRetry = retryCount < maxRetries;
+
+    if (shouldRetry) {
+        const backoffMinutes = Math.min(60, Math.max(1, Math.pow(2, Math.max(0, retryCount - 1))));
+        const nextAttemptAt = new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString();
+        await supabase
+            .from('push_notification_queue')
+            .update({
+                status: 'pending',
+                error_message: errorMessage,
+                next_attempt_at: nextAttemptAt,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', notificationId);
+        return;
+    }
+
     await supabase
         .from('push_notification_queue')
         .update({
-            status: 'failed',
-            error_message: errorMessage
+            status: 'dead_letter',
+            processed_at: new Date().toISOString(),
+            error_message: errorMessage,
+            updated_at: new Date().toISOString(),
         })
         .eq('id', notificationId);
 }

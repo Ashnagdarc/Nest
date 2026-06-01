@@ -85,15 +85,26 @@ export async function enqueuePushNotification(
     return { success: false, error: 'Missing required push payload fields' as const };
   }
 
+  const dedupeKey =
+    typeof data?.dedupe_key === 'string' && data.dedupe_key.trim().length > 0
+      ? data.dedupe_key.trim()
+      : null;
+
   const { error } = await supabase.from('push_notification_queue').insert({
     user_id: userId,
     title,
     body,
     data: data || {},
+    dedupe_key: dedupeKey,
     status: 'pending',
+    next_attempt_at: new Date().toISOString(),
   });
 
   if (error) {
+    // Unique dedupe collisions should be treated as success (already queued/sent).
+    if ((error as any)?.code === '23505') {
+      return { success: true as const, deduped: true as const };
+    }
     return { success: false, error: error.message };
   }
 

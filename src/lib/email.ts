@@ -12,6 +12,38 @@ if (!process.env.RESEND_API_KEY) {
 const resend = new Resend(process.env.RESEND_API_KEY);
 // Configurable sender (set RESEND_FROM to a verified domain sender in your Email provider)
 const RESEND_FROM = process.env.RESEND_FROM || 'Nest by Eden Oasis <onboarding@resend.dev>';
+const EMAIL_RETRY_DELAY_MINUTES = 5;
+
+const resolveBaseUrl = (): string | null => {
+  const explicitBase =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    null;
+
+  if (explicitBase) return explicitBase.replace(/\/+$/, '');
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return null;
+};
+
+async function triggerEmailWorker() {
+  const baseUrl = resolveBaseUrl();
+  if (!baseUrl) return;
+
+  const headers: Record<string, string> = {};
+  if (process.env.CRON_SECRET) {
+    headers.authorization = `Bearer ${process.env.CRON_SECRET}`;
+  }
+
+  try {
+    await fetch(`${baseUrl}/api/email/worker`, {
+      method: 'GET',
+      headers,
+      cache: 'no-store',
+    });
+  } catch {
+    // Non-blocking best effort
+  }
+}
 
 // Email template base styles
 const EMAIL_STYLES = `
@@ -1413,6 +1445,19 @@ export async function sendBookingLifecycleEmail({
   });
 
   const supabase = await createSupabaseServerClient(true);
+  const nowIso = new Date().toISOString();
+  const { data: existingLog } = await (supabase as any)
+    .from('email_logs')
+    .select('id,status')
+    .eq('recipient', to)
+    .eq('template_name', 'booking_lifecycle_update')
+    .eq('payload_hash', payloadHash)
+    .maybeSingle();
+
+  if (existingLog?.status === 'sent') {
+    return { success: true, deduped: true };
+  }
+
   await (supabase as any).from('email_logs').upsert({
     booking_id: booking.id,
     provider: 'resend',
@@ -1420,11 +1465,16 @@ export async function sendBookingLifecycleEmail({
     recipient: to,
     payload_hash: payloadHash,
     status: 'queued',
-    attempt_count: 1,
-    updated_at: new Date().toISOString(),
+    attempt_count: 0,
+    subject,
+    html_body: html,
+    next_attempt_at: nowIso,
+    updated_at: nowIso,
   }, { onConflict: 'recipient,template_name,payload_hash' });
 
   const result = await sendGearRequestEmail({ to, subject, html });
+  const wasSent = !!result.success;
+  const failedNextAttemptAt = new Date(Date.now() + EMAIL_RETRY_DELAY_MINUTES * 60 * 1000).toISOString();
 
   await (supabase as any).from('email_logs').upsert({
     booking_id: booking.id,
@@ -1432,12 +1482,21 @@ export async function sendBookingLifecycleEmail({
     template_name: 'booking_lifecycle_update',
     recipient: to,
     payload_hash: payloadHash,
-    status: result.success ? 'sent' : 'failed',
-    error_message: result.success ? null : result.error || 'Unknown email error',
-    provider_message_id: result.success ? String((result as any).result?.data?.id || '') : null,
+    status: wasSent ? 'sent' : 'failed',
+    error_message: wasSent ? null : result.error || 'Unknown email error',
+    provider_message_id: wasSent ? String((result as any).result?.data?.id || '') : null,
     attempt_count: 1,
-    updated_at: new Date().toISOString(),
+    last_attempt_at: nowIso,
+    processed_at: wasSent ? nowIso : null,
+    subject,
+    html_body: html,
+    next_attempt_at: wasSent ? nowIso : failedNextAttemptAt,
+    updated_at: nowIso,
   }, { onConflict: 'recipient,template_name,payload_hash' });
+
+  if (!wasSent) {
+    void triggerEmailWorker();
+  }
 
   return result;
 }
