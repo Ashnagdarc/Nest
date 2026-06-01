@@ -353,7 +353,11 @@ function RequestGearContent() {
       });
       const requestJson = await requestResp.json().catch(() => null);
       if (!requestResp.ok || requestJson?.error) {
-        throw new Error(requestJson?.error || 'Failed to submit request.');
+        throw new Error(
+          requestJson?.user_message ||
+          requestJson?.error ||
+          'We could not complete your request right now. Please try again.'
+        );
       }
 
       const requestId = requestJson?.data?.id as string | undefined;
@@ -383,7 +387,11 @@ function RequestGearContent() {
       router.push('/user/my-requests');
     } catch (error) {
       console.error('Error submitting request:', error);
-      toast({ title: "Submission Failed", description: "Please try again.", variant: "destructive" });
+      toast({
+        title: "Submission Failed",
+        description: error instanceof Error ? error.message : "We could not complete your request right now. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }

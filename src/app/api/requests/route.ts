@@ -6,6 +6,20 @@ import { sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification, triggerPushWorker } from '@/lib/push-queue';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
 
+function toUserFriendlyRequestError(message?: string) {
+    const raw = (message || '').toLowerCase();
+    if (raw.includes('permission denied') && raw.includes('is_admin')) {
+        return 'We could not complete your request right now due to a system permission issue. Our team has been notified. Please try again shortly.';
+    }
+    if (raw.includes('violates row-level security') || raw.includes('row-level security')) {
+        return 'We could not complete your request due to an access policy issue. Please try again shortly.';
+    }
+    if (raw.includes('foreign key')) {
+        return 'Some selected items are no longer available. Please review your selection and try again.';
+    }
+    return 'We could not complete your request right now. Please try again.';
+}
+
 export async function GET(request: NextRequest) {
     try {
         console.log('🔍 Admin requests API called');
@@ -237,7 +251,12 @@ export async function POST(request: NextRequest) {
                 console.error('Error creating request:', requestError);
                 clearTimeout(timeoutId);
                 return NextResponse.json(
-                    { data: null, error: `Failed to create request: ${requestError.message}` },
+                    {
+                        data: null,
+                        error: `Failed to create request: ${requestError.message}`,
+                        user_message: toUserFriendlyRequestError(requestError.message),
+                        error_code: 'REQUEST_CREATE_FAILED'
+                    },
                     { status: 500 }
                 );
             }
@@ -269,7 +288,13 @@ export async function POST(request: NextRequest) {
                     }
 
                     return NextResponse.json(
-                        { data: null, error: `Failed to add equipment to request: ${linesError.message}`, details: { linesError, gearLines, requestId: requestData.id } },
+                        {
+                            data: null,
+                            error: `Failed to add equipment to request: ${linesError.message}`,
+                            user_message: toUserFriendlyRequestError(linesError.message),
+                            error_code: 'REQUEST_LINES_INSERT_FAILED',
+                            details: { linesError, gearLines, requestId: requestData.id }
+                        },
                         { status: 500 }
                     );
                 } else {
