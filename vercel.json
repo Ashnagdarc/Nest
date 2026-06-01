@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/push/worker",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 8 * * *"
     },
     {
       "path": "/api/email/worker",
-      "schedule": "*/5 * * * *"
+      "schedule": "30 8 * * *"
     },
     {
       "path": "/api/notifications/cleanup-read",
