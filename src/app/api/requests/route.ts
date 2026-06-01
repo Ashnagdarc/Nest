@@ -5,6 +5,7 @@ import type { Database } from '@/types/supabase';
 import { sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification, triggerPushWorker } from '@/lib/push-queue';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
+import { randomUUID } from 'crypto';
 
 function toUserFriendlyRequestError(message?: string) {
     const raw = (message || '').toLowerCase();
@@ -145,6 +146,29 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    const correlationId = randomUUID();
+    const ok = (payload: { booking?: unknown; items?: unknown[]; warnings?: string[]; user_message?: string } = {}) =>
+        NextResponse.json({
+            success: true,
+            booking: payload.booking ?? null,
+            items: payload.items ?? [],
+            warnings: payload.warnings ?? [],
+            user_message: payload.user_message ?? null,
+            error_code: null,
+            correlation_id: correlationId,
+        }, { status: 201 });
+    const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
+        NextResponse.json({
+            success: false,
+            booking: null,
+            items: [],
+            warnings: [],
+            user_message: userMessage,
+            error_code: errorCode,
+            correlation_id: correlationId,
+            error,
+        }, { status });
+
     try {
         // Wrap in timeout to prevent hanging queries (30 second max)
         const abortController = new AbortController();
@@ -159,10 +183,7 @@ export async function POST(request: NextRequest) {
 
             // Validate required fields
             if (!body.user_id || !body.reason) {
-                return NextResponse.json(
-                    { data: null, error: 'Missing required fields: user_id, reason' },
-                    { status: 400 }
-                );
+                return fail(400, 'Missing required fields: user_id, reason', 'Please provide required fields and try again.', 'REQUEST_VALIDATION_FAILED');
             }
 
             const rawLines = Array.isArray(body.gear_request_gears)
@@ -175,10 +196,7 @@ export async function POST(request: NextRequest) {
                 : [];
 
             if (rawLines.length === 0) {
-                return NextResponse.json(
-                    { data: null, error: 'At least one equipment line is required' },
-                    { status: 400 }
-                );
+                return fail(400, 'At least one equipment line is required', 'Add at least one item to continue.', 'REQUEST_VALIDATION_FAILED');
             }
 
             // Aggregate repeated gear lines and validate availability upfront.
@@ -250,15 +268,7 @@ export async function POST(request: NextRequest) {
             if (requestError) {
                 console.error('Error creating request:', requestError);
                 clearTimeout(timeoutId);
-                return NextResponse.json(
-                    {
-                        data: null,
-                        error: `Failed to create request: ${requestError.message}`,
-                        user_message: toUserFriendlyRequestError(requestError.message),
-                        error_code: 'REQUEST_CREATE_FAILED'
-                    },
-                    { status: 500 }
-                );
+                return fail(500, `Failed to create request: ${requestError.message}`, toUserFriendlyRequestError(requestError.message), 'REQUEST_CREATE_FAILED');
             }
 
             // Insert gear lines (validated above)
@@ -287,22 +297,13 @@ export async function POST(request: NextRequest) {
                         console.log('Rollback successful:', deleteData, 'Request ID:', requestData.id);
                     }
 
-                    return NextResponse.json(
-                        {
-                            data: null,
-                            error: `Failed to add equipment to request: ${linesError.message}`,
-                            user_message: toUserFriendlyRequestError(linesError.message),
-                            error_code: 'REQUEST_LINES_INSERT_FAILED',
-                            details: { linesError, gearLines, requestId: requestData.id }
-                        },
-                        { status: 500 }
-                    );
+                    return fail(500, `Failed to add equipment to request: ${linesError.message}`, toUserFriendlyRequestError(linesError.message), 'REQUEST_LINES_INSERT_FAILED');
                 } else {
                     console.log('Gear lines inserted successfully:', linesData, 'Payload:', gearLines, 'Request ID:', requestData.id);
                 }
             }
 
-            // Dual-run synchronization: create v2 aggregate booking and line items.
+            // V2 lifecycle synchronization: create aggregate booking and line items.
             try {
                 await createBookingAggregate({
                     sourceType: 'gear_request',
@@ -323,7 +324,11 @@ export async function POST(request: NextRequest) {
                     })),
                 });
             } catch (syncError) {
-                console.error('[Requests] Failed to sync booking to v2 aggregate:', syncError);
+                console.error('[Requests] Failed to create v2 booking aggregate. Rolling back legacy request.', syncError);
+                await supabase.from('gear_request_gears').delete().eq('gear_request_id', requestData.id);
+                await supabase.from('gear_requests').delete().eq('id', requestData.id);
+                clearTimeout(timeoutId);
+                return fail(500, 'Failed to initialize booking lifecycle.', 'We could not complete your booking right now. Please try again.', 'BOOKING_V2_CREATE_FAILED');
             }
 
             clearTimeout(timeoutId);
@@ -452,29 +457,20 @@ export async function POST(request: NextRequest) {
             });
 
             // Return immediately with the created request ID
-            return NextResponse.json(
-                { 
-                    data: {
-                        id: requestData.id,
-                        status: requestData.status,
-                        created_at: requestData.created_at,
-                        user_id: requestData.user_id
-                    },
-                    error: null 
+            return ok({
+                booking: {
+                    id: requestData.id,
+                    status: requestData.status,
+                    created_at: requestData.created_at,
+                    user_id: requestData.user_id
                 },
-                { status: 201 }
-            );
+                user_message: 'Request created successfully.',
+            });
         } finally {
             clearTimeout(timeoutId);
         }
     } catch (error) {
         console.error('Unexpected error creating request:', error);
-        return NextResponse.json(
-            { 
-                data: null, 
-                error: error instanceof Error ? error.message : 'Failed to create request'
-            },
-            { status: 500 }
-        );
+        return fail(500, error instanceof Error ? error.message : 'Failed to create request', 'We could not complete your booking right now. Please try again.', 'REQUEST_CREATE_UNEXPECTED_ERROR');
     }
 }

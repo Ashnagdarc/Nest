@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { sendGearRequestEmail, sendCarBookingApprovalEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { randomUUID } from 'crypto';
 
 function isCarConflictError(message?: string | null) {
     const msg = (message || '').toLowerCase();
@@ -12,14 +13,19 @@ function isCarConflictError(message?: string | null) {
 }
 
 export async function POST(request: NextRequest) {
+    const correlationId = randomUUID();
+    const ok = (booking: unknown = null, userMessage = 'Car booking approved.', warnings: string[] = []) =>
+        NextResponse.json({ success: true, booking, items: [], warnings, user_message: userMessage, error_code: null, correlation_id: correlationId });
+    const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
+        NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: userMessage, error_code: errorCode, correlation_id: correlationId, error }, { status });
     try {
         const admin = await createSupabaseServerClient(true);
         const { bookingId } = await request.json();
-        if (!bookingId) return NextResponse.json({ success: false, error: 'bookingId is required' }, { status: 400 });
+        if (!bookingId) return fail(400, 'bookingId is required', 'Missing booking reference.', 'BOOKING_ID_REQUIRED');
 
         const { data: booking, error: selErr } = await admin.from('car_bookings').select('*').eq('id', bookingId).maybeSingle();
-        if (selErr || !booking) return NextResponse.json({ success: false, error: selErr?.message || 'Not found' }, { status: 404 });
-        if (booking.status === 'Approved') return NextResponse.json({ success: true, data: { message: 'Already approved' } });
+        if (selErr || !booking) return fail(404, selErr?.message || 'Not found', 'Booking not found.', 'CAR_BOOKING_NOT_FOUND');
+        if (booking.status === 'Approved') return ok(booking, 'Booking is already approved.');
 
         // Enforce: only one Approved per user per day
         if (booking.requester_id) {
@@ -30,14 +36,14 @@ export async function POST(request: NextRequest) {
                 .eq('date_of_use', booking.date_of_use)
                 .eq('status', 'Approved');
             if ((alreadyApproved || 0) > 0) {
-                return NextResponse.json({ success: false, error: 'User already has an approved car booking for this date.' }, { status: 400 });
+                return fail(400, 'User already has an approved car booking for this date.', 'User already has an approved booking for this date.', 'CAR_BOOKING_USER_CONFLICT');
             }
         }
 
         // Require assignment before approval
         const { data: assignment } = await admin.from('car_assignment').select('car_id').eq('booking_id', bookingId).maybeSingle();
         if (!assignment?.car_id) {
-            return NextResponse.json({ success: false, error: 'Assign a car before approval.' }, { status: 400 });
+            return fail(400, 'Assign a car before approval.', 'Assign a vehicle before approval.', 'CAR_ASSIGNMENT_REQUIRED');
         }
 
         // Prevent approval if car is already assigned/checked out by another approved booking
@@ -45,7 +51,7 @@ export async function POST(request: NextRequest) {
             .from('car_assignment')
             .select('booking_id, car_id')
             .eq('car_id', assignment.car_id);
-        if (aErr) return NextResponse.json({ success: false, error: aErr.message }, { status: 400 });
+        if (aErr) return fail(400, aErr.message, 'Could not verify car assignment.', 'CAR_ASSIGNMENT_CHECK_FAILED');
 
         if ((assignments || []).length > 0) {
             const ids = assignments.map(r => r.booking_id);
@@ -55,7 +61,7 @@ export async function POST(request: NextRequest) {
                 .in('id', ids)
                 .neq('id', bookingId);
 
-            if (relatedErr) return NextResponse.json({ success: false, error: relatedErr.message }, { status: 400 });
+            if (relatedErr) return fail(400, relatedErr.message, 'Could not verify booking conflicts.', 'CAR_CONFLICT_CHECK_FAILED');
 
             const approvedConflicts = (relatedBookings || []).filter(b => b.status === 'Approved');
 
@@ -64,15 +70,12 @@ export async function POST(request: NextRequest) {
                 (b) => b.date_of_use === booking.date_of_use && b.time_slot === booking.time_slot
             );
             if (slotConflict) {
-                return NextResponse.json({ success: false, error: 'Car is already assigned and approved for this specific time slot.' }, { status: 409 });
+                return fail(409, 'Car is already assigned and approved for this specific time slot.', 'Car is already assigned for this time slot.', 'CAR_SLOT_CONFLICT');
             }
 
             const checkedOut = approvedConflicts[0];
             if (checkedOut) {
-                return NextResponse.json({
-                    success: false,
-                    error: 'Vehicle is currently checked out by another user. It must be returned (marked as Completed) before this booking can be approved.'
-                }, { status: 409 });
+                return fail(409, 'Vehicle is currently checked out by another user. It must be returned (marked as Completed) before this booking can be approved.', 'Vehicle is currently checked out and unavailable.', 'CAR_ALREADY_CHECKED_OUT');
             }
         }
 
@@ -85,10 +88,7 @@ export async function POST(request: NextRequest) {
             approved_at: new Date().toISOString()
         }).eq('id', bookingId);
         if (error) {
-            return NextResponse.json(
-                { success: false, error: error.message },
-                { status: isCarConflictError(error.message) ? 409 : 400 }
-            );
+            return fail(isCarConflictError(error.message) ? 409 : 400, error.message, 'Could not approve booking right now.', 'CAR_BOOKING_APPROVE_FAILED');
         }
 
         try {
@@ -265,9 +265,9 @@ export async function POST(request: NextRequest) {
             console.warn('Failed to notify admins by email:', e);
         }
 
-        return NextResponse.json({ success: true });
+        return ok(null, 'Car booking approved.');
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error';
-        return NextResponse.json({ success: false, error: msg }, { status: 500 });
+        return fail(500, msg, 'We could not complete approval right now. Please try again.', 'CAR_BOOKING_APPROVE_UNEXPECTED_ERROR');
     }
 }

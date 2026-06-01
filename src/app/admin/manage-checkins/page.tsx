@@ -668,7 +668,7 @@ export default function ManageCheckinsPage() {
 
       // Send user email + push for grouped approvals in a single call.
       try {
-        await fetch('/api/checkins/approve', {
+        const approveRes = await fetch('/api/checkins/approve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -677,6 +677,13 @@ export default function ManageCheckinsPage() {
             gearNames: gearNames
           })
         });
+        const approveJson = await approveRes.json().catch(() => null);
+        if (!approveRes.ok || !approveJson?.success) {
+          if (approveJson?.correlation_id) {
+            console.error('[Manage Check-ins Approve Group] correlation_id:', approveJson.correlation_id);
+          }
+          throw new Error(approveJson?.user_message || approveJson?.error || 'Failed to send grouped check-in approval notifications.');
+        }
       } catch (notificationError) {
         console.error('Failed to send grouped check-in approval notifications:', notificationError);
       }
@@ -744,7 +751,7 @@ export default function ManageCheckinsPage() {
 
       // Step 3: Send rejection email notifications
       try {
-        await fetch('/api/checkins/reject', {
+        const rejectRes = await fetch('/api/checkins/reject', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -754,6 +761,13 @@ export default function ManageCheckinsPage() {
             reason: rejectionReason
           })
         });
+        const rejectJson = await rejectRes.json().catch(() => null);
+        if (!rejectRes.ok || !rejectJson?.success) {
+          if (rejectJson?.correlation_id) {
+            console.error('[Manage Check-ins Reject] correlation_id:', rejectJson.correlation_id);
+          }
+          throw new Error(rejectJson?.user_message || rejectJson?.error || 'Failed to send check-in rejection notifications.');
+        }
       } catch (emailError) {
         console.error('Failed to send check-in rejection emails:', emailError);
         // Don't fail the rejection if email fails
@@ -934,7 +948,7 @@ export default function ManageCheckinsPage() {
 
       // Step 5: Send approval email notifications
       try {
-        await fetch('/api/checkins/approve', {
+        const approveRes = await fetch('/api/checkins/approve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -943,6 +957,13 @@ export default function ManageCheckinsPage() {
             gearName: selectedCheckin.gearName
           })
         });
+        const approveJson = await approveRes.json().catch(() => null);
+        if (!approveRes.ok || !approveJson?.success) {
+          if (approveJson?.correlation_id) {
+            console.error('[Manage Check-ins Approve Single] correlation_id:', approveJson.correlation_id);
+          }
+          throw new Error(approveJson?.user_message || approveJson?.error || 'Failed to send check-in approval notifications.');
+        }
       } catch (emailError) {
         console.error('Failed to send check-in approval emails:', emailError);
         // Don't fail the approval if email fails

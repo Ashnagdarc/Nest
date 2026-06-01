@@ -196,6 +196,16 @@ export function useUnifiedDashboard() {
         fetchDashboardData();
     }, [fetchDashboardData]);
 
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+            fetchDashboardData();
+        }, 20 * 60 * 1000);
+
+        return () => {
+            clearInterval(intervalId);
+        };
+    }, [fetchDashboardData]);
+
     return {
         data,
         loading,

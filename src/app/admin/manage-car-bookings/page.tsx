@@ -121,6 +121,11 @@ export default function AdminManageCarBookingsPage() {
     const supabase = createClient();
     const { toast } = useToast();
 
+    const getCarTag = (status: CarBooking['status']) => {
+        if (status === 'Pending') return 'Preferred';
+        return 'Assigned';
+    };
+
     const load = async () => {
         setSectionLoading({ pending: true, approved: true, history: true, cars: true });
 
@@ -341,9 +346,12 @@ export default function AdminManageCarBookingsPage() {
                         try {
                             const res = await approveCarBooking(b.id);
                             if (!res?.success) {
+                                if (res?.correlation_id) {
+                                    console.error('[Admin Approve Car Booking] correlation_id:', res.correlation_id);
+                                }
                                 toast({
                                     title: 'Approval blocked',
-                                    description: res.error || 'Failed to approve booking. Car may still be checked out and not yet returned.',
+                                    description: res.user_message || res.error || 'Failed to approve booking. Car may still be checked out and not yet returned.',
                                     variant: 'destructive'
                                 });
                             } else {
@@ -363,8 +371,15 @@ export default function AdminManageCarBookingsPage() {
                     <Button size="sm" variant="destructive" disabled={rejectingId === b.id} onClick={async () => {
                         setRejectingId(b.id);
                         try {
-                            await rejectCarBooking(b.id);
-                            toast({ title: 'Rejected', description: 'Booking rejected.' });
+                            const res = await rejectCarBooking(b.id);
+                            if (!res.success) {
+                                if (res.correlation_id) {
+                                    console.error('[Admin Reject Car Booking] correlation_id:', res.correlation_id);
+                                }
+                                toast({ title: 'Error', description: res.user_message || res.error || 'Failed to reject booking', variant: 'destructive' });
+                            } else {
+                                toast({ title: 'Rejected', description: res.user_message || 'Booking rejected.' });
+                            }
                             await load();
                         } catch {
                             toast({ title: 'Error', description: 'Failed to reject', variant: 'destructive' });
@@ -427,7 +442,7 @@ export default function AdminManageCarBookingsPage() {
                 }
                 return (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>Assigned: {carInfo?.label || '—'} {carInfo?.plate ? `(${carInfo.plate})` : ''}</span>
+                        <span>{getCarTag(b.status)}: {carInfo?.label || '—'} {carInfo?.plate ? `(${carInfo.plate})` : ''}</span>
                         <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => setReassignId(b.id)}>Change</Button>
                     </div>
                 );
@@ -705,6 +720,9 @@ export default function AdminManageCarBookingsPage() {
 
                                                     {carInfo && (
                                                         <div className="flex items-center gap-2.5 text-sm font-medium text-primary bg-primary/5 p-3 rounded-2xl border border-primary/10">
+                                                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                                                                {getCarTag(b.status)}
+                                                            </span>
                                                             <span className="font-bold underline decoration-primary/30 underline-offset-4">
                                                                 {carInfo.label} {carInfo.plate ? `(${carInfo.plate})` : ''}
                                                             </span>

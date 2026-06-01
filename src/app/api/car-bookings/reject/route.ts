@@ -3,16 +3,22 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { sendGearRequestEmail, sendCarBookingRejectionEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
+    const correlationId = randomUUID();
+    const ok = (booking: unknown = null, userMessage = 'Car booking rejected.', warnings: string[] = []) =>
+        NextResponse.json({ success: true, booking, items: [], warnings, user_message: userMessage, error_code: null, correlation_id: correlationId });
+    const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
+        NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: userMessage, error_code: errorCode, correlation_id: correlationId, error }, { status });
     try {
         const admin = await createSupabaseServerClient(true);
         const { bookingId, reason } = await request.json();
-        if (!bookingId) return NextResponse.json({ success: false, error: 'bookingId is required' }, { status: 400 });
+        if (!bookingId) return fail(400, 'bookingId is required', 'Missing booking reference.', 'BOOKING_ID_REQUIRED');
 
         const { data: booking, error: selErr } = await admin.from('car_bookings').select('*').eq('id', bookingId).maybeSingle();
-        if (selErr || !booking) return NextResponse.json({ success: false, error: selErr?.message || 'Not found' }, { status: 404 });
-        if (booking.status === 'Rejected') return NextResponse.json({ success: true });
+        if (selErr || !booking) return fail(404, selErr?.message || 'Not found', 'Booking not found.', 'CAR_BOOKING_NOT_FOUND');
+        if (booking.status === 'Rejected') return ok(booking, 'Booking is already rejected.');
 
         const { data: me } = await admin.auth.getUser();
         const actorId = me.user?.id || null;
@@ -22,7 +28,7 @@ export async function POST(request: NextRequest) {
             rejected_by: actorId,
             rejection_reason: reason || null
         }).eq('id', bookingId);
-        if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+        if (error) return fail(400, error.message, 'Could not reject booking right now.', 'CAR_BOOKING_REJECT_FAILED');
 
         try {
             const { data: aggregate } = await (admin as any)
@@ -188,9 +194,9 @@ export async function POST(request: NextRequest) {
             console.warn('Failed to notify admins by email:', e);
         }
 
-        return NextResponse.json({ success: true });
+        return ok(null, 'Car booking rejected.');
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error';
-        return NextResponse.json({ success: false, error: msg }, { status: 500 });
+        return fail(500, msg, 'We could not complete rejection right now. Please try again.', 'CAR_BOOKING_REJECT_UNEXPECTED_ERROR');
     }
 }

@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { sendGearRequestEmail, sendCarBookingRequestEmail } from '@/lib/email';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
+import { randomUUID } from 'crypto';
 
 const MAX_PENDING_DEFAULT = 2;
 
@@ -55,12 +56,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    const correlationId = randomUUID();
+    const ok = (booking: unknown, userMessage: string, warnings: string[] = []) =>
+        NextResponse.json({ success: true, booking, items: [], warnings, user_message: userMessage, error_code: null, correlation_id: correlationId });
+    const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
+        NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: userMessage, error_code: errorCode, correlation_id: correlationId, error }, { status });
     try {
         const supabase = await createSupabaseServerClient();
         const body = await request.json();
-        const { employeeName, dateOfUse, timeSlot, destination, purpose } = body || {};
+        const { employeeName, dateOfUse, timeSlot, preferredCarId, destination, purpose } = body || {};
         if (!employeeName || !dateOfUse || !timeSlot) {
-            return NextResponse.json({ success: false, error: 'timeSlot is required' }, { status: 400 });
+            return fail(400, 'timeSlot is required', 'Please provide employee name, date, and time slot.', 'CAR_BOOKING_VALIDATION_FAILED');
         }
 
         // Rate limit: configurable
@@ -80,7 +86,7 @@ export async function POST(request: NextRequest) {
                 .maybeSingle();
 
             if (existing) {
-                return NextResponse.json({ success: false, error: 'You already have a booking for this date and time slot.' }, { status: 409 });
+                return fail(409, 'You already have a booking for this date and time slot.', 'You already have a booking for this date and time slot.', 'CAR_BOOKING_DUPLICATE');
             }
         }
         if (requesterId && Number.isFinite(maxPending)) {
@@ -90,7 +96,7 @@ export async function POST(request: NextRequest) {
                 .eq('requester_id', requesterId)
                 .eq('status', 'Pending');
             if ((pendingCount || 0) >= maxPending) {
-                return NextResponse.json({ success: false, error: `You have too many pending car bookings (limit ${maxPending}).` }, { status: 429 });
+                return fail(429, `You have too many pending car bookings (limit ${maxPending}).`, `You have reached the pending booking limit (${maxPending}).`, 'CAR_BOOKING_LIMIT_REACHED');
             }
         }
 
@@ -106,7 +112,65 @@ export async function POST(request: NextRequest) {
             status: 'Pending'
         }).select('*').maybeSingle();
 
-        if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+        if (error) return fail(400, error.message, 'We could not create your booking right now.', 'CAR_BOOKING_CREATE_FAILED');
+
+        let preferredCarDetails: { label?: string; plate?: string } | null = null;
+        if (preferredCarId && data?.id) {
+            const { data: requestedCar, error: carErr } = await supabase
+                .from('cars')
+                .select('id,label,plate,status,active')
+                .eq('id', preferredCarId)
+                .maybeSingle();
+
+            if (carErr || !requestedCar) {
+                return fail(400, carErr?.message || 'Preferred car not found', 'Selected vehicle is not available. Please refresh and try again.', 'CAR_BOOKING_PREFERRED_CAR_INVALID');
+            }
+
+            if (requestedCar.status === 'Retired') {
+                return fail(400, 'Preferred car is retired', 'Selected vehicle cannot be requested.', 'CAR_BOOKING_PREFERRED_CAR_RETIRED');
+            }
+
+            if (!requestedCar.active || requestedCar.status !== 'Available') {
+                return fail(409, 'Preferred car is not available', 'Selected vehicle is currently unavailable.', 'CAR_BOOKING_PREFERRED_CAR_UNAVAILABLE');
+            }
+
+            const { data: assignments, error: assignmentCheckError } = await supabase
+                .from('car_assignment')
+                .select('booking_id')
+                .eq('car_id', preferredCarId);
+
+            if (assignmentCheckError) {
+                return fail(400, assignmentCheckError.message, 'Could not verify selected vehicle availability.', 'CAR_BOOKING_PREFERRED_CAR_CHECK_FAILED');
+            }
+
+            if ((assignments || []).length > 0) {
+                const bookingIds = assignments.map((a) => a.booking_id);
+                const { data: relatedBookings, error: relatedBookingsError } = await supabase
+                    .from('car_bookings')
+                    .select('id,status,date_of_use,time_slot')
+                    .in('id', bookingIds)
+                    .neq('id', data.id);
+
+                if (relatedBookingsError) {
+                    return fail(400, relatedBookingsError.message, 'Could not verify selected vehicle availability.', 'CAR_BOOKING_PREFERRED_CAR_CHECK_FAILED');
+                }
+
+                const blocked = (relatedBookings || []).find((b) => b.status === 'Approved');
+                if (blocked) {
+                    return fail(409, 'Preferred car currently checked out', 'Selected vehicle is currently checked out by another approved booking.', 'CAR_BOOKING_PREFERRED_CAR_LOCKED');
+                }
+            }
+
+            const { error: assignErr } = await supabase
+                .from('car_assignment')
+                .insert({ booking_id: data.id, car_id: preferredCarId });
+
+            if (!assignErr) {
+                preferredCarDetails = { label: requestedCar.label, plate: requestedCar.plate || undefined };
+            } else {
+                console.warn('[Car Booking] Failed to persist preferred car assignment:', assignErr);
+            }
+        }
 
         // Dual-run synchronization: keep v2 aggregate in lock-step with legacy row creation.
         try {
@@ -137,7 +201,7 @@ export async function POST(request: NextRequest) {
                 user_id: requesterId,
                 type: 'Request',
                 title: 'Car booking request submitted',
-                message: `Your car booking request for ${dateOfUse} (${timeSlot}) has been submitted and is pending approval.`,
+                message: `Your car booking request for ${dateOfUse} (${timeSlot}) has been submitted and is pending approval.${preferredCarDetails?.label ? ` Preferred car: ${preferredCarDetails.label}${preferredCarDetails.plate ? ` (${preferredCarDetails.plate})` : ''}.` : ''}`,
                 link: '/user/car-booking'
             });
         }
@@ -145,7 +209,7 @@ export async function POST(request: NextRequest) {
         // Queue push notification for the user
         if (requesterId) {
             const pushTitle = 'Car Booking Request Submitted';
-            const pushMessage = `Your request for a car on ${dateOfUse} (${timeSlot}) has been submitted. You will be notified when the admin approves or rejects it.`;
+            const pushMessage = `Your request for a car on ${dateOfUse} (${timeSlot}) has been submitted.${preferredCarDetails?.label ? ` Preferred: ${preferredCarDetails.label}${preferredCarDetails.plate ? ` (${preferredCarDetails.plate})` : ''}.` : ''} You will be notified when the admin approves or rejects it.`;
 
             const { error: queueError } = await supabase.from('push_notification_queue').insert({
                 user_id: requesterId,
@@ -184,7 +248,9 @@ export async function POST(request: NextRequest) {
                     dateOfUse,
                     timeSlot,
                     destination: destination || undefined,
-                    purpose: purpose || undefined,
+                    purpose: preferredCarDetails?.label
+                      ? `${purpose ? `${purpose} | ` : ''}Preferred car: ${preferredCarDetails.label}${preferredCarDetails.plate ? ` (${preferredCarDetails.plate})` : ''}`
+                      : purpose || undefined,
                 });
             }
         } catch (e) {
@@ -303,9 +369,9 @@ export async function POST(request: NextRequest) {
             console.error('[Car Booking] Failed to notify admins by email:', e);
         }
 
-        return NextResponse.json({ success: true, data });
+        return ok(data, 'Car booking request submitted.');
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error';
-        return NextResponse.json({ success: false, error: msg }, { status: 500 });
+        return NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: 'We could not create your booking right now. Please try again.', error_code: 'CAR_BOOKING_UNEXPECTED_ERROR', correlation_id: correlationId, error: msg }, { status: 500 });
     }
 }

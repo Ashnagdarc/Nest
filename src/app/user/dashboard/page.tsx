@@ -112,6 +112,11 @@ export default function UserDashboardPage() {
 
   // Check if data is still loading
   const isDataLoading = isLoading;
+  const toLocalYmd = (dateValue: string): string => {
+    const d = new Date(dateValue);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-CA');
+  };
 
   return (
     <ErrorBoundary>
@@ -254,8 +259,10 @@ export default function UserDashboardPage() {
                 ) : (
                   (() => {
                     const all = dashboardData?.notifications || [];
+                    const READ_VISIBILITY_MS = 24 * 60 * 60 * 1000;
+                    const cutoff = Date.now() - READ_VISIBILITY_MS;
                     const unread = all.filter(n => !n.is_read);
-                    const read = all.filter(n => n.is_read);
+                    const read = all.filter(n => n.is_read && new Date(n.updated_at || n.created_at).getTime() >= cutoff);
                     return (
                       <div className="space-y-4">
                         <div>
@@ -339,19 +346,19 @@ export default function UserDashboardPage() {
                       if (items.length === 0) return <p className="text-gray-500 text-sm">No recent activity</p>;
                       const groups = new Map<string, typeof items>();
                       for (const a of items) {
-                        const d = new Date(a.timestamp);
-                        const key = d.toISOString().slice(0, 10);
+                        const key = toLocalYmd(a.timestamp);
+                        if (!key) continue;
                         const arr = (groups.get(key) || []) as any;
                         arr.push(a);
                         groups.set(key, arr);
                       }
                       const ordered = Array.from(groups.entries()).sort((a, b) => a[0] > b[0] ? -1 : 1);
                       const pretty = (k: string) => {
-                        const today = new Date().toISOString().slice(0, 10);
-                        const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+                        const today = toLocalYmd(new Date().toISOString());
+                        const y = toLocalYmd(new Date(Date.now() - 86400000).toISOString());
                         if (k === today) return 'Today';
                         if (k === y) return 'Yesterday';
-                        return k; // stable ISO date string for SSR/CSR match
+                        return k;
                       };
                       return ordered.map(([k, arr]) => (
                         <details key={k} className="rounded border">

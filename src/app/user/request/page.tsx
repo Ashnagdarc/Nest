@@ -353,6 +353,9 @@ function RequestGearContent() {
       });
       const requestJson = await requestResp.json().catch(() => null);
       if (!requestResp.ok || requestJson?.error) {
+        if (requestJson?.correlation_id) {
+          console.error('[Gear Request Submit] correlation_id:', requestJson.correlation_id);
+        }
         throw new Error(
           requestJson?.user_message ||
           requestJson?.error ||
@@ -360,7 +363,7 @@ function RequestGearContent() {
         );
       }
 
-      const requestId = requestJson?.data?.id as string | undefined;
+      const requestId = (requestJson?.booking?.id || requestJson?.data?.id) as string | undefined;
 
       const { data: userProfile } = await supabase.from('profiles').select('full_name, email').eq('id', userId).single();
       const gearNames = availableGears.filter(g => data.selectedGears.includes(g.id)).map(g => g.name).join(', ');

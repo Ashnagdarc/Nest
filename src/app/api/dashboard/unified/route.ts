@@ -1,6 +1,28 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 
+const truncateText = (value: string | null | undefined, max = 180): string => {
+    const input = (value || '').replace(/\s+/g, ' ').trim();
+    if (!input) return '';
+    if (input.length <= max) return input;
+    return `${input.slice(0, max - 1).trimEnd()}…`;
+};
+
+const compactListMessage = (value: string | null | undefined): string => {
+    const text = (value || '').trim();
+    if (!text) return '';
+
+    const colonIdx = text.indexOf(':');
+    if (colonIdx > -1) {
+        const prefix = text.slice(0, colonIdx + 1).trim();
+        const tail = text.slice(colonIdx + 1).trim();
+        const count = tail ? tail.split(',').map(s => s.trim()).filter(Boolean).length : 0;
+        if (count >= 4) return `${prefix} ${count} items`;
+    }
+
+    return truncateText(text, 180);
+};
+
 export async function GET(request: NextRequest) {
     try {
         // Use proper server client with user authentication
@@ -113,6 +135,7 @@ export async function GET(request: NextRequest) {
                     updated_at
                 `)
                 .eq('user_id', user.id)
+                .or('expires_at.is.null,expires_at.gt.now()')
                 .order('created_at', { ascending: false })
                 .limit(20),
             // Users
@@ -124,7 +147,9 @@ export async function GET(request: NextRequest) {
             // Cars
             supabase.from('cars').select('id, label, plate, active').eq('active', true),
             // Car bookings
-            supabase.from('car_bookings').select('*')
+            (isAdmin
+                ? supabase.from('car_bookings').select('*').order('updated_at', { ascending: false }).limit(30)
+                : supabase.from('car_bookings').select('*').eq('requester_id', user.id).order('updated_at', { ascending: false }).limit(20))
         ]);
 
         if (gearsResult.error) throw gearsResult.error;
@@ -140,7 +165,11 @@ export async function GET(request: NextRequest) {
         const requests = requestsResult.data || [];
         const gearRequestGears = gearRequestGearsResult.data || [];
         const checkins = checkinsResult.data || [];
-        const notifications = notificationsResult.data || [];
+        const notifications = (notificationsResult.data || []).map((notif) => ({
+            ...notif,
+            title: truncateText(notif.title || notif.type || 'Notification', 80),
+            message: compactListMessage(notif.message),
+        }));
         const users = usersResult.data || [];
         const cars = (carsResult.data || []).filter(c => c.active);
         const carBookings = carBookingsResult.data || [];
@@ -240,7 +269,7 @@ export async function GET(request: NextRequest) {
             id: b.id,
             type: 'car_booking',
             action: `Car booking ${b.status.toLowerCase()}`,
-            item: `${b.employee_name} ${b.date_of_use} ${b.start_time && b.end_time ? `${b.start_time.slice(0, 5)}-${b.end_time.slice(0, 5)}` : (b.time_slot || '')}`,
+            item: truncateText(`${b.employee_name} ${b.date_of_use} ${b.start_time && b.end_time ? `${b.start_time.slice(0, 5)}-${b.end_time.slice(0, 5)}` : (b.time_slot || '')}`, 120),
             user: b.employee_name,
             timestamp: b.updated_at || b.created_at,
             status: b.status
@@ -254,7 +283,7 @@ export async function GET(request: NextRequest) {
                 id: req.id,
                 type: 'request',
                 action: `Request ${req.status.toLowerCase()}`,
-                item: req.reason,
+                item: truncateText(req.reason || 'Equipment request', 120),
                 user: (req as any).profiles?.full_name || 'Unknown',
                 timestamp: req.created_at,
                 status: req.status,

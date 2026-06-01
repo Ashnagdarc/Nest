@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export async function GET(_request: NextRequest) {
     try {
         const admin = await createSupabaseServerClient(true);
-        const { data: cars, error: cErr } = await admin.from('cars').select('id,label,plate,image_url,status').neq('status', 'Retired');
+        const { data: cars, error: cErr } = await admin.from('cars').select('id,label,plate,image_url,status').eq('status', 'Available');
         if (cErr) return NextResponse.json({ data: [], error: cErr.message }, { status: 400 });
 
         const { data: approvedBookings, error: approvedErr } = await admin

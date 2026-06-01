@@ -152,6 +152,7 @@ export async function GET(req: NextRequest) {
                 // Send to all user's subscriptions
                 let tokenSent = 0;
                 let tokenFailed = 0;
+                const tokenFailures: Array<{ statusCode: number | null; message: string; endpointTail: string | null }> = [];
 
                 for (const row of tokenRows) {
                     try {
@@ -176,10 +177,24 @@ export async function GET(req: NextRequest) {
                             console.log('[Push Worker] Sent successfully to endpoint');
                         }
                     } catch (error: any) {
+                        const endpointTail = (() => {
+                            try {
+                                return JSON.parse(row.token).endpoint?.split('/').pop() || null;
+                            } catch {
+                                return null;
+                            }
+                        })();
+
                         console.error('[Push Worker] Send failed:', {
                             statusCode: error.statusCode,
                             message: error.message,
-                            endpoint: JSON.parse(row.token).endpoint?.split('/').pop()
+                            endpoint: endpointTail
+                        });
+
+                        tokenFailures.push({
+                            statusCode: Number.isFinite(error?.statusCode) ? Number(error.statusCode) : null,
+                            message: String(error?.message || 'Unknown push send failure'),
+                            endpointTail,
                         });
 
                         // Clean up invalid tokens (410 Gone, 404 Not Found)
@@ -212,7 +227,18 @@ export async function GET(req: NextRequest) {
                     console.log(`[Push Worker] Notification ${notification.id} marked as sent (${tokenSent} tokens)`);
                 } else {
                     // All tokens failed
-                    const errorMsg = `All ${tokenRows.length} tokens failed`;
+                    const failureSummary = tokenFailures
+                        .slice(0, 3)
+                        .map((f, idx) => {
+                            const code = f.statusCode ?? 'NA';
+                            const endpoint = f.endpointTail ? ` endpoint:${f.endpointTail}` : '';
+                            const msg = f.message.replace(/\s+/g, ' ').trim();
+                            return `#${idx + 1}[${code}] ${msg}${endpoint}`;
+                        })
+                        .join(' | ');
+                    const errorMsg = failureSummary
+                        ? `All ${tokenRows.length} tokens failed - ${failureSummary}`
+                        : `All ${tokenRows.length} tokens failed`;
                     const attemptsUsed = (notification.retry_count ?? 0) + 1;
                     if (attemptsUsed < notification.max_retries) {
                         const backoffMinutes = Math.min(60, Math.max(1, Math.pow(2, attemptsUsed - 1)));

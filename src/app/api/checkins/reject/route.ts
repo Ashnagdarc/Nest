@@ -4,6 +4,7 @@ import type { Database } from '@/types/supabase';
 import { sendCheckinRejectionEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { randomUUID } from 'crypto';
 
 /**
  * POST /api/checkins/reject
@@ -24,12 +25,34 @@ import { transitionBooking } from '@/lib/bookings-v2/service';
  * - Admins: Admin action notification
  */
 export async function POST(request: NextRequest) {
+    const correlationId = randomUUID();
+    const ok = (userMessage = 'Check-in rejection notifications sent.', warnings: string[] = []) =>
+        NextResponse.json({
+            success: true,
+            booking: null,
+            items: [],
+            warnings,
+            user_message: userMessage,
+            error_code: null,
+            correlation_id: correlationId,
+        });
+    const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
+        NextResponse.json({
+            success: false,
+            booking: null,
+            items: [],
+            warnings: [],
+            user_message: userMessage,
+            error_code: errorCode,
+            correlation_id: correlationId,
+            error,
+        }, { status });
     try {
         const body = await request.json();
         const { checkinId, userId, gearName, reason } = body;
 
         if (!checkinId || !userId || !gearName || !reason) {
-            return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+            return fail(400, 'Missing required fields', 'Missing required check-in fields.', 'CHECKIN_REJECT_VALIDATION_FAILED');
         }
 
         // Create Supabase client with service role key
@@ -38,7 +61,7 @@ export async function POST(request: NextRequest) {
 
         if (!supabaseUrl || !supabaseServiceKey) {
             console.error('[Check-in Reject] Missing Supabase environment variables');
-            return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
+            return fail(500, 'Server configuration error', 'Server configuration is incomplete.', 'SERVER_CONFIG_ERROR');
         }
 
         const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
@@ -57,7 +80,7 @@ export async function POST(request: NextRequest) {
 
         if (!user?.email) {
             console.warn('[Check-in Reject] User not found or no email:', userId);
-            return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+            return fail(404, 'User not found', 'User not found.', 'USER_NOT_FOUND');
         }
 
         // Check if user wants email notifications
@@ -208,9 +231,9 @@ export async function POST(request: NextRequest) {
             console.error('[Check-in Reject] Error sending admin notifications:', adminError);
         }
 
-        return NextResponse.json({ success: true });
+        return ok('Check-in rejected and notifications sent.');
     } catch (err) {
         console.error('[Check-in Reject] Error:', err);
-        return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 });
+        return fail(500, (err as Error).message, 'We could not complete check-in rejection notifications.', 'CHECKIN_REJECT_UNEXPECTED_ERROR');
     }
 }

@@ -2,14 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestEmail, sendCarBookingCancellationEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
+    const correlationId = randomUUID();
+    const ok = (booking: unknown = null, userMessage = 'Car booking cancelled.', warnings: string[] = []) =>
+        NextResponse.json({ success: true, booking, items: [], warnings, user_message: userMessage, error_code: null, correlation_id: correlationId });
+    const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
+        NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: userMessage, error_code: errorCode, correlation_id: correlationId, error }, { status });
     try {
         const admin = await createSupabaseServerClient(true);
         const { bookingId, reason } = await request.json();
         
         if (!bookingId) {
-            return NextResponse.json({ success: false, error: 'bookingId is required' }, { status: 400 });
+            return fail(400, 'bookingId is required', 'Missing booking reference.', 'BOOKING_ID_REQUIRED');
         }
 
         // Get current user
@@ -24,7 +30,7 @@ export async function POST(request: NextRequest) {
             .maybeSingle();
 
         if (selErr || !booking) {
-            return NextResponse.json({ success: false, error: selErr?.message || 'Booking not found' }, { status: 404 });
+            return fail(404, selErr?.message || 'Booking not found', 'Booking not found.', 'CAR_BOOKING_NOT_FOUND');
         }
 
         // Check if user is admin or owns the booking
@@ -38,18 +44,18 @@ export async function POST(request: NextRequest) {
         const isOwner = booking.requester_id === userId;
 
         if (!isAdmin && !isOwner) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
+            return fail(403, 'Unauthorized', 'You are not allowed to cancel this booking.', 'CAR_BOOKING_UNAUTHORIZED');
         }
 
         // Idempotency: if already cancelled, return success
         if (booking.status === 'Cancelled') {
-            return NextResponse.json({ success: true, message: 'Booking already cancelled' });
+            return ok(booking, 'Booking is already cancelled.');
         }
 
         // Validate status
         if (!['Pending', 'Approved'].includes(booking.status)) {
             return NextResponse.json(
-                { success: false, error: `Cannot cancel booking with status: ${booking.status}` },
+                { success: false, booking: null, items: [], warnings: [], user_message: `Cannot cancel booking with status: ${booking.status}.`, error_code: 'CAR_BOOKING_CANCEL_INVALID_STATE', correlation_id: correlationId, error: `Cannot cancel booking with status: ${booking.status}` },
                 { status: 400 }
             );
         }
@@ -67,7 +73,7 @@ export async function POST(request: NextRequest) {
             
             if (!isFutureOrToday && !isPastPending) {
                 return NextResponse.json(
-                    { success: false, error: 'Cannot cancel past approved bookings' },
+                    { success: false, booking: null, items: [], warnings: [], user_message: 'Past approved bookings cannot be cancelled.', error_code: 'CAR_BOOKING_CANCEL_POLICY', correlation_id: correlationId, error: 'Cannot cancel past approved bookings' },
                     { status: 400 }
                 );
             }
@@ -86,7 +92,7 @@ export async function POST(request: NextRequest) {
             .eq('id', bookingId);
 
         if (updateErr) {
-            return NextResponse.json({ success: false, error: updateErr.message }, { status: 400 });
+            return fail(400, updateErr.message, 'Could not cancel booking right now.', 'CAR_BOOKING_CANCEL_FAILED');
         }
 
         try {
@@ -284,9 +290,9 @@ export async function POST(request: NextRequest) {
             console.warn('Failed to notify admins by email:', e);
         }
 
-        return NextResponse.json({ success: true });
+        return ok(null, 'Car booking cancelled.');
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error';
-        return NextResponse.json({ success: false, error: msg }, { status: 500 });
+        return fail(500, msg, 'We could not cancel the booking right now. Please try again.', 'CAR_BOOKING_CANCEL_UNEXPECTED_ERROR');
     }
 }

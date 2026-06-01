@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestEmail, sendCarReturnConfirmationEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
+    const correlationId = randomUUID();
+    const ok = (booking: unknown = null, userMessage = 'Car booking completed.', warnings: string[] = []) =>
+        NextResponse.json({ success: true, booking, items: [], warnings, user_message: userMessage, error_code: null, correlation_id: correlationId });
+    const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
+        NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: userMessage, error_code: errorCode, correlation_id: correlationId, error }, { status });
     try {
         const authHeader = request.headers.get('authorization');
         const isCron = Boolean(process.env.CRON_SECRET) && authHeader === `Bearer ${process.env.CRON_SECRET}`;
@@ -11,7 +17,7 @@ export async function POST(request: NextRequest) {
             const authClient = await createSupabaseServerClient();
             const { data: userData } = await authClient.auth.getUser();
             if (!userData.user) {
-                return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+                return fail(401, 'Unauthorized', 'Authentication required.', 'CAR_BOOKING_UNAUTHORIZED');
             }
             const { data: profile } = await authClient
                 .from('profiles')
@@ -19,25 +25,25 @@ export async function POST(request: NextRequest) {
                 .eq('id', userData.user.id)
                 .maybeSingle();
             if (!profile || profile.role !== 'Admin' || profile.status !== 'Active') {
-                return NextResponse.json({ success: false, error: 'Only admins can complete car bookings manually.' }, { status: 403 });
+                return fail(403, 'Only admins can complete car bookings manually.', 'Only admins can complete bookings manually.', 'CAR_BOOKING_ADMIN_REQUIRED');
             }
         }
 
         const admin = await createSupabaseServerClient(true);
         const { bookingId } = await request.json();
-        if (!bookingId) return NextResponse.json({ success: false, error: 'bookingId is required' }, { status: 400 });
+        if (!bookingId) return fail(400, 'bookingId is required', 'Missing booking reference.', 'BOOKING_ID_REQUIRED');
 
         const { data: existing, error: selErr } = await admin
             .from('car_bookings')
             .select('id,status,requester_id,employee_name,date_of_use,time_slot')
             .eq('id', bookingId)
             .maybeSingle();
-        if (selErr || !existing) return NextResponse.json({ success: false, error: selErr?.message || 'Not found' }, { status: 404 });
+        if (selErr || !existing) return fail(404, selErr?.message || 'Not found', 'Booking not found.', 'CAR_BOOKING_NOT_FOUND');
         // Idempotency: if already completed, succeed
         if (existing.status === 'Completed') {
-            return NextResponse.json({ success: true, data: existing });
+            return ok(existing, 'Booking is already completed.');
         }
-        if (existing.status !== 'Approved') return NextResponse.json({ success: false, error: 'Booking is not in Approved state' }, { status: 400 });
+        if (existing.status !== 'Approved') return fail(400, 'Booking is not in Approved state', 'Only approved bookings can be completed.', 'CAR_BOOKING_INVALID_STATE');
 
         const { data: updatedRow, error: updErr } = await admin
             .from('car_bookings')
@@ -45,7 +51,7 @@ export async function POST(request: NextRequest) {
             .eq('id', bookingId)
             .select('id,status,employee_name,date_of_use,time_slot,updated_at')
             .maybeSingle();
-        if (updErr) return NextResponse.json({ success: false, error: updErr.message }, { status: 400 });
+        if (updErr) return fail(400, updErr.message, 'Could not complete booking right now.', 'CAR_BOOKING_COMPLETE_FAILED');
         
         let finalRow = updatedRow;
         
@@ -57,7 +63,7 @@ export async function POST(request: NextRequest) {
                 .eq('id', bookingId)
                 .maybeSingle();
             if (afterCheck?.status === 'Completed') {
-                return NextResponse.json({ success: true, data: afterCheck });
+                return ok(afterCheck, 'Car booking completed.');
             }
             // Retry once defensively
             const { data: secondTry, error: secondErr } = await admin
@@ -273,9 +279,9 @@ export async function POST(request: NextRequest) {
             console.warn('Failed to notify admins by email:', err);
         }
 
-        return NextResponse.json({ success: true, data: finalRow });
+        return ok(finalRow, 'Car booking completed.');
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error';
-        return NextResponse.json({ success: false, error: msg }, { status: 500 });
+        return fail(500, msg, 'We could not complete the booking right now. Please try again.', 'CAR_BOOKING_COMPLETE_UNEXPECTED_ERROR');
     }
 }

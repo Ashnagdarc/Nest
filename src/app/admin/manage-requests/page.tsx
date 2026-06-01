@@ -24,7 +24,6 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { cn } from "@/lib/utils";
 import { apiGet } from '@/lib/apiClient';
-import { createClient } from '@/lib/supabase/client';
 import RequestFilters from '@/components/admin/requests/RequestFilters';
 import RequestTable from '@/components/admin/requests/RequestTable';
 import { ViewRequestModal } from '@/components/admin/ViewRequestModal';
@@ -62,7 +61,6 @@ const useDebouncedSearch = (value: string, delay: number = 300) => {
 };
 
 function ManageRequestsContent() {
-  const supabase = createClient();
   const { toast } = useToast();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -175,9 +173,14 @@ function ManageRequestsContent() {
         body: JSON.stringify({ requestId }),
       });
       const result = await resp.json();
-      if (!resp.ok || !result.success) throw new Error(result.error || 'Approval failed');
+      if (!resp.ok || !result.success) {
+        if (result?.correlation_id) {
+          console.error('[Admin Gear Approve] correlation_id:', result.correlation_id);
+        }
+        throw new Error(result?.user_message || result?.error || 'Approval failed');
+      }
 
-      toast({ title: "Approved", description: "Request approved successfully." });
+      toast({ title: "Approved", description: result?.user_message || "Request approved successfully." });
       if (soundEnabled && audioRef.current) audioRef.current.play().catch(() => { });
       fetchRequests();
     } catch (error: any) {
@@ -192,11 +195,19 @@ function ManageRequestsContent() {
     if (!requestToReject || !rejectionReason.trim()) return;
     setIsProcessing(true);
     try {
-      const { error } = await supabase.from('gear_requests').update({
-        status: 'rejected', admin_notes: rejectionReason, updated_at: new Date().toISOString()
-      }).eq('id', requestToReject);
-      if (error) throw error;
-      toast({ title: "Rejected", description: "Request has been rejected." });
+      const resp = await fetch('/api/requests/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: requestToReject, reason: rejectionReason }),
+      });
+      const result = await resp.json().catch(() => null);
+      if (!resp.ok || !result?.success) {
+        if (result?.correlation_id) {
+          console.error('[Admin Gear Reject] correlation_id:', result.correlation_id);
+        }
+        throw new Error(result?.user_message || result?.error || 'Rejection failed');
+      }
+      toast({ title: "Rejected", description: result?.user_message || "Request has been rejected." });
       setRequestToReject(null);
       setRejectionReason('');
       fetchRequests();

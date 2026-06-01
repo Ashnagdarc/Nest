@@ -4,6 +4,8 @@ import type { Database } from '@/types/supabase';
 import { sendGearRequestApprovalEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { createBookingAggregate } from '@/lib/bookings-v2/service';
+import { randomUUID } from 'crypto';
 
 /**
  * Calculates due date based on request duration
@@ -54,12 +56,35 @@ const calculateDueDate = (duration: string): string => {
  * Security: Uses service role key to bypass RLS (admin-only operation)
  */
 export async function POST(request: NextRequest) {
+    const correlationId = randomUUID();
+    const ok = (payload: { booking?: unknown; items?: unknown[]; warnings?: string[]; user_message?: string } = {}) =>
+        NextResponse.json({
+            success: true,
+            booking: payload.booking ?? null,
+            items: payload.items ?? [],
+            warnings: payload.warnings ?? [],
+            user_message: payload.user_message ?? null,
+            error_code: null,
+            correlation_id: correlationId,
+        });
+    const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
+        NextResponse.json({
+            success: false,
+            booking: null,
+            items: [],
+            warnings: [],
+            user_message: userMessage,
+            error_code: errorCode,
+            correlation_id: correlationId,
+            error,
+        }, { status });
+
     try {
         const { requestId } = await request.json();
         console.log('🔍 Approving request:', requestId);
 
         if (!requestId) {
-            return NextResponse.json({ success: false, error: 'requestId is required' }, { status: 400 });
+            return fail(400, 'requestId is required', 'Invalid request payload.', 'REQUEST_ID_REQUIRED');
         }
 
         /**
@@ -75,7 +100,7 @@ export async function POST(request: NextRequest) {
 
         if (!supabaseUrl || !supabaseServiceKey) {
             console.error('Missing Supabase environment variables');
-            return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
+            return fail(500, 'Server configuration error', 'Service configuration is incomplete.', 'SERVER_CONFIG_ERROR');
         }
 
         const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
@@ -93,7 +118,7 @@ export async function POST(request: NextRequest) {
             .maybeSingle();
         if (reqErr || !req) {
             console.error('🔍 Request not found:', reqErr);
-            return NextResponse.json({ success: false, error: `Request not found: ${reqErr?.message || ''}` }, { status: 404 });
+            return fail(404, `Request not found: ${reqErr?.message || ''}`, 'Request not found.', 'REQUEST_NOT_FOUND');
         }
 
         console.log('🔍 Request found:', req);
@@ -105,13 +130,13 @@ export async function POST(request: NextRequest) {
             .eq('gear_request_id', requestId);
         if (gearErr) {
             console.error('🔍 Failed to load gear data:', gearErr);
-            return NextResponse.json({ success: false, error: `Failed to load gear data: ${gearErr.message}` }, { status: 500 });
+            return fail(500, `Failed to load gear data: ${gearErr.message}`, 'Could not load request items.', 'REQUEST_ITEMS_LOAD_FAILED');
         }
 
         console.log('🔍 Gear request gears:', gearRequestGears);
 
         if (req.status === 'Approved') {
-            return NextResponse.json({ success: true, data: { message: 'Already approved' } });
+            return ok({ user_message: 'Request is already approved.' });
         }
 
         const lines: Array<{ gear_id: string; quantity: number }> = Array.isArray(gearRequestGears)
@@ -119,7 +144,7 @@ export async function POST(request: NextRequest) {
             : [];
 
         if (lines.length === 0) {
-            return NextResponse.json({ success: false, error: 'No line items recorded for this request.' }, { status: 400 });
+            return fail(400, 'No line items recorded for this request.', 'This request has no items to approve.', 'REQUEST_HAS_NO_ITEMS');
         }
 
         // Validate availability and collect updates
@@ -132,13 +157,13 @@ export async function POST(request: NextRequest) {
                 .eq('id', line.gear_id)
                 .maybeSingle();
             if (gErr || !g) {
-                return NextResponse.json({ success: false, error: `Gear not found for line` }, { status: 400 });
+                return fail(400, 'Gear not found for line', 'One or more selected items no longer exist.', 'GEAR_NOT_FOUND');
             }
             const baseAvailable = typeof g.available_quantity === 'number' && !Number.isNaN(g.available_quantity)
                 ? g.available_quantity
                 : (typeof g.quantity === 'number' ? g.quantity : 0);
             if (baseAvailable < line.quantity) {
-                return NextResponse.json({ success: false, error: `Not enough available units for ${g.name}. Requested ${line.quantity}, available ${baseAvailable}.` }, { status: 409 });
+                return fail(409, `Not enough available units for ${g.name}. Requested ${line.quantity}, available ${baseAvailable}.`, 'Some items are no longer available for checkout.', 'INSUFFICIENT_GEAR_QUANTITY');
             }
             const newAvailable = Math.max(0, baseAvailable - line.quantity);
             // Use proper status progression: Available -> Partially Available -> Checked Out
@@ -166,7 +191,7 @@ export async function POST(request: NextRequest) {
                 })
                 .eq('id', upd.gear_id);
             if (uErr) {
-                return NextResponse.json({ success: false, error: `Failed to update gear availability: ${uErr.message}` }, { status: 500 });
+                return fail(500, `Failed to update gear availability: ${uErr.message}`, 'Could not update inventory right now.', 'GEAR_AVAILABILITY_UPDATE_FAILED');
             }
         }
 
@@ -174,26 +199,43 @@ export async function POST(request: NextRequest) {
         // Gear-to-request associations are handled by gear_request_gears junction table
         const distinctGearIds = Array.from(new Set(lines.map(l => l.gear_id)));
 
-        const { error: approveErr } = await supabase
-            .from('gear_requests')
-            .update({
-                status: 'Approved',
-                approved_at: new Date().toISOString(),
-                due_date: calculatedDueDate,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', requestId);
-        if (approveErr) {
-            return NextResponse.json({ success: false, error: `Failed to approve request: ${approveErr.message}` }, { status: 500 });
-        }
-
         try {
-            const { data: aggregate } = await (supabase as any)
+            let { data: aggregate } = await (supabase as any)
                 .from('bookings')
                 .select('id,status')
                 .eq('source_type', 'gear_request')
                 .eq('source_id', requestId)
                 .maybeSingle();
+
+            if (!aggregate?.id) {
+                await createBookingAggregate({
+                    sourceType: 'gear_request',
+                    sourceId: requestId,
+                    requesterId: req.user_id,
+                    startAt: new Date().toISOString(),
+                    endAt: calculatedDueDate,
+                    idempotencyKey: `legacy-gear-create:${requestId}`,
+                    metadata: {
+                        reason: req.reason || null,
+                        destination: req.destination || null,
+                        expected_duration: req.expected_duration || null,
+                    },
+                    items: lines.map((line) => ({
+                        itemType: 'gear' as const,
+                        gearId: line.gear_id,
+                        quantity: line.quantity,
+                    })),
+                });
+
+                const { data: createdAggregate } = await (supabase as any)
+                    .from('bookings')
+                    .select('id,status')
+                    .eq('source_type', 'gear_request')
+                    .eq('source_id', requestId)
+                    .maybeSingle();
+                aggregate = createdAggregate;
+            }
+
             if (aggregate?.id) {
                 await transitionBooking({
                     bookingId: aggregate.id,
@@ -206,6 +248,19 @@ export async function POST(request: NextRequest) {
             }
         } catch (syncError) {
             console.error('[Gear Approval] Failed syncing status to v2 booking lifecycle:', syncError);
+            return fail(500, 'Failed to update booking lifecycle state.', 'We could not complete approval right now. Please try again.', 'BOOKING_LIFECYCLE_SYNC_FAILED');
+        }
+
+        const { error: approveErr } = await supabase
+            .from('gear_requests')
+            .update({
+                approved_at: new Date().toISOString(),
+                due_date: calculatedDueDate,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', requestId);
+        if (approveErr) {
+            return fail(500, `Approved but failed to persist due date: ${approveErr.message}`, 'Request approved, but some details could not be saved.', 'REQUEST_METADATA_PERSIST_FAILED');
         }
 
         // Status history table not present; relying on gear_requests.approved_at/updated_at fields
@@ -361,10 +416,10 @@ export async function POST(request: NextRequest) {
         }
 
         console.log('🔍 Request approved successfully:', { updated: updates.length, gear_ids: distinctGearIds });
-        return NextResponse.json({ success: true, data: { updated: updates.length, gear_ids: distinctGearIds } });
+        return ok({ user_message: 'Request approved successfully.' });
     } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         console.error('🔍 Error in approve API:', msg);
-        return NextResponse.json({ success: false, error: msg }, { status: 500 });
+        return fail(500, msg, 'We could not complete approval right now. Please try again.', 'REQUEST_APPROVAL_UNEXPECTED_ERROR');
     }
 }

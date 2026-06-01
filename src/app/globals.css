@@ -673,3 +673,10 @@ html {
 .doc-card-indigo .doc-card-arrow {
   @apply group-hover:text-indigo-600 dark:group-hover:text-indigo-400;
 }
+
+@utility scrollbar-none {
+    scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

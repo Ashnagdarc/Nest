@@ -7,6 +7,10 @@
     {
       "path": "/api/email/worker",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/notifications/cleanup-read",
+      "schedule": "0 2 * * *"
     }
   ]
 }

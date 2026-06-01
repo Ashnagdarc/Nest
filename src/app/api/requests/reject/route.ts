@@ -5,12 +5,37 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { createBookingAggregate } from '@/lib/bookings-v2/service';
+import { randomUUID } from 'crypto';
 
 export async function POST(req: Request) {
+    const correlationId = randomUUID();
+    const ok = (payload: { booking?: unknown; items?: unknown[]; warnings?: string[]; user_message?: string } = {}) =>
+        NextResponse.json({
+            success: true,
+            booking: payload.booking ?? null,
+            items: payload.items ?? [],
+            warnings: payload.warnings ?? [],
+            user_message: payload.user_message ?? null,
+            error_code: null,
+            correlation_id: correlationId,
+        });
+    const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
+        NextResponse.json({
+            success: false,
+            booking: null,
+            items: [],
+            warnings: [],
+            user_message: userMessage,
+            error_code: errorCode,
+            correlation_id: correlationId,
+            error,
+        }, { status });
+
     try {
         const { requestId, reason } = await req.json();
         if (!requestId || typeof requestId !== 'string') {
-            return NextResponse.json({ success: false, error: 'Missing requestId' }, { status: 400 });
+            return fail(400, 'Missing requestId', 'Invalid request payload.', 'REQUEST_ID_REQUIRED');
         }
 
         const supabase = await createSupabaseServerClient();
@@ -22,26 +47,47 @@ export async function POST(req: Request) {
             .eq('id', requestId)
             .single();
 
-        const { error } = await supabase
-            .from('gear_requests')
-            .update({
-                status: 'Rejected',
-                admin_notes: reason ?? null,
-                updated_at: new Date().toISOString(),
-            })
-            .eq('id', requestId);
-
-        if (error) {
-            return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-        }
-
         try {
-            const { data: aggregate } = await (supabase as any)
+            const { data: gearRequestGears } = await supabase
+                .from('gear_request_gears')
+                .select('gear_id, quantity')
+                .eq('gear_request_id', requestId);
+
+            let { data: aggregate } = await (supabase as any)
                 .from('bookings')
                 .select('id')
                 .eq('source_type', 'gear_request')
                 .eq('source_id', requestId)
                 .maybeSingle();
+
+            if (!aggregate?.id && requestData?.user_id) {
+                await createBookingAggregate({
+                    sourceType: 'gear_request',
+                    sourceId: requestId,
+                    requesterId: requestData.user_id,
+                    startAt: new Date().toISOString(),
+                    endAt: null,
+                    idempotencyKey: `legacy-gear-create:${requestId}`,
+                    metadata: {
+                        reason: requestData.reason || null,
+                        destination: requestData.destination || null,
+                    },
+                    items: (gearRequestGears || []).map((line: { gear_id: string; quantity?: number }) => ({
+                        itemType: 'gear' as const,
+                        gearId: line.gear_id,
+                        quantity: Math.max(1, Number(line.quantity ?? 1)),
+                    })),
+                });
+
+                const { data: createdAggregate } = await (supabase as any)
+                    .from('bookings')
+                    .select('id')
+                    .eq('source_type', 'gear_request')
+                    .eq('source_id', requestId)
+                    .maybeSingle();
+                aggregate = createdAggregate;
+            }
+
             if (aggregate?.id) {
                 await transitionBooking({
                     bookingId: aggregate.id,
@@ -54,6 +100,19 @@ export async function POST(req: Request) {
             }
         } catch (syncError) {
             console.error('[Gear Rejection] Failed syncing status to v2 booking lifecycle:', syncError);
+            return fail(500, 'Failed to update booking lifecycle state.', 'We could not complete rejection right now. Please try again.', 'BOOKING_LIFECYCLE_SYNC_FAILED');
+        }
+
+        const { error } = await supabase
+            .from('gear_requests')
+            .update({
+                admin_notes: reason ?? null,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', requestId);
+
+        if (error) {
+            return fail(400, error.message, 'Could not save rejection note.', 'REQUEST_REJECTION_PERSIST_FAILED');
         }
 
         // Send rejection email to user
@@ -227,9 +286,9 @@ export async function POST(req: Request) {
             // Don't fail the request if email fails
         }
 
-        return NextResponse.json({ success: true });
+        return ok({ user_message: 'Request rejected successfully.' });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
-        return NextResponse.json({ success: false, error: message }, { status: 500 });
+        return fail(500, message, 'We could not complete rejection right now. Please try again.', 'REQUEST_REJECTION_UNEXPECTED_ERROR');
     }
 }
