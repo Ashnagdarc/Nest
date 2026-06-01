@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
     }
     try {
         const supabase = await createSupabaseServerClient(true);
+        const runStartedAt = new Date().toISOString();
 
         console.log('[Push Worker] Starting queue processing...');
 
@@ -59,6 +60,13 @@ export async function GET(req: NextRequest) {
 
         if (!pendingNotifications || pendingNotifications.length === 0) {
             console.log('[Push Worker] No pending notifications to process');
+            await (supabase as any).from('audit_logs').insert({
+                actor_id: null,
+                entity_type: 'worker',
+                entity_id: 'push',
+                action: 'run',
+                metadata: { route: '/api/push/worker', processed: 0, sent: 0, failed: 0, started_at: runStartedAt },
+            });
             return NextResponse.json({ processed: 0, message: 'No pending notifications' });
         }
 
@@ -236,6 +244,20 @@ export async function GET(req: NextRequest) {
         }
 
         console.log(`[Push Worker] Completed: ${processed} processed, ${sent} sent, ${failed} failed`);
+        await (supabase as any).from('audit_logs').insert({
+            actor_id: null,
+            entity_type: 'worker',
+            entity_id: 'push',
+            action: 'run',
+            metadata: {
+                route: '/api/push/worker',
+                processed,
+                sent,
+                failed,
+                started_at: runStartedAt,
+                finished_at: new Date().toISOString(),
+            },
+        });
 
         return NextResponse.json({
             processed,

@@ -995,7 +995,7 @@ function minimalEmailLayout({
         <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader || title)}</div>
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
           <tr>
-            <td align="center" style="padding:24px;">
+            <td align="left" style="padding:24px;">
               <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;border-collapse:collapse;">
                 <tr>
                   <td style="border-bottom:1px solid #111;padding-bottom:14px;">
@@ -1432,13 +1432,13 @@ export async function sendBookingLifecycleEmail({
           { label: 'Current status', value: booking.status.replace('_', ' ') },
         ],
       },
-      {
+      ...(itemRows.length > 0 ? [{
         heading: 'Items',
         rows: itemRows.map(row => ({
           label: `${row.label} · Qty ${row.qty}`,
           value: row.status,
         })),
-      },
+      }] : []),
     ],
     ctaLabel: 'View bookings',
     ctaHref: 'https://nestbyeden.app/user/my-requests',

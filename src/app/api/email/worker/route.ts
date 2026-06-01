@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = await createSupabaseServerClient(true);
+  const runStartedAt = new Date().toISOString();
   const batchSize = Math.max(1, Math.min(100, Number(process.env.EMAIL_WORKER_BATCH_SIZE || 25)));
   const nowIso = new Date().toISOString();
 
@@ -37,6 +38,13 @@ export async function GET(req: NextRequest) {
   }
 
   if (!dueLogs || dueLogs.length === 0) {
+    await (supabase as any).from('audit_logs').insert({
+      actor_id: null,
+      entity_type: 'worker',
+      entity_id: 'email',
+      action: 'run',
+      metadata: { route: '/api/email/worker', processed: 0, sent: 0, dead_letter: 0, started_at: runStartedAt },
+    });
     return NextResponse.json({ processed: 0, message: 'No due emails' });
   }
 
@@ -116,6 +124,21 @@ export async function GET(req: NextRequest) {
       processed++;
     }
   }
+
+  await (supabase as any).from('audit_logs').insert({
+    actor_id: null,
+    entity_type: 'worker',
+    entity_id: 'email',
+    action: 'run',
+    metadata: {
+      route: '/api/email/worker',
+      processed,
+      sent,
+      dead_letter: deadLetter,
+      started_at: runStartedAt,
+      finished_at: new Date().toISOString(),
+    },
+  });
 
   return NextResponse.json({
     processed,
