@@ -209,25 +209,17 @@ export async function sendGearRequestEmail({
 
 // Minimal, short welcome email for new users
 export async function sendWelcomeEmail({ to, userName }: { to: string; userName?: string }) {
-  const html = `
-    ${EMAIL_STYLES}
-    <div class="email-container">
-      <div class="email-header">
-        <h1>👋 Welcome to Nest!</h1>
-      </div>
-      <div class="email-body">
-        <h2>Hello${userName ? ` ${userName}` : ''},</h2>
-        <p>We're excited to have you on board. Start managing your assets and equipment with ease.</p>
-        <p style="margin-top:24px; font-size:14px; color:#718096;">If you have any questions, just reply to this email or contact support.</p>
-      </div>
-      <div class="email-footer">
-        <p>— The Nest by Eden Oasis Team</p>
-      </div>
-    </div>
-  `;
+  const html = minimalEmailLayout({
+    title: 'Welcome to Nest by Eden',
+    preheader: 'Your account is ready',
+    greeting: `Hello${userName ? ` ${userName}` : ''},`,
+    message: 'Welcome to Nest by Eden Oasis. Your account is ready and you can now request and manage equipment and car bookings.',
+    ctaLabel: 'Open dashboard',
+    ctaHref: 'https://nestbyeden.app/user',
+  });
   return sendGearRequestEmail({
     to,
-    subject: '👋 Welcome to Nest by Eden Oasis',
+    subject: 'Welcome to Nest by Eden Oasis',
     html,
   });
 }
@@ -251,47 +243,26 @@ export async function sendAnnouncementEmail({
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://nest-eden-oasis.vercel.app';
   const announcementUrl = `${siteUrl}/user/announcements?announcement=${announcementId}`;
 
-  const html = `
-    ${EMAIL_STYLES}
-    <div class="email-container">
-      <div class="email-header">
-        <h1>📢 New Announcement</h1>
-        <p class="subtitle">Important update from ${authorName}</p>
-      </div>
-      
-      <div class="email-body">
-        <h2>Hello ${userName},</h2>
-        
-        <p>A new announcement has been posted that requires your attention:</p>
-        
-        <div class="info-note">
-          <h3 style="margin: 0 0 10px 0; color: #2d3748;">${announcementTitle}</h3>
-          <div style="white-space: pre-wrap; line-height: 1.6;">${announcementContent}</div>
-        </div>
-        
-        <p>Please review this announcement in your dashboard for complete details and any required actions.</p>
-        
-        <a href="${announcementUrl}" class="action-button">
-          View Full Announcement
-        </a>
-        
-        <p style="margin-top: 30px; font-size: 14px; color: #718096;">
-          This announcement was sent to all users. If you have any questions, please contact your administrator.
-        </p>
-      </div>
-      
-      <div class="email-footer">
-        <p>
-          This email was sent from <a href="${siteUrl}">Nest by Eden Oasis</a><br>
-          Asset Management System
-        </p>
-      </div>
-    </div>
-  `;
+  const html = minimalEmailLayout({
+    title: 'New announcement',
+    preheader: `Update from ${authorName}`,
+    greeting: `Hello ${userName},`,
+    message: 'A new announcement has been posted.',
+    sections: [{
+      heading: announcementTitle,
+      rows: [
+        { label: 'Posted by', value: authorName },
+        { label: 'Message', value: announcementContent },
+      ],
+    }],
+    ctaLabel: 'View announcement',
+    ctaHref: announcementUrl,
+    footerNote: `Sent from Nest by Eden Oasis · ${siteUrl}`,
+  });
 
   return await sendGearRequestEmail({
     to,
-    subject: `📢 New Announcement: ${announcementTitle}`,
+    subject: `New announcement: ${announcementTitle}`,
     html,
   });
 }
@@ -311,67 +282,33 @@ export async function sendApprovalEmail({
   const gears = gearList.split(',').map(name => ({ name: name.trim() }));
   const formattedDueDate = formatDate(dueDate);
 
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Gear Request Approved</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>🎉 Request Approved!</h1>
-              <p class="subtitle">Your gear request has been approved and is ready for pickup</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName || 'there'},</h2>
-              
-              <div class="success-note">
-                <strong>Great news!</strong> Your gear request has been approved and is ready for pickup.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Approved Equipment:</h3>
-                ${createGearListHTML(gears)}
-              </div>
-              
-              <p><strong>Due Date:</strong> ${formattedDueDate}</p>
-              
-              <p><strong>Pickup Instructions:</strong></p>
-              <ul>
-                <li>Please collect your equipment from the designated pickup location</li>
-                <li>Bring your ID for verification</li>
-                <li>Inspect the equipment before leaving</li>
-                <li>Return equipment on or before the due date</li>
-              </ul>
-              
-              <a href="https://nestbyeden.app/user/my-requests" class="action-button">
-                View Request Details
-              </a>
-              
-              <div class="important-note">
-                <strong>Important:</strong> Please ensure all equipment is returned in the same condition. 
-                Any damage or missing items may result in charges.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>If you have any questions, please contact the admin team</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const html = minimalEmailLayout({
+    title: 'Gear request approved',
+    preheader: 'Your request is approved',
+    greeting: `Hello ${userName || 'there'},`,
+    message: 'Your gear request has been approved.',
+    sections: [
+      {
+        heading: 'Approved items',
+        rows: gears.map(g => ({ label: g.name, value: 'Approved' })),
+      },
+      {
+        heading: 'Request details',
+        rows: [{ label: 'Return by', value: formattedDueDate }],
+      },
+    ],
+    listItems: [
+      'Bring an ID for pickup verification.',
+      'Inspect items at pickup.',
+      'Return items by the due date.',
+    ],
+    ctaLabel: 'View request',
+    ctaHref: 'https://nestbyeden.app/user/my-requests',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '🎉 Your Gear Request Has Been Approved - Ready for Pickup!',
+    subject: 'Gear request approved',
     html,
   });
 }
@@ -390,69 +327,32 @@ export async function sendRejectionEmail({
 }) {
   const gears = gearList.split(',').map(name => ({ name: name.trim() }));
 
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Gear Request Update</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>📋 Request Update</h1>
-              <p class="subtitle">Your gear request status has been updated</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName || 'there'},</h2>
-              
-              <div class="important-note">
-                <strong>Request Status:</strong> Your gear request has been reviewed and cannot be approved at this time.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Requested Equipment:</h3>
-                ${createGearListHTML(gears)}
-              </div>
-              
-              <p><strong>Reason for Rejection:</strong></p>
-              <div style="background-color: #fed7d7; padding: 12px; border-radius: 4px; margin: 12px 0;">
-                ${reason || 'No specific reason provided'}
-              </div>
-              
-              <p><strong>Next Steps:</strong></p>
-              <ul>
-                <li>Review the reason provided above</li>
-                <li>If you believe this is an error, please contact the admin team</li>
-                <li>You may submit a new request with corrected information</li>
-              </ul>
-              
-              <a href="https://nestbyeden.app/user/my-requests" class="action-button">
-                View Request Details
-              </a>
-              
-              <div class="info-note">
-                <strong>Need Help?</strong> If you have questions about this decision or need assistance 
-                with your request, please don't hesitate to contact the admin team.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>We appreciate your understanding</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const html = minimalEmailLayout({
+    title: 'Gear request update',
+    preheader: 'Your request was not approved',
+    greeting: `Hello ${userName || 'there'},`,
+    message: 'Your gear request was reviewed and could not be approved.',
+    sections: [
+      {
+        heading: 'Requested items',
+        rows: gears.map(g => ({ label: g.name, value: 'Requested' })),
+      },
+      {
+        heading: 'Reason',
+        rows: [{ label: 'Not approved', value: reason || 'No specific reason provided' }],
+      },
+    ],
+    listItems: [
+      'Review the reason above.',
+      'You can submit a new request with updated details.',
+    ],
+    ctaLabel: 'View requests',
+    ctaHref: 'https://nestbyeden.app/user/my-requests',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '📋 Gear Request Update - Status Changed',
+    subject: 'Gear request update',
     html,
   });
 }
@@ -475,61 +375,35 @@ export async function sendCheckinApprovalEmail({
 }) {
   const formattedCheckinDate = formatDate(checkinDate);
 
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Check-in Approved</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>✅ Check-in Approved!</h1>
-              <p class="subtitle">Your equipment has been successfully returned</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName || 'there'},</h2>
-              
-              <div class="success-note">
-                <strong>Success!</strong> Your equipment check-in has been approved and processed.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Returned Equipment:</h3>
-                ${createGearListHTML(gearList)}
-              </div>
-              
-              <p><strong>Check-in Date:</strong> ${formattedCheckinDate}</p>
-              <p><strong>Overall Condition:</strong> <span class="gear-status status-${condition.toLowerCase()}">${condition}</span></p>
-              
-              ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
-              
-              <a href="https://nestbyeden.app/user/history" class="action-button">
-                View Check-in History
-              </a>
-              
-              <div class="info-note">
-                <strong>Thank you!</strong> We appreciate you returning the equipment on time and in good condition.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>Your equipment has been successfully processed</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const html = minimalEmailLayout({
+    title: 'Check-in approved',
+    preheader: 'Your return has been accepted',
+    greeting: `Hello ${userName || 'there'},`,
+    message: 'Your equipment return has been approved.',
+    sections: [
+      {
+        heading: 'Returned items',
+        rows: gearList.map(item => ({
+          label: item.name,
+          value: item.condition || condition,
+        })),
+      },
+      {
+        heading: 'Return details',
+        rows: [
+          { label: 'Check-in time', value: formattedCheckinDate },
+          { label: 'Condition', value: condition },
+          { label: 'Notes', value: notes || 'None' },
+        ],
+      },
+    ],
+    ctaLabel: 'View history',
+    ctaHref: 'https://nestbyeden.app/user/history',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '✅ Equipment Check-in Approved - Thank You!',
+    subject: 'Equipment check-in approved',
     html,
   });
 }
@@ -550,72 +424,36 @@ export async function sendCheckinRejectionEmail({
 }) {
   const formattedCheckinDate = formatDate(checkinDate);
 
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Check-in Update</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>⚠️ Check-in Update</h1>
-              <p class="subtitle">Your equipment check-in requires attention</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName || 'there'},</h2>
-              
-              <div class="important-note">
-                <strong>Check-in Status:</strong> Your equipment check-in has been reviewed and requires additional action.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Equipment in Question:</h3>
-                ${createGearListHTML(gearList)}
-              </div>
-              
-              <p><strong>Check-in Date:</strong> ${formattedCheckinDate}</p>
-              
-              <p><strong>Reason for Rejection:</strong></p>
-              <div style="background-color: #fed7d7; padding: 12px; border-radius: 4px; margin: 12px 0;">
-                ${reason}
-              </div>
-              
-              <p><strong>Required Actions:</strong></p>
-              <ul>
-                <li>Please review the reason provided above</li>
-                <li>Address any issues mentioned</li>
-                <li>Contact the admin team if you have questions</li>
-                <li>You may need to resubmit the check-in with corrections</li>
-              </ul>
-              
-              <a href="https://nestbyeden.app/user/history" class="action-button">
-                View Check-in History
-              </a>
-              
-              <div class="info-note">
-                <strong>Need Assistance?</strong> If you need help resolving this issue or have questions, 
-                please contact the admin team immediately.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>We're here to help resolve any issues</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const html = minimalEmailLayout({
+    title: 'Check-in requires action',
+    preheader: 'Your return was not accepted',
+    greeting: `Hello ${userName || 'there'},`,
+    message: 'Your check-in was reviewed and needs correction.',
+    sections: [
+      {
+        heading: 'Items',
+        rows: gearList.map(item => ({ label: item.name, value: 'Review required' })),
+      },
+      {
+        heading: 'Issue details',
+        rows: [
+          { label: 'Check-in time', value: formattedCheckinDate },
+          { label: 'Reason', value: reason || 'No reason provided' },
+        ],
+      },
+    ],
+    listItems: [
+      'Review the reason above.',
+      'Correct the issue and resubmit check-in if required.',
+      'Contact admin if you need help.',
+    ],
+    ctaLabel: 'View check-in history',
+    ctaHref: 'https://nestbyeden.app/user/history',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '⚠️ Equipment Check-in Update - Action Required',
+    subject: 'Equipment check-in update',
     html,
   });
 }
@@ -630,66 +468,27 @@ export async function sendRequestReceivedEmail({
   userName: string;
   gearList: string;
 }) {
-  const gears = gearList.split(',').map(name => ({ name: name.trim() }));
-
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Request Received</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>📝 Request Received</h1>
-              <p class="subtitle">Your equipment request has been submitted</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName || 'there'},</h2>
-              
-              <div class="info-note">
-                <strong>Confirmation:</strong> We've received your equipment request and it's now under review.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Requested Equipment:</h3>
-                ${createGearListHTML(gears)}
-              </div>
-              
-              <p><strong>What happens next?</strong></p>
-              <ul>
-                <li>Your request will be reviewed by the admin team</li>
-                <li>You'll receive an email notification once a decision is made</li>
-                <li>If approved, you'll get pickup instructions</li>
-                <li>If rejected, you'll receive the reason and next steps</li>
-              </ul>
-              
-              <a href="https://nestbyeden.app/user/my-requests" class="action-button">
-                Track Your Request
-              </a>
-              
-              <div class="info-note">
-                <strong>Processing Time:</strong> Most requests are processed within 24 hours during business days.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>We'll notify you as soon as your request is reviewed</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const gears = gearList.split(',').map(name => name.trim()).filter(Boolean);
+  const html = minimalEmailLayout({
+    title: 'Request received',
+    preheader: 'Your equipment request is under review',
+    greeting: `Hello ${userName || 'there'},`,
+    message: 'Your equipment request has been submitted and is under review.',
+    sections: [{
+      heading: 'Requested items',
+      rows: gears.map(name => ({ label: name, value: 'Pending review' })),
+    }],
+    listItems: [
+      'An admin will review your request.',
+      'You will receive an email update once a decision is made.',
+    ],
+    ctaLabel: 'Track request',
+    ctaHref: 'https://nestbyeden.app/user/my-requests',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '📝 Equipment Request Received - Under Review',
+    subject: 'Equipment request received',
     html,
   });
 }
@@ -1063,77 +862,142 @@ export async function sendOverdueReminderEmail({
 }) {
   const formattedDueDate = formatDate(dueDate);
 
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Overdue Equipment Reminder</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>⏰ Equipment Overdue</h1>
-              <p class="subtitle">Please return your equipment as soon as possible</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName || 'there'},</h2>
-              
-              <div class="important-note">
-                <strong>Urgent:</strong> You have equipment that is ${overdueDays} day${overdueDays > 1 ? 's' : ''} overdue.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Overdue Equipment:</h3>
-                ${gearList.map(gear => `
-                  <div class="gear-item">
-                    <span class="gear-name">${gear.name}</span>
-                    <span style="color: #e53e3e; font-size: 12px;">Due: ${formatDate(gear.dueDate)}</span>
-                  </div>
-                `).join('')}
-              </div>
-              
-              <p><strong>Original Due Date:</strong> ${formattedDueDate}</p>
-              <p><strong>Days Overdue:</strong> ${overdueDays}</p>
-              
-              <p><strong>Immediate Action Required:</strong></p>
-              <ul>
-                <li>Please return the equipment immediately</li>
-                <li>Contact the admin team if you need an extension</li>
-                <li>Ensure equipment is in good condition</li>
-                <li>Late returns may affect future requests</li>
-              </ul>
-              
-              <a href="https://nestbyeden.app/user/check-in" class="action-button">
-                Check-in Equipment Now
-              </a>
-              
-              <div class="important-note">
-                <strong>Important:</strong> Continued delays may result in account restrictions or charges.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>Please return equipment promptly to avoid any issues</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const html = minimalEmailLayout({
+    title: 'Equipment overdue reminder',
+    preheader: `You have equipment overdue by ${overdueDays} day${overdueDays > 1 ? 's' : ''}`,
+    greeting: `Hello ${userName || 'there'},`,
+    message: `You have equipment that is ${overdueDays} day${overdueDays > 1 ? 's' : ''} overdue.`,
+    sections: [
+      {
+        heading: 'Overdue items',
+        rows: gearList.map(gear => ({
+          label: gear.name,
+          value: `Due ${formatDate(gear.dueDate)}`,
+        })),
+      },
+      {
+        heading: 'Reminder',
+        rows: [
+          { label: 'Original due date', value: formattedDueDate },
+          { label: 'Days overdue', value: String(overdueDays) },
+        ],
+      },
+    ],
+    listItems: [
+      'Please return the equipment as soon as possible.',
+      'Contact admin if you need support.',
+    ],
+    ctaLabel: 'Check in equipment',
+    ctaHref: 'https://nestbyeden.app/user/check-in',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: `⏰ Equipment Overdue - ${overdueDays} Day${overdueDays > 1 ? 's' : ''} Late`,
+    subject: `Equipment overdue (${overdueDays} day${overdueDays > 1 ? 's' : ''})`,
     html,
   });
 }
 
 // Car booking email templates
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function minimalEmailLayout({
+  title,
+  preheader,
+  greeting,
+  message,
+  sections,
+  listItems,
+  ctaLabel,
+  ctaHref,
+  footerNote,
+}: {
+  title: string;
+  preheader?: string;
+  greeting: string;
+  message: string;
+  sections?: Array<{ heading: string; rows: Array<{ label: string; value: string }> }>;
+  listItems?: string[];
+  ctaLabel?: string;
+  ctaHref?: string;
+  footerNote?: string;
+}) {
+  const sectionHtml = (sections || []).map(section => `
+    <div style="margin:24px 0;">
+      <div style="font-size:14px;font-weight:700;margin:0 0 12px 0;">${escapeHtml(section.heading)}</div>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        ${section.rows.map(row => `
+          <tr>
+            <td style="padding:10px 0;border-top:1px solid #d4d4d4;font-size:14px;font-weight:600;vertical-align:top;width:38%;">${escapeHtml(row.label)}</td>
+            <td style="padding:10px 0;border-top:1px solid #d4d4d4;font-size:14px;vertical-align:top;">${escapeHtml(row.value)}</td>
+          </tr>
+        `).join('')}
+      </table>
+    </div>
+  `).join('');
+
+  const listHtml = (listItems && listItems.length > 0)
+    ? `<ul style="margin:10px 0 0 20px;padding:0;">${listItems.map(item => `<li style="margin:8px 0;font-size:14px;">${escapeHtml(item)}</li>`).join('')}</ul>`
+    : '';
+
+  const ctaHtml = ctaLabel && ctaHref
+    ? `<div style="margin:28px 0 8px 0;"><a href="${ctaHref}" style="display:inline-block;border:1px solid #111;color:#111;text-decoration:none;padding:10px 16px;font-size:14px;font-weight:600;">${escapeHtml(ctaLabel)}</a></div>`
+    : '';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${escapeHtml(title)}</title>
+      </head>
+      <body style="margin:0;padding:0;background:#fff;color:#111;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+        <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader || title)}</div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+          <tr>
+            <td align="center" style="padding:24px;">
+              <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;border-collapse:collapse;">
+                <tr>
+                  <td style="border-bottom:1px solid #111;padding-bottom:14px;">
+                    <div style="font-size:28px;font-weight:700;line-height:1.2;">Nest by Eden</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding-top:24px;">
+                    <div style="font-size:30px;font-weight:700;line-height:1.2;margin:0 0 10px 0;">${escapeHtml(greeting)}</div>
+                    <div style="font-size:15px;line-height:1.7;margin:0 0 10px 0;">${escapeHtml(message)}</div>
+                    ${sectionHtml}
+                    ${listHtml}
+                    ${ctaHtml}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding-top:28px;border-top:1px solid #d4d4d4;font-size:12px;line-height:1.6;color:#111;">
+                    ${escapeHtml(footerNote || 'Nest by Eden Oasis · Equipment and vehicle operations')}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
+}
+
+function normalizeCarLabel(carDetails?: string) {
+  if (!carDetails) return 'Not assigned yet';
+  return carDetails.replace(/\s+/g, ' ').trim();
+}
+
 export async function sendCarBookingRequestEmail({
   to,
   userName,
@@ -1150,84 +1014,31 @@ export async function sendCarBookingRequestEmail({
   purpose?: string;
 }) {
   const formattedDate = formatDate(dateOfUse);
-
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Car Booking Request Received</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>🚗 Car Booking Request Received</h1>
-              <p class="subtitle">Your request is under review</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName},</h2>
-              
-              <div class="info-note">
-                <strong>Confirmation:</strong> We've received your car booking request and it's now under review.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Booking Details:</h3>
-                <div class="gear-item">
-                  <span class="gear-name">Date of Use:</span>
-                  <span>${formattedDate}</span>
-                </div>
-                <div class="gear-item">
-                  <span class="gear-name">Time Slot:</span>
-                  <span>${timeSlot}</span>
-                </div>
-                ${destination ? `
-                <div class="gear-item">
-                  <span class="gear-name">Destination:</span>
-                  <span>${destination}</span>
-                </div>
-                ` : ''}
-                ${purpose ? `
-                <div class="gear-item">
-                  <span class="gear-name">Purpose:</span>
-                  <span>${purpose}</span>
-                </div>
-                ` : ''}
-              </div>
-              
-              <p><strong>What happens next?</strong></p>
-              <ul>
-                <li>Your request will be reviewed by the admin team</li>
-                <li>You'll receive an email notification once a decision is made</li>
-                <li>If approved, you'll get pickup instructions and car assignment details</li>
-                <li>If rejected, you'll receive the reason and can submit a new request</li>
-              </ul>
-              
-              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
-                Track Your Booking
-              </a>
-              
-              <div class="info-note">
-                <strong>Processing Time:</strong> Most requests are processed within 24 hours during business days.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>We'll notify you as soon as your request is reviewed</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const html = minimalEmailLayout({
+    title: 'Car booking received',
+    preheader: 'Your car booking request is under review',
+    greeting: `Hello ${userName || 'there'},`,
+    message: 'Your car booking request has been received and is now under review.',
+    sections: [{
+      heading: 'Booking details',
+      rows: [
+        { label: 'Date of use', value: formattedDate },
+        { label: 'Time slot', value: timeSlot },
+        { label: 'Destination', value: destination || 'Not provided' },
+        { label: 'Purpose', value: purpose || 'Not provided' },
+      ]
+    }],
+    listItems: [
+      'An admin will review your request.',
+      'You will receive an update by email once a decision is made.',
+    ],
+    ctaLabel: 'View booking',
+    ctaHref: 'https://nestbyeden.app/user/car-booking',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '🚗 Car Booking Request Received - Under Review',
+    subject: 'Car booking request received',
     html,
   });
 }
@@ -1248,84 +1059,32 @@ export async function sendCarBookingApprovalEmail({
   carDetails?: string;
 }) {
   const formattedDate = formatDate(dateOfUse);
-
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Car Booking Approved</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>🎉 Car Booking Approved!</h1>
-              <p class="subtitle">Your vehicle is ready for pickup</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName},</h2>
-              
-              <div class="success-note">
-                <strong>Great news!</strong> Your car booking has been approved and is ready for your scheduled date.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Approved Booking:</h3>
-                <div class="gear-item">
-                  <span class="gear-name">Date of Use:</span>
-                  <span>${formattedDate}</span>
-                </div>
-                <div class="gear-item">
-                  <span class="gear-name">Time Slot:</span>
-                  <span>${timeSlot}</span>
-                </div>
-                ${destination ? `
-                <div class="gear-item">
-                  <span class="gear-name">Destination:</span>
-                  <span>${destination}</span>
-                </div>
-                ` : ''}
-                ${carDetails ? `
-                <div class="gear-item">
-                  <span class="gear-name">Assigned Vehicle:</span>
-                  <span>${carDetails}</span>
-                </div>
-                ` : ''}
-              </div>
-              
-              <p><strong>Pickup Instructions:</strong></p>
-              <ul>
-                <li>Collect the vehicle at your scheduled time</li>
-                <li>Bring your ID for verification</li>
-                <li>Inspect the vehicle before leaving</li>
-                <li>Return the vehicle on time as per your booking</li>
-              </ul>
-              
-              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
-                View Booking Details
-              </a>
-              
-              <div class="important-note">
-                <strong>Important:</strong> Please ensure the vehicle is returned in the same condition. Report any issues immediately.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>Drive safely!</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const html = minimalEmailLayout({
+    title: 'Car booking approved',
+    preheader: 'Your booking has been approved',
+    greeting: `Hello ${userName || 'there'},`,
+    message: 'Your car booking has been approved.',
+    sections: [{
+      heading: 'Approved booking',
+      rows: [
+        { label: 'Date of use', value: formattedDate },
+        { label: 'Time slot', value: timeSlot },
+        { label: 'Destination', value: destination || 'Not provided' },
+        { label: 'Vehicle', value: normalizeCarLabel(carDetails) },
+      ]
+    }],
+    listItems: [
+      'Bring your ID for pickup verification.',
+      'Inspect the vehicle before departure.',
+      'Return the vehicle at the scheduled end time.',
+    ],
+    ctaLabel: 'View booking',
+    ctaHref: 'https://nestbyeden.app/user/car-booking',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '🎉 Car Booking Approved - Ready for Pickup!',
+    subject: 'Car booking approved',
     html,
   });
 }
@@ -1344,78 +1103,30 @@ export async function sendCarBookingRejectionEmail({
   reason?: string;
 }) {
   const formattedDate = formatDate(dateOfUse);
-
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Car Booking Update</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>📋 Car Booking Update</h1>
-              <p class="subtitle">Your booking request status has been updated</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName},</h2>
-              
-              <div class="important-note">
-                <strong>Request Status:</strong> Your car booking request has been reviewed and cannot be approved at this time.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Booking Details:</h3>
-                <div class="gear-item">
-                  <span class="gear-name">Date of Use:</span>
-                  <span>${formattedDate}</span>
-                </div>
-                <div class="gear-item">
-                  <span class="gear-name">Time Slot:</span>
-                  <span>${timeSlot}</span>
-                </div>
-              </div>
-              
-              ${reason ? `
-              <p><strong>Reason for Rejection:</strong></p>
-              <div style="background-color: #fed7d7; padding: 12px; border-radius: 4px; margin: 12px 0;">
-                ${reason}
-              </div>
-              ` : ''}
-              
-              <p><strong>Next Steps:</strong></p>
-              <ul>
-                <li>Review the reason provided above</li>
-                <li>If you believe this is an error, please contact the admin team</li>
-                <li>You may submit a new request with different dates or corrected information</li>
-              </ul>
-              
-              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
-                View Booking Details
-              </a>
-              
-              <div class="info-note">
-                <strong>Need Help?</strong> If you have questions about this decision, please contact the admin team.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>We appreciate your understanding</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const html = minimalEmailLayout({
+    title: 'Car booking update',
+    preheader: 'Your booking request was not approved',
+    greeting: `Hello ${userName || 'there'},`,
+    message: 'Your car booking request was reviewed and could not be approved.',
+    sections: [{
+      heading: 'Booking details',
+      rows: [
+        { label: 'Date of use', value: formattedDate },
+        { label: 'Time slot', value: timeSlot },
+        { label: 'Reason', value: reason || 'No reason provided' },
+      ]
+    }],
+    listItems: [
+      'Review the reason above.',
+      'You may submit a new request with updated details.',
+    ],
+    ctaLabel: 'View booking page',
+    ctaHref: 'https://nestbyeden.app/user/car-booking',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '📋 Car Booking Update - Status Changed',
+    subject: 'Car booking request update',
     html,
   });
 }
@@ -1437,74 +1148,27 @@ export async function sendCarReturnConfirmationEmail({
 }) {
   const formattedDate = formatDate(dateOfUse);
   const formattedReturnDate = formatDate(returnedAt);
-
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Car Return Confirmed</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>✅ Car Return Confirmed!</h1>
-              <p class="subtitle">Your vehicle has been successfully returned</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName},</h2>
-              
-              <div class="success-note">
-                <strong>Thank you!</strong> Your car has been successfully returned and checked in.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Return Details:</h3>
-                <div class="gear-item">
-                  <span class="gear-name">Original Booking Date:</span>
-                  <span>${formattedDate}</span>
-                </div>
-                <div class="gear-item">
-                  <span class="gear-name">Time Slot:</span>
-                  <span>${timeSlot}</span>
-                </div>
-                ${carDetails ? `
-                <div class="gear-item">
-                  <span class="gear-name">Vehicle:</span>
-                  <span>${carDetails}</span>
-                </div>
-                ` : ''}
-                <div class="gear-item">
-                  <span class="gear-name">Return Date:</span>
-                  <span>${formattedReturnDate}</span>
-                </div>
-              </div>
-              
-              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
-                View Booking History
-              </a>
-              
-              <div class="info-note">
-                <strong>Thank you!</strong> We appreciate you returning the vehicle on time and in good condition.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>Your booking has been successfully completed</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const html = minimalEmailLayout({
+    title: 'Car return confirmed',
+    preheader: 'Your vehicle return has been recorded',
+    greeting: `Hello ${userName || 'there'},`,
+    message: 'Your vehicle return has been recorded successfully.',
+    sections: [{
+      heading: 'Return details',
+      rows: [
+        { label: 'Booking date', value: formattedDate },
+        { label: 'Time slot', value: timeSlot },
+        { label: 'Vehicle', value: normalizeCarLabel(carDetails) },
+        { label: 'Return time', value: formattedReturnDate },
+      ]
+    }],
+    ctaLabel: 'View booking history',
+    ctaHref: 'https://nestbyeden.app/user/car-booking',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '✅ Car Return Confirmed - Thank You!',
+    subject: 'Car return confirmed',
     html,
   });
 }
@@ -1528,84 +1192,28 @@ export async function sendCarBookingCancellationEmail({
 }) {
   const formattedDate = formatDate(dateOfUse);
   const isUserCancelled = cancelledBy === 'user';
-  const title = isUserCancelled ? 'Booking Cancelled' : 'Booking Cancelled by Admin';
-
-  const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Car Booking Cancellation</title>
-          ${EMAIL_STYLES}
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-header">
-              <h1>🚫 ${title}</h1>
-              <p class="subtitle">Your car booking has been cancelled</p>
-            </div>
-            
-            <div class="email-body">
-              <h2>Hi ${userName},</h2>
-              
-              <div class="${isUserCancelled ? 'info-note' : 'important-note'}">
-                <strong>${isUserCancelled ? 'Cancellation Confirmed:' : 'Admin Cancellation:'}</strong> 
-                Your car booking has been cancelled ${isUserCancelled ? 'as requested' : 'by an administrator'}.
-              </div>
-              
-              <div class="gear-details">
-                <h3 style="margin: 0 0 16px 0; color: #2d3748;">Cancelled Booking Details:</h3>
-                <div class="gear-item">
-                  <span class="gear-name">Date of Use:</span>
-                  <span>${formattedDate}</span>
-                </div>
-                <div class="gear-item">
-                  <span class="gear-name">Time Slot:</span>
-                  <span>${timeSlot}</span>
-                </div>
-                ${destination ? `
-                <div class="gear-item">
-                  <span class="gear-name">Destination:</span>
-                  <span>${destination}</span>
-                </div>
-                ` : ''}
-                ${reason ? `
-                <div class="gear-item">
-                  <span class="gear-name">Reason:</span>
-                  <span>${reason}</span>
-                </div>
-                ` : ''}
-              </div>
-              
-              ${isUserCancelled ? `
-              <p>Your booking has been successfully cancelled. You can submit a new booking request anytime.</p>
-              ` : `
-              <p>This booking was cancelled by an administrator. If you have any questions, please contact the admin team.</p>
-              `}
-              
-              <a href="https://nestbyeden.app/user/car-booking" class="action-button">
-                View My Bookings
-              </a>
-              
-              <div class="info-note">
-                <strong>Need a car?</strong> You can submit a new booking request at any time through the booking page.
-              </div>
-            </div>
-            
-            <div class="email-footer">
-              <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-              <p>We're here to help with your transportation needs</p>
-              <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+  const title = isUserCancelled ? 'Car booking cancelled' : 'Car booking cancelled by admin';
+  const html = minimalEmailLayout({
+    title,
+    preheader: title,
+    greeting: `Hello ${userName || 'there'},`,
+    message: `Your car booking has been cancelled ${isUserCancelled ? 'as requested.' : 'by an administrator.'}`,
+    sections: [{
+      heading: 'Cancelled booking details',
+      rows: [
+        { label: 'Date of use', value: formattedDate },
+        { label: 'Time slot', value: timeSlot },
+        { label: 'Destination', value: destination || 'Not provided' },
+        { label: 'Reason', value: reason || 'Not provided' },
+      ]
+    }],
+    ctaLabel: 'View bookings',
+    ctaHref: 'https://nestbyeden.app/user/car-booking',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: `🚫 ${title}`,
+    subject: title,
     html,
   });
 }
@@ -1629,90 +1237,35 @@ export async function sendGearRequestApprovalEmail({
   destination?: string;
 }) {
   const formattedDueDate = formatDate(dueDate);
-  const gearItems = gearList.map(item => `${item.name} (Qty: ${item.quantity})`).join('<br/>');
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      </head>
-      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
-        ${EMAIL_STYLES}
-        <div class="email-container">
-          <div class="email-header" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-            <h1 style="margin: 0; font-size: 24px; font-weight: 600;">✅ Request Approved!</h1>
-            <p class="subtitle" style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95;">Your gear request has been approved</p>
-          </div>
-          
-          <div class="email-body">
-            <p style="font-size: 16px; color: #1f2937; margin: 0 0 24px 0;">Hello <strong>${userName}</strong>,</p>
-            
-            <p style="font-size: 15px; color: #374151; line-height: 1.6; margin: 0 0 24px 0;">
-              Great news! Your gear request has been <strong style="color: #10b981;">approved</strong> and is ready for pickup.
-            </p>
-
-            <div class="info-box" style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 16px; margin: 24px 0; border-radius: 4px;">
-              <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #166534;">📦 Approved Items</h3>
-              <div style="color: #166534; line-height: 1.8;">
-                ${gearItems}
-              </div>
-            </div>
-
-            <div class="info-box">
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Due Date:</td>
-                  <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${formattedDueDate}</td>
-                </tr>
-                ${reason ? `
-                <tr>
-                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Purpose:</td>
-                  <td style="padding: 8px 0; color: #1f2937;">${reason}</td>
-                </tr>
-                ` : ''}
-                ${destination ? `
-                <tr>
-                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Destination:</td>
-                  <td style="padding: 8px 0; color: #1f2937;">${destination}</td>
-                </tr>
-                ` : ''}
-              </table>
-            </div>
-
-            <div class="info-note" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 24px 0; border-radius: 4px;">
-              <p style="margin: 0; color: #92400e; font-size: 14px;">
-                <strong>⏰ Important:</strong> Please return all items by <strong>${formattedDueDate}</strong> to avoid late fees.
-              </p>
-            </div>
-
-            <div style="text-align: center; margin: 32px 0;">
-              <a href="https://nestbyeden.app/user/gear-requests${requestId ? '?request=' + requestId : ''}" 
-                 class="action-button"
-                 style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">
-                View Request Details
-              </a>
-            </div>
-
-            <p style="margin-top: 32px; font-size: 14px; color: #6b7280; line-height: 1.6;">
-              If you have any questions or need to modify your request, please contact the equipment management team.
-            </p>
-          </div>
-          
-          <div class="email-footer">
-            <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-            <p>Equipment pickup is available during business hours</p>
-            <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-          </div>
-        </div>
-      </body>
-    </html>
-  `;
+  const html = minimalEmailLayout({
+    title: 'Gear request approved',
+    preheader: 'Your request has been approved',
+    greeting: `Hello ${userName},`,
+    message: 'Your gear request has been approved and is ready for pickup.',
+    sections: [
+      {
+        heading: 'Approved items',
+        rows: gearList.map(item => ({
+          label: item.name,
+          value: `Qty ${item.quantity}`,
+        })),
+      },
+      {
+        heading: 'Request details',
+        rows: [
+          { label: 'Return by', value: formattedDueDate },
+          { label: 'Purpose', value: reason || 'Not provided' },
+          { label: 'Destination', value: destination || 'Not provided' },
+        ],
+      },
+    ],
+    ctaLabel: 'View request details',
+    ctaHref: `https://nestbyeden.app/user/gear-requests${requestId ? '?request=' + requestId : ''}`,
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '✅ Gear Request Approved - Ready for Pickup!',
+    subject: 'Gear request approved',
     html,
   });
 }
@@ -1733,92 +1286,39 @@ export async function sendGearRequestRejectionEmail({
   requestReason?: string;
   destination?: string;
 }) {
-  const gearItems = gearList.map(item => `${item.name} (Qty: ${item.quantity})`).join('<br/>');
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      </head>
-      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
-        ${EMAIL_STYLES}
-        <div class="email-container">
-          <div class="email-header" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
-            <h1 style="margin: 0; font-size: 24px; font-weight: 600;">❌ Request Update</h1>
-            <p class="subtitle" style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95;">Your gear request status</p>
-          </div>
-          
-          <div class="email-body">
-            <p style="font-size: 16px; color: #1f2937; margin: 0 0 24px 0;">Hello <strong>${userName}</strong>,</p>
-            
-            <p style="font-size: 15px; color: #374151; line-height: 1.6; margin: 0 0 24px 0;">
-              We regret to inform you that your gear request could not be approved at this time.
-            </p>
-
-            <div class="info-box" style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 16px; margin: 24px 0; border-radius: 4px;">
-              <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #991b1b;">📦 Requested Items</h3>
-              <div style="color: #991b1b; line-height: 1.8;">
-                ${gearItems}
-              </div>
-            </div>
-
-            ${reason ? `
-            <div class="info-note" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 24px 0; border-radius: 4px;">
-              <h3 style="margin: 0 0 8px 0; font-size: 15px; color: #92400e;">Reason for Rejection:</h3>
-              <p style="margin: 0; color: #78350f; font-size: 14px; line-height: 1.6;">
-                ${reason}
-              </p>
-            </div>
-            ` : ''}
-
-            ${requestReason || destination ? `
-            <div class="info-box">
-              <h3 style="margin: 0 0 12px 0; font-size: 15px; color: #374151;">Your Request Details:</h3>
-              <table style="width: 100%; border-collapse: collapse;">
-                ${requestReason ? `
-                <tr>
-                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Purpose:</td>
-                  <td style="padding: 8px 0; color: #1f2937;">${requestReason}</td>
-                </tr>
-                ` : ''}
-                ${destination ? `
-                <tr>
-                  <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Destination:</td>
-                  <td style="padding: 8px 0; color: #1f2937;">${destination}</td>
-                </tr>
-                ` : ''}
-              </table>
-            </div>
-            ` : ''}
-
-            <div style="text-align: center; margin: 32px 0;">
-              <a href="https://nestbyeden.app/user/gear-requests" 
-                 class="action-button"
-                 style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">
-                Submit New Request
-              </a>
-            </div>
-
-            <p style="margin-top: 32px; font-size: 14px; color: #6b7280; line-height: 1.6;">
-              You may submit a new request or contact the equipment management team for more information about equipment availability.
-            </p>
-          </div>
-          
-          <div class="email-footer">
-            <p>Thank you for using <strong>Nest by Eden Oasis</strong></p>
-            <p>We're here to help with your equipment needs</p>
-            <p><a href="https://nestbyeden.app">nestbyeden.app</a></p>
-          </div>
-        </div>
-      </body>
-    </html>
-  `;
+  const html = minimalEmailLayout({
+    title: 'Gear request update',
+    preheader: 'Your request was not approved',
+    greeting: `Hello ${userName},`,
+    message: 'Your gear request was reviewed and could not be approved at this time.',
+    sections: [
+      {
+        heading: 'Requested items',
+        rows: gearList.map(item => ({
+          label: item.name,
+          value: `Qty ${item.quantity}`,
+        })),
+      },
+      {
+        heading: 'Review details',
+        rows: [
+          { label: 'Reason', value: reason || 'No reason provided' },
+          { label: 'Purpose', value: requestReason || 'Not provided' },
+          { label: 'Destination', value: destination || 'Not provided' },
+        ],
+      },
+    ],
+    listItems: [
+      'Review the details above.',
+      'Submit a new request if needed.',
+    ],
+    ctaLabel: 'Submit new request',
+    ctaHref: 'https://nestbyeden.app/user/gear-requests',
+  });
 
   return sendGearRequestEmail({
     to,
-    subject: '❌ Gear Request Update',
+    subject: 'Gear request update',
     html,
   });
 }
@@ -1863,54 +1363,54 @@ export async function sendBookingLifecycleEmail({
   userName: string;
   transition: string;
 }) {
-  const subject = `Booking ${booking.reference} is now ${transition.replace('_', ' ')}`;
+  const normalizedTransition = transition.replace('_', ' ');
+  const subject = `Booking ${booking.reference} is now ${normalizedTransition}`;
   const payloadHash = createHash('sha256')
     .update(JSON.stringify({ bookingId: booking.id, to, subject, transition, items }))
     .digest('hex');
 
-  const itemRows = items.map((item) => {
-    const fallbackName = item.item_type === 'car' ? 'Assigned Car' : 'Gear Item';
-    const itemName = (item.metadata?.display_name as string | undefined) || fallbackName;
-    return `
-      <tr>
-        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${itemName}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${item.quantity}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-transform: capitalize;">${item.status.replace('_', ' ')}</td>
-      </tr>
-    `;
-  }).join('');
+  const itemRows = items.map((item, index) => {
+    const md = item.metadata || {};
+    const rawName =
+      (md.display_name as string | undefined) ||
+      (md.gear_name as string | undefined) ||
+      (md.car_name as string | undefined) ||
+      (item.item_type === 'car' ? `Car ${index + 1}` : `Gear ${index + 1}`);
+    const plate = (md.plate as string | undefined) || (md.car_plate as string | undefined);
+    const label = item.item_type === 'car' && plate ? `${rawName} (${plate})` : rawName;
+    return {
+      label,
+      qty: String(item.quantity),
+      status: item.status.replace('_', ' '),
+    };
+  });
 
-  const html = `
-    ${EMAIL_STYLES}
-    <div class="email-container">
-      <div class="email-header" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);">
-        <h1>Nest by Eden</h1>
-        <p class="subtitle">Booking lifecycle update</p>
-      </div>
-      <div class="email-body">
-        <h2>Hello ${userName},</h2>
-        <p>Your booking <strong>${booking.reference}</strong> is now <strong style="text-transform: capitalize;">${transition.replace('_', ' ')}</strong>.</p>
-        <div class="info-note">
-          <p><strong>Start:</strong> ${booking.start_at || 'N/A'}</p>
-          <p><strong>Expected Return:</strong> ${booking.end_at || 'N/A'}</p>
-          <p><strong>Final Status:</strong> <span style="text-transform: capitalize;">${booking.status.replace('_', ' ')}</span></p>
-        </div>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
-          <thead>
-            <tr>
-              <th style="text-align: left; padding: 10px; background: #f9fafb;">Item</th>
-              <th style="text-align: left; padding: 10px; background: #f9fafb;">Qty</th>
-              <th style="text-align: left; padding: 10px; background: #f9fafb;">Status</th>
-            </tr>
-          </thead>
-          <tbody>${itemRows}</tbody>
-        </table>
-      </div>
-      <div class="email-footer">
-        <p>Nest by Eden Oasis · Equipment and vehicle operations</p>
-      </div>
-    </div>
-  `;
+  const html = minimalEmailLayout({
+    title: `Booking ${booking.reference} update`,
+    preheader: `Booking status changed to ${normalizedTransition}`,
+    greeting: `Hello ${userName},`,
+    message: `Your booking ${booking.reference} is now ${normalizedTransition}.`,
+    sections: [
+      {
+        heading: 'Booking summary',
+        rows: [
+          { label: 'Booking reference', value: booking.reference },
+          { label: 'Start', value: booking.start_at ? formatDate(booking.start_at) : 'Not set' },
+          { label: 'Expected return', value: booking.end_at ? formatDate(booking.end_at) : 'Not set' },
+          { label: 'Current status', value: booking.status.replace('_', ' ') },
+        ],
+      },
+      {
+        heading: 'Items',
+        rows: itemRows.map(row => ({
+          label: `${row.label} · Qty ${row.qty}`,
+          value: row.status,
+        })),
+      },
+    ],
+    ctaLabel: 'View bookings',
+    ctaHref: 'https://nestbyeden.app/user/my-requests',
+  });
 
   const supabase = await createSupabaseServerClient(true);
   await (supabase as any).from('email_logs').upsert({

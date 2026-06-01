@@ -131,8 +131,8 @@ export async function POST(request: NextRequest) {
             });
 
             // Queue push notification for the user
-            const pushTitle = 'Your Car Booking Was Approved!';
-            const pushMessage = `Your car booking for ${booking.date_of_use} (${booking.time_slot}) has been approved. ${carDetails ? `Assigned vehicle: ${carDetails}` : ''}`;
+            const pushTitle = 'Car booking approved';
+            const pushMessage = `Your car booking for ${booking.date_of_use} (${booking.time_slot}) is approved.${carDetails ? ` Vehicle: ${carDetails}.` : ''}`;
 
             const { error: queueError } = await admin.from('push_notification_queue').insert({
                 user_id: booking.requester_id,

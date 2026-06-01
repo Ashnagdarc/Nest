@@ -55,8 +55,8 @@ export async function POST(request: NextRequest) {
             });
 
             // Queue push notification for the user
-            const pushTitle = 'Your Car Booking Was Rejected';
-            const pushMessage = `Your car booking for ${booking.date_of_use} (${booking.time_slot}) has been rejected.${reason ? ` Reason: ${reason}` : ''}`;
+            const pushTitle = 'Car booking not approved';
+            const pushMessage = `Your car booking for ${booking.date_of_use} (${booking.time_slot}) was not approved.${reason ? ` Reason: ${reason}` : ''}`;
 
             const { error: queueError } = await admin.from('push_notification_queue').insert({
                 user_id: booking.requester_id,

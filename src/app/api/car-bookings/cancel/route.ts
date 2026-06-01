@@ -134,8 +134,8 @@ export async function POST(request: NextRequest) {
 
         // Queue push notification for the user
         if (booking.requester_id) {
-            const pushTitle = 'Your Car Booking Was Cancelled';
-            const pushMessage = `Your car booking for ${booking.date_of_use} (${booking.time_slot}) has been cancelled.${reason ? ` Reason: ${reason}` : ''}`;
+            const pushTitle = 'Car booking cancelled';
+            const pushMessage = `Your car booking for ${booking.date_of_use} (${booking.time_slot}) was cancelled.${reason ? ` Reason: ${reason}` : ''}`;
 
             const { error: queueError } = await admin.from('push_notification_queue').insert({
                 user_id: booking.requester_id,
@@ -159,8 +159,8 @@ export async function POST(request: NextRequest) {
             .eq('status', 'Active');
 
         if (admins && admins.length > 0) {
-            const pushTitle = 'Car Booking Cancelled';
-            const pushMessage = `A car booking has been cancelled ${isAdmin ? 'by an administrator' : 'by the user'}.`;
+            const pushTitle = 'Car booking cancelled';
+            const pushMessage = `A car booking was cancelled ${isAdmin ? 'by an administrator' : 'by the user'}.`;
 
             for (const adminProfile of admins) {
                 const { error: queueError } = await admin.from('push_notification_queue').insert({
