@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
-import { sendCheckinRejectionEmail, sendGearRequestEmail } from '@/lib/email';
+import { buildGroupedCheckinEmail, sendCheckinRejectionEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { transitionBooking } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
@@ -171,55 +171,25 @@ export async function POST(request: NextRequest) {
                 for (const admin of admins) {
                     if (!admin.email) continue;
                     try {
+                        const groupedHtml = buildGroupedCheckinEmail({
+                            title: 'Check-in rejected',
+                            preheader: 'A grouped return needs attention',
+                            greeting: `Hello ${admin.full_name || 'Admin'},`,
+                            message: 'A grouped check-in has been rejected.',
+                            items: [{ name: gearName, value: 'Rejected' }],
+                            details: [
+                                { label: 'User', value: userName },
+                                { label: 'Reason', value: reason },
+                                { label: 'Status', value: 'Rejected' },
+                            ],
+                            ctaLabel: 'Review check-ins',
+                            ctaHref: 'https://nestbyeden.app/admin/manage-checkins',
+                            footerNote: 'Nest by Eden Oasis · Equipment and vehicle operations',
+                        });
                         await sendGearRequestEmail({
                             to: admin.email,
-                            subject: `❌ Check-in Rejected - ${userName}`,
-                            html: `
-                                <!DOCTYPE html>
-                                <html>
-                                    <head>
-                                        <meta charset="utf-8">
-                                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                                    </head>
-                                    <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
-                                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-                                            <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 30px 40px; text-align: center;">
-                                                <h1 style="margin: 0; font-size: 24px; font-weight: 600;">❌ Check-in Rejected</h1>
-                                                <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95;">Admin action completed</p>
-                                            </div>
-                                            <div style="padding: 40px; line-height: 1.6; color: #333;">
-                                                <h2 style="color: #2d3748; margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Hello ${admin.full_name || 'Admin'},</h2>
-                                                <p style="margin: 0 0 16px 0;">A check-in has been rejected.</p>
-                                                <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 16px; margin: 24px 0; border-radius: 4px;">
-                                                    <table style="width: 100%; border-collapse: collapse;">
-                                                        <tr>
-                                                            <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">User:</td>
-                                                            <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${userName}</td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Item:</td>
-                                                            <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${gearName}</td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Status:</td>
-                                                            <td style="padding: 8px 0; color: #ef4444; font-weight: 600;">Rejected ✗</td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td style="padding: 8px 0; color: #6b7280; font-weight: 500; vertical-align: top;">Reason:</td>
-                                                            <td style="padding: 8px 0; color: #1f2937;">${reason}</td>
-                                                        </tr>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                            <div style="background-color: #f7fafc; padding: 20px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
-                                                <p style="margin: 0; font-size: 14px; color: #718096;">
-                                                    This is an automated notification from <a href="https://nestbyeden.app" style="color: #ef4444; text-decoration: none;"><strong>Nest by Eden Oasis</strong></a>
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </body>
-                                </html>
-                            `
+                            subject: `Check-in rejected - ${userName}`,
+                            html: groupedHtml,
                         });
                         console.log(`[Check-in Reject] ✅ Admin email sent to: ${admin.email}`);
                     } catch (adminEmailError) {

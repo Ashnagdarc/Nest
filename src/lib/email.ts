@@ -490,6 +490,79 @@ export async function sendCheckinRejectionEmail({
   });
 }
 
+export async function sendCheckinSubmissionEmail({
+  to,
+  userName,
+  items,
+  requestId,
+  submittedAt,
+  audience = 'user',
+}: {
+  to: string;
+  userName: string;
+  items: Array<{ name: string; quantity: number; condition: string; notes?: string; damageNotes?: string }>;
+  requestId?: string | null;
+  submittedAt: string;
+  audience?: 'user' | 'admin';
+}) {
+  const formattedSubmittedAt = formatDate(submittedAt);
+  const itemRows = items.map((item) => ({
+    label: item.name,
+    value: `${item.quantity > 1 ? `x${item.quantity} · ` : ''}${item.condition || 'Good'}`,
+  }));
+
+  const html = minimalEmailLayout({
+    title: 'Check-in submitted',
+    preheader: audience === 'admin' ? 'A grouped check-in is waiting for review' : 'Your return is being reviewed',
+    greeting: `Hello ${userName || 'there'},`,
+    message: audience === 'admin'
+      ? 'A grouped equipment return has been submitted and is waiting for review.'
+      : 'Your equipment return has been submitted and is pending admin review.',
+    sections: [
+      {
+        heading: 'Submitted items',
+        rows: itemRows,
+      },
+      {
+        heading: 'Submission details',
+        rows: [
+          { label: 'Booking reference', value: requestId || 'Not provided' },
+          { label: 'Submitted at', value: formattedSubmittedAt },
+        ],
+      },
+      ...(items.some((item) => item.notes || item.damageNotes) ? [{
+        heading: 'Notes',
+        rows: items.flatMap((item) => {
+          const rows: Array<{ label: string; value: string }> = [];
+          if (item.notes) rows.push({ label: `${item.name} notes`, value: item.notes });
+          if (item.damageNotes) rows.push({ label: `${item.name} damage`, value: item.damageNotes });
+          return rows;
+        }),
+      }] : []),
+    ],
+    listItems: audience === 'admin'
+      ? [
+          'Review the full submission as one booking group.',
+          'Approve or reject each item only if needed.',
+        ]
+      : [
+          'We will notify you once the full submission is reviewed.',
+        ],
+    ctaLabel: audience === 'admin' ? 'Review check-ins' : 'View history',
+    ctaHref: audience === 'admin'
+      ? 'https://nestbyeden.app/admin/manage-checkins'
+      : 'https://nestbyeden.app/user/history',
+  });
+
+  return sendGearRequestEmail({
+    to,
+    subject: audience === 'admin'
+      ? 'New grouped check-in pending review'
+      : 'Check-in submitted and pending approval',
+    html,
+  });
+}
+
 // New: Request received confirmation email
 export async function sendRequestReceivedEmail({
   to,
@@ -940,7 +1013,7 @@ function escapeHtml(input: string): string {
     .replace(/'/g, '&#039;');
 }
 
-function minimalEmailLayout({
+export function minimalEmailLayout({
   title,
   preheader,
   greeting,
@@ -1023,6 +1096,53 @@ function minimalEmailLayout({
       </body>
     </html>
   `;
+}
+
+export function buildGroupedCheckinEmail({
+  title,
+  preheader,
+  greeting,
+  message,
+  items,
+  details,
+  ctaLabel,
+  ctaHref,
+  footerNote,
+}: {
+  title: string;
+  preheader: string;
+  greeting: string;
+  message: string;
+  items: Array<{ name: string; value: string }>;
+  details?: Array<{ label: string; value: string }>;
+  ctaLabel?: string;
+  ctaHref?: string;
+  footerNote?: string;
+}) {
+  return minimalEmailLayout({
+    title,
+    preheader,
+    greeting,
+    message,
+    sections: [
+      {
+        heading: 'Check-in items',
+        rows: items.map((item) => ({
+          label: item.name,
+          value: item.value,
+        })),
+      },
+      ...(details && details.length > 0
+        ? [{
+            heading: 'Details',
+            rows: details,
+          }]
+        : []),
+    ],
+    ctaLabel,
+    ctaHref,
+    footerNote,
+  });
 }
 
 function normalizeCarLabel(carDetails?: string) {

@@ -324,6 +324,7 @@ export default function CheckInGearPage() {
 
       // Step 1: Create check-in records for each gear
       const checkedInGearNames: string[] = [];
+      const groupedSubmissionItems = new Map<string, Array<{ name: string; quantity: number; condition: string; notes?: string; damageNotes?: string }>>();
       for (const gearId of selectedGears) {
         const gear = checkedOutGears.find(g => g.id === gearId);
         if (!gear) continue;
@@ -336,6 +337,16 @@ export default function CheckInGearPage() {
           throw new Error(`Return quantity for ${gear.name} exceeds outstanding amount.`);
         }
         checkedInGearNames.push(`${gear.name} (x${returnQuantity})`);
+        const requestGroupKey = gear.current_request_id || 'no-request';
+        const requestItems = groupedSubmissionItems.get(requestGroupKey) || [];
+        requestItems.push({
+          name: gear.name,
+          quantity: returnQuantity,
+          condition: isDamaged ? 'Damaged' : 'Good',
+          notes: checkinNotes || undefined,
+          damageNotes: isDamaged ? damageDescription : undefined,
+        });
+        groupedSubmissionItems.set(requestGroupKey, requestItems);
 
         // Create a pending check-in record
         const { error: checkinError } = await supabase
@@ -359,25 +370,6 @@ export default function CheckInGearPage() {
 
         // Note: Activity logging removed - the checkins table serves as the audit trail
 
-        // Send email notifications for check-in submission
-        try {
-          await fetch('/api/checkins/notify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId,
-              gearId,
-              gearName: `${gear.name} (x${returnQuantity})`,
-              condition: isDamaged ? 'Damaged' : 'Good',
-              notes: checkinNotes || undefined,
-              damageNotes: isDamaged ? damageDescription : undefined
-            })
-          });
-        } catch (emailError) {
-          console.error('Failed to send check-in email notifications:', emailError);
-          // Don't fail the check-in if email fails
-        }
-
         // Notify admins of pending check-in
         const { data: admins } = await supabase
           .from('profiles')
@@ -393,6 +385,30 @@ export default function CheckInGearPage() {
             );
           }
         }
+      }
+
+      // Send one grouped email notification per booking/request group
+      try {
+        for (const [requestId, items] of groupedSubmissionItems.entries()) {
+          if (items.length === 0) continue;
+          const groupedNames = items.map((item) => `${item.name} (x${item.quantity})`);
+          await fetch('/api/checkins/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              requestId: requestId === 'no-request' ? null : requestId,
+              gearNames: groupedNames,
+              items,
+              condition: isDamaged ? 'Damaged' : 'Good',
+              notes: checkinNotes || undefined,
+              damageNotes: isDamaged ? damageDescription : undefined,
+            })
+          });
+        }
+      } catch (emailError) {
+        console.error('Failed to send grouped check-in email notifications:', emailError);
+        // Don't fail the check-in if email fails
       }
 
       // Fetch user profile for notification
