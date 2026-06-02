@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestEmail, sendCarReturnConfirmationEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
 import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -41,6 +42,14 @@ export async function POST(request: NextRequest) {
         if (selErr || !existing) return fail(404, selErr?.message || 'Not found', 'Booking not found.', 'CAR_BOOKING_NOT_FOUND');
         // Idempotency: if already completed, succeed
         if (existing.status === 'Completed') {
+            try {
+                const carId = await getBookedCarId(admin, bookingId);
+                if (carId) {
+                    await setCarStatus(admin, carId, 'Available');
+                }
+            } catch (syncError) {
+                console.warn('[Car Booking Complete] Failed to sync already-completed car status:', syncError);
+            }
             return ok(existing, 'Booking is already completed.');
         }
         if (existing.status !== 'Approved') return fail(400, 'Booking is not in Approved state', 'Only approved bookings can be completed.', 'CAR_BOOKING_INVALID_STATE');
@@ -132,6 +141,15 @@ export async function POST(request: NextRequest) {
                 time_slot: string | null;
                 updated_at: string | null;
             };
+        }
+
+        try {
+            const carId = await getBookedCarId(admin, bookingId);
+            if (carId) {
+                await setCarStatus(admin, carId, 'Available');
+            }
+        } catch (syncError) {
+            console.warn('[Car Booking Complete] Failed to mark assigned car available:', syncError);
         }
 
         try {

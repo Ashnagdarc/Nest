@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export async function GET(_request: NextRequest) {
     try {
         const admin = await createSupabaseServerClient(true);
-        const { data: cars, error: cErr } = await admin.from('cars').select('id,label,plate,image_url,status').eq('status', 'Available');
+        const { data: cars, error: cErr } = await admin.from('cars').select('id,label,plate,image_url,status').neq('status', 'Retired');
         if (cErr) return NextResponse.json({ data: [], error: cErr.message }, { status: 400 });
 
         const { data: approvedBookings, error: approvedErr } = await admin
@@ -43,6 +43,7 @@ export async function GET(_request: NextRequest) {
 
         const response = (cars || []).map((c) => {
             const lock = locksByCarId.get(c.id);
+            const visibleStatus = lock ? 'In Service' : (c.status || 'Unknown');
             const lockReason = lock
                 ? `Checked out${lock.employee_name ? ` by ${lock.employee_name}` : ''}${lock.date_of_use ? ` on ${lock.date_of_use}` : ''}${lock.time_slot ? ` (${lock.time_slot})` : ''}; mark booking as Completed to release`
                 : null;
@@ -51,7 +52,7 @@ export async function GET(_request: NextRequest) {
                 id: c.id,
                 label: c.label,
                 plate: c.plate,
-                status: c.status,
+                status: visibleStatus,
                 in_use: !!lock,
                 image_url: c.image_url || null,
                 locked_by_booking_id: lock?.booking_id || null,

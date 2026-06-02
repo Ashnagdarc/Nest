@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { sendGearRequestEmail, sendCarBookingApprovalEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
 import { randomUUID } from 'crypto';
 
 function isCarConflictError(message?: string | null) {
@@ -25,7 +26,17 @@ export async function POST(request: NextRequest) {
 
         const { data: booking, error: selErr } = await admin.from('car_bookings').select('*').eq('id', bookingId).maybeSingle();
         if (selErr || !booking) return fail(404, selErr?.message || 'Not found', 'Booking not found.', 'CAR_BOOKING_NOT_FOUND');
-        if (booking.status === 'Approved') return ok(booking, 'Booking is already approved.');
+        if (booking.status === 'Approved') {
+            try {
+                const carId = await getBookedCarId(admin, bookingId);
+                if (carId) {
+                    await setCarStatus(admin, carId, 'In Service');
+                }
+            } catch (syncError) {
+                console.warn('[Car Booking Approve] Failed to sync already-approved car status:', syncError);
+            }
+            return ok(booking, 'Booking is already approved.');
+        }
 
         // Enforce: only one Approved per user per day
         if (booking.requester_id) {
@@ -89,6 +100,14 @@ export async function POST(request: NextRequest) {
         }).eq('id', bookingId);
         if (error) {
             return fail(isCarConflictError(error.message) ? 409 : 400, error.message, 'Could not approve booking right now.', 'CAR_BOOKING_APPROVE_FAILED');
+        }
+
+        try {
+            if (assignment?.car_id) {
+                await setCarStatus(admin, assignment.car_id, 'In Service');
+            }
+        } catch (syncError) {
+            console.warn('[Car Booking Approve] Failed to mark assigned car in service:', syncError);
         }
 
         try {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestEmail, sendCarBookingCancellationEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
 import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -49,6 +50,14 @@ export async function POST(request: NextRequest) {
 
         // Idempotency: if already cancelled, return success
         if (booking.status === 'Cancelled') {
+            try {
+                const carId = await getBookedCarId(admin, bookingId);
+                if (carId) {
+                    await setCarStatus(admin, carId, 'Available');
+                }
+            } catch (syncError) {
+                console.warn('[Car Booking Cancel] Failed to sync already-cancelled car status:', syncError);
+            }
             return ok(booking, 'Booking is already cancelled.');
         }
 
@@ -58,6 +67,13 @@ export async function POST(request: NextRequest) {
                 { success: false, booking: null, items: [], warnings: [], user_message: `Cannot cancel booking with status: ${booking.status}.`, error_code: 'CAR_BOOKING_CANCEL_INVALID_STATE', correlation_id: correlationId, error: `Cannot cancel booking with status: ${booking.status}` },
                 { status: 400 }
             );
+        }
+
+        let assignedCarId: string | null = null;
+        try {
+            assignedCarId = await getBookedCarId(admin, bookingId);
+        } catch (syncError) {
+            console.warn('[Car Booking Cancel] Failed to read assigned car before cancellation:', syncError);
         }
 
         // Validate date policy (unless admin)
@@ -93,6 +109,14 @@ export async function POST(request: NextRequest) {
 
         if (updateErr) {
             return fail(400, updateErr.message, 'Could not cancel booking right now.', 'CAR_BOOKING_CANCEL_FAILED');
+        }
+
+        if (assignedCarId) {
+            try {
+                await setCarStatus(admin, assignedCarId, 'Available');
+            } catch (syncError) {
+                console.warn('[Car Booking Cancel] Failed to mark assigned car available:', syncError);
+            }
         }
 
         try {

@@ -508,11 +508,24 @@ export default function AdminManageCarBookingsPage() {
                             </div>
                         </div>
                     ))}
-                    {!sectionLoading.cars && carStatus.map((c) => (
+                    {!sectionLoading.cars && carStatus.map((c) => {
+                        const isInService = c.in_use || c.status === 'In Service';
+                        const statusText = isInService ? 'CURRENTLY IN TRIP' : c.status || 'OFFLINE';
+                        const statusTone = isInService
+                            ? 'text-orange-500'
+                            : c.status === 'Available'
+                                ? 'text-emerald-500'
+                                : 'text-rose-500';
+                        const dotTone = isInService
+                            ? 'bg-orange-500 shadow-orange-500/50 animate-pulse'
+                            : c.status === 'Available'
+                                ? 'bg-emerald-500 shadow-emerald-500/50'
+                                : 'bg-rose-500 shadow-rose-500/50';
+                        return (
                         <motion.div
                             key={c.id}
                             whileHover={{ y: -8, transition: { duration: 0.2 } }}
-                            className={`group  h-full relative glass rounded-3xl overflow-hidden border border-border/20 bg-secondary/10 flex flex-col ${c.in_use ? 'ring-2 ring-primary/20' : ''}`}
+                            className={`group  h-full relative glass rounded-3xl overflow-hidden border border-border/20 bg-secondary/10 flex flex-col ${isInService ? 'ring-2 ring-primary/20' : ''}`}
                         >
                             <div className="relative h-48 w-full bg-slate-900/40">
                                 {c.image_url ? (
@@ -525,15 +538,15 @@ export default function AdminManageCarBookingsPage() {
 
                                 {/* Status Tags */}
                                 <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
-                                    {c.in_use && (
+                                    {isInService && (
                                         <div className="bg-orange-600 text-[10px] font-bold uppercase text-white px-3 py-1 rounded-full shadow-2xl flex items-center gap-1.5">
                                             <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                                             Checked Out
                                         </div>
                                     )}
                                     {c.status !== 'Available' && (
-                                        <div className="bg-rose-600 text-[10px] font-bold uppercase text-white px-3 py-1 rounded-full shadow-2xl">
-                                            {c.status}
+                                        <div className={`${isInService ? 'bg-orange-600' : 'bg-rose-600'} text-[10px] font-bold uppercase text-white px-3 py-1 rounded-full shadow-2xl`}>
+                                            {isInService ? 'In Service' : c.status}
                                         </div>
                                     )}
                                 </div>
@@ -570,14 +583,15 @@ export default function AdminManageCarBookingsPage() {
                                 </button>
 
                                 <div className="mt-auto pt-4 flex items-center justify-between border-t border-border/5">
-                                    <span className={`text-[10px] font-bold uppercase tracking-[0.15em] ${c.in_use ? 'text-orange-500' : c.status === 'Available' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                        {c.in_use ? 'CURRENTLY IN TRIP' : c.status || 'OFFLINE'}
+                                    <span className={`text-[10px] font-bold uppercase tracking-[0.15em] ${statusTone}`}>
+                                        {statusText}
                                     </span>
-                                    <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_12px] ${c.in_use ? 'bg-orange-500 shadow-orange-500/50 animate-pulse' : c.status === 'Available' ? 'bg-emerald-500 shadow-emerald-500/50' : 'bg-rose-500 shadow-rose-500/50'}`} />
+                                    <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_12px] ${dotTone}`} />
                                 </div>
                             </div>
                         </motion.div>
-                    ))}
+                        );
+                    })}
                     {!sectionLoading.cars && carStatus.length === 0 && (
                         <div className="col-span-full text-center py-20 text-muted-foreground bg-secondary/5 rounded-[40px] border-2 border-dashed border-border/10">
                             <p className="font-bold uppercase tracking-widest opacity-30">No vehicles in fleet</p>
@@ -597,6 +611,7 @@ export default function AdminManageCarBookingsPage() {
                             <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="Available">Available</SelectItem>
+                                <SelectItem value="In Service" disabled>In Service</SelectItem>
                                 <SelectItem value="Maintenance">Maintenance</SelectItem>
                                 <SelectItem value="Retired">Retired</SelectItem>
                                 <SelectItem value="Unavailable">Unavailable</SelectItem>

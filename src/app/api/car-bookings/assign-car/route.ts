@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
 
 function isCarConflictError(message?: string | null) {
     const msg = (message || '').toLowerCase();
@@ -30,6 +31,13 @@ export async function POST(request: NextRequest) {
 
         const { data: booking, error: bErr } = await admin.from('car_bookings').select('*').eq('id', bookingId).maybeSingle();
         if (bErr || !booking) return NextResponse.json({ success: false, error: bErr?.message || 'Booking not found' }, { status: 404 });
+
+        let previousCarId: string | null = null;
+        try {
+            previousCarId = await getBookedCarId(admin, bookingId);
+        } catch (syncError) {
+            console.warn('[Car Booking Assign] Failed to read previous assigned car:', syncError);
+        }
 
         // Prevent double assignment and hard-lock cars with any active approved booking
         const { data: assignments, error: aErr } = await admin
@@ -71,6 +79,17 @@ export async function POST(request: NextRequest) {
                 { success: false, error: error.message },
                 { status: isCarConflictError(error.message) ? 409 : 400 }
             );
+        }
+
+        if (booking.status === 'Approved') {
+            try {
+                if (previousCarId && previousCarId !== carId) {
+                    await setCarStatus(admin, previousCarId, 'Available');
+                }
+                await setCarStatus(admin, carId, 'In Service');
+            } catch (syncError) {
+                console.warn('[Car Booking Assign] Failed to sync car statuses after assignment:', syncError);
+            }
         }
 
         return NextResponse.json({ success: true });
