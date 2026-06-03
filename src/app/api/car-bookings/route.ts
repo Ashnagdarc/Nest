@@ -73,9 +73,12 @@ export async function POST(request: NextRequest) {
         const maxPending = Number(process.env.CAR_BOOKINGS_MAX_PENDING || MAX_PENDING_DEFAULT);
         const { data: me } = await supabase.auth.getUser();
         const requesterId = me.user?.id || null;
+        if (!requesterId) {
+            return fail(401, 'No authenticated user found', 'Please sign in before booking a car.', 'CAR_BOOKING_UNAUTHORIZED');
+        }
 
         // Prevent exact duplicate bookings (same user, date, and slot)
-        if (requesterId) {
+        {
             const { data: existing } = await supabase
                 .from('car_bookings')
                 .select('id')
@@ -89,7 +92,7 @@ export async function POST(request: NextRequest) {
                 return fail(409, 'You already have a booking for this date and time slot.', 'You already have a booking for this date and time slot.', 'CAR_BOOKING_DUPLICATE');
             }
         }
-        if (requesterId && Number.isFinite(maxPending)) {
+        if (Number.isFinite(maxPending)) {
             const { count: pendingCount } = await supabase
                 .from('car_bookings')
                 .select('*', { count: 'exact', head: true })
