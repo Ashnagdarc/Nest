@@ -161,8 +161,7 @@ function BookingCard({
   onReturn?: (booking: CarBooking) => void;
 }) {
   const canCancel =
-    ["Pending", "Approved"].includes(booking.status) &&
-    new Date(booking.date_of_use) >= new Date().toISOString().split("T")[0];
+    booking.status === "Pending";
   const canReturn = booking.status === "Approved";
 
   return (
@@ -214,7 +213,7 @@ function BookingCard({
             onClick={() => onCancel?.(booking)}
             className="w-full text-xs h-8"
           >
-            Cancel Booking
+            Delete Booking
           </Button>
         )}
       </div>
