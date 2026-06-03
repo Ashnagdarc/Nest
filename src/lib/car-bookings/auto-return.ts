@@ -82,9 +82,9 @@ export async function autoReturnDueCarBookings(
         }
       }
 
-      const carId = await getBookedCarId(admin as SupabaseAdminLike, booking.id);
+      const carId = await getBookedCarId(admin as unknown as Parameters<typeof getBookedCarId>[0], booking.id);
       if (carId) {
-        await setCarStatus(admin as SupabaseAdminLike, carId, 'Available');
+        await setCarStatus(admin as unknown as Parameters<typeof setCarStatus>[0], carId, 'Available');
         releasedCars += 1;
       }
 
