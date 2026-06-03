@@ -42,6 +42,7 @@ import {
   TimePickerSeparator,
   TimePickerTrigger,
 } from "@/components/ui/time-picker";
+import { Controller } from "react-hook-form";
 
 // ============================================================================
 // TYPES
@@ -305,6 +306,7 @@ function NewBookingTab({
   isSubmitting: boolean;
 }) {
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -387,30 +389,42 @@ function NewBookingTab({
               <label className="block text-sm font-medium text-foreground mb-2">
                 Start Time <span className="text-orange-500">*</span>
               </label>
-              <TimePicker className="w-full">
-                <TimePickerLabel>Select booking time</TimePickerLabel>
-                <TimePickerInputGroup>
-                  <TimePickerInput
-                    segment="hour"
-                    className="h-11 bg-neutral-800 border-neutral-700 focus:border-orange-500 transition-colors"
-                  />
-                  <TimePickerSeparator>:</TimePickerSeparator>
-                  <TimePickerInput
-                    segment="minute"
-                    className="h-11 bg-neutral-800 border-neutral-700 focus:border-orange-500 transition-colors"
-                  />
-                  <TimePickerInput
-                    segment="period"
-                    className="h-11 bg-neutral-800 border-neutral-700 focus:border-orange-500 transition-colors"
-                  />
-                  <TimePickerTrigger />
-                </TimePickerInputGroup>
-                <TimePickerContent>
-                  <TimePickerHour />
-                  <TimePickerMinute />
-                  <TimePickerPeriod />
-                </TimePickerContent>
-              </TimePicker>
+              <Controller
+                name="timeSlot"
+                control={control}
+                rules={{ required: "Start time is required" }}
+                render={({ field }) => (
+                  <TimePicker
+                    className="w-full"
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    name={field.name}
+                  >
+                    <TimePickerLabel>Select booking time</TimePickerLabel>
+                    <TimePickerInputGroup>
+                      <TimePickerInput
+                        segment="hour"
+                        className="h-11 bg-neutral-800 border-neutral-700 focus:border-orange-500 transition-colors"
+                      />
+                      <TimePickerSeparator>:</TimePickerSeparator>
+                      <TimePickerInput
+                        segment="minute"
+                        className="h-11 bg-neutral-800 border-neutral-700 focus:border-orange-500 transition-colors"
+                      />
+                      <TimePickerInput
+                        segment="period"
+                        className="h-11 bg-neutral-800 border-neutral-700 focus:border-orange-500 transition-colors"
+                      />
+                      <TimePickerTrigger />
+                    </TimePickerInputGroup>
+                    <TimePickerContent>
+                      <TimePickerHour />
+                      <TimePickerMinute />
+                      <TimePickerPeriod />
+                    </TimePickerContent>
+                  </TimePicker>
+                )}
+              />
               {errors.timeSlot && (
                 <p className="text-xs text-red-400 mt-2">
                   {errors.timeSlot.message}
