@@ -10,6 +10,7 @@ import {
   createCarBooking,
   listCarBookings,
   cancelCarBooking,
+  completeCarBooking,
 } from "@/services/car-bookings";
 import type { CarBooking } from "@/types/car-bookings";
 import { useToast } from "@/hooks/use-toast";
@@ -147,15 +148,18 @@ function BookingCard({
   carLabel,
   carPlate,
   onCancel,
+  onReturn,
 }: {
   booking: CarBooking;
   carLabel?: string;
   carPlate?: string;
   onCancel?: (booking: CarBooking) => void;
+  onReturn?: (booking: CarBooking) => void;
 }) {
   const canCancel =
     ["Pending", "Approved"].includes(booking.status) &&
     new Date(booking.date_of_use) >= new Date().toISOString().split("T")[0];
+  const canReturn = booking.status === "Approved";
 
   return (
     <motion.div
@@ -189,16 +193,27 @@ function BookingCard({
         </div>
       </div>
 
-      {canCancel && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => onCancel?.(booking)}
-          className="w-full text-xs h-8"
-        >
-          Cancel Booking
-        </Button>
-      )}
+      <div className="grid gap-2">
+        {canReturn && (
+          <Button
+            size="sm"
+            onClick={() => onReturn?.(booking)}
+            className="w-full text-xs h-8 bg-green-600 hover:bg-green-700 text-white"
+          >
+            Return Car
+          </Button>
+        )}
+        {canCancel && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onCancel?.(booking)}
+            className="w-full text-xs h-8"
+          >
+            Cancel Booking
+          </Button>
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -575,16 +590,24 @@ function MyBookingsTab({
   bookings,
   assignedMap,
   onCancel,
+  onReturn,
   isCancelling,
+  isReturning,
   onCancelConfirm,
+  onReturnConfirm,
   cancelDialog,
+  returnDialog,
 }: {
   bookings: CarBooking[];
   assignedMap: Record<string, { label?: string; plate?: string }>;
   onCancel: (booking: CarBooking) => void;
+  onReturn: (booking: CarBooking) => void;
   isCancelling: boolean;
+  isReturning: boolean;
   onCancelConfirm: () => Promise<void>;
+  onReturnConfirm: () => Promise<void>;
   cancelDialog: { open: boolean; booking: CarBooking | null };
+  returnDialog: { open: boolean; booking: CarBooking | null };
 }) {
   const groupedByStatus = bookings.reduce((acc, booking) => {
     const status = booking.status as keyof BookingsByStatus;
@@ -625,6 +648,7 @@ function MyBookingsTab({
                   carLabel={assignedMap[booking.id]?.label}
                   carPlate={assignedMap[booking.id]?.plate}
                   onCancel={onCancel}
+                  onReturn={onReturn}
                 />
               ))}
             </div>
@@ -660,6 +684,31 @@ function MyBookingsTab({
               disabled={isCancelling}
             >
               {isCancelling ? "Cancelling..." : "Cancel Booking"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={returnDialog.open} onOpenChange={() => {}}>
+        <DialogContent className="bg-neutral-900 border-neutral-800">
+          <DialogHeader>
+            <DialogTitle>Return Car Now?</DialogTitle>
+            <DialogDescription>
+              {returnDialog.booking?.employee_name} -{" "}
+              {returnDialog.booking?.date_of_use}{" "}
+              {returnDialog.booking?.time_slot}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {}}>
+              Keep Booking
+            </Button>
+            <Button
+              onClick={onReturnConfirm}
+              disabled={isReturning}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {isReturning ? "Returning..." : "Return Car"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -841,6 +890,14 @@ export default function UserCarBookingPageRefactored() {
     booking: null,
   });
   const [isCancelling, setIsCancelling] = useState(false);
+  const [returnDialog, setReturnDialog] = useState<{
+    open: boolean;
+    booking: CarBooking | null;
+  }>({
+    open: false,
+    booking: null,
+  });
+  const [isReturning, setIsReturning] = useState(false);
 
   // State for form submission
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
@@ -980,6 +1037,10 @@ export default function UserCarBookingPageRefactored() {
     setCancelDialog({ open: true, booking });
   };
 
+  const handleReturnClick = (booking: CarBooking) => {
+    setReturnDialog({ open: true, booking });
+  };
+
   const handleCancelConfirm = async () => {
     if (!cancelDialog.booking) return;
     setIsCancelling(true);
@@ -1007,6 +1068,33 @@ export default function UserCarBookingPageRefactored() {
       });
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  const handleReturnConfirm = async () => {
+    if (!returnDialog.booking) return;
+    setIsReturning(true);
+    try {
+      const res = await completeCarBooking(returnDialog.booking.id);
+      if (res.success) {
+        toast({ title: "Success", description: "Car returned successfully" });
+        setReturnDialog({ open: false, booking: null });
+        await loadData();
+      } else {
+        toast({
+          title: "Error",
+          description: res.user_message || "Failed to return car",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to return car",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReturning(false);
     }
   };
 
@@ -1091,9 +1179,13 @@ export default function UserCarBookingPageRefactored() {
                 bookings={myBookings}
                 assignedMap={assignedMap}
                 onCancel={handleCancelClick}
+                onReturn={handleReturnClick}
                 isCancelling={isCancelling}
+                isReturning={isReturning}
                 onCancelConfirm={handleCancelConfirm}
+                onReturnConfirm={handleReturnConfirm}
                 cancelDialog={cancelDialog}
+                returnDialog={returnDialog}
               />
             )}
             {activeTab === "history" && (

@@ -134,3 +134,19 @@ export async function listCars(): Promise<{ data: Array<{ id: string; label: str
 export async function assignCar(bookingId: string, carId: string): Promise<{ success: boolean; error?: string }> {
     return apiPost('/api/car-bookings/assign-car', { bookingId, carId });
 }
+
+export async function completeCarBooking(bookingId: string): Promise<{ success: boolean; error?: string; user_message?: string | null; correlation_id?: string }> {
+    try {
+        const res = await apiPost<BookingEnvelope>('/api/car-bookings/complete', { bookingId });
+        return { success: !!res.success, error: res.error, user_message: res.user_message, correlation_id: res.correlation_id };
+    } catch (error: any) {
+        let parsed: BookingEnvelope | null = null;
+        try { parsed = JSON.parse(error?.message || '{}'); } catch { parsed = null; }
+        return {
+            success: false,
+            error: parsed?.user_message || parsed?.error || 'Failed to complete booking',
+            user_message: parsed?.user_message || null,
+            correlation_id: parsed?.correlation_id,
+        };
+    }
+}

@@ -14,20 +14,14 @@ export async function POST(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
         const isCron = Boolean(process.env.CRON_SECRET) && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+        let currentUserId: string | null = null;
         if (!isCron) {
             const authClient = await createSupabaseServerClient();
             const { data: userData } = await authClient.auth.getUser();
             if (!userData.user) {
                 return fail(401, 'Unauthorized', 'Authentication required.', 'CAR_BOOKING_UNAUTHORIZED');
             }
-            const { data: profile } = await authClient
-                .from('profiles')
-                .select('role,status')
-                .eq('id', userData.user.id)
-                .maybeSingle();
-            if (!profile || profile.role !== 'Admin' || profile.status !== 'Active') {
-                return fail(403, 'Only admins can complete car bookings manually.', 'Only admins can complete bookings manually.', 'CAR_BOOKING_ADMIN_REQUIRED');
-            }
+            currentUserId = userData.user.id;
         }
 
         const admin = await createSupabaseServerClient(true);
@@ -40,6 +34,18 @@ export async function POST(request: NextRequest) {
             .eq('id', bookingId)
             .maybeSingle();
         if (selErr || !existing) return fail(404, selErr?.message || 'Not found', 'Booking not found.', 'CAR_BOOKING_NOT_FOUND');
+        if (!isCron && currentUserId) {
+            const { data: profile } = await admin
+                .from('profiles')
+                .select('role,status')
+                .eq('id', currentUserId)
+                .maybeSingle();
+            const isAdmin = profile?.role === 'Admin' && profile?.status === 'Active';
+            const isOwner = existing.requester_id === currentUserId;
+            if (!isAdmin && !isOwner) {
+                return fail(403, 'Only the booking owner or an admin can complete car bookings manually.', 'Only the booking owner or an admin can complete bookings manually.', 'CAR_BOOKING_ADMIN_REQUIRED');
+            }
+        }
         // Idempotency: if already completed, succeed
         if (existing.status === 'Completed') {
             try {
