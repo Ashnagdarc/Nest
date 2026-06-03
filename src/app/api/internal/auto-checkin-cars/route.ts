@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { transitionBooking } from '@/lib/bookings-v2/service';
 
-export async function POST(request: NextRequest) {
-  if (process.env.CRON_SECRET && request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+async function handleAutoCheckin(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  const isBearerAuthorized = !!process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  const isVercelCron = request.headers.has('x-vercel-cron');
+
+  if (!isBearerAuthorized && !isVercelCron) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -11,7 +15,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createSupabaseServerClient(true);
     const nowIso = new Date().toISOString();
 
-    const { data: dueBookings, error } = await (supabase as any)
+    const { data: dueBookings, error } = await supabase
       .from('bookings')
       .select('id,status,source_type,end_at')
       .eq('source_type', 'car_booking')
@@ -47,4 +51,12 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     return NextResponse.json({ success: false, error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 });
   }
+}
+
+export async function GET(request: NextRequest) {
+  return handleAutoCheckin(request);
+}
+
+export async function POST(request: NextRequest) {
+  return handleAutoCheckin(request);
 }

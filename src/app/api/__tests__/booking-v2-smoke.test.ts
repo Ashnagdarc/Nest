@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { POST as createBookingPost } from '@/app/api/v2/bookings/route';
 import { POST as transitionBookingPost } from '@/app/api/v2/bookings/[id]/transition/route';
-import { POST as autoCheckinPost } from '@/app/api/internal/auto-checkin-cars/route';
+import { GET as autoCheckinGet } from '@/app/api/internal/auto-checkin-cars/route';
+import { GET as autoReturnGet } from '@/app/api/internal/auto-return-cars/route';
 
 const mockCreateSupabaseServerClient = jest.fn();
 const mockCreateBookingAggregate = jest.fn();
 const mockTransitionBooking = jest.fn();
+const mockAutoReturnDueCarBookings = jest.fn();
 
 jest.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: (...args: unknown[]) => mockCreateSupabaseServerClient(...args),
@@ -14,6 +16,10 @@ jest.mock('@/lib/supabase/server', () => ({
 jest.mock('@/lib/bookings-v2/service', () => ({
   createBookingAggregate: (...args: unknown[]) => mockCreateBookingAggregate(...args),
   transitionBooking: (...args: unknown[]) => mockTransitionBooking(...args),
+}));
+
+jest.mock('@/lib/car-bookings/auto-return', () => ({
+  autoReturnDueCarBookings: (...args: unknown[]) => mockAutoReturnDueCarBookings(...args),
 }));
 
 function buildSupabaseMock(options?: {
@@ -73,21 +79,30 @@ describe('Booking V2 smoke tests', () => {
   });
 
   it('rejects unauthenticated v2 booking creation', async () => {
-    (mockCreateSupabaseServerClient as any).mockResolvedValueOnce(buildSupabaseMock({ userId: null }));
+    const mockedCreateSupabaseServerClient = mockCreateSupabaseServerClient as jest.MockedFunction<
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    mockedCreateSupabaseServerClient.mockResolvedValueOnce(buildSupabaseMock({ userId: null }));
     const req = new Request('http://localhost/api/v2/bookings', {
       method: 'POST',
       body: JSON.stringify({}),
       headers: { 'content-type': 'application/json' },
     });
 
-    const res = await createBookingPost(req as any);
+    const res = await createBookingPost(req as Parameters<typeof createBookingPost>[0]);
     expect(res.status).toBe(401);
   });
 
   it('creates booking through v2 handler when payload is valid', async () => {
     const userId = '11111111-1111-1111-1111-111111111111';
-    (mockCreateSupabaseServerClient as any).mockResolvedValueOnce(buildSupabaseMock({ userId, profileRole: 'User' }));
-    (mockCreateBookingAggregate as any).mockResolvedValueOnce({
+    const mockedCreateSupabaseServerClient = mockCreateSupabaseServerClient as jest.MockedFunction<
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    const mockedCreateBookingAggregate = mockCreateBookingAggregate as jest.MockedFunction<
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    mockedCreateSupabaseServerClient.mockResolvedValueOnce(buildSupabaseMock({ userId, profileRole: 'User' }));
+    mockedCreateBookingAggregate.mockResolvedValueOnce({
       booking: { id: 'b1', status: 'pending' },
       items: [{ id: 'i1', status: 'pending' }],
       warnings: [],
@@ -107,7 +122,7 @@ describe('Booking V2 smoke tests', () => {
       }),
     });
 
-    const res = await createBookingPost(req as any);
+    const res = await createBookingPost(req as Parameters<typeof createBookingPost>[0]);
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
@@ -116,7 +131,10 @@ describe('Booking V2 smoke tests', () => {
 
   it('blocks non-admin booking transition', async () => {
     const userId = '11111111-1111-1111-1111-111111111111';
-    (mockCreateSupabaseServerClient as any).mockResolvedValueOnce(
+    const mockedCreateSupabaseServerClient = mockCreateSupabaseServerClient as jest.MockedFunction<
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    mockedCreateSupabaseServerClient.mockResolvedValueOnce(
       buildSupabaseMock({ userId, profileRole: 'User', profileStatus: 'Active' })
     );
 
@@ -129,7 +147,9 @@ describe('Booking V2 smoke tests', () => {
       }),
     });
 
-    const res = await transitionBookingPost(req as any, { params: Promise.resolve({ id: 'abc' }) });
+    const res = await transitionBookingPost(req as Parameters<typeof transitionBookingPost>[0], {
+      params: Promise.resolve({ id: 'abc' }),
+    });
     expect(res.status).toBe(403);
   });
 
@@ -139,11 +159,20 @@ describe('Booking V2 smoke tests', () => {
       { id: 'b2', status: 'overdue', source_type: 'car_booking', end_at: '2026-05-28T10:00:00.000Z' },
     ];
 
-    (mockCreateSupabaseServerClient as any).mockResolvedValueOnce(buildSupabaseMock({ dueBookings }));
-    (mockTransitionBooking as any).mockResolvedValue(undefined);
+    const mockedCreateSupabaseServerClient = mockCreateSupabaseServerClient as jest.MockedFunction<
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    const mockedTransitionBooking = mockTransitionBooking as jest.MockedFunction<
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    mockedCreateSupabaseServerClient.mockResolvedValueOnce(buildSupabaseMock({ dueBookings }));
+    mockedTransitionBooking.mockResolvedValueOnce(undefined);
 
-    const req = new Request('http://localhost/api/internal/auto-checkin-cars', { method: 'POST' });
-    const res = await autoCheckinPost(req as any);
+    const req = new Request('http://localhost/api/internal/auto-checkin-cars', {
+      method: 'GET',
+      headers: { 'x-vercel-cron': '1' },
+    });
+    const res = await autoCheckinGet(req as Parameters<typeof autoCheckinGet>[0]);
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -151,5 +180,34 @@ describe('Booking V2 smoke tests', () => {
     expect(body.processed).toBe(2);
     expect(body.failed).toBe(0);
     expect(mockTransitionBooking).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows the auto-return route to run via Vercel cron header', async () => {
+    const mockedCreateSupabaseServerClient = mockCreateSupabaseServerClient as jest.MockedFunction<
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    const mockedAutoReturnDueCarBookings = mockAutoReturnDueCarBookings as jest.MockedFunction<
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    mockedCreateSupabaseServerClient.mockResolvedValueOnce(buildSupabaseMock({}));
+    mockedAutoReturnDueCarBookings.mockResolvedValueOnce({
+      processed: 1,
+      releasedCars: 1,
+      failed: 0,
+      cutoffDate: '2026-06-03',
+    });
+
+    const req = new Request('http://localhost/api/internal/auto-return-cars', {
+      method: 'GET',
+      headers: { 'x-vercel-cron': '1' },
+    });
+
+    const res = await autoReturnGet(req as Parameters<typeof autoReturnGet>[0]);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.processed).toBe(1);
+    expect(mockAutoReturnDueCarBookings).toHaveBeenCalledTimes(1);
   });
 });
