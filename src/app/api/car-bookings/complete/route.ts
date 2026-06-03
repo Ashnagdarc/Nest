@@ -159,12 +159,12 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-            const { data: aggregate } = await (admin as any)
+            const aggregateQuery = admin
                 .from('bookings')
                 .select('id')
                 .eq('source_type', 'car_booking')
-                .eq('source_id', bookingId)
-                .maybeSingle();
+                .eq('source_id', bookingId);
+            const { data: aggregate } = await aggregateQuery.maybeSingle();
             if (aggregate?.id) {
                 await transitionBooking({
                     bookingId: aggregate.id,

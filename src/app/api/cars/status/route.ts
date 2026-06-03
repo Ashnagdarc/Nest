@@ -4,7 +4,10 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export async function GET(_request: NextRequest) {
     try {
         const admin = await createSupabaseServerClient(true);
-        const { data: cars, error: cErr } = await admin.from('cars').select('id,label,plate,image_url,status').neq('status', 'Retired');
+        const { searchParams } = new URL(_request.url);
+        const includeRetired = searchParams.get('includeRetired') === 'true' || searchParams.get('includeRetired') === '1';
+        const carsQuery = admin.from('cars').select('id,label,plate,image_url,status');
+        const { data: cars, error: cErr } = includeRetired ? await carsQuery : await carsQuery.neq('status', 'Retired');
         if (cErr) return NextResponse.json({ data: [], error: cErr.message }, { status: 400 });
 
         const { data: approvedBookings, error: approvedErr } = await admin

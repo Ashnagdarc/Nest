@@ -24,14 +24,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import {
   TimePicker,
   TimePickerContent,
   TimePickerHour,
@@ -68,6 +60,13 @@ type BookingsByStatus = {
   Completed: CarBooking[];
   Rejected: CarBooking[];
   Cancelled: CarBooking[];
+};
+
+type CarBookingFormValues = {
+  employeeName: string;
+  dateOfUse: string;
+  timeSlot: string;
+  preferredCarId?: string;
 };
 
 // ============================================================================
@@ -115,6 +114,11 @@ function StatusBadge({ status }: { status: string }) {
     Completed: "bg-blue-500/20 text-blue-400 border border-blue-500/30",
     Rejected: "bg-red-500/20 text-red-400 border border-red-500/30",
     Cancelled: "bg-red-500/20 text-red-400 border border-red-500/30",
+    Available: "bg-green-500/20 text-green-400 border border-green-500/30",
+    "In Use": "bg-orange-500/20 text-orange-400 border border-orange-500/30",
+    Maintenance: "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
+    Damaged: "bg-red-500/20 text-red-400 border border-red-500/30",
+    Retired: "bg-gray-500/20 text-gray-300 border border-gray-500/30",
   };
 
   return (
@@ -223,11 +227,13 @@ function FleetCard({
   onSelect,
   isDisabled,
   disabledReason,
+  isSelected,
 }: {
   car: CarStatusRow;
   onSelect?: (carId: string) => void;
   isDisabled?: boolean;
   disabledReason?: string;
+  isSelected?: boolean;
 }) {
   return (
     <motion.button
@@ -239,7 +245,7 @@ function FleetCard({
       className={`group transition-all border border-neutral-800 ${
         isDisabled
           ? "opacity-50 cursor-not-allowed"
-          : "hover:border-orange-500/50 hover:scale-105 cursor-pointer"
+          : `hover:border-orange-500/50 hover:scale-105 cursor-pointer ${isSelected ? "border-orange-500" : ""}`
       }`}
     >
       <div className="bg-neutral-900">
@@ -317,7 +323,7 @@ function NewBookingTab({
   isSubmitting,
 }: {
   carStatus: CarStatusRow[];
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CarBookingFormValues) => Promise<void>;
   isSubmitting: boolean;
 }) {
   const {
@@ -328,12 +334,7 @@ function NewBookingTab({
     formState: { errors },
     watch,
     setValue,
-  } = useForm<{
-    employeeName: string;
-    dateOfUse: string;
-    timeSlot: string;
-    preferredCarId?: string;
-  }>({
+  } = useForm<CarBookingFormValues>({
     defaultValues: {
       employeeName: "",
       dateOfUse: "",
@@ -345,7 +346,7 @@ function NewBookingTab({
   const preferredCarId = watch("preferredCarId");
   const selectedCar = carStatus.find((c) => c.id === preferredCarId);
 
-  const handleFormSubmit = async (data: any) => {
+  const handleFormSubmit = async (data: CarBookingFormValues) => {
     await onSubmit(data);
     reset();
   };
@@ -456,7 +457,7 @@ function NewBookingTab({
               Select a Vehicle (Optional)
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              Click on a vehicle to select it, or leave blank and we'll assign
+              Click on a vehicle to select it, or leave blank and we&apos;ll assign
               the best available option
             </p>
           </CardHeader>
@@ -502,72 +503,19 @@ function NewBookingTab({
               </motion.div>
             )}
 
-            {/* Available Vehicles Grid */}
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-3">
-                Available Vehicles
+                All Vehicles
               </p>
-              {carStatus.filter((c) => c.status === "Available" && !c.in_use)
-                .length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {carStatus
-                    .filter((c) => c.status === "Available" && !c.in_use)
-                    .map((car) => (
-                      <motion.button
-                        key={car.id}
-                        type="button"
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        onClick={() => setValue("preferredCarId", car.id)}
-                        className={`group transition-all border-2 ${
-                          preferredCarId === car.id
-                            ? "border-orange-500 bg-orange-500/5"
-                            : "border-neutral-700 hover:border-orange-500/50"
-                        }`}
-                      >
-                        <div className="bg-neutral-900">
-                          {/* Image */}
-                          <div className="relative h-28 bg-neutral-800 overflow-hidden flex items-center justify-center">
-                            {car.image_url ? (
-                              <img
-                                src={car.image_url}
-                                alt={car.label}
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform"
-                              />
-                            ) : (
-                              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                                <p className="text-xs">No Image</p>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Info */}
-                          <div className="p-3 space-y-2">
-                            <div>
-                              <p className="font-semibold text-foreground text-xs truncate">
-                                {car.label}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {car.plate || "No Plate"}
-                              </p>
-                            </div>
-                            {preferredCarId === car.id && (
-                              <div className="text-xs font-medium text-orange-400 text-center">
-                                Selected
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </motion.button>
-                    ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 border border-neutral-800">
-                  <p className="text-sm text-muted-foreground">
-                    No vehicles available at this time
-                  </p>
-                </div>
-              )}
+              <FleetStatusTab
+                cars={carStatus.map((car) => ({
+                  ...car,
+                  status: car.status || "Unknown",
+                  in_use: car.in_use,
+                }))}
+                onSelectCar={(carId) => setValue("preferredCarId", carId)}
+                selectedCarId={preferredCarId}
+              />
             </div>
           </CardContent>
         </Card>
@@ -720,16 +668,35 @@ function MyBookingsTab({
 function FleetStatusTab({
   cars,
   onSelectCar,
+  selectedCarId,
 }: {
   cars: CarStatusRow[];
   onSelectCar?: (carId: string) => void;
+  selectedCarId?: string;
 }) {
-  const availableCars = cars.filter(
-    (c) => c.status === "Available" && !c.in_use,
-  );
-  const unavailableCars = cars.filter(
-    (c) => c.status !== "Available" || c.in_use,
-  );
+  const normalizeStatus = (car: CarStatusRow) => {
+    if (car.in_use) return "In Use";
+    const raw = (car.status || "Unknown").toLowerCase();
+    if (raw === "retired") return "Retired";
+    if (raw === "maintenance" || raw === "in service" || raw === "under repair") return "Maintenance";
+    if (raw === "damage" || raw === "damaged") return "Damaged";
+    if (raw === "available") return "Available";
+    return car.status || "Unknown";
+  };
+
+  const grouped = {
+    Available: cars.filter((c) => normalizeStatus(c) === "Available"),
+    "In Use": cars.filter((c) => normalizeStatus(c) === "In Use"),
+    Maintenance: cars.filter((c) => normalizeStatus(c) === "Maintenance"),
+    Damaged: cars.filter((c) => normalizeStatus(c) === "Damaged"),
+    Retired: cars.filter((c) => normalizeStatus(c) === "Retired"),
+    Other: cars.filter(
+      (c) =>
+        !["Available", "In Use", "Maintenance", "Damaged", "Retired"].includes(
+          normalizeStatus(c),
+        ),
+    ),
+  } as const;
 
   return (
     <motion.div
@@ -737,41 +704,41 @@ function FleetStatusTab({
       animate={{ opacity: 1 }}
       className="space-y-8"
     >
-      {/* Available Cars */}
-      {availableCars.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-green-400 mb-3">
-            Available Vehicles
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {availableCars.map((car) => (
-              <FleetCard key={car.id} car={car} onSelect={onSelectCar} />
-            ))}
+      {(
+        [
+          ["Available Vehicles", "Available", "text-green-400", false],
+          ["In Use", "In Use", "text-orange-400", true],
+          ["Maintenance", "Maintenance", "text-yellow-400", true],
+          ["Damaged", "Damaged", "text-red-400", true],
+          ["Retired", "Retired", "text-gray-400", true],
+          ["Other", "Other", "text-sky-400", true],
+        ] as const
+      ).map(([title, key, headingColor, disabled]) => {
+        const items = grouped[key];
+        if (items.length === 0) return null;
+        return (
+          <div key={title}>
+            <h3 className={`text-sm font-semibold mb-3 ${headingColor}`}>
+              {title}
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {items.map((car) => (
+                <FleetCard
+                  key={car.id}
+                  car={car}
+                  onSelect={disabled ? undefined : onSelectCar}
+                  isDisabled={disabled}
+                  isSelected={selectedCarId === car.id}
+                  disabledReason={
+                    car.lock_reason ||
+                    `This vehicle is ${normalizeStatus(car).toLowerCase()}`
+                  }
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Unavailable Cars */}
-      {unavailableCars.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-red-400 mb-3">
-            Unavailable Vehicles
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {unavailableCars.map((car) => (
-              <FleetCard
-                key={car.id}
-                car={car}
-                isDisabled
-                disabledReason={
-                  car.lock_reason ||
-                  `This vehicle is ${car.status?.toLowerCase()}`
-                }
-              />
-            ))}
-          </div>
-        </div>
-      )}
+        );
+      })}
 
       {cars.length === 0 && (
         <EmptyState
@@ -912,7 +879,7 @@ export default function UserCarBookingPageRefactored() {
       const recent = [...(pending.data || []), ...(approved.data || [])];
       setMyBookings(recent);
 
-      const status = await apiGet<{ data: CarStatusRow[] }>(`/api/cars/status`);
+      const status = await apiGet<{ data: CarStatusRow[] }>(`/api/cars/status?includeRetired=true`);
       setCarStatus(status.data || []);
 
       // Load assigned cars
@@ -999,7 +966,7 @@ export default function UserCarBookingPageRefactored() {
     loadData();
   }, []);
 
-  const handleFormSubmit = async (data: any) => {
+  const handleFormSubmit = async (data: CarBookingFormValues) => {
     setIsFormSubmitting(true);
     try {
       const res = await createCarBooking({
@@ -1022,7 +989,7 @@ export default function UserCarBookingPageRefactored() {
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "An unexpected error occurred",
@@ -1060,7 +1027,7 @@ export default function UserCarBookingPageRefactored() {
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to cancel booking",
@@ -1087,7 +1054,7 @@ export default function UserCarBookingPageRefactored() {
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to return car",
