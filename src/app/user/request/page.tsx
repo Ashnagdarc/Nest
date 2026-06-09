@@ -181,6 +181,8 @@ type RequestFormValues = z.infer<typeof requestSchema>;
 
 const REQUEST_FORM_DRAFT_KEY = "user-request-gear-form-draft";
 
+const buildRequestDraftKey = (userId: string) => `${REQUEST_FORM_DRAFT_KEY}:${userId}`;
+
 function RequestGearContent() {
   const searchParams = useSearchParams();
   const preselectedGearId = searchParams.get("gearId");
@@ -195,6 +197,8 @@ function RequestGearContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
+  const [isGearsLoaded, setIsGearsLoaded] = useState(false);
+  const [restoredDraftForUserId, setRestoredDraftForUserId] = useState<string | null>(null);
 
   /**
    * Form Configuration
@@ -225,6 +229,16 @@ function RequestGearContent() {
       .reduce((sum, x) => sum + (x.available_quantity || 0), 0);
   };
 
+  const availableGearIds = useMemo(
+    () => new Set(availableGears.map((gear) => gear.id)),
+    [availableGears],
+  );
+
+  const availableGearMap = useMemo(
+    () => new Map(availableGears.map((gear) => [gear.id, gear] as const)),
+    [availableGears],
+  );
+
   /**
    * Draft Persistence Effect
    *
@@ -232,23 +246,71 @@ function RequestGearContent() {
    * form values change to prevent data loss.
    */
   useEffect(() => {
-    const draft = localStorage.getItem(REQUEST_FORM_DRAFT_KEY);
-    if (draft) {
-      try {
-        const values = JSON.parse(draft);
-        form.reset({ ...form.getValues(), ...values });
-      } catch (error) {
-        console.warn("Failed to restore form draft:", error);
-      }
+    if (!userId || !isGearsLoaded || restoredDraftForUserId === userId) return;
+
+    const scopedDraftKey = buildRequestDraftKey(userId);
+    const draft = localStorage.getItem(scopedDraftKey);
+
+    if (!draft) {
+      setRestoredDraftForUserId(userId);
+      return;
     }
-  }, [form]);
+
+    try {
+      const values = JSON.parse(draft) as Partial<RequestFormValues> & {
+        selectedGears?: string[];
+        quantities?: Record<string, number>;
+      };
+      const selectedGears = Array.isArray(values.selectedGears)
+        ? values.selectedGears
+        : [];
+      const removedGearIds = selectedGears.filter(
+        (gearId) => !availableGearIds.has(gearId),
+      );
+      const cleanedSelectedGears = selectedGears.filter((gearId) =>
+        availableGearIds.has(gearId),
+      );
+      const cleanedQuantities = Object.fromEntries(
+        Object.entries(values.quantities || {}).filter(([gearId]) =>
+          cleanedSelectedGears.includes(gearId),
+        ),
+      );
+      const cleanedValues = {
+        ...form.getValues(),
+        ...values,
+        selectedGears: cleanedSelectedGears,
+        quantities: cleanedQuantities,
+      };
+
+      form.reset(cleanedValues);
+      localStorage.setItem(scopedDraftKey, JSON.stringify(cleanedValues));
+
+      if (removedGearIds.length > 0) {
+        const removedLabels = removedGearIds.map(
+          (gearId) => availableGearMap.get(gearId)?.name ?? gearId,
+        );
+        toast({
+          title: "Saved draft updated",
+          description: `${removedLabels.join(", ")} ${removedLabels.length === 1 ? "was" : "were"} removed because it is no longer selectable.`,
+          variant: "destructive",
+        });
+      }
+      setRestoredDraftForUserId(userId);
+    } catch (error) {
+      console.warn("Failed to restore form draft:", error);
+      setRestoredDraftForUserId(userId);
+    }
+  }, [availableGearIds, availableGearMap, form, isGearsLoaded, restoredDraftForUserId, toast, userId]);
 
   useEffect(() => {
+    if (!userId) return;
+
+    const scopedDraftKey = buildRequestDraftKey(userId);
     const subscription = form.watch((value) => {
-      localStorage.setItem(REQUEST_FORM_DRAFT_KEY, JSON.stringify(value));
+      localStorage.setItem(scopedDraftKey, JSON.stringify(value));
     });
     return () => subscription.unsubscribe();
-  }, [form]);
+  }, [form, userId]);
 
   useEffect(() => {
     const getCurrentUser = async () => {
@@ -301,6 +363,8 @@ function RequestGearContent() {
           description: "An unexpected error occurred while loading equipment.",
           variant: "destructive",
         });
+      } finally {
+        setIsGearsLoaded(true);
       }
     };
 
@@ -393,11 +457,48 @@ function RequestGearContent() {
     }
 
     try {
+      const selectedGearIds = Array.from(new Set(data.selectedGears));
+      const missingGearIds = selectedGearIds.filter(
+        (gearId) => !availableGearMap.has(gearId),
+      );
+      if (missingGearIds.length > 0) {
+        const removedLabels = missingGearIds.map(
+          (gearId) => availableGearMap.get(gearId)?.name ?? gearId,
+        );
+        form.setValue(
+          "selectedGears",
+          selectedGearIds.filter((gearId) => availableGearMap.has(gearId)),
+          { shouldValidate: true, shouldDirty: true },
+        );
+        form.setValue(
+          "quantities",
+          Object.fromEntries(
+            Object.entries(data.quantities || {}).filter(([gearId]) =>
+              availableGearMap.has(gearId),
+            ),
+          ),
+          { shouldValidate: true, shouldDirty: true },
+        );
+        toast({
+          title: "Unavailable items removed",
+          description: `${removedLabels.join(", ")} ${removedLabels.length === 1 ? "is" : "are"} no longer selectable. Please review your request and submit again.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       const byIdQuantity = data.quantities || {};
-      for (const gearId of data.selectedGears) {
+      for (const gearId of selectedGearIds) {
         const qty = byIdQuantity[gearId] ?? 1;
-        const anchor = availableGears.find((g) => g.id === gearId);
-        if (!anchor) continue;
+        const anchor = availableGearMap.get(gearId);
+        if (!anchor) {
+          toast({
+            title: "Unavailable items removed",
+            description: "One or more selected items are no longer selectable. Please review your request and try again.",
+            variant: "destructive",
+          });
+          return;
+        }
         const availableForName = getAvailableUnitsByName(anchor.name);
         if (qty > Math.max(1, availableForName)) {
           setIsLoading(false);
@@ -423,7 +524,7 @@ function RequestGearContent() {
           ? data.teamMembers.join(",")
           : null,
         status: "Pending",
-        gear_request_gears: data.selectedGears.map((gearId) => ({
+        gear_request_gears: selectedGearIds.map((gearId) => ({
           gear_id: gearId,
           quantity:
             data.quantities && typeof data.quantities[gearId] === "number"
@@ -659,7 +760,9 @@ function RequestGearContent() {
       }
 
       form.reset();
-      localStorage.removeItem(REQUEST_FORM_DRAFT_KEY);
+      if (userId) {
+        localStorage.removeItem(buildRequestDraftKey(userId));
+      }
       toast({
         title: "Request Submitted Successfully",
         description: `Your request for ${gearNames} has been submitted.`,
@@ -1403,7 +1506,11 @@ function RequestGearContent() {
               <div className="flex gap-3 pt-2">
                 <Button
                   type="submit"
-                  disabled={isLoading || !form.watch("selectedGears")?.length}
+                  disabled={
+                    isLoading ||
+                    !isGearsLoaded ||
+                    !form.watch("selectedGears")?.length
+                  }
                   className="h-11 px-8 bg-orange-500 hover:bg-orange-600 text-white border-0 font-medium transition-colors"
                 >
                   {isLoading ? "Processing..." : "Submit Request"}
