@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PlusCircle, Filter, Edit, Trash2, Download, Upload, CheckSquare, Wrench, Camera, Video, Mic, Speaker, Monitor, Laptop, Box, LucideIcon, Lightbulb, CheckCircle, AlertTriangle, Aperture, AirVent, Cable, Puzzle, Car, RotateCcw, X, Mouse, Battery, HardDrive } from 'lucide-react';
+import { PlusCircle, Filter, Edit, Trash2, Download, Upload, CheckSquare, Wrench, Box, CheckCircle, AlertTriangle, X } from 'lucide-react';
 import { getCategoryIcon } from '@/lib/utils/category';
 // Import Dialog components if using for Add/Edit form
 import {
@@ -37,35 +37,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { gearQueries } from '@/lib/api/queries';
 import { useDebounce } from '@/hooks/useDebounce';
 import { isFileList, isFile } from '@/lib/utils/browser-safe';
-
-// Category color mapping (icons now centralized)
-const categoryColors: Record<string, string> = {
-  camera: 'bg-blue-100 text-blue-800',
-  lens: 'bg-purple-100 text-purple-800',
-  drone: 'bg-cyan-100 text-cyan-800',
-  audio: 'bg-green-100 text-green-800',
-  laptop: 'bg-indigo-100 text-indigo-800',
-  monitor: 'bg-teal-100 text-teal-800',
-  mouse: 'bg-violet-100 text-violet-800',
-  batteries: 'bg-amber-100 text-amber-800',
-  storage: 'bg-stone-100 text-stone-800',
-  cables: 'bg-yellow-100 text-yellow-800',
-  lighting: 'bg-orange-100 text-orange-800',
-  tripod: 'bg-pink-100 text-pink-800',
-  accessory: 'bg-gray-100 text-gray-800',
-  cars: 'bg-red-100 text-red-800',
-  gimbal: 'bg-fuchsia-100 text-fuchsia-800',
-  microphone: 'bg-emerald-100 text-emerald-800',
-  computer: 'bg-slate-100 text-slate-800',
-  other: 'bg-gray-200 text-gray-700',
-};
-
-// Helper function to get an icon based on category - now using centralized utility
-
-const getCategoryBadgeClass = (category?: string) => {
-  const key = (category || '').toLowerCase();
-  return categoryColors[key] || 'bg-gray-200 text-gray-700';
-};
+import { gearCategoryOptions, getCategoryBadgeClass as getSharedCategoryBadgeClass } from '@/lib/utils/category';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -1445,20 +1417,13 @@ export default function ManageGearsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="Camera"><span className="inline-flex items-center gap-1">{getCategoryIcon('Camera' as const, 14)} Camera</span></SelectItem>
-                  <SelectItem value="Lens"><span className="inline-flex items-center gap-1">{getCategoryIcon('Lens' as const, 14)} Lens</span></SelectItem>
-                  <SelectItem value="Drone"><span className="inline-flex items-center gap-1">{getCategoryIcon('Drone' as const, 14)} Drone</span></SelectItem>
-                  <SelectItem value="Audio"><span className="inline-flex items-center gap-1">{getCategoryIcon('Audio' as const, 14)} Audio</span></SelectItem>
-                  <SelectItem value="Laptop"><span className="inline-flex items-center gap-1">{getCategoryIcon('Laptop' as const, 14)} Laptop</span></SelectItem>
-                  <SelectItem value="Monitor"><span className="inline-flex items-center gap-1">{getCategoryIcon('Monitor' as const, 14)} Monitor</span></SelectItem>
-                  <SelectItem value="Mouse"><span className="inline-flex items-center gap-1">{getCategoryIcon('Mouse' as const, 14)} Mouse</span></SelectItem>
-                  <SelectItem value="Batteries"><span className="inline-flex items-center gap-1">{getCategoryIcon('Batteries' as const, 14)} Batteries</span></SelectItem>
-                  <SelectItem value="Storage"><span className="inline-flex items-center gap-1">{getCategoryIcon('Storage' as const, 14)} Storage</span></SelectItem>
-                  <SelectItem value="Cables"><span className="inline-flex items-center gap-1">{getCategoryIcon('Cables' as const, 14)} Cables</span></SelectItem>
-                  <SelectItem value="Lighting"><span className="inline-flex items-center gap-1">{getCategoryIcon('Lighting' as const, 14)} Lighting</span></SelectItem>
-                  <SelectItem value="Tripod"><span className="inline-flex items-center gap-1">{getCategoryIcon('Tripod' as const, 14)} Tripod</span></SelectItem>
-                  <SelectItem value="Cars"><span className="inline-flex items-center gap-1">{getCategoryIcon('Cars' as const, 14)} Cars</span></SelectItem>
-                  {/* Add more categories as needed */}
+                  {gearCategoryOptions.map(({ value, label }) => (
+                    <SelectItem key={value} value={value}>
+                      <span className="inline-flex items-center gap-1">
+                        {getCategoryIcon(value, 14)} {label}
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1601,7 +1566,7 @@ export default function ManageGearsPage() {
                       <TableCell className="hidden md:table-cell">
                         <div className="inline-flex items-center gap-2">
                           {getCategoryIcon(gear.category, 16)}
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium text-xs ${getCategoryBadgeClass(gear.category)}`}>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium text-xs ${getSharedCategoryBadgeClass(gear.category)}`}>
                             {getCategoryIcon(gear.category, 14)}
                             {gear.category}
                           </span>

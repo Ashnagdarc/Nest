@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
 import Image from "next/image";
 import { isFileList, isFile } from "@/lib/utils/browser-safe";
+import { gearCategoryOptions } from "@/lib/utils/category";
 
 const gearSchema = z.object({
     name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -177,23 +178,9 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
                                         </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        <SelectItem value="Camera">Camera</SelectItem>
-                                        <SelectItem value="Lens">Lens</SelectItem>
-                                        <SelectItem value="Drone">Drone</SelectItem>
-                                        <SelectItem value="Audio">Audio</SelectItem>
-                                        <SelectItem value="Laptop">Laptop</SelectItem>
-                                        <SelectItem value="Monitor">Monitor</SelectItem>
-                                        <SelectItem value="Mouse">Mouse</SelectItem>
-                                        <SelectItem value="Batteries">Batteries</SelectItem>
-                                        <SelectItem value="Storage">Storage</SelectItem>
-                                        <SelectItem value="Cables">Cables</SelectItem>
-                                        <SelectItem value="Lighting">Lighting</SelectItem>
-                                        <SelectItem value="Tripod">Tripod</SelectItem>
-                                        <SelectItem value="Gimbal">Gimbal</SelectItem>
-                                        <SelectItem value="Computer">Computer</SelectItem>
-                                        <SelectItem value="Microphone">Microphone</SelectItem>
-                                        <SelectItem value="Other">Other</SelectItem>
-                                        <SelectItem value="Cars">Cars</SelectItem>
+                                        {gearCategoryOptions.map(({ value, label }) => (
+                                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                                 <FormMessage />

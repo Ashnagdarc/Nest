@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -10,60 +9,22 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Check, X, Calendar, Tag, Info, Package, Hash, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box } from 'lucide-react';
+import { Calendar, Tag, Info, Package, Hash } from 'lucide-react';
+import { getCategoryBadgeClass, getCategoryIcon } from '@/lib/utils/category';
 
 interface ViewItemModalProps {
-    item: any;
+    item: {
+        name?: string;
+        category?: string | null;
+        status?: string | null;
+        serial_number?: string | null;
+        purchase_date?: string | null;
+        description?: string | null;
+        notes?: string | null;
+    };
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }
-
-const categoryIcons: Record<string, any> = {
-    camera: Camera,
-    lens: Aperture,
-    drone: AirVent,
-    audio: Speaker,
-    laptop: Laptop,
-    monitor: Monitor,
-    cables: Cable,
-    lighting: Lightbulb,
-    tripod: Video,
-    accessory: Puzzle,
-    cars: Car,
-    gimbal: RotateCcw,
-    microphone: Mic,
-    computer: Monitor,
-    other: Box,
-};
-
-const categoryColors: Record<string, string> = {
-    camera: 'bg-blue-100 text-blue-800',
-    lens: 'bg-purple-100 text-purple-800',
-    drone: 'bg-cyan-100 text-cyan-800',
-    audio: 'bg-green-100 text-green-800',
-    laptop: 'bg-indigo-100 text-indigo-800',
-    monitor: 'bg-teal-100 text-teal-800',
-    cables: 'bg-yellow-100 text-yellow-800',
-    lighting: 'bg-orange-100 text-orange-800',
-    tripod: 'bg-pink-100 text-pink-800',
-    accessory: 'bg-gray-100 text-gray-800',
-    cars: 'bg-red-100 text-red-800',
-    gimbal: 'bg-fuchsia-100 text-fuchsia-800',
-    microphone: 'bg-emerald-100 text-emerald-800',
-    computer: 'bg-slate-100 text-slate-800',
-    other: 'bg-gray-200 text-gray-700',
-};
-
-const getCategoryIcon = (category?: string, size = 16) => {
-    const key = (category || '').toLowerCase();
-    const Icon = categoryIcons[key] || Box;
-    return <Icon size={size} className="inline-block mr-1 align-text-bottom text-muted-foreground" />;
-};
-
-const getCategoryBadgeClass = (category?: string) => {
-    const key = (category || '').toLowerCase();
-    return categoryColors[key] || 'bg-gray-200 text-gray-700';
-};
 
 export function ViewItemModal({ item, open, onOpenChange }: ViewItemModalProps) {
     if (!item) return null;

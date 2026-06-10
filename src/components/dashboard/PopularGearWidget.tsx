@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { logger } from "@/utils/logger";
-import { TrendingUp, TrendingDown, Camera, Aperture, AirVent, Speaker, Laptop, Monitor, Cable, Lightbulb, Video, Puzzle, Car, RotateCcw, Mic, Box } from 'lucide-react';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 import Image from 'next/image';
 import { normalizeGearStatus, GearStatus } from '@/lib/constants/gear-status';
+import { getCategoryBadgeClass, getCategoryIcon } from '@/lib/utils/category';
 
 interface PopularGear {
     gear_id: string;
@@ -20,58 +21,28 @@ interface PopularGear {
     status?: string;
 }
 
+interface PopularGearApiItem {
+    gear_id: string;
+    name: string;
+    full_name: string;
+    request_count: number;
+}
+
+interface GearDetailsRow {
+    id: string;
+    category?: string | null;
+    image_url?: string | null;
+    status?: string | null;
+}
+
 export function PopularGearWidget() {
     const [popularGear, setPopularGear] = useState<PopularGear[]>([]);
     const [loading, setLoading] = useState(true);
-    const [trendData, setTrendData] = useState<Record<string, 'up' | 'down' | null>>({});
+    const [trendData] = useState<Record<string, 'up' | 'down' | null>>({});
 
     // --- UI State Preservation ---
     const listContainerRef = useRef<HTMLDivElement | null>(null);
     const scrollPositionRef = useRef<number>(0);
-
-    const categoryIcons: Record<string, any> = {
-        camera: Camera,
-        lens: Aperture,
-        drone: AirVent,
-        audio: Speaker,
-        laptop: Laptop,
-        monitor: Monitor,
-        cables: Cable,
-        lighting: Lightbulb,
-        tripod: Video,
-        accessory: Puzzle,
-        cars: Car,
-        gimbal: RotateCcw,
-        microphone: Mic,
-        computer: Monitor,
-        other: Box,
-    };
-    const categoryColors: Record<string, string> = {
-        camera: 'bg-blue-100 text-blue-800',
-        lens: 'bg-purple-100 text-purple-800',
-        drone: 'bg-cyan-100 text-cyan-800',
-        audio: 'bg-green-100 text-green-800',
-        laptop: 'bg-indigo-100 text-indigo-800',
-        monitor: 'bg-teal-100 text-teal-800',
-        cables: 'bg-yellow-100 text-yellow-800',
-        lighting: 'bg-orange-100 text-orange-800',
-        tripod: 'bg-pink-100 text-pink-800',
-        accessory: 'bg-gray-100 text-gray-800',
-        cars: 'bg-red-100 text-red-800',
-        gimbal: 'bg-fuchsia-100 text-fuchsia-800',
-        microphone: 'bg-emerald-100 text-emerald-800',
-        computer: 'bg-slate-100 text-slate-800',
-        other: 'bg-gray-200 text-gray-700',
-    };
-    const getCategoryIcon = (category?: string, size = 16) => {
-        const key = (category || '').toLowerCase();
-        const Icon = categoryIcons[key] || Box;
-        return <Icon size={size} className="inline-block mr-1 align-text-bottom text-muted-foreground" />;
-    };
-    const getCategoryBadgeClass = (category?: string) => {
-        const key = (category || '').toLowerCase();
-        return categoryColors[key] || 'bg-gray-200 text-gray-700';
-    };
 
     // Fetch popular gear data with a date range (last 7 days)
     const fetchPopularGear = async () => {
@@ -91,17 +62,21 @@ export function PopularGearWidget() {
 
             if (Array.isArray(directData) && directData.length > 0) {
                 // Fetch extra details for each gear (category, image_url, status)
-                const gearIds = directData.map((g: any) => g.gear_id);
+                const popularGearItems = directData as PopularGearApiItem[];
+                const gearIds = popularGearItems.map((g) => g.gear_id);
                 const { data: gearDetails } = await supabase
                     .from('gears')
                     .select('id, category, image_url, status')
                     .in('id', gearIds);
 
-                const detailsMap = new Map();
-                gearDetails?.forEach((g: any) => detailsMap.set(g.id, g));
+                const detailsMap = new Map<string, GearDetailsRow>();
+                gearDetails?.forEach((g) => {
+                    const row = g as GearDetailsRow;
+                    detailsMap.set(row.id, row);
+                });
 
                 setPopularGear(
-                    directData.map((g: any) => ({
+                    popularGearItems.map((g) => ({
                         ...g,
                         category: detailsMap.get(g.gear_id)?.category || '',
                         image_url: detailsMap.get(g.gear_id)?.image_url || null,
@@ -112,7 +87,7 @@ export function PopularGearWidget() {
                 // No data available
                 setPopularGear([]);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             logger.error("PopularGear query error", { error });
             setPopularGear([]);
         } finally {

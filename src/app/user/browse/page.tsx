@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import Image from 'next/image';
 import Link from 'next/link';
 import { PackagePlus, Box, ArrowLeft, Filter, ChevronLeft, ChevronRight } from 'lucide-react'; // Icons for view details and request
-import { getCategoryIcon } from '@/lib/utils/category';
+import { gearCategoryOptions, getCategoryBadgeClass, getCategoryIcon } from '@/lib/utils/category';
 import { createClient } from '@/lib/supabase/client';
 // import { createGearNotification } from '@/lib/notifications'; // No longer used
 import { useToast } from "@/hooks/use-toast";
@@ -62,87 +62,6 @@ interface Gear {
  */
 
 /**
- * Category Color Mapping
- * 
- * Maps equipment categories to their corresponding badge colors
- * for consistent visual design and improved user experience.
- * Uses Tailwind CSS classes for color consistency.
- * 
- * @constant {Record<string, string>} categoryColors
- */
-const categoryColors: Record<string, string> = {
-  camera: 'bg-blue-100 text-blue-800',
-  lens: 'bg-purple-100 text-purple-800',
-  drone: 'bg-cyan-100 text-cyan-800',
-  audio: 'bg-green-100 text-green-800',
-  laptop: 'bg-indigo-100 text-indigo-800',
-  monitor: 'bg-teal-100 text-teal-800',
-  mouse: 'bg-violet-100 text-violet-800',
-  batteries: 'bg-amber-100 text-amber-800',
-  storage: 'bg-stone-100 text-stone-800',
-  cables: 'bg-yellow-100 text-yellow-800',
-  lighting: 'bg-orange-100 text-orange-800',
-  tripod: 'bg-pink-100 text-pink-800',
-  accessory: 'bg-gray-100 text-gray-800',
-  cars: 'bg-red-100 text-red-800',
-  gimbal: 'bg-fuchsia-100 text-fuchsia-800',
-  microphone: 'bg-emerald-100 text-emerald-800',
-  computer: 'bg-slate-100 text-slate-800',
-  other: 'bg-gray-200 text-gray-700',
-};
-
-/**
- * Get Category Icon Component
- * 
- * Returns the appropriate icon component for a given equipment category
- * with consistent sizing and styling. Provides fallback icon for
- * unknown or undefined categories.
- * 
- * @param {string} [category] - Equipment category identifier
- * @param {number} [size=18] - Icon size in pixels
- * @returns {JSX.Element} Rendered icon component
- * 
- * @example
- * ```typescript
- * // Basic usage with default size
- * const cameraIcon = getCategoryIcon('camera');
- * 
- * // Custom size
- * const largeIcon = getCategoryIcon('laptop', 24);
- * 
- * // Handles undefined categories gracefully
- * const unknownIcon = getCategoryIcon(undefined); // Returns Box icon
- * ```
- */
-// Using centralized getCategoryIcon from @/lib/utils/category
-
-/**
- * Get Category Badge Class
- * 
- * Returns the appropriate CSS classes for category badge styling
- * based on the equipment category. Provides consistent visual
- * design across all equipment cards.
- * 
- * @param {string} [category] - Equipment category identifier
- * @returns {string} Tailwind CSS classes for badge styling
- * 
- * @example
- * ```typescript
- * // Get styling for camera equipment
- * const cameraStyles = getCategoryBadgeClass('camera');
- * // Returns: 'bg-blue-100 text-blue-800'
- * 
- * // Handle unknown categories
- * const unknownStyles = getCategoryBadgeClass('unknown');
- * // Returns: 'bg-gray-200 text-gray-700'
- * ```
- */
-const getCategoryBadgeClass = (category?: string) => {
-  const key = (category || '').toLowerCase();
-  return categoryColors[key] || 'bg-gray-200 text-gray-700';
-};
-
-/**
  * Browse Gears Page Component
  * 
  * Main page component that renders the equipment catalog interface
@@ -183,7 +102,6 @@ export default function BrowseGearsPage() {
   const [gears, setGears] = useState<Gear[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('Available');
   const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [categories, setCategories] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 300);
   const [isLoading, setIsLoading] = useState(true);
@@ -203,13 +121,6 @@ export default function BrowseGearsPage() {
   }, [stableFetchGears]);
 
   useEffect(() => {
-    // fetch distinct categories once
-    (async () => {
-      const { data } = await supabase.from('gears').select('category').not('category', 'is', null).neq('category', '').neq('category', 'Cars').order('category');
-      const distinct = Array.from(new Set((data || []).map((d: any) => d.category)));
-      setCategories(distinct);
-    })();
-
     // stable realtime subscription
     const channel = supabase
       .channel('public:gears')
@@ -392,8 +303,12 @@ export default function BrowseGearsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Categories</SelectItem>
-                        {categories.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        {gearCategoryOptions.map(({ value, label }) => (
+                          <SelectItem key={value} value={value}>
+                            <span className="inline-flex items-center gap-1">
+                              {getCategoryIcon(value, 14)} {label}
+                            </span>
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -467,7 +382,7 @@ export default function BrowseGearsPage() {
                           <CardTitle className="text-base sm:text-lg font-semibold line-clamp-2 mb-2">{gear.name}</CardTitle>
                           <CardDescription className="text-xs sm:text-sm mb-3">
                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full font-medium text-xs ${getCategoryBadgeClass(gear.category || '')}`}>
-                              {getCategoryIcon((gear.category as 'Camera' | 'Lens' | 'Drone' | 'Audio' | 'Laptop' | 'Monitor' | 'Mouse' | 'Batteries' | 'Storage' | 'Cables' | 'Lighting' | 'Tripod' | 'Cars') || '', 14)}
+                              {getCategoryIcon(gear.category, 14)}
                               {gear.category}
                             </span>
                           </CardDescription>
@@ -567,4 +482,3 @@ export default function BrowseGearsPage() {
     </motion.div>
   );
 }
-

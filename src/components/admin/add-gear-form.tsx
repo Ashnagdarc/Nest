@@ -20,6 +20,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog"; // Import for close button
 import { isFileList } from "@/lib/utils/browser-safe";
+import { gearCategoryOptions } from "@/lib/utils/category";
 
 const gearSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -82,7 +83,8 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
   useEffect(() => {
     const subscription = form.watch((values) => {
       // Don't persist File objects (image)
-      const { image_url: _, ...rest } = values;
+      const rest = { ...values };
+      delete rest.image_url;
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(rest));
     });
     return () => subscription.unsubscribe();
@@ -140,21 +142,9 @@ export default function AddGearForm({ onSubmit }: AddGearFormProps) {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="Camera">Camera</SelectItem>
-                    <SelectItem value="Lens">Lens</SelectItem>
-                    <SelectItem value="Drone">Drone</SelectItem>
-                    <SelectItem value="Audio">Audio</SelectItem>
-                    <SelectItem value="Laptop">Laptop</SelectItem>
-                    <SelectItem value="Monitor">Monitor</SelectItem>
-                    <SelectItem value="Mouse">Mouse</SelectItem>
-                    <SelectItem value="Batteries">Batteries</SelectItem>
-                    <SelectItem value="Storage">Storage</SelectItem>
-                    <SelectItem value="Cables">Cables</SelectItem>
-                    <SelectItem value="Lighting">Lighting</SelectItem>
-                    <SelectItem value="Tripod">Tripod</SelectItem>
-                    <SelectItem value="Accessory">Accessory</SelectItem>
-                    <SelectItem value="Cars">Cars</SelectItem>
-                    {/* Add more categories */}
+                    {gearCategoryOptions.map(({ value, label }) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />
