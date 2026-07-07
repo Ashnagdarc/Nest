@@ -1,29 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
+import { requireActiveAdmin } from '@/app/api/_utils/route-auth';
 
 export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = await params;
-        console.log('🔍 Admin Update Notification API called for ID:', id);
-
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Missing Supabase environment variables');
-            return NextResponse.json({ data: null, error: 'Server configuration error' }, { status: 500 });
+        const authContext = await requireActiveAdmin();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
         }
 
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
+        const { id } = await params;
+        console.log('🔍 Admin Update Notification API called for ID:', id);
+        const supabase = authContext.adminSupabase;
 
         const body = await request.json();
         const { is_read, ...otherUpdates } = body;
@@ -88,23 +78,14 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = await params;
-        console.log('🔍 Admin Delete Notification API called for ID:', id);
-
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Missing Supabase environment variables');
-            return NextResponse.json({ data: null, error: 'Server configuration error' }, { status: 500 });
+        const authContext = await requireActiveAdmin();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
         }
 
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
+        const { id } = await params;
+        console.log('🔍 Admin Delete Notification API called for ID:', id);
+        const supabase = authContext.adminSupabase;
 
         console.log('🗑️ Deleting admin notification:', id);
 

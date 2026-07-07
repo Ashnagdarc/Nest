@@ -180,6 +180,10 @@ const requestSchema = z
 type RequestFormValues = z.infer<typeof requestSchema>;
 
 const REQUEST_FORM_DRAFT_KEY = "user-request-gear-form-draft";
+const createClientSubmissionId = () =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 const buildRequestDraftKey = (userId: string) => `${REQUEST_FORM_DRAFT_KEY}:${userId}`;
 
@@ -197,6 +201,7 @@ function RequestGearContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
+  const [clientSubmissionId, setClientSubmissionId] = useState(createClientSubmissionId);
   const [isGearsLoaded, setIsGearsLoaded] = useState(false);
   const [restoredDraftForUserId, setRestoredDraftForUserId] = useState<string | null>(null);
 
@@ -281,9 +286,21 @@ function RequestGearContent() {
         selectedGears: cleanedSelectedGears,
         quantities: cleanedQuantities,
       };
+      const restoredSubmissionId =
+        typeof (values as { clientSubmissionId?: unknown }).clientSubmissionId === "string" &&
+        (values as { clientSubmissionId?: string }).clientSubmissionId?.trim()
+          ? (values as { clientSubmissionId: string }).clientSubmissionId.trim()
+          : createClientSubmissionId();
 
       form.reset(cleanedValues);
-      localStorage.setItem(scopedDraftKey, JSON.stringify(cleanedValues));
+      setClientSubmissionId(restoredSubmissionId);
+      localStorage.setItem(
+        scopedDraftKey,
+        JSON.stringify({
+          ...cleanedValues,
+          clientSubmissionId: restoredSubmissionId,
+        }),
+      );
 
       if (removedGearIds.length > 0) {
         const removedLabels = removedGearIds.map(
@@ -307,10 +324,16 @@ function RequestGearContent() {
 
     const scopedDraftKey = buildRequestDraftKey(userId);
     const subscription = form.watch((value) => {
-      localStorage.setItem(scopedDraftKey, JSON.stringify(value));
+      localStorage.setItem(
+        scopedDraftKey,
+        JSON.stringify({
+          ...value,
+          clientSubmissionId,
+        }),
+      );
     });
     return () => subscription.unsubscribe();
-  }, [form, userId]);
+  }, [clientSubmissionId, form, userId]);
 
   useEffect(() => {
     const getCurrentUser = async () => {
@@ -524,6 +547,7 @@ function RequestGearContent() {
           ? data.teamMembers.join(",")
           : null,
         status: "Pending",
+        client_submission_id: clientSubmissionId,
         gear_request_gears: selectedGearIds.map((gearId) => ({
           gear_id: gearId,
           quantity:
@@ -763,6 +787,7 @@ function RequestGearContent() {
       if (userId) {
         localStorage.removeItem(buildRequestDraftKey(userId));
       }
+      setClientSubmissionId(createClientSubmissionId());
       toast({
         title: "Request Submitted Successfully",
         description: `Your request for ${gearNames} has been submitted.`,

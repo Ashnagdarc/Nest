@@ -10,6 +10,22 @@ function isCarConflictError(message?: string | null) {
 
 export async function POST(request: NextRequest) {
     try {
+        const authClient = await createSupabaseServerClient();
+        const { data: userData } = await authClient.auth.getUser();
+        if (!userData.user) {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const { data: profile } = await authClient
+            .from('profiles')
+            .select('role,status')
+            .eq('id', userData.user.id)
+            .maybeSingle();
+        const isAdmin = profile?.role === 'Admin' && profile?.status === 'Active';
+        if (!isAdmin) {
+            return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 });
+        }
+
         const admin = await createSupabaseServerClient(true);
         const { bookingId, carId } = await request.json();
         if (!bookingId || !carId) return NextResponse.json({ success: false, error: 'bookingId and carId are required' }, { status: 400 });

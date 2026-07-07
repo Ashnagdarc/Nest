@@ -1,32 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import type { Database } from '@/types/supabase';
 import { enqueuePushNotification, triggerPushWorker } from '@/lib/push-queue';
+
+function isUuid(value: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+async function getAuthenticatedContext() {
+    const authSupabase = await createSupabaseServerClient();
+    const { data: { user }, error: authError } = await authSupabase.auth.getUser();
+
+    if (authError || !user) {
+        return {
+            errorResponse: NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 })
+        };
+    }
+
+    const adminSupabase = await createSupabaseServerClient(true);
+    const { data: profile } = await adminSupabase
+        .from('profiles')
+        .select('role, status')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    return {
+        user,
+        adminSupabase,
+        isAdmin: profile?.role === 'Admin' && profile?.status === 'Active'
+    };
+}
 
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = await params;
-        console.log('🔍 Fetching request details for ID:', id);
-
-        // Create direct Supabase client with service role key to bypass RLS
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Missing Supabase environment variables');
-            return NextResponse.json({ data: null, error: 'Server configuration error' }, { status: 500 });
+        const authContext = await getAuthenticatedContext();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
         }
 
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
+        const { id } = await params;
+        if (!isUuid(id)) {
+            return NextResponse.json({ data: null, error: 'Invalid request id' }, { status: 400 });
+        }
+        console.log('🔍 Fetching request details for ID:', id);
+        const { adminSupabase: supabase, isAdmin, user } = authContext;
 
         // First, get the request with user profile data
         const { data: requestData, error: requestError } = await supabase
@@ -46,6 +65,10 @@ export async function GET(
         if (!requestData) {
             console.error('❌ Request not found for ID:', id);
             return NextResponse.json({ data: null, error: 'Request not found' }, { status: 404 });
+        }
+
+        if (!isAdmin && requestData.user_id !== user.id) {
+            return NextResponse.json({ data: null, error: 'Forbidden' }, { status: 403 });
         }
 
         console.log('✅ Request found:', { id: requestData.id, status: requestData.status, userId: requestData.user_id });
@@ -147,8 +170,20 @@ export async function GET(
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const authContext = await getAuthenticatedContext();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
+        if (!authContext.isAdmin) {
+            return NextResponse.json({ data: null, error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id } = await params;
-        const supabase = await createSupabaseServerClient();
+        if (!isUuid(id)) {
+            return NextResponse.json({ data: null, error: 'Invalid request id' }, { status: 400 });
+        }
+        const supabase = authContext.adminSupabase;
         const body = await request.json();
 
         // Only allow a narrow, explicit set of request fields to be updated from this endpoint.
@@ -194,23 +229,20 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const { id } = await params;
-        
-        // Create direct Supabase client with service role key to bypass RLS
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Missing Supabase environment variables');
-            return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
+        const authContext = await getAuthenticatedContext();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
         }
 
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
+        if (!authContext.isAdmin) {
+            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+        }
+
+        const { id } = await params;
+        if (!isUuid(id)) {
+            return NextResponse.json({ success: false, error: 'Invalid request id' }, { status: 400 });
+        }
+        const supabase = authContext.adminSupabase;
 
         // Get request details before deletion for notifications
         const { data: requestData, error: requestError } = await supabase

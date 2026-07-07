@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/supabase';
+import { getRouteAuthContext } from '@/app/api/_utils/route-auth';
 
 type Line = { gear_id: string; quantity?: number };
 
 export async function POST(request: NextRequest) {
     try {
+        const authContext = await getRouteAuthContext();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const { requestId, lines } = (await request.json()) as { requestId?: string; lines?: Line[] };
         if (!requestId || !Array.isArray(lines) || lines.length === 0) {
             return NextResponse.json({ success: false, error: 'requestId and lines are required', details: { requestIdPresent: !!requestId, linesType: typeof lines, linesIsArray: Array.isArray(lines) } }, { status: 400 });
@@ -30,6 +36,26 @@ export async function POST(request: NextRequest) {
         const requestedByGear = new Map<string, number>();
         for (const line of sanitized) {
             requestedByGear.set(line.gear_id, (requestedByGear.get(line.gear_id) || 0) + line.quantity);
+        }
+
+        if (!authContext.isActiveAdmin) {
+            const { data: requestRow, error: requestLookupError } = await authContext.authSupabase
+                .from('gear_requests')
+                .select('user_id')
+                .eq('id', requestId)
+                .maybeSingle();
+
+            if (requestLookupError) {
+                return NextResponse.json({ success: false, error: 'Failed to verify request ownership' }, { status: 500 });
+            }
+
+            if (!requestRow) {
+                return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+            }
+
+            if (requestRow.user_id !== authContext.user.id) {
+                return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+            }
         }
 
         const supabase = await createSupabaseServerClient(true);
@@ -112,4 +138,3 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: msg }, { status: 400 });
     }
 }
-

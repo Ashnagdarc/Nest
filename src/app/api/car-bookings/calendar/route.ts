@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { requireActiveAdminRoute } from '@/lib/api/route-auth';
 
 function toIcsDate(dateStr: string, timeStr: string) {
     // Expect time like "12:00-1:30 PM" or "10:00 AM"; produce DTSTART and DTEND in floating time
@@ -18,6 +19,11 @@ function toIcsDate(dateStr: string, timeStr: string) {
 
 export async function GET(request: NextRequest) {
     try {
+        const authContext = await requireActiveAdminRoute();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const supabase = await createSupabaseServerClient(true); // admin to read all approved
         const { searchParams } = new URL(request.url);
         const dateFrom = searchParams.get('dateFrom');

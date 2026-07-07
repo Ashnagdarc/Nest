@@ -1,13 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getRouteAuthContext, requireActiveAdmin } from '@/app/api/_utils/route-auth';
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     try {
-        const supabase = await createSupabaseServerClient(true);
+        const authContext = await getRouteAuthContext();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 10;
         const page = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
         const userId = searchParams.get('userId');
+
+        if (userId && userId !== authContext.user.id && !authContext.isActiveAdmin) {
+            return NextResponse.json(
+                { error: 'Forbidden' },
+                { status: 403 }
+            );
+        }
+
+        const supabase = await createSupabaseServerClient(true);
 
         const offset = (page - 1) * limit;
 
@@ -78,12 +92,24 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient(true);
+        const authContext = await requireActiveAdmin();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
+        const supabase = authContext.adminSupabase;
         const { title, content, author_id, send_notifications = false } = await request.json();
 
-        if (!title || !content || !author_id) {
+        if (!title || !content) {
             return NextResponse.json(
                 { error: 'Missing required fields' },
+                { status: 400 }
+            );
+        }
+
+        if (author_id && author_id !== authContext.user.id) {
+            return NextResponse.json(
+                { error: 'author_id must match the authenticated admin user' },
                 { status: 400 }
             );
         }
@@ -95,7 +121,7 @@ export async function POST(request: NextRequest) {
             const result = await announcementService.createAnnouncementWithNotifications(
                 title,
                 content,
-                author_id
+                authContext.user.id
             );
 
             if (!result.success) {
@@ -121,11 +147,11 @@ export async function POST(request: NextRequest) {
         // Insert announcement using created_by only (author_id column does not exist)
         const { data, error } = await supabase
             .from('announcements')
-            .insert([{ title, content, created_by: author_id }])
+            .insert([{ title, content, created_by: authContext.user.id }])
             .select();
 
         if (error) {
-            const fkViolation = (error as any)?.code === '23503';
+            const fkViolation = typeof error.code === 'string' && error.code === '23503';
             console.error('Error creating announcement:', error);
             return NextResponse.json(
                 {
@@ -138,10 +164,10 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ announcement: data[0] });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Unexpected error creating announcement:', error);
         return NextResponse.json(
-            { error: 'An unexpected error occurred', details: String(error?.message || error) },
+            { error: 'An unexpected error occurred', details: error instanceof Error ? error.message : String(error) },
             { status: 500 }
         );
     }

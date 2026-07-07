@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestApprovalEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { transitionBooking } from '@/lib/bookings-v2/service';
@@ -36,6 +35,34 @@ const calculateDueDate = (duration: string): string => {
     }
     return dueDate.toISOString();
 };
+
+async function requireAdminContext() {
+    const authSupabase = await createSupabaseServerClient();
+    const { data: { user }, error: authError } = await authSupabase.auth.getUser();
+
+    if (authError || !user) {
+        return {
+            errorResponse: NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+        };
+    }
+
+    const adminSupabase = await createSupabaseServerClient(true);
+    const { data: profile, error: profileError } = await adminSupabase
+        .from('profiles')
+        .select('role, status')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    const isAdmin = !profileError && profile?.role === 'Admin' && profile?.status === 'Active';
+
+    if (!isAdmin) {
+        return {
+            errorResponse: NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+        };
+    }
+
+    return { adminSupabase, user };
+}
 
 /**
  * POST /api/requests/approve
@@ -80,35 +107,18 @@ export async function POST(request: NextRequest) {
         }, { status });
 
     try {
+        const adminContext = await requireAdminContext();
+        if ('errorResponse' in adminContext) {
+            return adminContext.errorResponse;
+        }
+
+        const { adminSupabase: supabase, user: adminUser } = adminContext;
         const { requestId } = await request.json();
         console.log('🔍 Approving request:', requestId);
 
         if (!requestId) {
             return fail(400, 'requestId is required', 'Invalid request payload.', 'REQUEST_ID_REQUIRED');
         }
-
-        /**
-         * Use service role key instead of user session
-         * 
-         * Why: RLS policies block admins from updating gear inventory directly.
-         * Service role bypasses RLS to allow atomic approval + inventory update.
-         * 
-         * Security: This endpoint should have auth middleware to verify admin role.
-         */
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Missing Supabase environment variables');
-            return fail(500, 'Server configuration error', 'Service configuration is incomplete.', 'SERVER_CONFIG_ERROR');
-        }
-
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
 
         // Load request first
         const { data: req, error: reqErr } = await supabase
@@ -240,7 +250,7 @@ export async function POST(request: NextRequest) {
                 await transitionBooking({
                     bookingId: aggregate.id,
                     nextStatus: 'approved',
-                    changedBy: null,
+                    changedBy: adminUser.id,
                     reason: 'Legacy approval route sync',
                     metadata: { legacy_route: '/api/requests/approve' },
                     idempotencyKey: `legacy-approve:${requestId}`,

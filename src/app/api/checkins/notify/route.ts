@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
-import { sendCheckinSubmissionEmail, sendGearRequestEmail } from '@/lib/email';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { sendCheckinSubmissionEmail } from '@/lib/email';
+import { getRouteAuthContext } from '@/app/api/_utils/route-auth';
+
+type NotificationPreferences = {
+    email?: Record<string, boolean | undefined>;
+};
 
 /**
  * POST /api/checkins/notify
@@ -28,8 +32,13 @@ import { sendCheckinSubmissionEmail, sendGearRequestEmail } from '@/lib/email';
  */
 export async function POST(request: NextRequest) {
     try {
+        const authContext = await getRouteAuthContext();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const body = await request.json();
-        const { userId, gearId, gearName, gearNames, requestId, items, condition, notes, damageNotes } = body;
+        const { userId, gearName, gearNames, requestId, items, condition, notes, damageNotes } = body;
 
         const submissionItems = Array.isArray(items) && items.length > 0
             ? items.filter((item): item is { name: string; quantity: number; condition: string; notes?: string; damageNotes?: string } =>
@@ -56,21 +65,13 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
         }
 
-        // Create Supabase client with service role key
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('[Check-in Notify] Missing Supabase environment variables');
-            return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
+        if (authContext.user.id !== userId && !authContext.isActiveAdmin) {
+            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
         }
 
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
+        const supabase = authContext.isActiveAdmin
+            ? await createSupabaseServerClient(true)
+            : authContext.authSupabase;
 
         // Get user details
         const { data: user } = await supabase
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Check if user wants email notifications (default: enabled)
-        const userPrefs = (user as any).notification_preferences || {};
+        const userPrefs = (user.notification_preferences as NotificationPreferences | null) || {};
         const shouldSendUserEmail = userPrefs.email?.gear_checkins !== false;
 
         // Send confirmation email to user
@@ -116,7 +117,6 @@ export async function POST(request: NextRequest) {
             console.log(`[Check-in Notify] Found ${admins?.length || 0} admins to notify`);
 
             if (admins && admins.length) {
-                const userName = user.full_name || 'User';
                 for (const admin of admins) {
                     if (!admin.email) continue;
                     try {

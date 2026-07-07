@@ -20,6 +20,22 @@ export async function POST(request: NextRequest) {
     const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
         NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: userMessage, error_code: errorCode, correlation_id: correlationId, error }, { status });
     try {
+        const authClient = await createSupabaseServerClient();
+        const { data: userData } = await authClient.auth.getUser();
+        if (!userData.user) {
+            return fail(401, 'Unauthorized', 'Authentication required.', 'CAR_BOOKING_UNAUTHORIZED');
+        }
+
+        const { data: profile } = await authClient
+            .from('profiles')
+            .select('role,status')
+            .eq('id', userData.user.id)
+            .maybeSingle();
+        const isAdmin = profile?.role === 'Admin' && profile?.status === 'Active';
+        if (!isAdmin) {
+            return fail(403, 'Admin access required', 'Only active admins can approve car bookings.', 'CAR_BOOKING_ADMIN_REQUIRED');
+        }
+
         const admin = await createSupabaseServerClient(true);
         const { bookingId } = await request.json();
         if (!bookingId) return fail(400, 'bookingId is required', 'Missing booking reference.', 'BOOKING_ID_REQUIRED');
@@ -90,8 +106,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const { data: me } = await admin.auth.getUser();
-        const approverId = me.user?.id || null;
+        const approverId = userData.user.id;
 
         const { error } = await admin.from('car_bookings').update({
             status: 'Approved',
@@ -111,7 +126,7 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-            const { data: aggregate } = await (admin as any)
+            const { data: aggregate } = await admin
                 .from('bookings')
                 .select('id,status')
                 .eq('source_type', 'car_booking')
@@ -196,14 +211,16 @@ export async function POST(request: NextRequest) {
 
         try {
             await notifyGoogleChat(NotificationEventType.ADMIN_APPROVE_REQUEST, {
-                adminName: me.user?.email,
-                adminEmail: me.user?.email,
+                adminName: userData.user.email,
+                adminEmail: userData.user.email,
                 userName: booking.employee_name,
                 userEmail: '',
                 gearNames: [`Car booking: ${booking.date_of_use} ${booking.time_slot}`],
                 dueDate: booking.date_of_use
             });
-        } catch { }
+        } catch (chatError) {
+            console.warn('[Car Booking Approve] Failed to notify Google Chat:', chatError);
+        }
 
         // Send notification email to all admins
         try {

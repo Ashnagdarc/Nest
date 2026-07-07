@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
+import { requireActiveAdminRoute } from '@/lib/api/route-auth';
 
 export async function GET(request: NextRequest) {
     try {
         console.log('🔍 Admin analytics API called');
+        const authContext = await requireActiveAdminRoute();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
 
         // Create direct Supabase client with service role key to bypass RLS
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -46,7 +51,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Get total damage reports count (optional - table might not exist)
-        let damageData: any[] = [];
+        let damageData: Array<{ id: string }> = [];
         try {
             const { data: damageResult, error: damageError } = await supabase
                 .from('gear_maintenance')

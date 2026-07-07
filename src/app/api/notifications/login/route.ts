@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { enqueuePushNotification } from '@/lib/push-queue';
+import { normalizeNotificationInsert, normalizeNotificationType } from '@/lib/notification-type';
 import type { Database } from '@/types/supabase';
 
 const LOGIN_NOTIFICATION_DEDUP_WINDOW_MS = 2 * 60 * 1000;
+const LOGIN_ALERT_TYPE = 'Login Alert';
+const LOGIN_ALERT_SUBTYPE = 'login_alert';
 
 export async function POST(_req: NextRequest) {
     try {
@@ -47,7 +50,8 @@ export async function POST(_req: NextRequest) {
             .from('notifications')
             .select('id, created_at')
             .eq('user_id', user.id)
-            .eq('type', 'Login Alert')
+            .eq('type', normalizeNotificationType(LOGIN_ALERT_TYPE))
+            .contains('metadata', { subtype: LOGIN_ALERT_SUBTYPE })
             .order('created_at', { ascending: false })
             .limit(1);
 
@@ -80,14 +84,15 @@ export async function POST(_req: NextRequest) {
         const message = `A new login to your account was detected on ${now.toLocaleString()}. If this wasn't you, please contact support.`;
 
         // 1. Insert In-App Notification using User Client (RLS should allow inserting own notifications)
-        const { error: insertError } = await supabase.from('notifications').insert({
+        const { error: insertError } = await supabase.from('notifications').insert(normalizeNotificationInsert({
             user_id: user.id,
-            type: 'Login Alert',
+            type: LOGIN_ALERT_TYPE,
             title,
             message,
             is_read: false,
             category: 'Security',
-        });
+            metadata: { subtype: LOGIN_ALERT_SUBTYPE },
+        }));
 
         if (insertError) {
             console.error('[Login Push] Failed to insert in-app notification:', insertError);

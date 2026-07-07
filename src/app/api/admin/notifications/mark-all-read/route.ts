@@ -1,25 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
+import { NextResponse } from 'next/server';
+import { requireActiveAdmin } from '@/app/api/_utils/route-auth';
 
-export async function PUT(request: NextRequest) {
+export async function PUT() {
     try {
         console.log('🔍 Admin Mark All Notifications Read API called');
-
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Missing Supabase environment variables');
-            return NextResponse.json({ data: null, error: 'Server configuration error' }, { status: 500 });
+        const authContext = await requireActiveAdmin();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
         }
 
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
+        const supabase = authContext.adminSupabase;
 
         console.log('📝 Marking all notifications as read (admin)');
 

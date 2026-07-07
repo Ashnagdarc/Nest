@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { enqueuePushNotification } from '@/lib/push-queue';
+import { getRouteAuthContext } from '@/app/api/_utils/route-auth';
 
 // Helper function to map table names to valid notification types
 function getNotificationType(table: string): string {
@@ -18,13 +19,15 @@ function getNotificationType(table: string): string {
 import {
     sendGearRequestEmail,
     sendRequestReceivedEmail,
-    sendApprovalEmail,
-    sendRejectionEmail,
-    sendCheckinApprovalEmail,
-    sendCheckinRejectionEmail
 } from '@/lib/email';
 import type { Database } from '@/types/supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
+
+type NotificationPreferences = {
+    email?: Record<string, boolean | undefined>;
+    in_app?: Record<string, boolean | undefined>;
+    push?: Record<string, boolean | undefined>;
+};
 
 // Firebase fallback removed - using only Web Push (VAPID)
 
@@ -43,30 +46,12 @@ async function getAppSettings(supabase: SupabaseClient<Database>) {
 }
 
 export async function POST(req: NextRequest) {
-    const supabase = await createSupabaseServerClient(true) as SupabaseClient<Database>;
-    const appSettings = await getAppSettings(supabase);
-    const BRAND_LOGO_URL = appSettings['brand_logo_url'] || 'https://nestbyeden.app/logo.png';
-    const BRAND_COLOR = appSettings['brand_primary_color'] || '#ff6300';
-    const notificationDefaults = appSettings['notification_defaults'] ? JSON.parse(appSettings['notification_defaults']) : { email: true, push: true, in_app: true };
-
-    const notifyAdminsByEmail = async (subject: string, html: string) => {
-        const { data: admins } = await supabase.from('profiles').select('email').eq('role', 'Admin').eq('status', 'Active');
-        if (admins && Array.isArray(admins)) {
-            for (const admin of admins) {
-                if (admin.email) {
-                    await sendGearRequestEmail({
-                        to: admin.email,
-                        subject,
-                        html,
-                    });
-                }
-            }
-        }
-    };
-
-    type NotificationTarget = { id: string; email?: string; preferences?: Record<string, unknown> };
-
     try {
+        const authContext = await getRouteAuthContext();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const payload = await req.json();
         const { type, table, record, old_record } = payload;
 
@@ -78,6 +63,17 @@ export async function POST(req: NextRequest) {
                 success: false,
                 error: 'Missing required fields: type, table, or record'
             }, { status: 400 });
+        }
+
+        const isOwnerCheckinInsert = table === 'checkins'
+            && type === 'INSERT'
+            && record?.user_id === authContext.user.id;
+
+        if (!authContext.isActiveAdmin && !isOwnerCheckinInsert) {
+            return NextResponse.json({
+                success: false,
+                error: 'Forbidden'
+            }, { status: 403 });
         }
 
         const supabase = await createSupabaseServerClient(true) as SupabaseClient<Database>;
@@ -131,7 +127,7 @@ export async function POST(req: NextRequest) {
                  category = 'request';
                  metadata = { gear_id: record.gear_id, request_id: record.id };
                  // Find all admin users and their preferences
-                 const { data: admins } = await supabase.from('profiles').select('id,email,notification_preferences,role').eq('role', 'Admin');
+                 const { data: admins } = await supabase.from('profiles').select('id,email,notification_preferences,role').eq('role', 'Admin').eq('status', 'Active');
                  notificationTargets = (admins || [])
                      .filter(a => !!a.email)
                      .map(a => ({
@@ -174,7 +170,7 @@ export async function POST(req: NextRequest) {
                                      userName: user.full_name || 'there',
                                      gearList: record.gear_name || 'equipment',
                                  });
-                             } catch (err: any) {
+                             } catch (err: unknown) {
                                  console.error('[Email Notification Error]', err);
                              }
                          }
@@ -218,7 +214,7 @@ export async function POST(req: NextRequest) {
                   category = 'system';
                   metadata = { checkin_id: record.id, gear_id: record.gear_id };
                   // Notify all admin users
-                  const { data: admins } = await supabase.from('profiles').select('id,email,notification_preferences,role').eq('role', 'Admin');
+                  const { data: admins } = await supabase.from('profiles').select('id,email,notification_preferences,role').eq('role', 'Admin').eq('status', 'Active');
                   notificationTargets = (admins || [])
                       .filter(a => !!a.email)
                       .map(a => ({
@@ -270,19 +266,18 @@ export async function POST(req: NextRequest) {
         for (const target of targets) {
             const targetId = target.id;
             const targetEmail = target.email;
-            let notificationId: string | null = null;
             let lastError: string | null = null;
-            const prefs = target.preferences || {};
+            const prefs = (target.preferences as NotificationPreferences | null) || {};
 
             // Determine channels for this event
-            const sendInApp = (prefs as any).in_app?.[table] ?? notificationDefaults.in_app;
-            const sendEmail = (prefs as any).email?.[table] ?? notificationDefaults.email;
-            const sendPush = (prefs as any).push?.[table] ?? notificationDefaults.push;
+            const sendInApp = prefs.in_app?.[table] ?? notificationDefaults.in_app;
+            const sendEmail = prefs.email?.[table] ?? notificationDefaults.email;
+            const sendPush = prefs.push?.[table] ?? notificationDefaults.push;
 
             // In-app notification
             if (sendInApp) {
                 try {
-                    const { data, error } = await supabase
+                    const { error } = await supabase
                         .from('notifications')
                         .insert([
                             {
@@ -299,9 +294,8 @@ export async function POST(req: NextRequest) {
                         ])
                         .select('id');
                     if (error) throw error;
-                    notificationId = data?.[0]?.id ?? null;
-                } catch (err: any) {
-                    errors.push(`In-app: ${err.message}`);
+                } catch (err: unknown) {
+                    errors.push(`In-app: ${err instanceof Error ? err.message : 'Unknown in-app error'}`);
                 }
             }
 
@@ -358,9 +352,9 @@ export async function POST(req: NextRequest) {
                     } else {
                         console.log('[Notification Trigger] Push notification queued for user:', targetId);
                     }
-                } catch (err: any) {
+                } catch (err: unknown) {
                     console.error('[Notification Trigger] Push queue error:', err);
-                    lastError = `Push queue: ${err.message}`;
+                    lastError = `Push queue: ${err instanceof Error ? err.message : 'Unknown push error'}`;
                     errors.push(lastError);
                 }
             }
@@ -373,13 +367,13 @@ export async function POST(req: NextRequest) {
             pushSent: targets.length > 0,
             errors: errors.length > 0 ? errors : undefined,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[Notification Trigger Error]:', error);
         return NextResponse.json(
             {
                 success: false,
-                error: error.message || 'Unknown error occurred',
-                details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+                error: error instanceof Error ? error.message : 'Unknown error occurred',
+                details: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined,
             },
             { status: 500 }
         );

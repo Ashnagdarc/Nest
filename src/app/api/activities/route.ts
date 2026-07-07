@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireActiveAdminRoute } from '@/lib/api/route-auth';
 
 export async function GET(request: NextRequest) {
     try {
+        const authContext = await requireActiveAdminRoute();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         // Create Supabase client with service role key to bypass RLS
         const supabase = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { requireActiveAdminRoute } from '@/lib/api/route-auth';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const authContext = await requireActiveAdminRoute();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const admin = await createSupabaseServerClient(true);
         const { id: carId } = await params;
         const { data: assignmentRows, error: aErr } = await admin

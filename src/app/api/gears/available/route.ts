@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
+import { requireAuthenticatedRouteUser } from '@/lib/api/route-auth';
 
 export async function GET() {
     try {
+        const authContext = await requireAuthenticatedRouteUser();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         // Get environment variables
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

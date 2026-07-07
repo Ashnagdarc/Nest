@@ -8,6 +8,34 @@ import { transitionBooking } from '@/lib/bookings-v2/service';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
 
+async function requireAdminContext() {
+    const authSupabase = await createSupabaseServerClient();
+    const { data: { user }, error: authError } = await authSupabase.auth.getUser();
+
+    if (authError || !user) {
+        return {
+            errorResponse: NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+        };
+    }
+
+    const adminSupabase = await createSupabaseServerClient(true);
+    const { data: profile, error: profileError } = await adminSupabase
+        .from('profiles')
+        .select('role, status')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    const isAdmin = !profileError && profile?.role === 'Admin' && profile?.status === 'Active';
+
+    if (!isAdmin) {
+        return {
+            errorResponse: NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+        };
+    }
+
+    return { adminSupabase, user };
+}
+
 export async function POST(req: Request) {
     const correlationId = randomUUID();
     const ok = (payload: { booking?: unknown; items?: unknown[]; warnings?: string[]; user_message?: string } = {}) =>
@@ -33,12 +61,16 @@ export async function POST(req: Request) {
         }, { status });
 
     try {
+        const adminContext = await requireAdminContext();
+        if ('errorResponse' in adminContext) {
+            return adminContext.errorResponse;
+        }
+
+        const { adminSupabase: supabase, user: adminUser } = adminContext;
         const { requestId, reason } = await req.json();
         if (!requestId || typeof requestId !== 'string') {
             return fail(400, 'Missing requestId', 'Invalid request payload.', 'REQUEST_ID_REQUIRED');
         }
-
-        const supabase = await createSupabaseServerClient();
 
         // Fetch request details first for email
         const { data: requestData } = await supabase
@@ -92,7 +124,7 @@ export async function POST(req: Request) {
                 await transitionBooking({
                     bookingId: aggregate.id,
                     nextStatus: 'failed',
-                    changedBy: null,
+                    changedBy: adminUser.id,
                     reason: reason || 'Request rejected via legacy route',
                     metadata: { legacy_route: '/api/requests/reject' },
                     idempotencyKey: `legacy-reject:${requestId}`,

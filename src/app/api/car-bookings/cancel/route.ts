@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingCancellationEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
 import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
+import { normalizeNotificationInsert, normalizeNotificationType } from '@/lib/notification-type';
 import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -153,13 +154,18 @@ export async function POST(request: NextRequest) {
 
         // Create in-app notification for user
         if (booking.requester_id) {
-            await admin.from('notifications').insert({
+            const { error: notificationError } = await admin.from('notifications').insert(normalizeNotificationInsert({
                 user_id: booking.requester_id,
                 type: 'Cancellation',
                 title: 'Car booking cancelled',
                 message: `Your car booking for ${booking.date_of_use} (${booking.time_slot}) has been cancelled.${reason ? ` Reason: ${reason}` : ''}`,
-                link: '/user/car-booking'
-            });
+                link: '/user/car-booking',
+                metadata: { subtype: 'car_booking_cancelled' }
+            }));
+
+            if (notificationError) {
+                console.error('[Car Booking Cancel] Failed to create in-app notification:', notificationError);
+            }
         }
 
         // Queue push notification for the user

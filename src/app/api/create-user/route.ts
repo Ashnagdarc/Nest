@@ -1,7 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import rateLimit from 'next-rate-limit';
 import { NextRequest } from 'next/server';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
 const limiter = rateLimit({
     interval: 60 * 1000, // 1 minute
@@ -18,20 +19,15 @@ export async function POST(request: NextRequest) {
         }
         const { email, password, fullName } = await request.json();
 
-        // Create Supabase client with service role key
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!,
-            {
-                auth: {
-                    autoRefreshToken: false,
-                    persistSession: false
-                }
-            }
-        );
+        const adminContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in adminContext) {
+            return adminContext.errorResponse;
+        }
+
+        const supabase = await createSupabaseAdminClient();
 
         // 1. Create user in auth.users
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        const { data: authData, error: createUserError } = await supabase.auth.admin.createUser({
             email,
             password,
             email_confirm: true, // Auto-confirm email
@@ -40,16 +36,16 @@ export async function POST(request: NextRequest) {
             }
         });
 
-        if (authError) {
+        if (createUserError) {
             // Specific error handling
-            if (authError.message.includes('User already registered')) {
+            if (createUserError.message.includes('User already registered')) {
                 return NextResponse.json({ error: 'Email is already registered.' }, { status: 409 });
-            } else if (authError.message.includes('Invalid email')) {
+            } else if (createUserError.message.includes('Invalid email')) {
                 return NextResponse.json({ error: 'Invalid email address.' }, { status: 400 });
-            } else if (authError.message.includes('Password should be at least')) {
+            } else if (createUserError.message.includes('Password should be at least')) {
                 return NextResponse.json({ error: 'Password does not meet requirements.' }, { status: 400 });
             }
-            return NextResponse.json({ error: authError.message }, { status: 400 });
+            return NextResponse.json({ error: createUserError.message }, { status: 400 });
         }
 
         if (!authData.user) {
@@ -61,20 +57,20 @@ export async function POST(request: NextRequest) {
 
         // The profile will be automatically created by the handle_new_user trigger
         // But we can verify it was created
-        const { data: profile, error: profileError } = await supabase
+        const { data: createdProfile, error: createdProfileError } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', authData.user.id)
             .single();
 
-        if (profileError) {
-            console.error('Error fetching created profile:', profileError);
+        if (createdProfileError) {
+            console.error('Error fetching created profile:', createdProfileError);
             // Don't fail the request, as the trigger might just be taking time
         }
 
         return NextResponse.json({
             user: authData.user,
-            profile
+            profile: createdProfile
         });
 
     } catch (error) {

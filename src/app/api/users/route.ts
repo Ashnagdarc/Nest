@@ -1,9 +1,15 @@
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
 export async function GET(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient(true);
+        const adminContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in adminContext) {
+            const body = await adminContext.errorResponse.json();
+            return NextResponse.json({ data: null, total: 0, error: body.error }, { status: adminContext.errorResponse.status });
+        }
+
+        const adminSupabase = adminContext.adminSupabase;
         const { searchParams } = new URL(request.url);
         const role = searchParams.get('role');
         const ids = searchParams.get('ids');
@@ -13,7 +19,7 @@ export async function GET(request: NextRequest) {
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
 
-        let query = supabase.from('profiles').select('*', { count: 'exact' });
+        let query = adminSupabase.from('profiles').select('*', { count: 'exact' });
 
         // Filter by role if specified
         if (role && role !== 'all') {
@@ -48,27 +54,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient(true);
         const body = await request.json();
-
-        // Check for admin authorization
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-            return NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 });
+        const adminContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in adminContext) {
+            const body = await adminContext.errorResponse.json();
+            return NextResponse.json({ data: null, error: body.error }, { status: adminContext.errorResponse.status });
         }
 
-        // Verify admin role before allowing user creation
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-        if (profileError || profile?.role !== 'Admin') {
-            return NextResponse.json({ data: null, error: 'Unauthorized: Admin access required' }, { status: 403 });
-        }
-
-        const { data, error } = await supabase.from('profiles').insert(body).select().single();
+        const adminSupabase = adminContext.adminSupabase;
+        const { data, error } = await adminSupabase.from('profiles').insert(body).select().single();
 
         if (error) {
             console.error('Error creating user:', error);

@@ -1,24 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
+import { normalizeNotificationInsert } from '@/lib/notification-type';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
+
+async function requireAdmin() {
+    const adminContext = await requireActiveAdminRouteUser();
+    if ('errorResponse' in adminContext) {
+        const body = await adminContext.errorResponse.json();
+        return {
+            errorResponse: NextResponse.json({ data: null, error: body.error }, { status: adminContext.errorResponse.status })
+        };
+    }
+
+    return { adminSupabase: adminContext.adminSupabase };
+}
 
 export async function GET(request: NextRequest) {
     try {
         console.log('🔍 Admin Notifications API called');
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Missing Supabase environment variables');
-            return NextResponse.json({ data: null, error: 'Server configuration error' }, { status: 500 });
+        const { adminSupabase, errorResponse } = await requireAdmin();
+        if (errorResponse) {
+            return errorResponse;
         }
-
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
 
         // Extract query parameters
         const { searchParams } = new URL(request.url);
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
         console.log('📊 Fetching admin notifications with filters:', { unreadOnly, limit, userId });
 
         // Build the query; support optional userId scoping
-        let query = supabase
+        let query = adminSupabase
             .from('notifications')
             .select(`
                 id,
@@ -93,20 +95,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         console.log('🔍 Admin Create Notification API called');
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Missing Supabase environment variables');
-            return NextResponse.json({ data: null, error: 'Server configuration error' }, { status: 500 });
+        const { adminSupabase, errorResponse } = await requireAdmin();
+        if (errorResponse) {
+            return errorResponse;
         }
-
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
 
         const body = await request.json();
         const {
@@ -132,9 +124,9 @@ export async function POST(request: NextRequest) {
         console.log('📝 Creating admin notification:', { user_id, type, title });
 
         // Create the notification
-        const { data, error } = await supabase
+        const { data, error } = await adminSupabase
             .from('notifications')
-            .insert({
+            .insert(normalizeNotificationInsert({
                 user_id,
                 type,
                 title,
@@ -145,7 +137,7 @@ export async function POST(request: NextRequest) {
                 priority,
                 expires_at,
                 is_read: false
-            })
+            }))
             .select(`
                 id,
                 type,

@@ -5,7 +5,7 @@ import type { BookingCreateInput, BookingLifecycleStatus, BookingTransitionInput
 
 const TRANSITIONS: Record<BookingLifecycleStatus, BookingLifecycleStatus[]> = {
   pending: ['approved', 'cancelled', 'failed'],
-  approved: ['checked_out', 'cancelled', 'failed'],
+  approved: ['checked_out', 'active', 'completed', 'cancelled', 'failed'],
   checked_out: ['active', 'completed', 'overdue', 'failed'],
   active: ['completed', 'overdue', 'failed'],
   completed: [],
@@ -16,6 +16,9 @@ const TRANSITIONS: Record<BookingLifecycleStatus, BookingLifecycleStatus[]> = {
 
 const toLegacyBookingStatus = (status: BookingLifecycleStatus): string => {
   if (status === 'approved') return 'Approved';
+  if (status === 'checked_out') return 'Approved';
+  if (status === 'active') return 'Approved';
+  if (status === 'overdue') return 'Approved';
   if (status === 'completed') return 'Completed';
   if (status === 'cancelled') return 'Cancelled';
   if (status === 'failed') return 'Rejected';

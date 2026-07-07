@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
+import { requireActiveAdminRoute } from '@/lib/api/route-auth';
 
 export async function GET(request: NextRequest) {
     try {
         console.log('🔍 Simple Reports API called');
+        const authContext = await requireActiveAdminRoute();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -128,16 +134,10 @@ export async function GET(request: NextRequest) {
         const totalUsers = users.length;
         const activeUsers = users.filter(u => u.role !== 'Inactive').length;
 
-        // Popular gears (from requests)
         const gearRequestCounts: Record<string, { name: string; category?: string; count: number }> = {};
-        requests.forEach(request => {
-            // We need to get gear details from gear_request_gears
-            // For now, we'll use a simplified approach
-        });
 
         // Get gear request details
         const requestIds = requests.map(r => r.id);
-        let gearRequestDetails: any[] = [];
         if (requestIds.length > 0) {
             const { data: gearRequestGearsData } = await supabase
                 .from('gear_request_gears')
@@ -148,10 +148,8 @@ export async function GET(request: NextRequest) {
                 `)
                 .in('gear_request_id', requestIds);
 
-            gearRequestDetails = gearRequestGearsData || [];
-
             // Calculate popular gears
-            gearRequestDetails.forEach(item => {
+            (gearRequestGearsData || []).forEach(item => {
                 if (item.gears) {
                     const gearName = item.gears.name;
                     const category = item.gears.category;

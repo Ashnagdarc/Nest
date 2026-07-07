@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/client';
+import { normalizeNotificationInsert, normalizeNotificationType } from '@/lib/notification-type';
+
+const DUE_SOON_TYPE = 'Due Soon';
+const DUE_SOON_SUBTYPE = 'due_soon';
+const PENDING_ALERT_TYPE = 'Pending Alert';
+const PENDING_ALERT_SUBTYPE = 'pending_alert';
+const OFFICE_CLOSING_TYPE = 'Office Closing';
+const OFFICE_CLOSING_SUBTYPE = 'office_closing';
 
 export async function GET(req: NextRequest) {
     return POST(req);
@@ -156,7 +164,10 @@ async function handleDueSoon() {
         for (const userId in userGearMap) {
             // Check idempotency
             const { data: existing } = await supabase.from('notifications')
-                .select('id').eq('user_id', userId).eq('type', 'Due Soon')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('type', normalizeNotificationType(DUE_SOON_TYPE))
+                .contains('metadata', { subtype: DUE_SOON_SUBTYPE })
                 .gte('created_at', new Date(now.setHours(0, 0, 0, 0)).toISOString());
 
             if (existing && existing.length > 0) continue;
@@ -166,14 +177,15 @@ async function handleDueSoon() {
 
             // Insert Notification (Trigger will handle push/email if configured, or we do it manually here)
             // We'll insert directly to notifications table 
-            await supabase.from('notifications').insert({
+            await supabase.from('notifications').insert(normalizeNotificationInsert({
                 user_id: userId,
-                type: 'Due Soon',
+                type: DUE_SOON_TYPE,
                 title: 'Gear Due Tomorrow',
                 message,
                 is_read: false,
                 category: 'System',
-            });
+                metadata: { subtype: DUE_SOON_SUBTYPE },
+            }));
 
             // Queue push notification
             const { error: pushError } = await supabase.from('push_notification_queue').insert([
@@ -225,7 +237,8 @@ async function handlePendingRequests() {
             // We can use a unique tag in metadata
             const { data: existing } = await supabase.from('notifications')
                 .select('id')
-                .eq('type', 'Pending Alert')
+                .eq('type', normalizeNotificationType(PENDING_ALERT_TYPE))
+                .contains('metadata', { subtype: PENDING_ALERT_SUBTYPE })
                 .contains('metadata', { request_id: req.id });
 
             if (existing && existing.length > 0) continue; // Already alerted for this request
@@ -234,15 +247,15 @@ async function handlePendingRequests() {
 
             // Notify all admins
             for (const admin of admins) {
-                await supabase.from('notifications').insert({
+                await supabase.from('notifications').insert(normalizeNotificationInsert({
                     user_id: admin.id,
-                    type: 'Pending Alert',
+                    type: PENDING_ALERT_TYPE,
                     title: 'Pending Request Alert',
                     message,
                     is_read: false,
                     category: 'System',
-                    metadata: { request_id: req.id }
-                });
+                    metadata: { request_id: req.id, subtype: PENDING_ALERT_SUBTYPE }
+                }));
             }
             sent++;
         }
@@ -279,7 +292,8 @@ async function handleOfficeClosing() {
         // Check if we sent 'Office Closing' today
         const { data: existing } = await supabase.from('notifications')
             .select('id')
-            .eq('type', 'Office Closing')
+            .eq('type', normalizeNotificationType(OFFICE_CLOSING_TYPE))
+            .contains('metadata', { subtype: OFFICE_CLOSING_SUBTYPE })
             .gte('created_at', new Date(now.setHours(0, 0, 0, 0)).toISOString())
             .limit(1);
 
@@ -294,14 +308,15 @@ async function handleOfficeClosing() {
         const { data: users } = await supabase.from('profiles').select('id');
         if (!users) return { message: 'No users found.', sent: 0 };
 
-        const notifications = users.map(u => ({
+        const notifications = users.map(u => normalizeNotificationInsert({
             user_id: u.id,
-            type: 'Office Closing',
+            type: OFFICE_CLOSING_TYPE,
             title: 'Office Closing Soon',
             message: 'It is 6 PM. The office is now closing. Please ensure all gear is returned or secured.',
             is_read: false,
             created_at: new Date().toISOString(),
-            category: 'System'
+            category: 'System',
+            metadata: { subtype: OFFICE_CLOSING_SUBTYPE }
         }));
 
         // Batch insert

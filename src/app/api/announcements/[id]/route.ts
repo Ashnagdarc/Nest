@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseApiClient } from '@/lib/supabase/api-client';
+import { requireActiveAdmin } from '@/app/api/_utils/route-auth';
 
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        // Use service-role client explicitly (no cookie auth) to avoid RLS filtering
-        const supabase = createSupabaseApiClient(true);
+        const authContext = await requireActiveAdmin();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
+        const supabase = authContext.adminSupabase;
         const { id } = await params;
 
         if (!id) {
@@ -25,8 +29,8 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
             return NextResponse.json({ error: 'Announcement not found or already deleted' }, { status: 404 });
         }
 
-        return NextResponse.json({ success: true, deleted: data.map((r: any) => r.id) });
-    } catch (e: any) {
-        return NextResponse.json({ error: 'Unexpected error', details: String(e?.message || e) }, { status: 500 });
+        return NextResponse.json({ success: true, deleted: data.map((row) => row.id) });
+    } catch (error: unknown) {
+        return NextResponse.json({ error: 'Unexpected error', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
     }
 }

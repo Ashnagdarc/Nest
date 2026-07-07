@@ -12,6 +12,22 @@ export async function POST(request: NextRequest) {
     const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
         NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: userMessage, error_code: errorCode, correlation_id: correlationId, error }, { status });
     try {
+        const authClient = await createSupabaseServerClient();
+        const { data: userData } = await authClient.auth.getUser();
+        if (!userData.user) {
+            return fail(401, 'Unauthorized', 'Authentication required.', 'CAR_BOOKING_UNAUTHORIZED');
+        }
+
+        const { data: profile } = await authClient
+            .from('profiles')
+            .select('role,status')
+            .eq('id', userData.user.id)
+            .maybeSingle();
+        const isAdmin = profile?.role === 'Admin' && profile?.status === 'Active';
+        if (!isAdmin) {
+            return fail(403, 'Admin access required', 'Only active admins can reject car bookings.', 'CAR_BOOKING_ADMIN_REQUIRED');
+        }
+
         const admin = await createSupabaseServerClient(true);
         const { bookingId, reason } = await request.json();
         if (!bookingId) return fail(400, 'bookingId is required', 'Missing booking reference.', 'BOOKING_ID_REQUIRED');
@@ -20,8 +36,7 @@ export async function POST(request: NextRequest) {
         if (selErr || !booking) return fail(404, selErr?.message || 'Not found', 'Booking not found.', 'CAR_BOOKING_NOT_FOUND');
         if (booking.status === 'Rejected') return ok(booking, 'Booking is already rejected.');
 
-        const { data: me } = await admin.auth.getUser();
-        const actorId = me.user?.id || null;
+        const actorId = userData.user.id;
 
         const { error } = await admin.from('car_bookings').update({
             status: 'Rejected',
@@ -31,7 +46,7 @@ export async function POST(request: NextRequest) {
         if (error) return fail(400, error.message, 'Could not reject booking right now.', 'CAR_BOOKING_REJECT_FAILED');
 
         try {
-            const { data: aggregate } = await (admin as any)
+            const { data: aggregate } = await admin
                 .from('bookings')
                 .select('id')
                 .eq('source_type', 'car_booking')
@@ -106,14 +121,16 @@ export async function POST(request: NextRequest) {
 
         try {
             await notifyGoogleChat(NotificationEventType.ADMIN_REJECT_REQUEST, {
-                adminName: me.user?.email,
-                adminEmail: me.user?.email,
+                adminName: userData.user.email,
+                adminEmail: userData.user.email,
                 userName: booking.employee_name,
                 userEmail: '',
                 gearNames: [`Car booking: ${booking.date_of_use} ${booking.time_slot}`],
                 dueDate: booking.date_of_use
             });
-        } catch { }
+        } catch (chatError) {
+            console.warn('[Car Booking Reject] Failed to notify Google Chat:', chatError);
+        }
 
         // Send notification email to all admins
         try {

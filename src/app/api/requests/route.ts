@@ -1,7 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import type { Database } from '@/types/supabase';
 import { sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification, triggerPushWorker } from '@/lib/push-queue';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
@@ -21,25 +19,52 @@ function toUserFriendlyRequestError(message?: string) {
     return 'We could not complete your request right now. Please try again.';
 }
 
+async function requireAuthenticatedUser() {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+        return {
+            errorResponse: NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 })
+        };
+    }
+
+    return { user };
+}
+
+async function requireAdminUser() {
+    const authContext = await requireAuthenticatedUser();
+    if ('errorResponse' in authContext) {
+        return authContext;
+    }
+
+    const adminSupabase = await createSupabaseServerClient(true);
+    const { data: profile, error: profileError } = await adminSupabase
+        .from('profiles')
+        .select('role, status')
+        .eq('id', authContext.user.id)
+        .maybeSingle();
+
+    const isAdmin = !profileError && profile?.role === 'Admin' && profile?.status === 'Active';
+
+    if (!isAdmin) {
+        return {
+            errorResponse: NextResponse.json({ data: null, error: 'Forbidden' }, { status: 403 })
+        };
+    }
+
+    return { adminSupabase, user: authContext.user };
+}
+
 export async function GET(request: NextRequest) {
     try {
         console.log('🔍 Admin requests API called');
-
-        // Create direct Supabase client with service role key to bypass RLS
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Missing Supabase environment variables');
-            return NextResponse.json({ data: null, error: 'Server configuration error' }, { status: 500 });
+        const adminContext = await requireAdminUser();
+        if ('errorResponse' in adminContext) {
+            return adminContext.errorResponse;
         }
 
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
+        const { adminSupabase: supabase } = adminContext;
 
         // Extract query parameters
         const { searchParams } = new URL(request.url);
@@ -175,15 +200,52 @@ export async function POST(request: NextRequest) {
         const timeoutId = setTimeout(() => abortController.abort(), 30000);
 
         try {
+            const authContext = await requireAuthenticatedUser();
+            if ('errorResponse' in authContext) {
+                return authContext.errorResponse;
+            }
+
+            const requesterId = authContext.user.id;
+
             // Create Supabase client with admin privileges
             const supabase = await createSupabaseServerClient(true);
 
             // Parse the request body
             const body = await request.json();
+            const clientSubmissionId = typeof body.client_submission_id === 'string'
+                ? body.client_submission_id.trim()
+                : '';
 
             // Validate required fields
-            if (!body.user_id || !body.reason) {
-                return fail(400, 'Missing required fields: user_id, reason', 'Please provide required fields and try again.', 'REQUEST_VALIDATION_FAILED');
+            if (!body.reason) {
+                return fail(400, 'Missing required field: reason', 'Please provide required fields and try again.', 'REQUEST_VALIDATION_FAILED');
+            }
+
+            if (clientSubmissionId) {
+                const { data: existingRequest, error: existingRequestError } = await supabase
+                    .from('gear_requests')
+                    .select('id, status, created_at, user_id')
+                    .eq('user_id', requesterId)
+                    .eq('client_submission_id', clientSubmissionId)
+                    .maybeSingle();
+
+                if (existingRequestError) {
+                    return fail(500, `Failed to check for duplicate submission: ${existingRequestError.message}`, 'We could not verify your request right now. Please try again.', 'REQUEST_DUPLICATE_CHECK_FAILED');
+                }
+
+                if (existingRequest) {
+                    clearTimeout(timeoutId);
+                    return ok({
+                        booking: {
+                            id: existingRequest.id,
+                            status: existingRequest.status,
+                            created_at: existingRequest.created_at,
+                            user_id: existingRequest.user_id,
+                        },
+                        warnings: ['Existing request returned for duplicate submission key.'],
+                        user_message: 'Request already submitted.',
+                    });
+                }
             }
 
             const rawLines = Array.isArray(body.gear_request_gears)
@@ -253,19 +315,42 @@ export async function POST(request: NextRequest) {
             const { data: requestData, error: requestError } = await supabase
                 .from('gear_requests')
                 .insert({
-                    user_id: body.user_id,
+                    user_id: requesterId,
                     reason: body.reason,
                     destination: body.destination || null,
                     expected_duration: body.expected_duration || null,
                     team_members: body.team_members || null,
                     status: body.status || 'Pending',
-                    due_date: body.due_date || null
+                    due_date: body.due_date || null,
+                    client_submission_id: clientSubmissionId || null,
                 })
                 .select('id, status, created_at, user_id')
                 .single();
 
             // Handle database errors
             if (requestError) {
+                if (clientSubmissionId && requestError.code === '23505') {
+                    const { data: existingRequest } = await supabase
+                        .from('gear_requests')
+                        .select('id, status, created_at, user_id')
+                        .eq('user_id', requesterId)
+                        .eq('client_submission_id', clientSubmissionId)
+                        .maybeSingle();
+
+                    if (existingRequest) {
+                        clearTimeout(timeoutId);
+                        return ok({
+                            booking: {
+                                id: existingRequest.id,
+                                status: existingRequest.status,
+                                created_at: existingRequest.created_at,
+                                user_id: existingRequest.user_id,
+                            },
+                            warnings: ['Existing request returned after duplicate submission race.'],
+                            user_message: 'Request already submitted.',
+                        });
+                    }
+                }
                 console.error('Error creating request:', requestError);
                 clearTimeout(timeoutId);
                 return fail(500, `Failed to create request: ${requestError.message}`, toUserFriendlyRequestError(requestError.message), 'REQUEST_CREATE_FAILED');
@@ -351,7 +436,7 @@ export async function POST(request: NextRequest) {
                         const { data: userData } = await notificationSupabase
                             .from('profiles')
                             .select('full_name, email')
-                            .eq('id', body.user_id)
+                            .eq('id', requesterId)
                             .single();
 
                         const totalRequestedUnits = normalizedLines.reduce((sum, line) => sum + line.quantity, 0);
@@ -437,7 +522,7 @@ export async function POST(request: NextRequest) {
                                     data: {
                                         type: 'gear_request_created',
                                         request_id: requestData.id,
-                                        requester_id: body.user_id,
+                                        requester_id: requesterId,
                                     },
                                 },
                                 {

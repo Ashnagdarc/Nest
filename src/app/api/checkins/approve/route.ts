@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
 import { buildGroupedCheckinEmail, sendCheckinApprovalEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { transitionBooking } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
+import { requireActiveAdmin } from '@/app/api/_utils/route-auth';
+
+type NotificationPreferences = {
+    email?: Record<string, boolean | undefined>;
+};
 
 /**
  * POST /api/checkins/approve
@@ -47,6 +50,11 @@ export async function POST(request: NextRequest) {
             error,
         }, { status });
     try {
+        const authContext = await requireActiveAdmin();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const body = await request.json();
         const { checkinId, userId, gearName, gearNames } = body;
 
@@ -58,21 +66,21 @@ export async function POST(request: NextRequest) {
             return fail(400, 'Missing required fields', 'Missing required check-in fields.', 'CHECKIN_APPROVE_VALIDATION_FAILED');
         }
 
-        // Create Supabase client with service role key
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+        const supabase = authContext.adminSupabase;
 
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('[Check-in Approve] Missing Supabase environment variables');
-            return fail(500, 'Server configuration error', 'Server configuration is incomplete.', 'SERVER_CONFIG_ERROR');
+        const { data: checkin } = await supabase
+            .from('checkins')
+            .select('id, user_id')
+            .eq('id', checkinId)
+            .maybeSingle();
+
+        if (!checkin) {
+            return fail(404, 'Check-in not found', 'Check-in not found.', 'CHECKIN_NOT_FOUND');
         }
 
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
+        if (checkin.user_id !== userId) {
+            return fail(400, 'Check-in user mismatch', 'Check-in payload does not match the stored owner.', 'CHECKIN_USER_MISMATCH');
+        }
 
         // Get user details
         const { data: user } = await supabase
@@ -87,7 +95,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Check if user wants email notifications
-        const userPrefs = (user as any).notification_preferences || {};
+        const userPrefs = (user.notification_preferences as NotificationPreferences | null) || {};
         const shouldSendUserEmail = userPrefs.email?.gear_checkins !== false;
 
         const gearLabel = normalizedGearNames.join(', ');
@@ -147,7 +155,7 @@ export async function POST(request: NextRequest) {
                     .eq('status', 'Pending Admin Approval');
 
                 const nextStatus = (pendingCount || 0) > 0 ? 'active' : 'completed';
-                const { data: aggregate } = await (supabase as any)
+                const { data: aggregate } = await supabase
                     .from('bookings')
                     .select('id')
                     .eq('source_type', 'gear_request')

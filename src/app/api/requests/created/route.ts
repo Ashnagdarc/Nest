@@ -1,31 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
     try {
+        const authSupabase = await createSupabaseServerClient();
+        const { data: { user }, error: authError } = await authSupabase.auth.getUser();
+        if (authError || !user) {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { requestId } = body as { requestId?: string };
         if (!requestId) {
             return NextResponse.json({ success: false, error: 'requestId is required' }, { status: 400 });
         }
 
-        // Create direct Supabase client with service role key to bypass RLS
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Missing Supabase environment variables');
-            return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
-        }
-
-        const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
+        const supabase = await createSupabaseServerClient(true);
+        const { data: callerProfile } = await supabase
+            .from('profiles')
+            .select('role, status')
+            .eq('id', user.id)
+            .maybeSingle();
+        const isAdmin = callerProfile?.role === 'Admin' && callerProfile?.status === 'Active';
 
         // Load request first
         const { data: req, error } = await supabase
@@ -37,6 +34,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
         }
 
+        if (!isAdmin && req.user_id !== user.id) {
+            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+        }
+
         // Then load gear request gears separately
         const { data: gearRequestGears, error: gearError } = await supabase
             .from('gear_request_gears')
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Failed to load gear data' }, { status: 500 });
         }
 
-        const { data: user } = await supabase
+        const { data: requestUser } = await supabase
             .from('profiles')
             .select('email, full_name, notification_preferences')
             .eq('id', req.user_id)
@@ -76,20 +77,20 @@ export async function POST(request: NextRequest) {
         // If email service not configured, log and bail gracefully
         if (!process.env.RESEND_API_KEY) {
             console.warn('[Email Service] RESEND_API_KEY not configured - skipping request created emails');
-            return NextResponse.json({ success: false, error: 'Email service not configured' });
+            return NextResponse.json({ success: false, error: 'Email service not configured' }, { status: 503 });
         }
 
         // User email - respect notification preferences (default: enabled)
-        if (user?.email) {
+        if (requestUser?.email) {
             // Get user's notification preferences - default to true if not explicitly disabled
-            const userPrefs = (user as any).notification_preferences || {};
+            const userPrefs = (requestUser as any).notification_preferences || {};
             const shouldSendEmail = userPrefs.email?.gear_requests !== false; // Default true
             
             if (shouldSendEmail) {
                 await sendGearRequestEmail({
-                    to: user.email,
+                    to: requestUser.email,
                     subject: '✅ We received your gear request',
-                    html: `<p>Hi ${user.full_name || 'there'},</p>
+                    html: `<p>Hi ${requestUser.full_name || 'there'},</p>
                            <p>We received your request for: <strong>${gearList}</strong>.</p>
                            <p>Reason: ${req.reason || '-'} | Destination: ${req.destination || '-'} | Duration: ${req.expected_duration || '-'}</p>
                            <p>We will notify you when it is approved.</p>`
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
                 await sendGearRequestEmail({
                     to: admin.email,
                     subject: '🆕 New gear request submitted',
-                    html: `<p>New request #${req.id} submitted by ${user?.full_name || 'User'}.</p>
+                    html: `<p>New request #${req.id} submitted by ${requestUser?.full_name || 'User'}.</p>
                            <p>Items: <strong>${gearList}</strong></p>
                            <p>Reason: ${req.reason || '-'} | Destination: ${req.destination || '-'} | Duration: ${req.expected_duration || '-'}</p>`
                 });
@@ -121,5 +122,3 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 });
     }
 }
-
-

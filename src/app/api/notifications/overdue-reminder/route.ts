@@ -3,10 +3,25 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendOverdueReminderEmail } from '@/lib/email';
 import type { Database } from '@/types/supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { hasValidCronSecret, requireActiveAdmin } from '@/app/api/_utils/route-auth';
+
+type GearReminderItem = {
+    name: string;
+    dueDate?: string;
+};
 
 export async function POST(req: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient(true) as SupabaseClient<Database>;
+        let supabase: SupabaseClient<Database>;
+        if (hasValidCronSecret(req)) {
+            supabase = await createSupabaseServerClient(true) as SupabaseClient<Database>;
+        } else {
+            const authContext = await requireActiveAdmin();
+            if ('errorResponse' in authContext) {
+                return authContext.errorResponse;
+            }
+            supabase = authContext.adminSupabase as SupabaseClient<Database>;
+        }
         const { userId, gearList, dueDate, overdueDays } = await req.json();
 
         if (!userId || !gearList || !dueDate || !overdueDays) {
@@ -45,7 +60,7 @@ export async function POST(req: NextRequest) {
         const result = await sendOverdueReminderEmail({
             to: user.email,
             userName: user.full_name || 'there',
-            gearList: gearList.map((gear: any) => ({
+            gearList: gearList.map((gear: GearReminderItem) => ({
                 name: gear.name,
                 dueDate: gear.dueDate || dueDate
             })),

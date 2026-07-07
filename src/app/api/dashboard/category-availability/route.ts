@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { requireActiveAdminRoute } from '@/lib/api/route-auth';
 
 export async function GET() {
   try {
+    const authContext = await requireActiveAdminRoute();
+    if ('errorResponse' in authContext) {
+      return authContext.errorResponse;
+    }
+
     const supabase = await createSupabaseServerClient(true);
     const { data, error } = await supabase
       .from('gears')
@@ -14,7 +20,7 @@ export async function GET() {
 
     const grouped = new Map<string, { category: string; total: number; available: number; checked_out: number; maintenance: number }>();
 
-    (data || []).forEach((row: any) => {
+    (data || []).forEach((row) => {
       const category = String(row.category || 'Other');
       if (!grouped.has(category)) {
         grouped.set(category, { category, total: 0, available: 0, checked_out: 0, maintenance: 0 });
@@ -32,7 +38,8 @@ export async function GET() {
     });
 
     return NextResponse.json(Array.from(grouped.values()));
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || 'Unexpected error' }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unexpected error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendAnnouncementEmail } from '@/lib/email';
+import { normalizeNotificationInsert } from '@/lib/notification-type';
 
 export interface AnnouncementData {
     id: string;
@@ -86,7 +87,7 @@ export class AnnouncementService {
                 message: content,
                 link: `/user/announcements?announcement=${announcement.id}`,
                 metadata: { author_name: authorName }
-            }));
+            })).map(normalizeNotificationInsert);
 
             if (notificationsPayload.length > 0) {
                 const { error: notifyError } = await supabase
@@ -176,7 +177,7 @@ export class AnnouncementService {
                 try {
                     const { error: notificationError } = await supabase
                         .from('notifications')
-                        .insert({
+                        .insert(normalizeNotificationInsert({
                             user_id: user.id,
                             type: 'Announcement',
                             title: `New Announcement: ${announcement.title}`,
@@ -188,7 +189,7 @@ export class AnnouncementService {
                                 author_name: authorName,
                             },
                             link: `/user/announcements?announcement=${announcement.id}`,
-                        });
+                        }));
 
                     if (notificationError) {
                         errors.push(`Notification for ${user.email}: ${notificationError.message}`);

@@ -172,3 +172,6 @@ pids
 .kiro/steering/byterover-rules.md
 .qoder/rules/byterover-rules.md
 .augment/rules/byterover-rules.md
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

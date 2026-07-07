@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
+import { getRouteAuthContext, requireActiveAdmin } from '@/app/api/_utils/route-auth';
 
 type CheckinRow = {
     user_id: string;
@@ -14,8 +15,12 @@ type ProfileRow = {
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     try {
-        // Use admin client to bypass RLS for this admin-facing endpoint
-        const supabase = await createSupabaseAdminClient();
+        const authContext = await requireActiveAdmin();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
+        const supabase = authContext.adminSupabase;
         const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 10;
         const page = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
         const userId = searchParams.get('userId');
@@ -116,7 +121,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient();
+        const authContext = await getRouteAuthContext();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const { user_id, gear_id, request_id, quantity, condition, notes } = await request.json();
 
         if (!user_id || !gear_id) {
@@ -125,6 +134,18 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
+
+        const actingOnOwnCheckin = authContext.user.id === user_id;
+        if (!actingOnOwnCheckin && !authContext.isActiveAdmin) {
+            return NextResponse.json(
+                { error: 'Forbidden' },
+                { status: 403 }
+            );
+        }
+
+        const supabase = actingOnOwnCheckin
+            ? authContext.authSupabase
+            : await createSupabaseAdminClient();
 
         const sanitizedQuantity = Math.max(1, Number(quantity ?? 1));
         if (!Number.isFinite(sanitizedQuantity)) {
@@ -211,7 +232,10 @@ export async function POST(request: NextRequest) {
         const baseOrigin = new URL(request.url).origin;
         fetch(`${baseOrigin}/api/notifications/trigger`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                cookie: request.headers.get('cookie') ?? '',
+            },
             body: JSON.stringify({
                 type: 'INSERT',
                 table: 'checkins',
