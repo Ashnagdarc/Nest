@@ -286,19 +286,16 @@ function RequestGearContent() {
         selectedGears: cleanedSelectedGears,
         quantities: cleanedQuantities,
       };
-      const restoredSubmissionId =
-        typeof (values as { clientSubmissionId?: unknown }).clientSubmissionId === "string" &&
-        (values as { clientSubmissionId?: string }).clientSubmissionId?.trim()
-          ? (values as { clientSubmissionId: string }).clientSubmissionId.trim()
-          : createClientSubmissionId();
-
       form.reset(cleanedValues);
-      setClientSubmissionId(restoredSubmissionId);
+      // Always rotate the submission key when restoring a draft so a stale
+      // successful request cannot be mistaken for a brand-new booking.
+      const nextSubmissionId = createClientSubmissionId();
+      setClientSubmissionId(nextSubmissionId);
       localStorage.setItem(
         scopedDraftKey,
         JSON.stringify({
           ...cleanedValues,
-          clientSubmissionId: restoredSubmissionId,
+          clientSubmissionId: nextSubmissionId,
         }),
       );
 
@@ -580,6 +577,30 @@ function RequestGearContent() {
       const requestId = (requestJson?.booking?.id || requestJson?.data?.id) as
         | string
         | undefined;
+      const isDuplicateSubmission =
+        requestJson?.user_message === "Request already submitted." ||
+        (Array.isArray(requestJson?.warnings) &&
+          requestJson.warnings.some(
+            (warning: unknown) =>
+              typeof warning === "string" &&
+              warning.toLowerCase().includes("duplicate submission"),
+          ));
+
+      form.reset();
+      if (userId) {
+        localStorage.removeItem(buildRequestDraftKey(userId));
+      }
+      setClientSubmissionId(createClientSubmissionId());
+
+      if (isDuplicateSubmission) {
+        toast({
+          title: "Request already submitted",
+          description:
+            "We found an earlier submission with the same request key, so no second booking was created.",
+        });
+        router.push(requestId ? `/user/my-requests?id=${requestId}` : "/user/my-requests");
+        return;
+      }
 
       const { data: userProfile } = await supabase
         .from("profiles")
@@ -783,11 +804,6 @@ function RequestGearContent() {
         // Don't fail the whole request if emails fail
       }
 
-      form.reset();
-      if (userId) {
-        localStorage.removeItem(buildRequestDraftKey(userId));
-      }
-      setClientSubmissionId(createClientSubmissionId());
       toast({
         title: "Request Submitted Successfully",
         description: `Your request for ${gearNames} has been submitted.`,
