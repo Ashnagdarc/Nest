@@ -1,9 +1,10 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { sendGearRequestEmail } from '@/lib/email';
+import { sendGearRequestEmail, sendEquipmentBookedForYouEmail, sendRequestReceivedEmail } from '@/lib/email';
 import { enqueuePushNotification, triggerPushWorker } from '@/lib/push-queue';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
+import { sitePath } from '@/lib/site-url';
 
 function toUserFriendlyRequestError(message?: string) {
     const raw = (message || '').toLowerCase();
@@ -83,6 +84,12 @@ export async function GET(request: NextRequest) {
             .select(`
                 *,
                 profiles:user_id (
+                    id,
+                    full_name,
+                    email,
+                    avatar_url
+                ),
+                submitted_by:submitted_by_user_id (
                     id,
                     full_name,
                     email
@@ -215,6 +222,31 @@ export async function POST(request: NextRequest) {
             const clientSubmissionId = typeof body.client_submission_id === 'string'
                 ? body.client_submission_id.trim()
                 : '';
+            const bookedForUserId = typeof body.booked_for_user_id === 'string'
+                ? body.booked_for_user_id.trim()
+                : '';
+
+            // user_id = who the equipment is for; submitted_by = who filled the form (if different)
+            let ownerUserId = requesterId;
+            let submittedByUserId: string | null = null;
+
+            if (bookedForUserId && bookedForUserId !== requesterId) {
+                const { data: bookedForProfile, error: bookedForError } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email, status')
+                    .eq('id', bookedForUserId)
+                    .maybeSingle();
+
+                if (bookedForError || !bookedForProfile) {
+                    return fail(400, 'Invalid booked_for_user_id', 'The selected person could not be found. Please choose someone else.', 'REQUEST_VALIDATION_FAILED');
+                }
+                if (bookedForProfile.status && bookedForProfile.status !== 'Active') {
+                    return fail(400, 'Inactive booked_for user', 'The selected person is not an active user.', 'REQUEST_VALIDATION_FAILED');
+                }
+
+                ownerUserId = bookedForUserId;
+                submittedByUserId = requesterId;
+            }
 
             // Validate required fields
             if (!body.reason) {
@@ -222,12 +254,16 @@ export async function POST(request: NextRequest) {
             }
 
             if (clientSubmissionId) {
-                const { data: existingRequest, error: existingRequestError } = await supabase
+                let duplicateQuery = supabase
                     .from('gear_requests')
-                    .select('id, status, created_at, user_id')
-                    .eq('user_id', requesterId)
-                    .eq('client_submission_id', clientSubmissionId)
-                    .maybeSingle();
+                    .select('id, status, created_at, user_id, submitted_by_user_id')
+                    .eq('client_submission_id', clientSubmissionId);
+
+                duplicateQuery = submittedByUserId
+                    ? duplicateQuery.eq('submitted_by_user_id', submittedByUserId)
+                    : duplicateQuery.eq('user_id', requesterId);
+
+                const { data: existingRequest, error: existingRequestError } = await duplicateQuery.maybeSingle();
 
                 if (existingRequestError) {
                     return fail(500, `Failed to check for duplicate submission: ${existingRequestError.message}`, 'We could not verify your request right now. Please try again.', 'REQUEST_DUPLICATE_CHECK_FAILED');
@@ -315,7 +351,8 @@ export async function POST(request: NextRequest) {
             const { data: requestData, error: requestError } = await supabase
                 .from('gear_requests')
                 .insert({
-                    user_id: requesterId,
+                    user_id: ownerUserId,
+                    submitted_by_user_id: submittedByUserId,
                     reason: body.reason,
                     destination: body.destination || null,
                     expected_duration: body.expected_duration || null,
@@ -324,18 +361,22 @@ export async function POST(request: NextRequest) {
                     due_date: body.due_date || null,
                     client_submission_id: clientSubmissionId || null,
                 })
-                .select('id, status, created_at, user_id')
+                .select('id, status, created_at, user_id, submitted_by_user_id')
                 .single();
 
             // Handle database errors
             if (requestError) {
                 if (clientSubmissionId && requestError.code === '23505') {
-                    const { data: existingRequest } = await supabase
+                    let raceQuery = supabase
                         .from('gear_requests')
-                        .select('id, status, created_at, user_id')
-                        .eq('user_id', requesterId)
-                        .eq('client_submission_id', clientSubmissionId)
-                        .maybeSingle();
+                        .select('id, status, created_at, user_id, submitted_by_user_id')
+                        .eq('client_submission_id', clientSubmissionId);
+
+                    raceQuery = submittedByUserId
+                        ? raceQuery.eq('submitted_by_user_id', submittedByUserId)
+                        : raceQuery.eq('user_id', requesterId);
+
+                    const { data: existingRequest } = await raceQuery.maybeSingle();
 
                     if (existingRequest) {
                         clearTimeout(timeoutId);
@@ -423,117 +464,147 @@ export async function POST(request: NextRequest) {
             process.nextTick(async () => {
                 try {
                     const notificationSupabase = await createSupabaseServerClient(true);
+                    const gearNames = normalizedLines
+                        .map((line) => gearMap.get(line.gear_id)?.name)
+                        .filter((name): name is string => Boolean(name));
+                    const gearListText = gearNames
+                        .map((name, idx) => `${idx + 1}. ${name}`)
+                        .join('\n');
+                    const gearSummary = gearNames.length > 0
+                        ? gearNames.join(', ')
+                        : 'Equipment requested';
 
-                    // Fetch simplified admin data
+                    const [{ data: submitterProfile }, { data: ownerProfile }] = await Promise.all([
+                        notificationSupabase
+                            .from('profiles')
+                            .select('id, full_name, email')
+                            .eq('id', requesterId)
+                            .maybeSingle(),
+                        notificationSupabase
+                            .from('profiles')
+                            .select('id, full_name, email')
+                            .eq('id', requestData.user_id)
+                            .maybeSingle(),
+                    ]);
+
+                    const submitterName = submitterProfile?.full_name || 'User';
+                    const ownerName = ownerProfile?.full_name || 'User';
+                    const isOnBehalfBooking = Boolean(submittedByUserId && submittedByUserId !== requestData.user_id);
+
+                    // In-app + push for the person the equipment is for
+                    if (ownerProfile?.id) {
+                        await notificationSupabase.from('notifications').insert({
+                            user_id: ownerProfile.id,
+                            title: isOnBehalfBooking ? 'Equipment Booked For You' : 'Equipment Request Submitted',
+                            message: isOnBehalfBooking
+                                ? `${submitterName} booked equipment for you: ${gearSummary}`
+                                : `Your equipment request was submitted: ${gearSummary}`,
+                            type: 'System',
+                            is_read: false,
+                        });
+
+                        if (ownerProfile.email) {
+                            if (isOnBehalfBooking) {
+                                await sendEquipmentBookedForYouEmail({
+                                    to: ownerProfile.email,
+                                    recipientName: ownerName,
+                                    bookerName: submitterName,
+                                    gearList: gearListText,
+                                    reason: body.reason,
+                                    destination: body.destination,
+                                    duration: body.expected_duration,
+                                    requestId: requestData.id,
+                                }).catch((err) => console.error('Booked-for email failed:', err));
+                            } else {
+                                await sendRequestReceivedEmail({
+                                    to: ownerProfile.email,
+                                    userName: ownerName,
+                                    gearList: gearSummary,
+                                }).catch((err) => console.error('Request received email failed:', err));
+                            }
+                        }
+
+                        await enqueuePushNotification(
+                            notificationSupabase,
+                            {
+                                userId: ownerProfile.id,
+                                title: isOnBehalfBooking ? 'Equipment booked for you' : 'Request submitted',
+                                body: isOnBehalfBooking
+                                    ? `${submitterName} booked equipment for you.`
+                                    : `Your equipment request is under review.`,
+                                data: {
+                                    type: isOnBehalfBooking ? 'gear_booked_for_you' : 'gear_request_created',
+                                    request_id: requestData.id,
+                                },
+                            },
+                            { requestUrl: request.url, triggerWorker: false, context: 'Gear Request Create' },
+                        );
+                    }
+
+                    // Confirmation for submitter when booking for someone else
+                    if (isOnBehalfBooking && submitterProfile?.email) {
+                        await sendRequestReceivedEmail({
+                            to: submitterProfile.email,
+                            userName: submitterName,
+                            gearList: `${gearSummary} (for ${ownerName})`,
+                        }).catch((err) => console.error('Submitter confirmation email failed:', err));
+                    }
+
                     const { data: admins } = await notificationSupabase
                         .from('profiles')
                         .select('id, email, full_name')
                         .eq('role', 'Admin')
                         .eq('status', 'Active');
 
-                    if (admins && Array.isArray(admins) && admins.length > 0) {
-                        // Get user and gear data for the email  
-                        const { data: userData } = await notificationSupabase
-                            .from('profiles')
-                            .select('full_name, email')
-                            .eq('id', requesterId)
-                            .single();
-
-                        const totalRequestedUnits = normalizedLines.reduce((sum, line) => sum + line.quantity, 0);
-                        const gearSummary = totalRequestedUnits > 0
-                            ? `${totalRequestedUnits} equipment unit(s)`
-                            : 'Equipment requested';
-
-                        const userName = userData?.full_name || 'User';
-                        const userEmail = userData?.email || '';
-
-                        // Send emails to all admins in parallel
-                        const emailPromises = admins.map(admin => {
+                    if (admins && admins.length > 0) {
+                        const emailPromises = admins.map((admin) => {
                             if (!admin.email) return Promise.resolve();
 
                             return sendGearRequestEmail({
                                 to: admin.email,
-                                subject: `📦 New Gear Request - ${userName}`,
+                                subject: `New Gear Request - ${isOnBehalfBooking ? ownerName : submitterName}`,
                                 html: `
-                                    <!DOCTYPE html>
-                                    <html>
-                                        <head>
-                                            <meta charset="utf-8">
-                                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                                        </head>
-                                        <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
-                                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-                                                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 40px; text-align: center;">
-                                                    <h1 style="margin: 0; font-size: 24px; font-weight: 600;">📦 New Gear Request</h1>
-                                                    <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Action required - Review and approve</p>
-                                                </div>
-                                                <div style="padding: 40px; line-height: 1.6; color: #333;">
-                                                    <h2 style="color: #2d3748; margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Hello ${admin.full_name || 'Admin'},</h2>
-                                                    <p style="margin: 0 0 16px 0; font-size: 15px; color: #374151;">A new gear request has been submitted and requires your review.</p>
-                                                    <div style="background-color: #f9fafb; border-left: 4px solid #667eea; padding: 16px; margin: 24px 0; border-radius: 4px;">
-                                                        <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #5521b5;">Request Details</h3>
-                                                        <table style="width: 100%; border-collapse: collapse;">
-                                                            <tr>
-                                                                <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Requester:</td>
-                                                                <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${userName}</td>
-                                                            </tr>
-                                                            ${userEmail ? `<tr><td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Email:</td><td style="padding: 8px 0; color: #1f2937;">${userEmail}</td></tr>` : ''}
-                                                            <tr>
-                                                                <td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Equipment:</td>
-                                                                <td style="padding: 8px 0; color: #1f2937;">${gearSummary}</td>
-                                                            </tr>
-                                                            ${body.reason ? `<tr><td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Reason:</td><td style="padding: 8px 0; color: #1f2937;">${body.reason}</td></tr>` : ''}
-                                                            ${body.destination ? `<tr><td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Destination:</td><td style="padding: 8px 0; color: #1f2937;">${body.destination}</td></tr>` : ''}
-                                                            ${body.expected_duration ? `<tr><td style="padding: 8px 0; color: #6b7280; font-weight: 500;">Duration:</td><td style="padding: 8px 0; color: #1f2937;">${body.expected_duration}</td></tr>` : ''}
-                                                        </table>
-                                                    </div>
-                                                    <div style="text-align: center; margin: 32px 0;">
-                                                        <a href="https://nestbyeden.app/admin/manage-requests" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">Review Request</a>
-                                                    </div>
-                                                    <p style="margin-top: 32px; font-size: 14px; color: #6b7280; line-height: 1.6;">Please review this request and approve or reject it based on equipment availability.</p>
-                                                </div>
-                                                <div style="background-color: #f7fafc; padding: 20px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
-                                                    <p style="margin: 0; font-size: 14px; color: #718096;">
-                                                        This is an automated notification from Nest by Eden Oasis<br>
-                                                        Equipment Management System
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </body>
-                                    </html>
-                                `
-                            }).catch(err => {
-                                console.error(`Failed to send email to ${admin.email}:`, err);
-                            });
+                                    <p>Hello ${admin.full_name || 'Admin'},</p>
+                                    <p>A new gear request requires your review.</p>
+                                    <ul>
+                                        <li><strong>Equipment for:</strong> ${ownerName}</li>
+                                        ${isOnBehalfBooking ? `<li><strong>Submitted by:</strong> ${submitterName}</li>` : ''}
+                                        <li><strong>Items:</strong> ${gearSummary}</li>
+                                        ${body.reason ? `<li><strong>Reason:</strong> ${body.reason}</li>` : ''}
+                                        ${body.destination ? `<li><strong>Destination:</strong> ${body.destination}</li>` : ''}
+                                    </ul>
+                                    <p><a href="${sitePath('/admin/manage-requests')}">Review request</a></p>
+                                `,
+                            }).catch((err) => console.error(`Failed to send email to ${admin.email}:`, err));
                         });
 
                         await Promise.allSettled(emailPromises);
 
-                        const pushTitle = 'New Gear Request Submitted';
-                        const pushMessage = `${userName} submitted a new gear request for ${gearSummary}.`;
-                        const pushPromises = admins.map((admin) => {
-                            if (!admin.id) return Promise.resolve();
-                            return enqueuePushNotification(
-                                notificationSupabase,
-                                {
-                                    userId: admin.id,
-                                    title: pushTitle,
-                                    body: pushMessage,
-                                    data: {
-                                        type: 'gear_request_created',
-                                        request_id: requestData.id,
-                                        requester_id: requesterId,
-                                    },
-                                },
-                                {
-                                    requestUrl: request.url,
-                                    triggerWorker: false,
-                                    context: 'Gear Request Create',
-                                }
-                            );
-                        });
+                        const pushTitle = 'New Gear Request';
+                        const pushMessage = isOnBehalfBooking
+                            ? `${submitterName} submitted a request for ${ownerName}: ${gearSummary}`
+                            : `${submitterName} submitted a new gear request for ${gearSummary}.`;
 
-                        await Promise.allSettled(pushPromises);
+                        await Promise.allSettled(
+                            admins.map((admin) => {
+                                if (!admin.id) return Promise.resolve();
+                                return enqueuePushNotification(
+                                    notificationSupabase,
+                                    {
+                                        userId: admin.id,
+                                        title: pushTitle,
+                                        body: pushMessage,
+                                        data: {
+                                            type: 'gear_request_created',
+                                            request_id: requestData.id,
+                                            requester_id: requestData.user_id,
+                                            submitted_by_user_id: submittedByUserId,
+                                        },
+                                    },
+                                    { requestUrl: request.url, triggerWorker: false, context: 'Gear Request Create' },
+                                );
+                            }),
+                        );
                         await triggerPushWorker({ requestUrl: request.url, context: 'Gear Request Create' });
                     }
                 } catch (notificationError) {

@@ -9,7 +9,8 @@ import { ArrowLeft } from 'lucide-react';
 
 const DOCS_DIR = path.join(process.cwd(), 'Project-docs');
 
-export default async function DocPage({ params }: { params: { slug: string } }) {
+export default async function DocPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   // Map slug to filename
   const slugToFile: Record<string, string> = {
     '01-Product-Requirements-Document': '01-Product-Requirements-Document.md',
@@ -23,7 +24,7 @@ export default async function DocPage({ params }: { params: { slug: string } }) 
     'README': 'README.md',
     'DOCUMENTATION-SUMMARY': 'DOCUMENTATION-SUMMARY.txt',
   };
-  const file = slugToFile[params.slug];
+  const file = slugToFile[slug];
   if (!file) return notFound();
   const filePath = path.join(DOCS_DIR, file);
   let source: string;
@@ -54,7 +55,7 @@ export default async function DocPage({ params }: { params: { slug: string } }) 
             <div className="bg-white dark:bg-black rounded-2xl border-2 border-gray-200 dark:border-gray-800 overflow-hidden">
               <MarkdownRenderer 
                 content={content} 
-                title={data.title || params.slug.replace(/-/g, ' ')} 
+                title={data.title || slug.replace(/-/g, ' ')} 
               />
             </div>
           </div>

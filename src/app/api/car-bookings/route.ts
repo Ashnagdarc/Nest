@@ -4,6 +4,7 @@ import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingRequestEmail } from '@/lib/email';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
+import { sitePath } from '@/lib/site-url';
 
 const MAX_PENDING_DEFAULT = 2;
 
@@ -295,7 +296,7 @@ export async function POST(request: NextRequest) {
                                     ]
                                 }],
                                 ctaLabel: 'Review booking',
-                                ctaHref: 'https://nestbyeden.app/admin/manage-car-bookings',
+                                ctaHref: sitePath('/admin/manage-car-bookings'),
                                 footerNote: 'Nest by Eden Oasis · Vehicle management',
                             });
                             await sendGearRequestEmail({

@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { computeGearInventoryStats } from '@/lib/gear/inventory-stats';
 
 const truncateText = (value: string | null | undefined, max = 180): string => {
     const input = (value || '').replace(/\s+/g, ' ').trim();
@@ -186,23 +187,10 @@ export async function GET(request: NextRequest) {
             }
         }));
 
-        // Aggregate gear stats (car metrics remain separate)
-        const totalGearUnits = gears.reduce((sum, gear) => sum + gear.quantity, 0);
-        
-        // Calculate checked out equipment based on actual gear status and available_quantity
-        // This is the correct way - look at the gears table, not requests
-        const checkedOutGearUnits = gears
-            .filter(gear => {
-                const status = gear.status || 'Available';
-                return status === 'Checked Out' || status === 'Partially Checked Out' || status === 'Partially Available';
-            })
-            .reduce((sum, gear) => {
-                // Calculate how many units of this gear are actually checked out
-                const totalQuantity = gear.quantity ?? 1;
-                const availableQuantity = (gear as any).available_quantity ?? totalQuantity;
-                const checkedOutQuantity = totalQuantity - availableQuantity;
-                return sum + Math.max(0, checkedOutQuantity);
-            }, 0);
+        // Aggregate gear stats (car metrics remain separate) — shared with manage-gears summary
+        const inventoryStats = computeGearInventoryStats(gears);
+        const totalGearUnits = inventoryStats.total;
+        const checkedOutGearUnits = inventoryStats.checkedOut;
 
         let userCheckedOutGearUnits = checkedOutGearUnits;
         if (!isAdmin) {
@@ -242,68 +230,132 @@ export async function GET(request: NextRequest) {
             }, 0);
         }
 
-        const stats = {
-            total_equipment: totalGearUnits,
-            checked_out_equipment: (isAdmin ? checkedOutGearUnits : userCheckedOutGearUnits),
-            available_equipment: totalGearUnits - checkedOutGearUnits,
-            under_repair_equipment: checkins.filter(checkin => checkin.condition === 'Damaged' && checkin.status === 'Completed').length,
-            retired_equipment: gears.filter(g => g.status === 'Retired').length,
-            total_requests: requests.filter(req => req.user_id === user.id).length,
-            pending_requests: requests.filter(req => req.user_id === user.id && req.status === 'Pending').length,
-            approved_requests: requests.filter(req => req.user_id === user.id && req.status === 'Approved').length,
-            rejected_requests: requests.filter(req => req.user_id === user.id && req.status === 'Rejected').length,
-            completed_requests: requests.filter(req => req.user_id === user.id && req.status === 'Completed').length,
-            total_users: users.length,
-            active_users: users.filter(user => user.status === 'Active').length,
-            admin_users: users.filter(user => user.role === 'Admin').length,
-            total_checkins: checkins.filter(checkin => checkin.user_id === user.id).length,
-            pending_checkins: checkins.filter(checkin => checkin.user_id === user.id && checkin.status === 'Pending').length,
-            completed_checkins: checkins.filter(checkin => checkin.user_id === user.id && checkin.status === 'Completed').length,
-            unread_notifications: notifications.filter(notif => !notif.is_read).length,
-            total_notifications: notifications.length,
-            pending_car_bookings: carBookings.filter(b => b.status === 'Pending').length
-        } as any;
+        const profileNameById = new Map<string, string>();
+        for (const profileRow of users) {
+            if (profileRow?.id) {
+                profileNameById.set(profileRow.id, profileRow.full_name || 'User');
+            }
+        }
+
+        const stats = isAdmin
+            ? {
+                total_equipment: totalGearUnits,
+                checked_out_equipment: checkedOutGearUnits,
+                available_equipment: inventoryStats.available,
+                under_repair_equipment: checkins.filter(
+                    (checkin) => checkin.condition === 'Damaged' && checkin.status === 'Completed'
+                ).length,
+                retired_equipment: gears.filter((g) => g.status === 'Retired').length,
+                total_requests: requests.length,
+                pending_requests: requests.filter((req) => req.status === 'Pending').length,
+                approved_requests: requests.filter((req) => req.status === 'Approved').length,
+                rejected_requests: requests.filter((req) => req.status === 'Rejected').length,
+                completed_requests: requests.filter((req) => req.status === 'Completed').length,
+                total_users: users.length,
+                active_users: users.filter((profileRow) => profileRow.status === 'Active').length,
+                admin_users: users.filter((profileRow) => profileRow.role === 'Admin').length,
+                total_checkins: checkins.length,
+                pending_checkins: checkins.filter((checkin) => checkin.status === 'Pending Admin Approval').length,
+                completed_checkins: checkins.filter((checkin) => checkin.status === 'Completed').length,
+                unread_notifications: notifications.filter((notif) => !notif.is_read).length,
+                total_notifications: notifications.length,
+                pending_car_bookings: carBookings.filter((booking) => booking.status === 'Pending').length,
+            }
+            : {
+                total_equipment: totalGearUnits,
+                checked_out_equipment: userCheckedOutGearUnits,
+                available_equipment: inventoryStats.available,
+                under_repair_equipment: checkins.filter(
+                    (checkin) => checkin.condition === 'Damaged' && checkin.status === 'Completed'
+                ).length,
+                retired_equipment: gears.filter((g) => g.status === 'Retired').length,
+                total_requests: requests.filter((req) => req.user_id === user.id).length,
+                pending_requests: requests.filter((req) => req.user_id === user.id && req.status === 'Pending').length,
+                approved_requests: requests.filter((req) => req.user_id === user.id && req.status === 'Approved').length,
+                rejected_requests: requests.filter((req) => req.user_id === user.id && req.status === 'Rejected').length,
+                completed_requests: requests.filter((req) => req.user_id === user.id && req.status === 'Completed').length,
+                total_users: users.length,
+                active_users: users.filter((profileRow) => profileRow.status === 'Active').length,
+                admin_users: users.filter((profileRow) => profileRow.role === 'Admin').length,
+                total_checkins: checkins.filter((checkin) => checkin.user_id === user.id).length,
+                pending_checkins: checkins.filter(
+                    (checkin) => checkin.user_id === user.id && checkin.status === 'Pending Admin Approval'
+                ).length,
+                completed_checkins: checkins.filter(
+                    (checkin) => checkin.user_id === user.id && checkin.status === 'Completed'
+                ).length,
+                unread_notifications: notifications.filter((notif) => !notif.is_read).length,
+                total_notifications: notifications.length,
+                pending_car_bookings: carBookings.filter((booking) => booking.status === 'Pending').length,
+            };
 
         // Recent activity include car bookings
-        const carActivity = carBookings.slice(0, 10).map(b => ({
-            id: b.id,
+        const carActivity = carBookings.slice(0, 10).map((booking) => ({
+            id: booking.id,
             type: 'car_booking',
-            action: `Car booking ${b.status.toLowerCase()}`,
-            item: truncateText(`${b.employee_name} ${b.date_of_use} ${b.start_time && b.end_time ? `${b.start_time.slice(0, 5)}-${b.end_time.slice(0, 5)}` : (b.time_slot || '')}`, 120),
-            user: b.employee_name,
-            timestamp: b.updated_at || b.created_at,
-            status: b.status
+            action: `Car booking ${String(booking.status).toLowerCase()}`,
+            item: truncateText(
+                `${booking.employee_name} ${booking.date_of_use} ${
+                    booking.start_time && booking.end_time
+                        ? `${booking.start_time.slice(0, 5)}-${booking.end_time.slice(0, 5)}`
+                        : booking.time_slot || ''
+                }`,
+                120
+            ),
+            user: booking.employee_name,
+            timestamp: booking.updated_at || booking.created_at,
+            status: booking.status,
         }));
 
         const gearIdToName = new Map<string, string>();
-        for (const g of gears) { if (g?.id && g?.name) gearIdToName.set(g.id, g.name); }
+        for (const gear of gears) {
+            if (gear?.id && gear?.name) gearIdToName.set(gear.id, gear.name);
+        }
 
-        const recentActivity = [
-            ...requests.filter(req => req.user_id === user.id).slice(0, 10).map(req => ({
-                id: req.id,
-                type: 'request',
-                action: `Request ${req.status.toLowerCase()}`,
-                item: truncateText(req.reason || 'Equipment request', 120),
-                user: (req as any).profiles?.full_name || 'Unknown',
-                timestamp: req.created_at,
-                status: req.status,
-                metadata: {
-                    destination: req.destination,
-                    expected_duration: req.expected_duration
-                }
-            })),
-            ...checkins.filter(checkin => checkin.user_id === user.id).slice(0, 10).map(checkin => ({
-                id: checkin.id,
-                type: 'checkin',
-                action: checkin.action,
-                item: gearIdToName.get(checkin.gear_id as any) || `Gear`,
-                user: profile?.role === 'Admin' ? 'User' : 'You',
-                timestamp: checkin.checkin_date,
-                status: checkin.status,
-                metadata: { condition: checkin.condition, quantity: checkin.quantity }
-            })),
-            ...carActivity
-        ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 20);
+        const requestActivitySource = isAdmin
+            ? requests
+            : requests.filter((req) => req.user_id === user.id);
+
+        const requestActivity = requestActivitySource.slice(0, isAdmin ? 15 : 10).map((req) => ({
+            id: req.id,
+            type: 'request',
+            action: `Request ${String(req.status).toLowerCase()}`,
+            item: truncateText(req.reason || 'Equipment request', 120),
+            user: (req as { profiles?: { full_name?: string | null } }).profiles?.full_name || 'Unknown',
+            timestamp: req.created_at,
+            status: req.status,
+            metadata: {
+                destination: req.destination,
+                expected_duration: req.expected_duration,
+            },
+        }));
+
+        const scopedCheckins = isAdmin
+            ? checkins
+            : checkins.filter((checkin) => checkin.user_id === user.id);
+
+        const checkinActivity = scopedCheckins.slice(0, isAdmin ? 15 : 10).map((checkin) => ({
+            id: checkin.id,
+            type: 'checkin',
+            action: checkin.action,
+            item: gearIdToName.get(checkin.gear_id as string) || 'Gear',
+            user: isAdmin ? profileNameById.get(checkin.user_id) || 'User' : 'You',
+            timestamp: checkin.checkin_date || checkin.created_at,
+            status: checkin.status,
+            metadata: { condition: checkin.condition, quantity: checkin.quantity },
+        }));
+
+        const scopedCarActivity = isAdmin
+            ? carActivity
+            : carActivity.filter((activity) =>
+                  carBookings.some(
+                      (booking) => booking.id === activity.id && booking.requester_id === user.id
+                  )
+              );
+
+        const recentActivity = [...requestActivity, ...checkinActivity, ...scopedCarActivity]
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .slice(0, 20);
 
         return NextResponse.json({
             data: {
@@ -315,7 +367,10 @@ export async function GET(request: NextRequest) {
                 users: isAdmin ? users : [],
                 recent_activity: recentActivity,
                 popular_gear: [],
-                overdue_items: []
+                overdue_items: [],
+                car_bookings: isAdmin
+                    ? carBookings
+                    : carBookings.filter((booking) => booking.requester_id === user.id),
             },
             error: null
         });

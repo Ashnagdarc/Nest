@@ -1,535 +1,76 @@
-// Equipment check-in page for Nest by Eden Oasis. Handles asset return, QR scanning, and condition reporting.
-
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
-import { createClient } from '@/lib/supabase/client';
-import { createSystemNotification } from '@/lib/notifications';
-import { Html5QrcodeScanner } from 'html5-qrcode';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle, Loader2, QrCode } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { Checkbox } from "@/components/ui/checkbox";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from '@/components/ui/label';
-import { PackageCheck } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast";
-import { ScrollArea } from '@/components/ui/scroll-area';
-import dynamic from 'next/dynamic';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle, History, Loader2, PackageCheck } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { History } from 'lucide-react';
-import { Calendar } from 'lucide-react';
-import { useSuccessFeedback } from '@/hooks/use-success-feedback';
-import { useCheckedOutGears } from '@/hooks/check-in/useCheckedOutGears';
+import { useToast } from "@/hooks/use-toast";
+import { useCheckedOutGears } from "@/hooks/check-in/useCheckedOutGears";
+import { useCheckInHistory } from "@/hooks/check-in/useCheckInHistory";
+import { useCheckInSubmit, type DamageLevel } from "@/hooks/check-in/useCheckInSubmit";
+import { createClient } from "@/lib/supabase/client";
+import { BookingReturnCard } from "@/components/check-in/BookingReturnCard";
+import { CheckInEmptyState } from "@/components/check-in/CheckInEmptyState";
+import { CheckInHeader } from "@/components/check-in/CheckInHeader";
+import { CheckInHistoryList } from "@/components/check-in/CheckInHistoryList";
+import { PendingReturnsBanner } from "@/components/check-in/PendingReturnsBanner";
+import { QrScannerDialog } from "@/components/check-in/QrScannerDialog";
+import { ReturnDetailsStep } from "@/components/check-in/ReturnDetailsStep";
+import { ReturnReviewStep } from "@/components/check-in/ReturnReviewStep";
+import { ReturnStepIndicator } from "@/components/check-in/ReturnStepIndicator";
+import {
+  groupCheckedOutGears,
+  isOverdue,
+  matchGearByScanCode,
+  type GearReturnGroup,
+} from "@/components/check-in/types";
 
-/**
- * Dynamic Lottie Import - prevents SSR issues and reduces bundle size
- */
-const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
-
-/**
- * Success Animation Import - check-in success animation for visual feedback
- */
-import checkinSuccessAnimation from "@/../public/animations/checkin-success.json";
-
-// Initialize Supabase client
-const supabase = createClient();
-
-/**
- * Type Definitions for Equipment Check-In System
- * 
- * Comprehensive type definitions for equipment return workflow
- * with proper TypeScript support and data validation.
- */
-
-/**
- * Processed Gear Interface
- * 
- * Comprehensive equipment data structure used throughout
- * the check-in interface with all necessary fields.
- */
-type ProcessedGear = {
-  /** Unique equipment identifier */
-  id: string;
-  /** Equipment name/title */
-  name: string;
-  /** Equipment category */
-  category: string;
-  /** Current equipment status */
-  status: string;
-  /** User ID of current checkout holder */
-  checked_out_to: string | null;
-  /** Current active request ID */
-  current_request_id: string | null;
-  /** Last checkout timestamp */
-  last_checkout_date: string | null;
-  /** Due date for return */
-  due_date: string | null;
-  /** Equipment image URL */
-  image_url: string | null;
-  /** Requested quantity on the active request */
-  requested_quantity: number;
-  /** Already approved returns */
-  completed_return_quantity: number;
-  /** Pending admin-approval returns */
-  pending_return_quantity: number;
-  /** Quantity user can currently return */
-  returnable_quantity: number;
-};
-
-type GearReturnGroup = {
-  key: string;
-  requestId: string | null;
-  bookingDate: string | null;
-  dueDate: string | null;
-  gears: ProcessedGear[];
-  totalUnits: number;
-};
-
-/**
- * Check-In History Interface
- * 
- * Represents historical check-in records for audit
- * trails and user activity tracking.
- */
-type CheckInHistory = {
-  /** Unique check-in record identifier */
-  id: string;
-  /** Name of returned equipment */
-  gearName: string;
-  /** Date when equipment was checked in */
-  checkinDate: Date;
-  /** Return status */
-  status: string;
-  /** Equipment condition upon return */
-  condition: string;
-  /** Additional notes about the return */
-  notes: string;
-};
-
-/**
- * Check-In Gear Page Component
- * 
- * Main page component that renders the equipment check-in interface
- * with QR scanning, condition reporting, and return workflow management.
- * Provides comprehensive equipment return capabilities with real-time
- * updates and visual feedback.
- * 
- * Key Features:
- * - Real-time checked-out equipment display
- * - QR code scanning for equipment identification
- * - Multi-select equipment return processing
- * - Condition reporting and damage documentation
- * - Check-in history tracking and display
- * - Automated notifications and status updates
- * - Visual success feedback with animations
- * 
- * State Management:
- * - Equipment data with real-time subscriptions
- * - QR scanner state and error handling
- * - Form state for condition reporting
- * - Modal and dialog state management
- * - Loading and success state tracking
- * 
- * @component
- * @returns {JSX.Element} Equipment check-in page interface
- * 
- * @example
- * ```typescript
- * // Basic usage in app routing
- * import CheckInGearPage from '@/app/user/check-in/page';
- * 
- * // Rendered at /user/check-in route
- * <CheckInGearPage />
- * ```
- */
 export default function CheckInGearPage() {
-  // Core services and utilities
   const { toast } = useToast();
-  const { showSuccessFeedback } = useSuccessFeedback();
-
-  // Equipment and user state
+  const [userId, setUserId] = useState<string | null>(null);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedGears, setSelectedGears] = useState<string[]>([]);
   const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
-  const [userId, setUserId] = useState<string | null>(null);
-  const [checkInHistory, setCheckInHistory] = useState<CheckInHistory[]>([]);
-  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+  const [damage, setDamage] = useState<DamageLevel>("none");
+  const [notes, setNotes] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
 
-  // Condition reporting state
-  const [isDamaged, setIsDamaged] = useState(false);
-  const [damageDescription, setDamageDescription] = useState('');
-  const [checkinNotes, setCheckinNotes] = useState('');
+  const { checkedOutGears, pendingCheckInCount, fetchCheckedOutGear, isLoading } = useCheckedOutGears(
+    userId,
+    toast,
+  );
+  const { groups: historyGroups, loading: historyLoading, refetch: refetchHistory } = useCheckInHistory(userId);
+  const { submit, isSubmitting } = useCheckInSubmit(toast);
 
-  // UI state management
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+  const groupedGears = useMemo(() => groupCheckedOutGears(checkedOutGears), [checkedOutGears]);
 
-  // QR scanner state
-  const [scannerInitialized, setScannerInitialized] = useState(false);
-  const [qrError, setQrError] = useState<string | null>(null);
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scannedCode, setScannedCode] = useState<string | null>(null);
+  const selectedGearObjects = useMemo(
+    () => checkedOutGears.filter((g) => selectedGears.includes(g.id)),
+    [checkedOutGears, selectedGears],
+  );
 
-  // Use the new custom hook for checked out gears
-  const { checkedOutGears, pendingCheckInCount, fetchCheckedOutGear, isLoading } = useCheckedOutGears(userId, toast);
-
-  const groupedCheckedOutGears = useMemo<GearReturnGroup[]>(() => {
-    const groups = new Map<string, GearReturnGroup>();
-
-    checkedOutGears.forEach((gear) => {
-      const fallbackDate = gear.last_checkout_date || gear.due_date || null;
-      const fallbackDayKey = fallbackDate ? new Date(fallbackDate).toDateString() : 'no-date';
-      const key = gear.current_request_id ? `req::${gear.current_request_id}` : `day::${fallbackDayKey}`;
-
-      const existing = groups.get(key);
-      if (!existing) {
-        groups.set(key, {
-          key,
-          requestId: gear.current_request_id || null,
-          bookingDate: gear.last_checkout_date || null,
-          dueDate: gear.due_date || null,
-          gears: [gear],
-          totalUnits: Math.max(1, gear.returnable_quantity || 1),
-        });
-        return;
-      }
-
-      existing.gears.push(gear);
-      existing.totalUnits += Math.max(1, gear.returnable_quantity || 1);
-
-      if (!existing.bookingDate && gear.last_checkout_date) {
-        existing.bookingDate = gear.last_checkout_date;
-      }
-      if (!existing.dueDate && gear.due_date) {
-        existing.dueDate = gear.due_date;
-      }
+  useEffect(() => {
+    const supabase = createClient();
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.id) setUserId(user.id);
     });
+  }, []);
 
-    return Array.from(groups.values())
-      .map((group) => ({
-        ...group,
-        gears: [...group.gears].sort((a, b) => a.name.localeCompare(b.name)),
-      }))
-      .sort((a, b) => {
-        const aTime = a.bookingDate ? new Date(a.bookingDate).getTime() : 0;
-        const bTime = b.bookingDate ? new Date(b.bookingDate).getTime() : 0;
-        return bTime - aTime;
-      });
-  }, [checkedOutGears]);
+  const isGroupSelected = useCallback(
+    (group: GearReturnGroup) => group.gears.every((gear) => selectedGears.includes(gear.id)),
+    [selectedGears],
+  );
 
-  /**
-   * User Authentication Effect
-   * 
-   * Retrieves current user information for equipment ownership
-   * validation and check-in authorization.
-   */
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.id) {
-          setUserId(user.id);
-        }
-      } catch (error) {
-        console.error('Failed to get user:', error);
-      }
-    };
-    fetchUser();
-  }, [supabase]);
-
-  /**
-   * Equipment Data Effect
-   * 
-   * The useCheckedOutGears hook now handles data fetching and real-time updates.
-   * This effect is kept for any additional user-specific logic if needed.
-   */
-  useEffect(() => {
-    if (!userId) return;
-
-    // Any additional user-specific logic can go here
-    console.log('User ID set, gear data will be fetched by hook:', userId);
-  }, [userId]);
-
-  /**
-   * QR Scanner Initialization Effect
-   * 
-   * Initializes the HTML5 QR code scanner when the scanner modal
-   * is opened and cleans up resources when closed.
-   */
-  useEffect(() => {
-    if (!scannerInitialized && !scannedCode && isScannerOpen) {
-      // Delay to ensure DOM element is ready
-      const timeoutId = setTimeout(() => {
-        const element = document.getElementById("qr-reader");
-        if (!element) {
-          console.warn("QR reader element not found, will retry");
-          return;
-        }
-
-        try {
-          const scanner = new Html5QrcodeScanner("qr-reader", {
-            qrbox: {
-              width: 250,
-              height: 250,
-            },
-            fps: 5,
-          }, false);
-
-          scanner.render(
-            (decodedText) => {
-              setScannedCode(decodedText);
-              scanner.clear();
-            },
-            (error) => {
-              console.warn(error);
-              setQrError("Failed to read QR code. Please try again.");
-            }
-          );
-
-          setScannerInitialized(true);
-
-          return () => {
-            scanner.clear();
-          };
-        } catch (error) {
-          console.error("Error initializing QR scanner:", error);
-          setQrError("Failed to initialize scanner. Please try again.");
-        }
-      }, 300);
-
-      return () => {
-        clearTimeout(timeoutId);
-      };
-    }
-  }, [scannerInitialized, scannedCode, isScannerOpen]);
-
-  const handleCheckinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error("No authenticated user found");
-      }
-      const userId = user.id;
-
-      // Step 1: Create check-in records for each gear
-      const checkedInGearNames: string[] = [];
-      const groupedSubmissionItems = new Map<string, Array<{ name: string; quantity: number; condition: string; notes?: string; damageNotes?: string }>>();
-      for (const gearId of selectedGears) {
-        const gear = checkedOutGears.find(g => g.id === gearId);
-        if (!gear) continue;
-        const maxReturnableQuantity = Math.max(1, gear.returnable_quantity || 1);
-        const returnQuantity = Math.max(1, Number(selectedQuantities[gearId] ?? maxReturnableQuantity));
-        if (!Number.isFinite(returnQuantity) || returnQuantity < 1) {
-          throw new Error(`Invalid return quantity for ${gear.name}`);
-        }
-        if (returnQuantity > maxReturnableQuantity) {
-          throw new Error(`Return quantity for ${gear.name} exceeds outstanding amount.`);
-        }
-        checkedInGearNames.push(`${gear.name} (x${returnQuantity})`);
-        const requestGroupKey = gear.current_request_id || 'no-request';
-        const requestItems = groupedSubmissionItems.get(requestGroupKey) || [];
-        requestItems.push({
-          name: gear.name,
-          quantity: returnQuantity,
-          condition: isDamaged ? 'Damaged' : 'Good',
-          notes: checkinNotes || undefined,
-          damageNotes: isDamaged ? damageDescription : undefined,
-        });
-        groupedSubmissionItems.set(requestGroupKey, requestItems);
-
-        // Create a pending check-in record
-        const { error: checkinError } = await supabase
-          .from('checkins')
-          .insert({
-            user_id: userId,
-            gear_id: gearId,
-            request_id: gear.current_request_id,
-            action: 'Check In',
-            quantity: returnQuantity,
-            status: 'Pending Admin Approval',
-            condition: isDamaged ? 'Damaged' : 'Good',
-            damage_notes: isDamaged ? damageDescription : null,
-            notes: checkinNotes
-          });
-
-        if (checkinError) {
-          console.error("Error creating check-in record:", checkinError);
-          throw new Error(`Failed to create check-in record: ${checkinError.message}`);
-        }
-
-        // Note: Activity logging removed - the checkins table serves as the audit trail
-
-        // Notify admins of pending check-in
-        const { data: admins } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('role', 'Admin');
-
-        if (admins) {
-          for (const admin of admins) {
-            await createSystemNotification(
-              admin.id,
-              'Pending Check-in',
-              `New gear check-in pending approval for ${gear.name}.`
-            );
-          }
-        }
-      }
-
-      // Send one grouped email notification per booking/request group
-      try {
-        for (const [requestId, items] of groupedSubmissionItems.entries()) {
-          if (items.length === 0) continue;
-          const groupedNames = items.map((item) => `${item.name} (x${item.quantity})`);
-          await fetch('/api/checkins/notify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId,
-              requestId: requestId === 'no-request' ? null : requestId,
-              gearNames: groupedNames,
-              items,
-              condition: isDamaged ? 'Damaged' : 'Good',
-              notes: checkinNotes || undefined,
-              damageNotes: isDamaged ? damageDescription : undefined,
-            })
-          });
-        }
-      } catch (emailError) {
-        console.error('Failed to send grouped check-in email notifications:', emailError);
-        // Don't fail the check-in if email fails
-      }
-
-      // Fetch user profile for notification
-      let userProfile = null;
-      if (userId) {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', userId)
-          .single();
-        if (!profileError) userProfile = profileData;
-      }
-
-      // Send Google Chat notification
-      await fetch('/api/notifications/google-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventType: 'USER_CHECKIN',
-          payload: {
-            userName: userProfile?.full_name || 'Unknown User',
-            userEmail: userProfile?.email || 'Unknown Email',
-            gearNames: checkedInGearNames,
-            checkinDate: new Date().toLocaleString(),
-            condition: isDamaged ? 'Damaged' : 'Good',
-            notes: isDamaged ? damageDescription : checkinNotes,
-          }
-        })
-      });
-
-      showSuccessFeedback({
-        toast: {
-          title: "Check-in Submitted",
-          description: "Your check-in has been submitted and is pending admin approval.",
-          variant: "default",
-        },
-        redirectPath: '/user/history',
-        delay: 1500,
-        onSuccess: () => {
-          setSelectedGears([]);
-          setSelectedQuantities({});
-          setIsDamaged(false);
-          setDamageDescription('');
-          setCheckinNotes('');
-        },
-        showAnimation: () => {
-          setShowSuccessAnimation(true);
-          setTimeout(() => setShowSuccessAnimation(false), 1500);
-        },
-      });
-
-      // Refresh the list of checked out gear
-      await fetchCheckedOutGear();
-
-    } catch (error) {
-      console.error('Error during check-in:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to submit check-in. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const isOverdue = (date: string | null) => {
-    if (!date) return false;
-    return new Date(date) < new Date();
-  };
-
-  // Memoize Lottie component
-  const SuccessAnimationComponent = useMemo(() => {
-    return showSuccessAnimation ? (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="flex flex-col items-center justify-center p-10 border rounded-lg bg-card"
-        style={{ minHeight: '400px' }} // Adjust height as needed
-      >
-        {/* --- Lottie Component --- */}
-        <Lottie
-          animationData={checkinSuccessAnimation} // Use imported data
-          loop={false}
-          style={{ width: 180, height: 180 }}
-          aria-label="Check-in successful animation"
-        />
-        <p className="mt-4 text-lg font-semibold text-primary">Check-in Successful!</p>
-        <p className="text-muted-foreground text-sm">Your returned items have been recorded.</p>
-      </motion.div>
-    ) : null;
-  }, [showSuccessAnimation]);
-
-  const handleCheckIn = async () => {
-    if (!scannedCode) return;
-
-    try {
-      // Here you would handle the check-in logic with the scanned code
-      console.log("Checking in with code:", scannedCode);
-      setIsDialogOpen(true);
-    } catch (error) {
-      console.error("Error during check-in:", error);
-      setQrError("Failed to process check-in. Please try again.");
-    }
-  };
-
-  const isGroupSelected = (group: GearReturnGroup) => {
-    return group.gears.every((gear) => selectedGears.includes(gear.id));
-  };
-
-  const setGroupSelection = (group: GearReturnGroup, shouldSelect: boolean) => {
+  const setGroupSelection = useCallback((group: GearReturnGroup, shouldSelect: boolean) => {
     const groupGearIds = group.gears.map((gear) => gear.id);
-
-    setSelectedGears((prev) => {
-      if (shouldSelect) {
-        return Array.from(new Set([...prev, ...groupGearIds]));
-      }
-      return prev.filter((id) => !groupGearIds.includes(id));
-    });
-
+    setSelectedGears((prev) =>
+      shouldSelect
+        ? Array.from(new Set([...prev, ...groupGearIds]))
+        : prev.filter((id) => !groupGearIds.includes(id)),
+    );
     setSelectedQuantities((prev) => {
       const next = { ...prev };
       if (shouldSelect) {
@@ -543,572 +84,240 @@ export default function CheckInGearPage() {
       }
       return next;
     });
-  };
+  }, []);
 
-  const selectedGroupCount = useMemo(() => {
-    return groupedCheckedOutGears.filter((group) => isGroupSelected(group)).length;
-  }, [groupedCheckedOutGears, selectedGears]);
+  const toggleGroup = useCallback(
+    (group: GearReturnGroup) => setGroupSelection(group, !isGroupSelected(group)),
+    [isGroupSelected, setGroupSelection],
+  );
 
-  const renderGroupCard = (group: GearReturnGroup) => {
-    const selected = isGroupSelected(group);
-    const groupHasOverdue = group.gears.some((gear) => isOverdue(gear.due_date));
-    const bookingDateLabel = group.bookingDate ? format(new Date(group.bookingDate), 'MMM d, yyyy') : null;
-    const dueDateLabel = group.dueDate ? format(new Date(group.dueDate), 'MMM d, yyyy') : null;
-    const groupLabel = group.requestId ? `Booking ${group.requestId.slice(0, 8)}` : `Booking Group`;
+  const handleQuantityChange = useCallback((gearId: string, delta: number, max: number) => {
+    setSelectedQuantities((prev) => {
+      const current = prev[gearId] ?? max;
+      const next = Math.min(max, Math.max(1, current + delta));
+      return { ...prev, [gearId]: next };
+    });
+  }, []);
 
-    return (
-      <motion.div
-        key={group.key}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className={cn(
-          "rounded-xl border-2 p-6 transition-all duration-200",
-          selected
-            ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
-            : "border-border hover:border-primary/50 hover:shadow-md bg-card"
-        )}
-      >
-        <div
-          className="flex items-start justify-between gap-4 cursor-pointer"
-          onClick={() => setGroupSelection(group, !selected)}
-        >
-          <div className="space-y-2">
-            <h3 className="text-lg font-semibold">{groupLabel}</h3>
-            <p className="text-sm text-muted-foreground">
-              {group.gears.length} gear type{group.gears.length > 1 ? 's' : ''} • {group.totalUnits} total item{group.totalUnits > 1 ? 's' : ''}
-            </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              {bookingDateLabel && (
-                <Badge variant="secondary" className="text-xs">
-                  Booked: {bookingDateLabel}
-                </Badge>
-              )}
-              {dueDateLabel && (
-                <Badge variant={groupHasOverdue ? "destructive" : "secondary"} className="text-xs">
-                  Due: {dueDateLabel}
-                </Badge>
-              )}
-              {groupHasOverdue && (
-                <Badge variant="destructive" className="text-xs">
-                  Overdue
-                </Badge>
-              )}
-            </div>
-          </div>
-          <Checkbox
-            id={`group-${group.key}`}
-            checked={selected}
-            onCheckedChange={(checked) => setGroupSelection(group, checked === true)}
-            onClick={(event) => event.stopPropagation()}
-            className="h-5 w-5 mt-1"
-          />
-        </div>
+  const selectAll = useCallback(() => {
+    setSelectedGears(checkedOutGears.map((g) => g.id));
+    setSelectedQuantities((prev) => {
+      const next = { ...prev };
+      checkedOutGears.forEach((gear) => {
+        next[gear.id] = Math.max(1, gear.returnable_quantity || 1);
+      });
+      return next;
+    });
+  }, [checkedOutGears]);
 
-        <div className="mt-4 space-y-2">
-          {group.gears.map((gear) => {
-            const returnableQuantity = Math.max(1, gear.returnable_quantity || 1);
-            return (
-              <div key={gear.id} className="rounded-lg border px-3 py-2 bg-background/40">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{gear.name}</p>
-                    <p className="text-xs text-muted-foreground">{gear.category}</p>
-                  </div>
-                  <Badge variant="outline">x{returnableQuantity}</Badge>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </motion.div>
-    );
-  };
+  const resetForm = useCallback(() => {
+    setStep(1);
+    setSelectedGears([]);
+    setSelectedQuantities({});
+    setDamage("none");
+    setNotes("");
+  }, []);
 
-  // Add function to fetch check-in history
-  const fetchCheckInHistory = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Use a direct query approach that's more reliable
-      let historyData, historyError;
-      try {
-        const result = await supabase
-          .from('checkins')
-          .select(`
-            id,
-            checkin_date,
-            status,
-            condition,
-            notes,
-            gear_id,
-            gears!inner (
-              name
-            )
-          `)
-          .eq('user_id', user.id)
-          .order('checkin_date', { ascending: false });
-
-        historyData = result.data;
-        historyError = result.error;
-      } catch (queryError) {
-        console.error("Exception during check-in history query:", queryError);
-        historyError = { message: "Query exception", details: queryError };
-      }
-
-      if (historyError) {
-        console.error("Error fetching check-in history:", historyError);
-        console.error("Error details:", {
-          message: historyError.message,
-          details: historyError.details,
-          hint: historyError.hint
+  const handleScan = useCallback(
+    (code: string) => {
+      const match = matchGearByScanCode(checkedOutGears, code);
+      if (!match) {
+        toast({
+          title: "Gear not found",
+          description: "That code doesn't match any of your returnable equipment.",
+          variant: "destructive",
         });
-
-        // Fallback: try to fetch check-ins without gear names first, then fetch gear names separately
-        const { data: basicHistoryData, error: basicError } = await supabase
-          .from('checkins')
-          .select('id, checkin_date, status, condition, notes, gear_id')
-          .eq('user_id', user.id)
-          .order('checkin_date', { ascending: false });
-
-        if (basicError) {
-          console.error("Fallback query also failed:", basicError);
-          toast({
-            title: "Error",
-            description: "Failed to load check-in history. Please try refreshing the page.",
-            variant: "destructive"
-          });
-          return;
-        }
-
-        // Fetch gear names for all gear IDs
-        const gearIds = basicHistoryData?.map(item => item.gear_id).filter(Boolean) || [];
-        const { data: gearsData } = await supabase
-          .from('gears')
-          .select('id, name')
-          .in('id', gearIds);
-
-        const gearNameMap = new Map(gearsData?.map(g => [g.id, g.name]) || []);
-
-        const processedHistory: CheckInHistory[] = (basicHistoryData || []).map((item) => ({
-          id: item.id,
-          gearName: gearNameMap.get(item.gear_id) || 'Unknown Gear',
-          checkinDate: new Date(item.checkin_date),
-          status: item.status || 'Unknown',
-          condition: item.condition || 'Not specified',
-          notes: item.notes || ''
-        }));
-
-        setCheckInHistory(processedHistory);
         return;
       }
 
-      // Process the data from the direct query
-      type CheckInHistoryRow = {
-        id: string;
-        checkin_date: string;
-        status: string;
-        condition: string;
-        notes: string;
-        gear_id: string;
-        gears: { name: string };
-      };
+      const group = groupedGears.find((g) => g.gears.some((gear) => gear.id === match.id));
+      if (group) {
+        setGroupSelection(group, true);
+      } else {
+        setSelectedGears((prev) => Array.from(new Set([...prev, match.id])));
+        setSelectedQuantities((prev) => ({
+          ...prev,
+          [match.id]: Math.max(1, match.returnable_quantity || 1),
+        }));
+      }
 
-      const processedHistory: CheckInHistory[] = (historyData || []).map((item) => {
-        const row = item as CheckInHistoryRow;
-        return {
-          id: row.id,
-          gearName: row.gears?.name || 'Unknown Gear',
-          checkinDate: new Date(row.checkin_date),
-          status: row.status || 'Unknown',
-          condition: row.condition || 'Not specified',
-          notes: row.notes || ''
-        };
+      toast({
+        title: "Gear selected",
+        description: `${match.name} added to your return.`,
       });
+    },
+    [checkedOutGears, groupedGears, setGroupSelection, toast],
+  );
 
-      setCheckInHistory(processedHistory);
-    } catch (error) {
-      console.error("Error in fetchCheckInHistory:", error);
-    } finally {
-      setIsHistoryLoading(false);
-    }
+  const canProceedStep1 = selectedGears.length > 0;
+  const canProceedStep2 = damage !== "major" || notes.trim().length > 0;
+  const hasOverdueSelection = selectedGearObjects.some((g) => isOverdue(g.due_date));
+
+  const handleSubmit = async () => {
+    await submit({
+      selectedGearIds: selectedGears,
+      quantities: selectedQuantities,
+      checkedOutGears,
+      damage,
+      notes,
+      onSuccess: () => {
+        resetForm();
+        void fetchCheckedOutGear();
+        void refetchHistory();
+      },
+    });
   };
 
-  // Add useEffect to fetch history
-  useEffect(() => {
-    fetchCheckInHistory();
-  }, []);
-
-  // Debug function to test the query
-
-
-  // Add history section render function
-  const renderCheckInHistory = () => {
-    if (isHistoryLoading) {
-      return (
-        <div className="flex justify-center items-center py-10">
-          <Loader2 className="h-10 w-10 animate-spin mr-2 text-primary" />
-          <p className="text-muted-foreground">Loading check-in history...</p>
-        </div>
-      );
-    }
-
-    if (checkInHistory.length === 0) {
-      return (
-        <div className="text-center py-10">
-          <History className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-lg font-semibold mb-2">No Check-in History</h3>
-          <p className="text-muted-foreground mt-1">You haven&apos;t checked in any gear yet.</p>
-        </div>
-      );
-    }
-
-    return (
-      <ScrollArea className="h-[400px] w-full rounded-md border">
-        <div className="p-4 space-y-4">
-          {checkInHistory.map((item) => (
-            <div
-              key={item.id}
-              className="flex flex-col space-y-2 p-4 rounded-lg border bg-card transition-colors hover:bg-accent/5"
-            >
-              <div className="flex items-center justify-between">
-                <h4 className="font-medium">{item.gearName}</h4>
-                <Badge variant={item.condition.toLowerCase() === 'damaged' ? 'destructive' : 'secondary'}>
-                  {item.condition}
-                </Badge>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Calendar className="h-4 w-4" />
-                <span>{format(item.checkinDate, 'PPp')}</span>
-              </div>
-              {item.notes && (
-                <p className="text-sm text-muted-foreground">
-                  Notes: {item.notes}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </ScrollArea>
-    );
-  };
+  const selectedGroupCount = groupedGears.filter((g) => isGroupSelected(g)).length;
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="min-h-screen bg-background"
-    >
-      {/* Header Section - Apple HIG inspired */}
-      <div className="border-b bg-card/50 backdrop-blur-sm">
-        <div className="container max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Check-in Gear</h1>
-              <p className="text-muted-foreground mt-1">Return equipment you&apos;ve checked out</p>
+    <div className="mx-auto w-full max-w-5xl space-y-6">
+      <CheckInHeader onScanClick={() => setScannerOpen(true)} />
+      <PendingReturnsBanner count={pendingCheckInCount} />
+
+      <Tabs defaultValue="check-in" className="space-y-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="check-in" className="gap-2">
+            <PackageCheck className="h-4 w-4" />
+            Return gear
+          </TabsTrigger>
+          <TabsTrigger value="history" className="gap-2">
+            <History className="h-4 w-4" />
+            History
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="check-in" className="space-y-6">
+          {isLoading && checkedOutGears.length === 0 ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-28 w-full rounded-xl" />
+              ))}
             </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <Button
-                onClick={() => setIsScannerOpen(true)}
-                variant="outline"
-                className="flex-1 sm:flex-none"
-              >
-                <QrCode className="mr-2 h-4 w-4" />
-                Scan QR Code
-              </Button>
+          ) : checkedOutGears.length === 0 ? (
+            <CheckInEmptyState pendingCount={pendingCheckInCount} />
+          ) : (
+            <>
+              <ReturnStepIndicator step={step} />
 
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content - Apple HIG inspired layout */}
-      <div className="container max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Pending Check-ins Banner */}
-        {pendingCheckInCount > 0 && (
-          <Alert className="mb-6 border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
-            <AlertCircle className="h-4 w-4 text-amber-600" />
-            <AlertTitle className="text-amber-900 dark:text-amber-600">Pending Admin Approval</AlertTitle>
-            <AlertDescription className="text-amber-800 dark:text-amber-700">
-              You have {pendingCheckInCount} item{pendingCheckInCount > 1 ? 's' : ''} awaiting admin approval. These items won&apos;t appear below until approved or rejected.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <Tabs defaultValue="check-in" className="space-y-8">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
-            <TabsTrigger value="check-in" className="flex items-center gap-2">
-              <PackageCheck className="h-4 w-4" />
-              Check-in Gear
-            </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-2">
-              <History className="h-4 w-4" />
-              History
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="check-in" className="space-y-8">
-            {/* Success Animation Screen */}
-            {SuccessAnimationComponent}
-
-            {/* Main Content: Form or No Gear Message */}
-            {!showSuccessAnimation && (
-              <>
-                {checkedOutGears.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-                    <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mb-6">
-                      <PackageCheck className="h-10 w-10 text-muted-foreground" />
+              {step === 1 && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-semibold">Select items to return</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Choose bookings or individual equipment
+                      </p>
                     </div>
-                    <h2 className="text-2xl font-semibold mb-3">No Gear to Check-in</h2>
-                    <p className="text-muted-foreground max-w-md mb-8 leading-relaxed">
-                      You currently have no gear checked out. Browse our available equipment and request some gear to get started.
-                    </p>
-                    <Button size="lg" asChild className="px-8">
-                      <a href="/user/browse">Browse Available Gear</a>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">
+                        {selectedGroupCount} / {groupedGears.length} bookings
+                      </Badge>
+                      <Button type="button" variant="ghost" size="sm" onClick={selectAll}>
+                        Select all
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {groupedGears.map((group) => (
+                      <BookingReturnCard
+                        key={group.key}
+                        group={group}
+                        selected={isGroupSelected(group)}
+                        quantities={selectedQuantities}
+                        onToggleGroup={toggleGroup}
+                        onQuantityChange={handleQuantityChange}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <Button type="button" disabled={!canProceedStep1} onClick={() => setStep(2)}>
+                      Continue
+                      <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
-                ) : (
-                  <form onSubmit={handleCheckinSubmit} className="space-y-8">
-                    {/* Gear Selection Section */}
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h2 className="text-xl font-semibold">Select Items to Return</h2>
-                          <p className="text-muted-foreground mt-1">Choose the equipment you&apos;re returning</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="px-3 py-1">
-                            {selectedGroupCount} of {groupedCheckedOutGears.length} bookings selected
-                          </Badge>
-                          {groupedCheckedOutGears.length > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedGears(checkedOutGears.map(g => g.id));
-                                setSelectedQuantities(prev => {
-                                  const next = { ...prev };
-                                  checkedOutGears.forEach((gear) => {
-                                    next[gear.id] = Math.max(1, gear.returnable_quantity || 1);
-                                  });
-                                  return next;
-                                });
-                              }}
-                              className="text-sm"
-                            >
-                              Select All Bookings
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+                </div>
+              )}
 
-                      <div className="grid gap-4">
-                        {isLoading ? (
-                          <div className="flex items-center justify-center py-12">
-                            <div className="flex items-center space-x-3">
-                              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent"></div>
-                              <span className="text-muted-foreground">Loading your gear...</span>
-                            </div>
-                          </div>
-                        ) : (
-                          groupedCheckedOutGears.map((group) => renderGroupCard(group))
-                        )}
-                      </div>
-                    </div>
+              {step === 2 && (
+                <div className="space-y-4">
+                  {hasOverdueSelection && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Overdue items selected</AlertTitle>
+                      <AlertDescription>
+                        One or more items are past their due date. Note any wear in the condition step.
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
-                    {/* Check-in Details Section */}
-                    {selectedGears.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-6"
-                      >
-                        <div>
-                          <h2 className="text-xl font-semibold mb-2">Return Details</h2>
-                          <p className="text-muted-foreground">Report the condition and add any notes</p>
-                        </div>
+                  <ReturnDetailsStep
+                    damage={damage}
+                    notes={notes}
+                    onDamageChange={(v) => setDamage(v as DamageLevel)}
+                    onNotesChange={setNotes}
+                  />
 
-                        <div className="space-y-6">
-                          {/* Damage Report Section */}
-                          <Card className="border-2">
-                            <CardContent className="p-6">
-                              <div className="flex items-start space-x-4">
-                                <Checkbox
-                                  id="isDamaged"
-                                  checked={isDamaged}
-                                  onCheckedChange={(checked) => setIsDamaged(checked === true)}
-                                  className="mt-1"
-                                />
-                                <div className="flex-1 space-y-2">
-                                  <Label htmlFor="isDamaged" className="text-base font-medium cursor-pointer">
-                                    Report Damage or Issues
-                                  </Label>
-                                  <p className="text-sm text-muted-foreground">
-                                    Check this if any selected items are damaged, malfunctioning, or need maintenance
-                                  </p>
-                                </div>
-                              </div>
+                  <div className="flex justify-between gap-3 pt-2">
+                    <Button type="button" variant="outline" onClick={() => setStep(1)}>
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back
+                    </Button>
+                    <Button type="button" disabled={!canProceedStep2} onClick={() => setStep(3)}>
+                      Review
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
 
-                              {isDamaged && (
-                                <motion.div
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: 'auto' }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  transition={{ duration: 0.2 }}
-                                  className="mt-6"
-                                >
-                                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
-                                    <Label htmlFor="damageDescription" className="text-base font-medium flex items-center gap-2 mb-2">
-                                      <AlertCircle className="h-4 w-4 text-destructive" />
-                                      Damage Report <span className="text-destructive">*</span>
-                                    </Label>
-                                    <p className="text-sm text-muted-foreground mb-4">
-                                      Please provide specific details about any damage or maintenance needs
-                                    </p>
-                                    <Textarea
-                                      id="damageDescription"
-                                      value={damageDescription}
-                                      onChange={(e) => setDamageDescription(e.target.value)}
-                                      placeholder="Describe the damage or maintenance needs in detail..."
-                                      className="min-h-[120px] bg-background border-destructive/20 focus:border-destructive"
-                                      required={isDamaged}
-                                    />
-                                  </div>
-                                </motion.div>
-                              )}
-                            </CardContent>
-                          </Card>
+              {step === 3 && (
+                <div className="space-y-4">
+                  <ReturnReviewStep
+                    selectedGears={selectedGearObjects}
+                    quantities={selectedQuantities}
+                    damage={damage}
+                    notes={notes}
+                  />
 
-                          {/* Notes Section */}
-                          <Card>
-                            <CardContent className="p-6">
-                              <div className="space-y-3">
-                                <Label htmlFor="checkinNotes" className="text-base font-medium">
-                                  Additional Notes
-                                  <span className="text-muted-foreground text-sm font-normal ml-1">(Optional)</span>
-                                </Label>
-                                <p className="text-sm text-muted-foreground">
-                                  Add any additional notes about the return condition or usage
-                                </p>
-                                <Textarea
-                                  id="checkinNotes"
-                                  value={checkinNotes}
-                                  onChange={(e) => setCheckinNotes(e.target.value)}
-                                  placeholder="Add any additional notes about the return..."
-                                  className="min-h-[100px]"
-                                />
-                              </div>
-                            </CardContent>
-                          </Card>
+                  <div className="flex justify-between gap-3 pt-2">
+                    <Button type="button" variant="outline" onClick={() => setStep(2)}>
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back
+                    </Button>
+                    <Button
+                      type="button"
+                      size="lg"
+                      disabled={isSubmitting || !canProceedStep2}
+                      onClick={() => void handleSubmit()}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Submitting…
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Submit return
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </TabsContent>
 
-                          {/* Overdue Warning */}
-                          {checkedOutGears.some(gear => selectedGears.includes(gear.id) && isOverdue(gear.due_date)) && (
-                            <Alert variant="destructive" className="border-destructive/50">
-                              <AlertCircle className="h-4 w-4" />
-                              <AlertTitle>Overdue Items</AlertTitle>
-                              <AlertDescription>
-                                One or more selected items are past their due date. Please check for any wear and tear.
-                              </AlertDescription>
-                            </Alert>
-                          )}
+        <TabsContent value="history">
+          <CheckInHistoryList groups={historyGroups} loading={historyLoading} />
+        </TabsContent>
+      </Tabs>
 
-                          {/* Submit Button */}
-                          <div className="flex justify-end pt-4">
-                            <Button
-                              type="submit"
-                              disabled={selectedGears.length === 0 || isSubmitting || (isDamaged && !damageDescription.trim())}
-                              size="lg"
-                              className="px-8"
-                            >
-                              {isSubmitting ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Checking in...
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle className="mr-2 h-4 w-4" />
-                                  Check In Selected Bookings
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </form>
-                )}
-              </>
-            )}
-          </TabsContent>
-
-          <TabsContent value="history">
-            <Card>
-              <CardHeader>
-                <CardTitle>Check-in History</CardTitle>
-                <CardDescription>View your past gear check-ins</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {renderCheckInHistory()}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      {/* QR Scanner Dialog */}
-      <Dialog open={isScannerOpen} onOpenChange={setIsScannerOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Scan QR Code</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col items-center gap-4">
-            <div id="qr-reader" className="w-full max-w-md mx-auto"></div>
-            {scannedCode && (
-              <div className="w-full space-y-4">
-                <Badge variant="secondary" className="w-full py-2 text-center">
-                  Code: {scannedCode}
-                </Badge>
-                <Button
-                  className="w-full"
-                  onClick={handleCheckIn}
-                >
-                  Complete Check-In
-                </Button>
-              </div>
-            )}
-            {qrError && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{qrError}</AlertDescription>
-              </Alert>
-            )}
-            <DialogClose asChild>
-              <Button variant="secondary" className="w-full">Close Scanner</Button>
-            </DialogClose>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Success Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Check-In Successful</DialogTitle>
-          </DialogHeader>
-          <p>Equipment has been successfully checked in.</p>
-          <DialogClose asChild>
-            <Button className="w-full mt-4" onClick={() => {
-              setScannedCode(null);
-              setIsDialogOpen(false);
-            }}>
-              Close
-            </Button>
-          </DialogClose>
-        </DialogContent>
-      </Dialog>
-    </motion.div>
+      <QrScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onScan={handleScan} />
+    </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
+import { getSiteUrl } from '@/lib/site-url';
 
 type PushPayload = {
   userId: string;
@@ -38,7 +39,7 @@ const resolveBaseUrl = (requestUrl?: string): string | null => {
     return `https://${process.env.VERCEL_URL}`;
   }
 
-  return null;
+  return getSiteUrl();
 };
 
 export async function triggerPushWorker(options: { requestUrl?: string; context?: string } = {}) {

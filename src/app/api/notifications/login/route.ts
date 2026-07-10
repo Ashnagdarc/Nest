@@ -2,37 +2,76 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { enqueuePushNotification } from '@/lib/push-queue';
+import { getSettingsPathForProfile } from '@/lib/auth/role-routing';
 import { normalizeNotificationInsert, normalizeNotificationType } from '@/lib/notification-type';
 import type { Database } from '@/types/supabase';
 
-const LOGIN_NOTIFICATION_DEDUP_WINDOW_MS = 2 * 60 * 1000;
 const LOGIN_ALERT_TYPE = 'Login Alert';
 const LOGIN_ALERT_SUBTYPE = 'login_alert';
 
-export async function POST(_req: NextRequest) {
-    try {
-        console.log('[Login Push] Request received');
+type AuthUser = {
+    id: string;
+    last_sign_in_at?: string | null;
+};
 
+async function hasLoginAlertForSession(
+    supabase: SupabaseClient<Database>,
+    userId: string,
+    loginSignInAt: string | null | undefined,
+): Promise<boolean> {
+    if (loginSignInAt) {
+        const { data: sessionAlerts, error: sessionAlertError } = await supabase
+            .from('notifications')
+            .select('id')
+            .eq('user_id', userId)
+            .contains('metadata', { subtype: LOGIN_ALERT_SUBTYPE, login_sign_in_at: loginSignInAt })
+            .limit(1);
+
+        if (sessionAlertError) {
+            console.error('[Login Push] Failed to check session login alerts:', sessionAlertError);
+        } else if (sessionAlerts && sessionAlerts.length > 0) {
+            return true;
+        }
+    }
+
+    const { data: recentLoginNotifications, error: recentLoginError } = await supabase
+        .from('notifications')
+        .select('id, created_at')
+        .eq('user_id', userId)
+        .eq('type', normalizeNotificationType(LOGIN_ALERT_TYPE))
+        .contains('metadata', { subtype: LOGIN_ALERT_SUBTYPE })
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+    if (recentLoginError) {
+        console.error('[Login Push] Failed to check recent notifications:', recentLoginError);
+        return false;
+    }
+
+    const lastCreatedAt = recentLoginNotifications?.[0]?.created_at;
+    if (!lastCreatedAt) return false;
+
+    const lastLoginAt = new Date(lastCreatedAt).getTime();
+    return !Number.isNaN(lastLoginAt) && Date.now() - lastLoginAt < 60 * 60 * 1000;
+}
+
+export async function POST(req: NextRequest) {
+    try {
         let supabase: SupabaseClient<Database>;
-        let user: { id: string } | null = null;
+        let user: AuthUser | null = null;
         let authError: { message?: string } | null = null;
 
-        // Check for Authorization header first (more reliable for immediate post-login)
-        const authHeader = _req.headers.get('authorization');
+        const authHeader = req.headers.get('authorization');
         if (authHeader) {
-            console.log('[Login Push] Using Authorization header');
-            // Create a client compliant with RLS using the user's token
             supabase = createClient<Database>(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
                 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-                { global: { headers: { Authorization: authHeader } } }
+                { global: { headers: { Authorization: authHeader } } },
             );
             const { data, error } = await supabase.auth.getUser();
             user = data.user;
             authError = error;
         } else {
-            // Fallback to cookies
-            console.log('[Login Push] Using Cookies');
             supabase = await createSupabaseServerClient();
             const { data, error } = await supabase.auth.getUser();
             user = data.user;
@@ -40,33 +79,17 @@ export async function POST(_req: NextRequest) {
         }
 
         if (authError || !user) {
-            console.error('[Login Push] Auth error:', authError);
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
-        console.log('[Login Push] User authenticated:', user.id);
-
-        const { data: recentLoginNotifications, error: recentLoginError } = await supabase
-            .from('notifications')
-            .select('id, created_at')
-            .eq('user_id', user.id)
-            .eq('type', normalizeNotificationType(LOGIN_ALERT_TYPE))
-            .contains('metadata', { subtype: LOGIN_ALERT_SUBTYPE })
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-        if (recentLoginError) {
-            console.error('[Login Push] Failed to check recent notifications:', recentLoginError);
-        } else if (recentLoginNotifications?.[0]?.created_at) {
-            const lastLoginAt = new Date(recentLoginNotifications[0].created_at).getTime();
-            if (!Number.isNaN(lastLoginAt) && Date.now() - lastLoginAt < LOGIN_NOTIFICATION_DEDUP_WINDOW_MS) {
-                console.log('[Login Push] Skipping duplicate login notification within dedupe window');
-                return NextResponse.json({
-                    success: true,
-                    message: 'Login notification already sent recently',
-                    deduped: true,
-                });
-            }
+        const loginSignInAt = user.last_sign_in_at ?? null;
+        const alreadyNotified = await hasLoginAlertForSession(supabase, user.id, loginSignInAt);
+        if (alreadyNotified) {
+            return NextResponse.json({
+                success: true,
+                message: 'Login notification already sent for this session',
+                deduped: true,
+            });
         }
 
         const { data: userTokens, error: tokenLookupError } = await supabase
@@ -83,7 +106,6 @@ export async function POST(_req: NextRequest) {
         const title = 'New Login Detected';
         const message = `A new login to your account was detected on ${now.toLocaleString()}. If this wasn't you, please contact support.`;
 
-        // 1. Insert In-App Notification using User Client (RLS should allow inserting own notifications)
         const { error: insertError } = await supabase.from('notifications').insert(normalizeNotificationInsert({
             user_id: user.id,
             type: LOGIN_ALERT_TYPE,
@@ -91,37 +113,40 @@ export async function POST(_req: NextRequest) {
             message,
             is_read: false,
             category: 'Security',
-            metadata: { subtype: LOGIN_ALERT_SUBTYPE },
+            metadata: {
+                subtype: LOGIN_ALERT_SUBTYPE,
+                ...(loginSignInAt ? { login_sign_in_at: loginSignInAt } : {}),
+            },
         }));
 
         if (insertError) {
             console.error('[Login Push] Failed to insert in-app notification:', insertError);
-        } else {
-            console.log('[Login Push] In-app notification inserted');
+            return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
         }
 
-        if (!userTokens || userTokens.length === 0) {
-            console.log('[Login Push] No push subscriptions found; skipping queue insert');
-        } else {
-            // 2. Queue Push Notification
+        if (userTokens && userTokens.length > 0) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role, status')
+                .eq('id', user.id)
+                .maybeSingle();
+
             const queueResult = await enqueuePushNotification(
                 supabase,
                 {
                     userId: user.id,
                     title,
                     body: message,
-                    data: { url: '/user/settings' }
+                    data: { url: getSettingsPathForProfile(profile) },
                 },
                 {
-                    requestUrl: _req.url,
-                    context: 'Login Push'
-                }
+                    requestUrl: req.url,
+                    context: 'Login Push',
+                },
             );
 
             if (!queueResult.success) {
                 console.error('[Login Push] Failed to queue push notification:', queueResult.error);
-            } else {
-                console.log('[Login Push] Push notification queued');
             }
         }
 

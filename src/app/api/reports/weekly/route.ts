@@ -1,11 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
+
+type WeeklyActivityRow = {
+    action: string;
+};
+
+type UserActivityRow = {
+    profiles: {
+        id: string;
+    };
+};
 
 export async function GET(request: NextRequest) {
     try {
-        const supabase = createSupabaseServerClient();
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
+        const supabase = await createSupabaseAdminClient();
         const { searchParams } = new URL(request.url);
-        const days = searchParams.get('days') ? parseInt(searchParams.get('days')!) : 7;
+        const rawDays = searchParams.get('days');
+        const days = rawDays ? parseInt(rawDays, 10) : 7;
+
+        if (!Number.isFinite(days) || days < 1 || days > 365) {
+            return NextResponse.json(
+                { error: 'days must be an integer between 1 and 365' },
+                { status: 400 }
+            );
+        }
 
         // Calculate date range
         const endDate = new Date();
@@ -87,14 +111,15 @@ export async function GET(request: NextRequest) {
         }
 
         // Calculate summary metrics
-        const totalRequests = gearActivity?.filter((item: any) => item.action === 'Request').length || 0;
-        const totalCheckouts = gearActivity?.filter((item: any) => item.action === 'Checkout').length || 0;
-        const totalCheckins = gearActivity?.filter((item: any) => item.action === 'Checkin').length || 0;
+        const typedGearActivity = (gearActivity || []) as WeeklyActivityRow[];
+        const totalRequests = typedGearActivity.filter((item) => item.action === 'Request').length;
+        const totalCheckouts = typedGearActivity.filter((item) => item.action === 'Checkout').length;
+        const totalCheckins = typedGearActivity.filter((item) => item.action === 'Checkin').length;
         const totalDamageReports = damageReports?.length || 0;
 
         // Calculate active users (users with at least one activity)
-        const activeUsers = new Set();
-        userActivity?.forEach((item: any) => {
+        const activeUsers = new Set<string>();
+        ((userActivity || []) as unknown as UserActivityRow[]).forEach((item) => {
             activeUsers.add(item.profiles.id);
         });
 

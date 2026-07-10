@@ -1,23 +1,26 @@
-import React from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./button";
+import { cn } from "@/lib/utils";
 
-interface PaginationProps {
+export interface PaginationProps {
     currentPage: number;
     totalPages: number;
     onPageChange: (page: number) => void;
     className?: string;
+    disabled?: boolean;
 }
 
-export const Pagination: React.FC<PaginationProps> = ({
+export function Pagination({
     currentPage,
     totalPages,
     onPageChange,
-    className = "",
-}) => {
+    className,
+    disabled = false,
+}: PaginationProps) {
     if (totalPages <= 1) return null;
 
     const getPages = () => {
-        const pages = [];
+        const pages: number[] = [];
         const max = Math.max(1, totalPages);
         let start = Math.max(1, currentPage - 2);
         let end = Math.min(max, currentPage + 2);
@@ -28,15 +31,19 @@ export const Pagination: React.FC<PaginationProps> = ({
     };
 
     return (
-        <nav className={`flex items-center gap-2 ${className}`} aria-label="Pagination">
+        <nav
+            className={cn("flex items-center gap-1", className)}
+            aria-label="Pagination"
+        >
             <Button
                 variant="outline"
                 size="sm"
                 onClick={() => onPageChange(currentPage - 1)}
-                disabled={currentPage === 1}
+                disabled={disabled || currentPage === 1}
                 aria-label="Previous page"
+                className="h-8 w-8 p-0"
             >
-                &lt;
+                <ChevronLeft className="h-4 w-4" />
             </Button>
             {getPages().map((page) => (
                 <Button
@@ -44,7 +51,9 @@ export const Pagination: React.FC<PaginationProps> = ({
                     variant={page === currentPage ? "default" : "outline"}
                     size="sm"
                     onClick={() => onPageChange(page)}
+                    disabled={disabled}
                     aria-current={page === currentPage ? "page" : undefined}
+                    className="h-8 min-w-8 px-2"
                 >
                     {page}
                 </Button>
@@ -53,11 +62,12 @@ export const Pagination: React.FC<PaginationProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={() => onPageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
+                disabled={disabled || currentPage === totalPages}
                 aria-label="Next page"
+                className="h-8 w-8 p-0"
             >
-                &gt;
+                <ChevronRight className="h-4 w-4" />
             </Button>
         </nav>
     );
-}; 
+}

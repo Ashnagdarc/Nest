@@ -52,7 +52,8 @@ export async function GET(
             .from('gear_requests')
             .select(`
         *,
-        profiles:user_id (full_name, email)
+        profiles:user_id (id, full_name, email),
+        submitted_by:submitted_by_user_id (id, full_name, email)
       `)
             .eq('id', id)
             .maybeSingle();
@@ -67,7 +68,11 @@ export async function GET(
             return NextResponse.json({ data: null, error: 'Request not found' }, { status: 404 });
         }
 
-        if (!isAdmin && requestData.user_id !== user.id) {
+        if (
+            !isAdmin &&
+            requestData.user_id !== user.id &&
+            requestData.submitted_by_user_id !== user.id
+        ) {
             return NextResponse.json({ data: null, error: 'Forbidden' }, { status: 403 });
         }
 

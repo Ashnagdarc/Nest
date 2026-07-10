@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
+function normalizeRoleFilter(role: string): string {
+    switch (role.toLowerCase()) {
+        case 'admin':
+            return 'Admin';
+        case 'user':
+            return 'User';
+        case 'manager':
+            return 'Manager';
+        default:
+            return role;
+    }
+}
+
 export async function GET(request: NextRequest) {
     try {
         const adminContext = await requireActiveAdminRouteUser();
@@ -23,7 +36,7 @@ export async function GET(request: NextRequest) {
 
         // Filter by role if specified
         if (role && role !== 'all') {
-            query = query.eq('role', role);
+            query = query.eq('role', normalizeRoleFilter(role));
         }
 
         // Filter by specific IDs if provided

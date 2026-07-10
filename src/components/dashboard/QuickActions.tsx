@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Package, ArrowUpDown, PlusCircle, Search, AlertTriangle } from "lucide-react";
+import { Package, ArrowUpDown, PlusCircle, Search, Car, Megaphone } from "lucide-react";
 
 interface QuickAction {
     label: string;
@@ -43,10 +43,17 @@ export function QuickActions() {
             variant: "outline"
         },
         {
-            label: "Report Issue",
-            description: "Report equipment problem",
-            icon: <AlertTriangle className="h-5 w-5" />,
-            href: "/user/report",
+            label: "Book a Car",
+            description: "Request a car booking",
+            icon: <Car className="h-5 w-5" />,
+            href: "/user/car-booking",
+            variant: "outline"
+        },
+        {
+            label: "Announcements",
+            description: "Latest company updates",
+            icon: <Megaphone className="h-5 w-5" />,
+            href: "/user/announcements",
             variant: "ghost"
         },
     ];
@@ -57,7 +64,7 @@ export function QuickActions() {
                 <CardTitle className="text-lg font-semibold">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 w-full">
                     {actions.map((action, index) => (
                         <motion.div
                             key={action.label}

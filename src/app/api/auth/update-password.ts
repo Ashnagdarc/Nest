@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import rateLimit from 'next-rate-limit';
 import { NextRequest } from 'next/server';
+import { getSiteUrl } from '@/lib/site-url';
 
 // Only use this route server-side and protect/remove after use!
 
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
         }
         const client = createClient(supabaseUrl, anonKey);
         const { data, error } = await client.auth.resetPasswordForEmail(email, {
-            redirectTo: redirectTo || `${process.env.NEXT_PUBLIC_BASE_URL}/reset-password`,
+            redirectTo: redirectTo || `${getSiteUrl()}/reset-password`,
         });
         if (error) {
             if (error.message.includes('User not found')) {

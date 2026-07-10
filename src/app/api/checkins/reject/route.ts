@@ -4,6 +4,7 @@ import { enqueuePushNotification } from '@/lib/push-queue';
 import { transitionBooking } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
 import { requireActiveAdmin } from '@/app/api/_utils/route-auth';
+import { sitePath } from '@/lib/site-url';
 
 type NotificationPreferences = {
     email?: Record<string, boolean | undefined>;
@@ -191,7 +192,7 @@ export async function POST(request: NextRequest) {
                                 { label: 'Status', value: 'Rejected' },
                             ],
                             ctaLabel: 'Review check-ins',
-                            ctaHref: 'https://nestbyeden.app/admin/manage-checkins',
+                            ctaHref: sitePath('/admin/manage-checkins'),
                             footerNote: 'Nest by Eden Oasis · Equipment and vehicle operations',
                         });
                         await sendGearRequestEmail({

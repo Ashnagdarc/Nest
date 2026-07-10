@@ -10,63 +10,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createClient } from '@/lib/supabase/client';
 import { apiGet } from '@/lib/apiClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertCircle, Clock, CheckCircle2, XCircle } from 'lucide-react';
-import Image from 'next/image';
+import { Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-
-function StatusPill({ status, updatedAt }: { status: string; updatedAt?: string }) {
-    const getStatusStyles = (status: string) => {
-        switch (status) {
-            case 'Approved':
-                return {
-                    bg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400',
-                    icon: <CheckCircle2 className="w-3 h-3" />,
-                    label: 'Approved'
-                };
-            case 'Pending':
-                return {
-                    bg: 'bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-400',
-                    icon: <Clock className="w-3 h-3" />,
-                    label: 'Pending'
-                };
-            case 'Rejected':
-                return {
-                    bg: 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400',
-                    icon: <XCircle className="w-3 h-3" />,
-                    label: 'Rejected'
-                };
-            case 'Cancelled':
-                return {
-                    bg: 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400',
-                    icon: <AlertCircle className="w-3 h-3" />,
-                    label: 'Cancelled'
-                };
-            case 'Completed':
-                return {
-                    bg: 'bg-primary/10 border-primary/20 text-primary',
-                    icon: <CheckCircle2 className="w-3 h-3" />,
-                    label: 'Completed'
-                };
-            default:
-                return {
-                    bg: 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400',
-                    icon: <AlertCircle className="w-3 h-3" />,
-                    label: status
-                };
-        }
-    };
-
-    const styles = getStatusStyles(status);
-    return (
-        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm ${styles.bg}`}>
-            {styles.icon}
-            <span>{styles.label}</span>
-            {updatedAt && <span className="opacity-40 ml-0.5 tracking-normal lowercase font-medium">({(updatedAt || '').slice(11, 16)})</span>}
-        </div>
-    );
-}
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ListSkeleton } from '@/components/dashboard/ListSkeleton';
+import { PaginationFooter } from '@/components/ui/PaginationFooter';
+import { BookingPageHeader } from '@/components/admin/car-bookings/BookingPageHeader';
+import { BookingStatsCards } from '@/components/admin/car-bookings/BookingStatsCards';
+import { FleetCarCard } from '@/components/admin/car-bookings/FleetCarCard';
+import { BookingQueueTable } from '@/components/admin/car-bookings/BookingQueueTable';
+import { BookingHistoryTable } from '@/components/admin/car-bookings/BookingHistoryTable';
+import { formatTimeRange } from '@/components/admin/car-bookings/booking-status';
 
 type CarStatusRow = {
     id: string;
@@ -115,18 +71,15 @@ export default function AdminManageCarBookingsPage() {
     const [historyPage, setHistoryPage] = useState(1);
     const [historyTotal, setHistoryTotal] = useState(0);
     const [historyFilter, setHistoryFilter] = useState<'All' | 'Completed' | 'Rejected' | 'Cancelled'>('All');
-    const historyPageSize = 10;
+    const historyPageSize = 5;
     const [sectionLoading, setSectionLoading] = useState<{ pending?: boolean; approved?: boolean; history?: boolean; cars?: boolean }>({});
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const supabase = createClient();
     const { toast } = useToast();
 
-    const getCarTag = (status: CarBooking['status']) => {
-        if (status === 'Pending') return 'Preferred';
-        return 'Assigned';
-    };
-
     const load = async () => {
+        setIsRefreshing(true);
         setSectionLoading({ pending: true, approved: true, history: true, cars: true });
 
         let p: PaginatedCarBookings = { data: [], total: 0 };
@@ -144,7 +97,6 @@ export default function AdminManageCarBookingsPage() {
             await loadHistoryPage(historyPage, historyFilter);
         } catch (error) {
             console.error('Failed to load bookings:', error);
-            // Set empty states on error
             setPending([]);
             setApproved([]);
         }
@@ -179,6 +131,7 @@ export default function AdminManageCarBookingsPage() {
         }
 
         setSectionLoading(prev => ({ ...prev, pending: false, approved: false, cars: false }));
+        setIsRefreshing(false);
     };
 
     const loadHistoryPage = async (page: number, filter: 'All' | 'Completed' | 'Rejected' | 'Cancelled' = 'All') => {
@@ -257,18 +210,6 @@ export default function AdminManageCarBookingsPage() {
 
     // bySlot removed
 
-    const to12h = (hhmm: string | null | undefined): string => {
-        if (!hhmm) return '';
-        const [h, m] = hhmm.slice(0, 5).split(':').map(Number);
-        const d = new Date(); d.setHours(h, m, 0, 0);
-        return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-    };
-    const range12h = (s?: string | null, e?: string | null, fallback?: string | null) => {
-        if (s && e) return `${to12h(s)}-${to12h(e)}`;
-        if (fallback) return fallback;
-        return '';
-    };
-
     const checkOverlap = (b: CarBooking) => {
         const timeKey = b.start_time && b.end_time ? `${b.start_time.slice(0, 5)}-${b.end_time.slice(0, 5)}` : (b.time_slot || '');
         // We'll count overlaps from the relevant set of bookings
@@ -299,22 +240,108 @@ export default function AdminManageCarBookingsPage() {
         load();
     };
 
-    const sections: Array<{ key: 'pending' | 'approved' | 'history'; title: string; rows: CarBooking[]; renderActions: (b: CarBooking) => JSX.Element }> = [
-        {
-            key: 'pending',
-            title: 'Pending Approvals',
-            rows: pending,
-            renderActions: (b) => (
-                <div className="flex items-center gap-2">
-                    <Select value={bookingCarMap[b.id]?.car_id || ''} disabled={assigningId === b.id} onValueChange={async (carId) => {
+    const availableCars = carStatus.filter((c) => c.status === 'Available' && !c.in_use).length;
+
+    const renderPendingActions = (b: CarBooking) => (
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <Select value={bookingCarMap[b.id]?.car_id || ''} disabled={assigningId === b.id} onValueChange={async (carId) => {
+                setAssigningId(b.id);
+                try {
+                    await assignCar(b.id, carId);
+                    toast({ title: 'Assigned', description: 'Car assigned to booking.' });
+                    await load();
+                } catch (err) {
+                    toast({
+                        title: 'Assignment blocked',
+                        description: getApiErrorMessage(err, 'Car is unavailable or still checked out.'),
+                        variant: 'destructive'
+                    });
+                } finally {
+                    setAssigningId(null);
+                }
+            }}>
+                <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Assign car" /></SelectTrigger>
+                <SelectContent>
+                    {cars.map(c => {
+                        const statusObj = carStatus.find(cs => cs.id === c.id);
+                        const isCheckedOut = statusObj?.in_use;
+                        const carStatusText = statusObj?.status || 'Unavailable';
+                        const isAvailable = carStatusText === 'Available' && !isCheckedOut;
+                        let statusLabel = '';
+                        if (isCheckedOut) statusLabel = '(Checked out)';
+                        else if (carStatusText !== 'Available') statusLabel = `(${carStatusText})`;
+                        const unavailableTitle = statusObj?.lock_reason || `Car is ${carStatusText.toLowerCase()}`;
+                        return (
+                            <SelectItem key={c.id} value={c.id} disabled={!isAvailable} title={!isAvailable ? unavailableTitle : ''}>
+                                {c.label}{c.plate ? ` (${c.plate})` : ''} {statusLabel && <span className={`text-xs ml-2 ${isCheckedOut ? 'text-rose-500' : 'text-gray-500'}`}>{statusLabel}</span>}
+                            </SelectItem>
+                        );
+                    })}
+                </SelectContent>
+            </Select>
+            <Button size="sm" className="h-8 px-2.5" disabled={!bookingCarMap[b.id]?.car_id || approvingId === b.id} onClick={async () => {
+                setApprovingId(b.id);
+                try {
+                    const res = await approveCarBooking(b.id);
+                    if (!res?.success) {
+                        if (res?.correlation_id) {
+                            console.error('[Admin Approve Car Booking] correlation_id:', res.correlation_id);
+                        }
+                        toast({
+                            title: 'Approval blocked',
+                            description: res.user_message || res.error || 'Failed to approve booking. Car may still be checked out and not yet returned.',
+                            variant: 'destructive'
+                        });
+                    } else {
+                        toast({ title: 'Approved', description: 'Booking approved.' });
+                        await load();
+                    }
+                } catch (err: unknown) {
+                    toast({
+                        title: 'Error',
+                        description: getApiErrorMessage(err, 'Failed to approve booking. Car may still be checked out and not yet returned.'),
+                        variant: 'destructive'
+                    });
+                } finally {
+                    setApprovingId(null);
+                }
+            }}>{approvingId === b.id ? 'Approving…' : 'Approve'}</Button>
+            <Button size="sm" variant="destructive" className="h-8 px-2.5" disabled={rejectingId === b.id} onClick={async () => {
+                setRejectingId(b.id);
+                try {
+                    const res = await rejectCarBooking(b.id);
+                    if (!res.success) {
+                        if (res.correlation_id) {
+                            console.error('[Admin Reject Car Booking] correlation_id:', res.correlation_id);
+                        }
+                        toast({ title: 'Error', description: res.user_message || res.error || 'Failed to reject booking', variant: 'destructive' });
+                    } else {
+                        toast({ title: 'Rejected', description: res.user_message || 'Booking rejected.' });
+                    }
+                    await load();
+                } catch {
+                    toast({ title: 'Error', description: 'Failed to reject', variant: 'destructive' });
+                } finally {
+                    setRejectingId(null);
+                }
+            }}>{rejectingId === b.id ? 'Rejecting…' : 'Reject'}</Button>
+        </div>
+    );
+
+    const renderApprovedActions = (b: CarBooking) => {
+        const carInfo = bookingCarMap[b.id];
+        if (reassignId === b.id) {
+            return (
+                <div className="flex flex-wrap items-center gap-2">
+                    <Select value={carInfo?.car_id || ''} disabled={assigningId === b.id} onValueChange={async (carId) => {
                         setAssigningId(b.id);
                         try {
                             await assignCar(b.id, carId);
-                            toast({ title: 'Assigned', description: 'Car assigned to booking.' });
+                            toast({ title: 'Reassigned', description: 'Car reassigned to booking.' });
                             await load();
                         } catch (err) {
                             toast({
-                                title: 'Assignment blocked',
+                                title: 'Reassignment blocked',
                                 description: getApiErrorMessage(err, 'Car is unavailable or still checked out.'),
                                 variant: 'destructive'
                             });
@@ -322,283 +349,209 @@ export default function AdminManageCarBookingsPage() {
                             setAssigningId(null);
                         }
                     }}>
-                        <SelectTrigger className="w-[180px]"><SelectValue placeholder="Assign car" /></SelectTrigger>
+                        <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Select car" /></SelectTrigger>
                         <SelectContent>
                             {cars.map(c => {
                                 const statusObj = carStatus.find(cs => cs.id === c.id);
-                                const isCheckedOut = statusObj?.in_use;
+                                const isCheckedOut = statusObj?.in_use && carInfo?.car_id !== c.id;
                                 const carStatusText = statusObj?.status || 'Unavailable';
                                 const isAvailable = carStatusText === 'Available' && !isCheckedOut;
                                 let statusLabel = '';
-                                if (isCheckedOut) statusLabel = '(Checked out - return pending)';
+                                if (isCheckedOut) statusLabel = '(Checked out)';
                                 else if (carStatusText !== 'Available') statusLabel = `(${carStatusText})`;
                                 const unavailableTitle = statusObj?.lock_reason || `Car is ${carStatusText.toLowerCase()}`;
                                 return (
                                     <SelectItem key={c.id} value={c.id} disabled={!isAvailable} title={!isAvailable ? unavailableTitle : ''}>
-                                        {c.label}{c.plate ? ` (${c.plate})` : ''} {statusLabel && <span className={`text-xs ml-2 ${isCheckedOut ? 'text-rose-500' : 'text-gray-500'}`}>{statusLabel}</span>}
+                                        {c.label}{c.plate ? ` (${c.plate})` : ''} {statusLabel && <span className="text-xs ml-2 opacity-70">{statusLabel}</span>}
                                     </SelectItem>
                                 );
                             })}
                         </SelectContent>
                     </Select>
-                    <Button size="sm" disabled={!bookingCarMap[b.id]?.car_id || approvingId === b.id} onClick={async () => {
-                        setApprovingId(b.id);
-                        try {
-                            const res = await approveCarBooking(b.id);
-                            if (!res?.success) {
-                                if (res?.correlation_id) {
-                                    console.error('[Admin Approve Car Booking] correlation_id:', res.correlation_id);
-                                }
-                                toast({
-                                    title: 'Approval blocked',
-                                    description: res.user_message || res.error || 'Failed to approve booking. Car may still be checked out and not yet returned.',
-                                    variant: 'destructive'
-                                });
-                            } else {
-                                toast({ title: 'Approved', description: 'Booking approved.' });
-                                await load();
-                            }
-                        } catch (err: any) {
-                            toast({
-                                title: 'Error',
-                                description: getApiErrorMessage(err, 'Failed to approve booking. Car may still be checked out and not yet returned.'),
-                                variant: 'destructive'
-                            });
-                        } finally {
-                            setApprovingId(null);
-                        }
-                    }}>{approvingId === b.id ? 'Approving…' : 'Approve'}</Button>
-                    <Button size="sm" variant="destructive" disabled={rejectingId === b.id} onClick={async () => {
-                        setRejectingId(b.id);
-                        try {
-                            const res = await rejectCarBooking(b.id);
-                            if (!res.success) {
-                                if (res.correlation_id) {
-                                    console.error('[Admin Reject Car Booking] correlation_id:', res.correlation_id);
-                                }
-                                toast({ title: 'Error', description: res.user_message || res.error || 'Failed to reject booking', variant: 'destructive' });
-                            } else {
-                                toast({ title: 'Rejected', description: res.user_message || 'Booking rejected.' });
-                            }
-                            await load();
-                        } catch {
-                            toast({ title: 'Error', description: 'Failed to reject', variant: 'destructive' });
-                        } finally {
-                            setRejectingId(null);
-                        }
-                    }}>{rejectingId === b.id ? 'Rejecting…' : 'Reject'}</Button>
+                    <Button size="sm" variant="outline" className="h-8" onClick={() => setReassignId(null)}>Done</Button>
                 </div>
-            )
-        },
-        {
-            key: 'approved',
-            title: 'Pending Check-ins',
-            rows: approved,
-            renderActions: (b) => {
-                const carInfo = bookingCarMap[b.id];
-                // After approval, show assigned car; allow optional reassign with audit
-                if (reassignId === b.id) {
-                    return (
-                        <div className="flex items-center gap-2">
-                            <Select value={carInfo?.car_id || ''} disabled={assigningId === b.id} onValueChange={async (carId) => {
-                                setAssigningId(b.id);
-                                try {
-                                    await assignCar(b.id, carId);
-                                    toast({ title: 'Reassigned', description: 'Car reassigned to booking.' });
-                                    await load();
-                                } catch (err) {
-                                    toast({
-                                        title: 'Reassignment blocked',
-                                        description: getApiErrorMessage(err, 'Car is unavailable or still checked out.'),
-                                        variant: 'destructive'
-                                    });
-                                } finally {
-                                    setAssigningId(null);
-                                }
-                            }}>
-                                <SelectTrigger className="w-[180px]"><SelectValue placeholder="Select car" /></SelectTrigger>
-                                <SelectContent>
-                                    {cars.map(c => {
-                                        const statusObj = carStatus.find(cs => cs.id === c.id);
-                                        const isCheckedOut = statusObj?.in_use && carInfo?.car_id !== c.id; // Allow selecting current car
-                                        const carStatusText = statusObj?.status || 'Unavailable';
-                                        const isAvailable = carStatusText === 'Available' && !isCheckedOut;
-                                        let statusLabel = '';
-                                        if (isCheckedOut) statusLabel = '(Checked out - return pending)';
-                                        else if (carStatusText !== 'Available') statusLabel = `(${carStatusText})`;
-                                        const unavailableTitle = statusObj?.lock_reason || `Car is ${carStatusText.toLowerCase()}`;
+            );
+        }
+        return (
+            <div className="flex flex-wrap items-center justify-end gap-1.5 text-xs text-muted-foreground">
+                <span className="max-w-[160px] truncate">
+                    {carInfo?.label || '—'}
+                    {carInfo?.plate ? ` (${carInfo.plate})` : ''}
+                </span>
+                <Button size="sm" variant="outline" className="h-8 px-2.5" onClick={() => setReassignId(b.id)}>Change</Button>
+            </div>
+        );
+    };
 
-                                        return (
-                                            <SelectItem key={c.id} value={c.id} disabled={!isAvailable} title={!isAvailable ? unavailableTitle : ''}>
-                                                {c.label}{c.plate ? ` (${c.plate})` : ''} {statusLabel && <span className="text-xs ml-2 opacity-70">{statusLabel}</span>}
-                                            </SelectItem>
-                                        );
-                                    })}
-                                </SelectContent>
-                            </Select>
-                            <Button size="sm" variant="outline" onClick={() => setReassignId(null)}>Done</Button>
-                        </div>
-                    );
-                }
-                return (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{getCarTag(b.status)}: {carInfo?.label || '—'} {carInfo?.plate ? `(${carInfo.plate})` : ''}</span>
-                        <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => setReassignId(b.id)}>Change</Button>
-                    </div>
-                );
-            }
-        },
-        {
-            key: 'history',
-            title: `History - ${historyFilter} (${historyTotal} total)`,
-            rows: history,
-            renderActions: () => <div className="text-xs text-muted-foreground">—</div>
-        },
-    ];
+    const renderQueueSection = (
+        rows: CarBooking[],
+        loading: boolean | undefined,
+        renderActions: (b: CarBooking) => JSX.Element,
+        emptyLabel: string
+    ) => {
+        if (loading) return <ListSkeleton rows={3} />;
+        if (rows.length === 0) {
+            return (
+                <div className="rounded-xl border border-dashed border-border bg-muted/10 px-6 py-8 text-center">
+                    <Clock className="mx-auto mb-2 h-8 w-8 text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground">{emptyLabel}</p>
+                </div>
+            );
+        }
+        return (
+            <BookingQueueTable
+                rows={rows}
+                renderActions={renderActions}
+                getOverlapCount={checkOverlap}
+                assignedCarMap={bookingCarMap}
+            />
+        );
+    };
 
     return (
-        <div className="mx-auto max-w-7xl space-y-12 px-2 sm:px-6 py-10 min-h-screen bg-transparent relative">
-            {/* Background decorative elements */}
-            <div className="absolute top-0 right-0 -z-10 w-96 h-96 bg-primary/10 blur-[120px] rounded-full opacity-50 pointer-events-none" />
-            <div className="absolute bottom-40 left-0 -z-10 w-80 h-80 bg-orange-500/10 blur-[100px] rounded-full opacity-30 pointer-events-none" />
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-6 pb-8"
+        >
+            <BookingPageHeader isRefreshing={isRefreshing} onRefresh={() => void load()} />
 
-            {/* Premium Page Header */}
-            <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="flex flex-col md:flex-row md:items-end justify-between gap-6"
-            >
-                <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                        <h1 className="text-4xl font-bold tracking-tight text-foreground">Manage Bookings</h1>
-                    </div>
-                    <p className="text-muted-foreground font-medium max-w-md">Fleet oversight, approval workflows, and booking history tracking.</p>
-                </div>
+            <BookingStatsCards
+                pending={pending.length}
+                activeTrips={approved.length}
+                availableCars={availableCars}
+                historyTotal={historyTotal}
+                loading={sectionLoading.pending && sectionLoading.approved}
+            />
 
-                <div className="flex items-center gap-3">
-                    <Button
-                        variant="secondary"
-                        size="lg"
-                        onClick={() => { load(); toast({ title: 'System Updated', description: 'Fleet status synchronized successfully.' }); }}
-                        className="h-12 px-6 rounded-xl font-bold bg-secondary/80 backdrop-blur-md hover:bg-secondary transition-all border border-border/10 shadow-lg"
-                    >
-                        <span>Refresh Fleet</span>
-                    </Button>
-                </div>
-            </motion.div>
-
-            {/* Cars Overview Section */}
-            <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.1 }}
-            >
-                <div className="flex items-center gap-2 mb-6 px-1">
-                    <div className="w-1.5 h-6 bg-primary rounded-full" />
-                    <h2 className="text-lg font-bold tracking-tight uppercase text-muted-foreground/80">Active Fleet</h2>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {sectionLoading.cars && [0, 1, 2, 3].map(i => (
-                        <div key={i} className="rounded-3xl overflow-hidden border border-border/50 animate-pulse bg-secondary/20">
-                            <div className="h-44 bg-muted/30" />
-                            <div className="p-5 space-y-3">
-                                <div className="h-5 bg-muted/30 rounded-lg w-2/3" />
-                                <div className="h-4 bg-muted/30 rounded-lg w-1/3" />
-                            </div>
+            <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <div>
+                            <CardTitle>Active fleet</CardTitle>
+                            <CardDescription>Vehicle availability and quick maintenance actions.</CardDescription>
                         </div>
-                    ))}
-                    {!sectionLoading.cars && carStatus.map((c) => {
-                        const isInService = c.in_use || c.status === 'In Service';
-                        const statusText = isInService ? 'CURRENTLY IN TRIP' : c.status || 'OFFLINE';
-                        const statusTone = isInService
-                            ? 'text-orange-500'
-                            : c.status === 'Available'
-                                ? 'text-emerald-500'
-                                : 'text-rose-500';
-                        const dotTone = isInService
-                            ? 'bg-orange-500 shadow-orange-500/50 animate-pulse'
-                            : c.status === 'Available'
-                                ? 'bg-emerald-500 shadow-emerald-500/50'
-                                : 'bg-rose-500 shadow-rose-500/50';
-                        return (
-                        <motion.div
-                            key={c.id}
-                            whileHover={{ y: -8, transition: { duration: 0.2 } }}
-                            className={`group  h-full relative glass rounded-3xl overflow-hidden border border-border/20 bg-secondary/10 flex flex-col ${isInService ? 'ring-2 ring-primary/20' : ''}`}
-                        >
-                            <div className="relative h-48 w-full bg-slate-900/40">
-                                {c.image_url ? (
-                                    <Image src={c.image_url} alt={c.label} fill className="object-cover transition-transform duration-700 group-hover:scale-110" unoptimized />
-                                ) : (
-                                    <div className="h-full w-full flex flex-col items-center justify-center text-muted-foreground/20 bg-secondary/5">
-                                        <span className="text-[10px] uppercase font-bold tracking-widest opacity-50">No Fleet Media</span>
-                                    </div>
-                                )}
-
-                                {/* Status Tags */}
-                                <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
-                                    {isInService && (
-                                        <div className="bg-orange-600 text-[10px] font-bold uppercase text-white px-3 py-1 rounded-full shadow-2xl flex items-center gap-1.5">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                                            Checked Out
-                                        </div>
-                                    )}
-                                    {c.status !== 'Available' && (
-                                        <div className={`${isInService ? 'bg-orange-600' : 'bg-rose-600'} text-[10px] font-bold uppercase text-white px-3 py-1 rounded-full shadow-2xl`}>
-                                            {isInService ? 'In Service' : c.status}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Overlay Controls */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-end p-5 backdrop-blur-[2px]">
-                                    <div className="grid grid-cols-2 gap-3 w-full translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="h-9 text-xs font-bold rounded-xl bg-white/10 hover:bg-primary hover:text-white backdrop-blur-xl border border-white/10 transition-all"
-                                            onClick={() => openEdit(c)}
-                                        >
-                                            EDIT
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="h-9 text-xs font-bold rounded-xl bg-white/10 hover:bg-primary hover:text-white backdrop-blur-xl border border-white/10 transition-all"
-                                            onClick={() => { setEditStatusCar(c); setNewStatus(c.status || 'Available'); setEditStatusOpen(true); }}
-                                        >
-                                            STATUS
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="p-5 flex flex-col gap-1 flex-1">
-                                <button onClick={() => openCarDialog(c)} className="text-left group/btn">
-                                    <div className="font-bold text-lg group-hover/btn:text-primary transition-colors line-clamp-1">{c.label}</div>
-                                    <div className="text-[11px] font-mono font-bold text-muted-foreground bg-secondary/40 inline-block px-2 py-0.5 rounded-md mt-1 tracking-wider">
-                                        {c.plate || 'V-NEST'}
-                                    </div>
-                                </button>
-
-                                <div className="mt-auto pt-4 flex items-center justify-between border-t border-border/5">
-                                    <span className={`text-[10px] font-bold uppercase tracking-[0.15em] ${statusTone}`}>
-                                        {statusText}
-                                    </span>
-                                    <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_12px] ${dotTone}`} />
-                                </div>
-                            </div>
-                        </motion.div>
-                        );
-                    })}
-                    {!sectionLoading.cars && carStatus.length === 0 && (
-                        <div className="col-span-full text-center py-20 text-muted-foreground bg-secondary/5 rounded-[40px] border-2 border-dashed border-border/10">
-                            <p className="font-bold uppercase tracking-widest opacity-30">No vehicles in fleet</p>
+                        <Badge variant="secondary" className="rounded-full font-normal">
+                            {carStatus.length} vehicles
+                        </Badge>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {sectionLoading.cars ? (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <div key={i} className="h-56 animate-pulse rounded-xl bg-muted" />
+                            ))}
+                        </div>
+                    ) : carStatus.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-border bg-muted/10 px-6 py-12 text-center text-sm text-muted-foreground">
+                            No vehicles in fleet.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {carStatus.map((c) => (
+                                <FleetCarCard
+                                    key={c.id}
+                                    car={c}
+                                    onViewBookings={(car) => void openCarDialog(car)}
+                                    onEditImage={(car) => openEdit(car)}
+                                    onEditStatus={(car) => {
+                                        setEditStatusCar(car);
+                                        setNewStatus(car.status || 'Available');
+                                        setEditStatusOpen(true);
+                                    }}
+                                />
+                            ))}
                         </div>
                     )}
-                </div>
-            </motion.div>
+                </CardContent>
+            </Card>
+
+            <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <div>
+                            <CardTitle>Pending approvals</CardTitle>
+                            <CardDescription>Assign a car, then approve or reject each request.</CardDescription>
+                        </div>
+                        <Badge variant="secondary" className="rounded-full font-normal">
+                            {pending.length} pending
+                        </Badge>
+                    </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                    {renderQueueSection(pending, sectionLoading.pending, renderPendingActions, 'No pending booking requests.')}
+                </CardContent>
+            </Card>
+
+            <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <div>
+                            <CardTitle>Active trips</CardTitle>
+                            <CardDescription>Approved bookings awaiting vehicle return.</CardDescription>
+                        </div>
+                        <Badge variant="secondary" className="rounded-full font-normal">
+                            {approved.length} active
+                        </Badge>
+                    </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                    {renderQueueSection(approved, sectionLoading.approved, renderApprovedActions, 'No active trips right now.')}
+                </CardContent>
+            </Card>
+
+            <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <CardTitle>Booking history</CardTitle>
+                            <CardDescription>{historyTotal} total records</CardDescription>
+                        </div>
+                        <Select
+                            value={historyFilter}
+                            onValueChange={(value) => {
+                                const filter = value as typeof historyFilter;
+                                setHistoryPage(1);
+                                void loadHistoryPage(1, filter);
+                            }}
+                        >
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Filter status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="All">All statuses</SelectItem>
+                                <SelectItem value="Completed">Completed</SelectItem>
+                                <SelectItem value="Rejected">Rejected</SelectItem>
+                                <SelectItem value="Cancelled">Cancelled</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                    {sectionLoading.history ? (
+                        <ListSkeleton rows={3} />
+                    ) : history.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-border bg-muted/10 px-6 py-8 text-center">
+                            <Clock className="mx-auto mb-2 h-8 w-8 text-muted-foreground/30" />
+                            <p className="text-sm text-muted-foreground">No history records for this filter.</p>
+                        </div>
+                    ) : (
+                        <BookingHistoryTable rows={history} bookingCarMap={bookingCarMap} />
+                    )}
+                    {historyTotal > 0 && (
+                        <PaginationFooter
+                            page={historyPage}
+                            pageSize={historyPageSize}
+                            total={historyTotal}
+                            onPageChange={(page) => void loadHistoryPage(page, historyFilter)}
+                            itemLabel="record"
+                            disabled={sectionLoading.history}
+                        />
+                    )}
+                </CardContent>
+            </Card>
 
             {/* Edit Status Dialog */}
             <Dialog open={editStatusOpen} onOpenChange={setEditStatusOpen}>
@@ -662,7 +615,7 @@ export default function AdminManageCarBookingsPage() {
                     <div className="space-y-2 max-h-[50vh] overflow-auto">
                         {(carDialogData?.rows || []).map((b: CarBooking) => (
                             <div key={b.id} className="border rounded p-2 text-sm">
-                                <div className="font-medium">{b.employee_name} — {b.date_of_use} ({range12h(b.start_time, b.end_time, b.time_slot || '')})</div>
+                                <div className="font-medium">{b.employee_name} — {b.date_of_use} ({formatTimeRange(b.start_time, b.end_time, b.time_slot || '')})</div>
                                 <div className="text-xs">Status: {b.status}</div>
                             </div>
                         ))}
@@ -670,173 +623,6 @@ export default function AdminManageCarBookingsPage() {
                     </div>
                 </DialogContent>
             </Dialog>
-
-            {/* Active Monitoring Sections */}
-            <div className="grid grid-cols-1 gap-12 pt-8">
-                {sections.map((section, sIdx) => (
-                    <motion.div
-                        key={section.key}
-                        initial={{ opacity: 0, y: 30 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.6, delay: 0.2 + (sIdx * 0.1) }}
-                        className="space-y-6"
-                    >
-                        <div className="flex items-center justify-between px-1">
-                            <div className="flex items-center gap-3">
-                                <div className="w-1.5 h-6 bg-primary rounded-full" />
-                                <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">{section.title}</h2>
-                            </div>
-                            <Badge variant="outline" className="bg-secondary/40 text-[11px] font-bold px-3 py-0.5 rounded-full border-border/10">
-                                {section.rows.length} {section.rows.length === 1 ? 'Entry' : 'Entries'}
-                            </Badge>
-                        </div>
-
-                        <div className="space-y-4">
-                            {sectionLoading[section.key as keyof typeof sectionLoading] && [0, 1].map(i => (
-                                <div key={i} className="h-32 bg-secondary/10 rounded-3xl animate-pulse border border-border/10" />
-                            ))}
-
-                            {!sectionLoading[section.key as keyof typeof sectionLoading] && section.rows.map((b, bIdx) => {
-                                const carInfo = bookingCarMap[b.id];
-                                const overlaps = checkOverlap(b);
-
-                                return (
-                                    <motion.div
-                                        key={b.id}
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: bIdx * 0.05 }}
-                                        className="relative group bg-secondary/5 hover:bg-secondary/10 border border-border/10 rounded-[32px] p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-primary/5"
-                                    >
-                                        <div className="flex flex-col md:flex-row gap-6">
-                                            {/* Left Info: Requester & Time */}
-                                            <div className="flex-1 space-y-4">
-                                                <div className="flex items-start justify-between">
-                                                    <div className="space-y-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                                                                <span className="text-xs font-bold text-primary">{b.employee_name.slice(0, 1).toUpperCase()}</span>
-                                                            </div>
-                                                            <h3 className="text-lg font-bold tracking-tight">{b.employee_name}</h3>
-                                                        </div>
-                                                        <div className="flex items-center gap-3 text-muted-foreground ml-10">
-                                                            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider">
-                                                                {b.date_of_use} • {b.time_slot}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <StatusPill status={b.status} updatedAt={b.updated_at} />
-                                                </div>
-
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 ml-10">
-                                                    <div className="flex items-center gap-2.5 text-sm font-medium text-foreground/80 bg-background/40 backdrop-blur-sm p-3 rounded-2xl border border-border/5">
-                                                        <span className="line-clamp-1">{b.destination || 'Internal Mission'}</span>
-                                                    </div>
-
-                                                    {carInfo && (
-                                                        <div className="flex items-center gap-2.5 text-sm font-medium text-primary bg-primary/5 p-3 rounded-2xl border border-primary/10">
-                                                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
-                                                                {getCarTag(b.status)}
-                                                            </span>
-                                                            <span className="font-bold underline decoration-primary/30 underline-offset-4">
-                                                                {carInfo.label} {carInfo.plate ? `(${carInfo.plate})` : ''}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* Critical Warnings */}
-                                                {(overlaps > 0 || b.purpose) && (
-                                                    <div className="flex flex-wrap gap-2 ml-10">
-                                                        {b.purpose && (
-                                                            <div className="text-[11px] font-bold text-muted-foreground italic bg-secondary/10 px-3 py-1 rounded-lg">
-                                                                "{b.purpose}"
-                                                            </div>
-                                                        )}
-                                                        {overlaps > 0 && (
-                                                            <div className="animate-pulse bg-orange-500/10 text-orange-500 border border-orange-500/20 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5">
-                                                                {overlaps} Slot Conflict
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Right Actions: Dedicated Box */}
-                                            <div className="flex flex-col justify-center items-end gap-3 min-w-[200px]">
-                                                {section.renderActions(b)}
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                );
-                            })}
-
-                            {!sectionLoading[section.key as keyof typeof sectionLoading] && section.rows.length === 0 && (
-                                <div className="text-center py-20 bg-secondary/5 rounded-[40px] border border-border/10 border-dashed">
-                                    <Clock className="w-12 h-12 mx-auto mb-4 opacity-10" />
-                                    <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">No active requests found</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* History Specialized Controls */}
-                        {section.key === 'history' && (
-                            <div className="bg-secondary/10 backdrop-blur-xl rounded-[40px] p-8 border border-border/20 space-y-6">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                                    <div className="space-y-4">
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Intelligence Filters</span>
-                                        <div className="flex flex-wrap gap-2">
-                                            {(['All', 'Completed', 'Rejected', 'Cancelled'] as const).map((filterOption) => {
-                                                const isActive = historyFilter === filterOption;
-                                                return (
-                                                    <Button
-                                                        key={filterOption}
-                                                        size="sm"
-                                                        variant={isActive ? "default" : "outline"}
-                                                        onClick={() => { setHistoryPage(1); loadHistoryPage(1, filterOption); }}
-                                                        className={`rounded-full px-5 font-bold text-xs h-9 transition-all ${isActive ? 'bg-primary hover:bg-primary shadow-lg shadow-primary/20' : 'bg-transparent border-border/10 hover:bg-white/5'}`}
-                                                    >
-                                                        {filterOption}
-                                                    </Button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    {historyTotal > historyPageSize && (
-                                        <div className="flex items-center gap-3 bg-background/40 p-2 rounded-2xl border border-border/5">
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                disabled={historyPage <= 1 || sectionLoading.history}
-                                                onClick={() => loadHistoryPage(historyPage - 1)}
-                                                className="w-10 h-10 p-0 rounded-xl hover:bg-primary/10 hover:text-primary font-bold"
-                                            >
-                                                ←
-                                            </Button>
-                                            <div className="text-xs font-bold px-4 bg-primary text-white h-7 rounded-lg flex items-center shadow-lg shadow-primary/20">
-                                                PAGE {historyPage}
-                                            </div>
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                disabled={historyPage >= Math.ceil(historyTotal / historyPageSize) || sectionLoading.history}
-                                                onClick={() => loadHistoryPage(historyPage + 1)}
-                                                className="w-10 h-10 p-0 rounded-xl hover:bg-primary/10 hover:text-primary font-bold"
-                                            >
-                                                →
-                                            </Button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </motion.div>
-                ))}
-            </div>
-
-            {/* Global Modals Overlays */}
-            <div className="pointer-events-none fixed inset-0 z-0 h-full w-full bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px]" />
-        </div>
+        </motion.div>
     );
 }

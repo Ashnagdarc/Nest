@@ -1,53 +1,117 @@
-import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { mergeNotificationPreferences } from "@/components/settings/types";
+
+const PROFILE_FIELDS =
+  "id, email, full_name, avatar_url, phone, department, role, status, notification_preferences, created_at, updated_at";
 
 export async function GET() {
-    const startTime = Date.now();
-    try {
-        const supabase = await createSupabaseServerClient();
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-        // Get current auth user with improved error handling
-        console.log('[Profile API] Starting auth check...');
-        const authStart = Date.now();
-        const { data: userData, error: userError } = await supabase.auth.getUser();
-        const authTime = Date.now() - authStart;
-        
-        if (userError) {
-            console.error('[Profile API] Auth error after', authTime + 'ms:', userError.message);
-            if (userError.message?.includes('fetch failed') || userError.message?.includes('timeout')) {
-                return NextResponse.json({ 
-                    data: null, 
-                    error: 'Service temporarily unavailable. Please try again.' 
-                }, { status: 503 });
-            }
-            return NextResponse.json({ data: null, error: 'Authentication failed' }, { status: 401 });
-        }
-        
-        if (!userData?.user) {
-            console.log('[Profile API] No user found after', authTime + 'ms');
-            return NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 });
-        }
-        
-        console.log('[Profile API] Auth successful in', authTime + 'ms for user:', userData.user.id);
-
-        // Fetch profile for this user
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('id, email, full_name, avatar_url, role, status')
-            .eq('id', userData.user.id)
-            .maybeSingle();
-
-        if (profileError) {
-            return NextResponse.json({ data: null, error: profileError.message || 'Failed to fetch profile' }, { status: 500 });
-        }
-
-        const totalTime = Date.now() - startTime;
-        console.log('[Profile API] Request completed successfully in', totalTime + 'ms');
-        return NextResponse.json({ data: profile ?? null, error: null }, { status: 200 });
-    } catch (err: any) {
-        const totalTime = Date.now() - startTime;
-        const message = err?.message || 'Unexpected server error';
-        console.error('[Profile API] Request failed after', totalTime + 'ms:', err);
-        return NextResponse.json({ data: null, error: message }, { status: 500 });
+    if (userError || !user) {
+      return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 });
     }
-} 
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select(PROFILE_FIELDS)
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      return NextResponse.json(
+        { data: null, error: profileError.message || "Failed to fetch profile" },
+        { status: 500 },
+      );
+    }
+
+    if (!profile) {
+      return NextResponse.json({ data: null, error: "Profile not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      data: {
+        ...profile,
+        email: profile.email || user.email || null,
+        notification_preferences: mergeNotificationPreferences(profile.notification_preferences),
+      },
+      error: null,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unexpected server error";
+    return NextResponse.json({ data: null, error: message }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const update: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (typeof body.full_name === "string") update.full_name = body.full_name.trim();
+    if (body.phone === null || typeof body.phone === "string") {
+      update.phone = body.phone?.trim() || null;
+    }
+    if (body.department === null || typeof body.department === "string") {
+      update.department = body.department?.trim() || null;
+    }
+    if (body.avatar_url === null || typeof body.avatar_url === "string") {
+      update.avatar_url = body.avatar_url;
+    }
+    if (body.notification_preferences && typeof body.notification_preferences === "object") {
+      update.notification_preferences = body.notification_preferences;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .update(update)
+      .eq("id", user.id)
+      .select(PROFILE_FIELDS)
+      .single();
+
+    if (profileError) {
+      return NextResponse.json(
+        { data: null, error: profileError.message || "Failed to update profile" },
+        { status: 500 },
+      );
+    }
+
+    if (typeof body.full_name === "string" || body.avatar_url !== undefined) {
+      await supabase.auth.updateUser({
+        data: {
+          ...(typeof body.full_name === "string" ? { full_name: body.full_name.trim() } : {}),
+          ...(body.avatar_url !== undefined ? { avatar_url: body.avatar_url } : {}),
+        },
+      });
+    }
+
+    return NextResponse.json({
+      data: {
+        ...profile,
+        email: profile.email || user.email || null,
+        notification_preferences: mergeNotificationPreferences(profile.notification_preferences),
+      },
+      error: null,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unexpected server error";
+    return NextResponse.json({ data: null, error: message }, { status: 500 });
+  }
+}

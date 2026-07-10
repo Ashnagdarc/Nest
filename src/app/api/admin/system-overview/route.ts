@@ -1,27 +1,14 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
 export async function GET() {
     try {
-        // Use server client with proper auth handling
-        const supabase = await createSupabaseServerClient(true);
-
-        // Verify admin access
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
+            return NextResponse.json({ success: false, error: (await authContext.errorResponse.json()).error }, { status: authContext.errorResponse.status });
         }
 
-        // Check if user is admin
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-        if (profileError || !profile || profile.role !== 'Admin') {
-            return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 });
-        }
+        const supabase = authContext.adminSupabase;
 
         // Fetch all system statistics in parallel
         const [

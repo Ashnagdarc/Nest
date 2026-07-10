@@ -3,6 +3,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import rateLimit from 'next-rate-limit';
+import { isAccountActive } from '@/lib/auth/account-status';
 
 const limiter = rateLimit({
     interval: 60 * 1000, // 1 minute window
@@ -62,6 +63,19 @@ export async function POST(request: NextRequest) {
                 success: false,
                 error: 'Failed to fetch user profile.'
             }, { status: 500 });
+        }
+
+        if (!isAccountActive(profile?.status)) {
+            await supabase.auth.signOut();
+            const blockedStatus = profile?.status?.toLowerCase() === 'suspended' ? 'suspended' : 'inactive';
+            return NextResponse.json({
+                success: false,
+                error: blockedStatus === 'suspended'
+                    ? 'Your account has been suspended. Contact your administrator or HR.'
+                    : 'Your account is inactive. Contact your administrator or HR.',
+                accountStatus: blockedStatus,
+                fullName: profile?.full_name ?? null,
+            }, { status: 403 });
         }
 
         return NextResponse.json({

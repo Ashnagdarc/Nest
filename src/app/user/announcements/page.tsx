@@ -1,133 +1,118 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Megaphone } from 'lucide-react';
-import { format } from 'date-fns';
-
-// Type for announcements
-type Announcement = {
-    id: string;
-    title: string;
-    content: string;
-    createdAt: Date;
-    created_by: string | null;
-};
+import { useMemo, useState } from 'react';
+import { Bell } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { ListSkeleton } from '@/components/dashboard/ListSkeleton';
+import ErrorDisplay from '@/components/ui/error-display';
+import { AnnouncementCard, AnnouncementsEmptyState } from '@/components/announcements/AnnouncementCard';
+import { AnnouncementsPageHeader } from '@/components/announcements/AnnouncementsPageHeader';
+import { useAnnouncements } from '@/hooks/announcements/useAnnouncements';
 
 export default function UserAnnouncementsPage() {
-    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-    const [loading, setLoading] = useState(true);
+    const {
+        announcements,
+        readIds,
+        unreadCount,
+        loading,
+        isRefreshing,
+        error,
+        fetchAnnouncements,
+        markAsRead,
+        markAllAsRead,
+    } = useAnnouncements(50);
 
-    useEffect(() => {
-        fetchAnnouncements();
-    }, []);
+    const [search, setSearch] = useState('');
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
-    async function fetchAnnouncements() {
-        setLoading(true);
-        console.log("User: Fetching announcements...");
-
-        try {
-            const res = await fetch('/api/announcements?limit=50&page=1', { cache: 'no-store' });
-            if (!res.ok) {
-                setLoading(false);
-                return;
-            }
-            const payload = await res.json();
-            const rows = Array.isArray(payload?.announcements) ? payload.announcements : [];
-            if (rows.length) {
-                setAnnouncements(rows.map((a: any) => ({
-                    id: a.id,
-                    title: a.title,
-                    content: a.content,
-                    createdAt: new Date(a.created_at),
-                    created_by: a.created_by || null,
-                })));
-            }
-            setLoading(false);
-        } catch (e) {
-            console.error("Unexpected error in fetchAnnouncements:", e);
-            setLoading(false);
-        }
-    }
-
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        visible: {
-            opacity: 1,
-            transition: {
-                staggerChildren: 0.1
-            }
-        }
-    };
-
-    const itemVariants = {
-        hidden: { y: 20, opacity: 0 },
-        visible: {
-            y: 0,
-            opacity: 1
-        }
-    };
+    const filteredAnnouncements = useMemo(() => {
+        const query = search.trim().toLowerCase();
+        return announcements.filter((item) => {
+            const matchesFilter = filter === 'all' || !readIds.has(item.id);
+            if (!matchesFilter) return false;
+            if (!query) return true;
+            return (
+                item.title.toLowerCase().includes(query) ||
+                item.content.toLowerCase().includes(query) ||
+                item.authorName?.toLowerCase().includes(query)
+            );
+        });
+    }, [announcements, filter, readIds, search]);
 
     return (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-6 container mx-auto py-6"
-        >
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <h1 className="text-3xl font-bold text-foreground">Company Announcements</h1>
-            </div>
+        <div className="mx-auto w-full max-w-4xl space-y-6">
+            <AnnouncementsPageHeader
+                title="Announcements"
+                description="Company updates, news, and important notices."
+                isRefreshing={isRefreshing}
+                onRefresh={() => void fetchAnnouncements({ silent: true })}
+                action={
+                    unreadCount > 0 ? (
+                        <Button variant="outline" size="sm" className="gap-2" onClick={() => void markAllAsRead()}>
+                            <Bell className="h-4 w-4" />
+                            Mark all read ({unreadCount})
+                        </Button>
+                    ) : undefined
+                }
+            />
 
-            {loading ? (
-                <div className="py-10 text-center">
-                    <p className="text-muted-foreground">Loading announcements...</p>
-                </div>
-            ) : (
-                <motion.div
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="space-y-4"
-                >
-                    {announcements.length > 0 ? (
-                        announcements.map((announcement) => (
-                            <motion.div key={announcement.id} variants={itemVariants}>
-                                <Card>
-                                    <CardHeader>
-                                        <div className="flex items-start">
-                                            <div className="flex items-center gap-2">
-                                                <Megaphone className="h-5 w-5 text-primary" />
-                                                <CardTitle>{announcement.title}</CardTitle>
-                                            </div>
-                                        </div>
-                                        <CardDescription className="text-xs">
-                                            Posted on {format(announcement.createdAt, 'PPP')}
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <p className="text-sm whitespace-pre-wrap">{announcement.content}</p>
-                                    </CardContent>
-                                </Card>
-                            </motion.div>
-                        ))
-                    ) : (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.2 }}
+            <Card className="border-border/50">
+                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+                    <Input
+                        placeholder="Search announcements..."
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        className="flex-1"
+                    />
+                    <div className="flex gap-2">
+                        <Button
+                            variant={filter === 'all' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setFilter('all')}
                         >
-                            <Card className="text-center py-10">
-                                <CardContent>
-                                    <Megaphone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                                    <p className="text-muted-foreground">No announcements have been posted yet.</p>
-                                </CardContent>
-                            </Card>
-                        </motion.div>
-                    )}
-                </motion.div>
+                            All
+                        </Button>
+                        <Button
+                            variant={filter === 'unread' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setFilter('unread')}
+                        >
+                            Unread ({unreadCount})
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {error ? (
+                <ErrorDisplay error={error} onRetry={() => void fetchAnnouncements()} />
+            ) : loading ? (
+                <ListSkeleton rows={4} />
+            ) : filteredAnnouncements.length === 0 ? (
+                <AnnouncementsEmptyState />
+            ) : (
+                <div className="space-y-4">
+                    {filteredAnnouncements.map((announcement) => {
+                        const isRead = readIds.has(announcement.id);
+                        return (
+                            <AnnouncementCard
+                                key={announcement.id}
+                                announcement={announcement}
+                                isRead={isRead}
+                                expanded={expandedId === announcement.id}
+                                onToggleExpand={() =>
+                                    setExpandedId((current) =>
+                                        current === announcement.id ? null : announcement.id
+                                    )
+                                }
+                                onMarkRead={() => void markAsRead(announcement.id)}
+                            />
+                        );
+                    })}
+                </div>
             )}
-        </motion.div>
+        </div>
     );
-} 
+}

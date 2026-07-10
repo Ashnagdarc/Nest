@@ -1,376 +1,532 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useCallback, Suspense } from 'react';
-import { motion } from 'framer-motion';
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { RefreshCw, CheckCircle, XCircle, Clock, Search, FileText } from 'lucide-react';
-import { format } from 'date-fns';
+import { useState, useMemo, useEffect, useRef, useCallback, Suspense } from "react";
+import { motion } from "framer-motion";
+import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { DateRange } from "react-day-picker";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { cn } from "@/lib/utils";
-import { apiGet } from '@/lib/apiClient';
-import RequestFilters from '@/components/admin/requests/RequestFilters';
-import RequestTable from '@/components/admin/requests/RequestTable';
-import { ViewRequestModal } from '@/components/admin/ViewRequestModal';
+import { apiGet } from "@/lib/apiClient";
+import { ListSkeleton } from "@/components/dashboard/ListSkeleton";
+import { PaginationFooter } from "@/components/ui/PaginationFooter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import RequestFilters from "@/components/admin/requests/RequestFilters";
+import RequestTable from "@/components/admin/requests/RequestTable";
+import { RequestPageHeader } from "@/components/admin/requests/RequestPageHeader";
+import { RequestStatsCards } from "@/components/admin/requests/RequestStatsCards";
+import { ViewRequestModal } from "@/components/admin/ViewRequestModal";
+import { useRequestSummary } from "@/hooks/admin/useRequestSummary";
 
-const NOTIFICATION_SOUND_URL = '/sounds/notification-bell.mp3';
-
+const NOTIFICATION_SOUND_URL = "/sounds/notification-bell.mp3";
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
 interface GearRequest {
-  id: string;
-  userName: string;
-  userEmail?: string;
-  avatarUrl?: string;
-  userId: string;
-  gearNames: string[];
-  requestDate: Date;
-  duration: string;
-  reason?: string;
-  destination?: string;
-  status: string;
-  adminNotes?: string | null;
-  checkoutDate?: Date | null;
-  dueDate?: Date | null;
-  checkinDate?: Date | null;
-  teamMembers?: string | null;
-  gear_request_gears?: any[];
+    id: string;
+    userName: string;
+    userEmail?: string;
+    avatarUrl?: string;
+    userId: string;
+    submittedByName?: string | null;
+    submittedByEmail?: string | null;
+    submittedByUserId?: string | null;
+    isOnBehalfBooking: boolean;
+    gearNames: string[];
+    requestDate: Date;
+    duration: string;
+    reason?: string;
+    destination?: string;
+    status: string;
+    adminNotes?: string | null;
+    checkoutDate?: Date | null;
+    dueDate?: Date | null;
+    checkinDate?: Date | null;
+    teamMembers?: string | null;
+    gear_request_gears?: unknown[];
 }
 
-const useDebouncedSearch = (value: string, delay: number = 300) => {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-  return debouncedValue;
+const useDebouncedSearch = (value: string, delay = 300) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+        const handler = setTimeout(() => setDebouncedValue(value), delay);
+        return () => clearTimeout(handler);
+    }, [value, delay]);
+    return debouncedValue;
 };
 
 function ManageRequestsContent() {
-  const { toast } = useToast();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+    const { toast } = useToast();
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [soundEnabled, setSoundEnabled] = useState(true);
 
-  const [requests, setRequests] = useState<GearRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [selectedRequests, setSelectedRequests] = useState<string[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<GearRequest | null>(null);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
-  const [requestToReject, setRequestToReject] = useState<string | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [userFilter, setUserFilter] = useState<string>('all');
-  const [gearFilter, setGearFilter] = useState<string>('all');
-  const [keyword, setKeyword] = useState('');
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
-  const [total, setTotal] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+    const [requests, setRequests] = useState<GearRequest[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+    const [selectedRequests, setSelectedRequests] = useState<string[]>([]);
+    const [selectedRequest, setSelectedRequest] = useState<GearRequest | null>(null);
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+    const [requestToReject, setRequestToReject] = useState<string | null>(null);
+    const [rejectionReason, setRejectionReason] = useState("");
+    const [filterStatus, setFilterStatus] = useState("all");
+    const [userFilter, setUserFilter] = useState("all");
+    const [gearFilter, setGearFilter] = useState("all");
+    const [keyword, setKeyword] = useState("");
+    const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+    const [total, setTotal] = useState(0);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [summaryRefreshKey, setSummaryRefreshKey] = useState(0);
 
-  const debouncedKeyword = useDebouncedSearch(keyword, 300);
+    const debouncedKeyword = useDebouncedSearch(keyword, 300);
+    const { summary, loading: summaryLoading } = useRequestSummary(summaryRefreshKey);
 
-  useEffect(() => {
-    audioRef.current = new Audio(NOTIFICATION_SOUND_URL);
-    const saved = localStorage.getItem('nestbyeden.appSoundEnabled');
-    if (saved !== null) setSoundEnabled(saved === 'true');
-  }, []);
+    useEffect(() => {
+        audioRef.current = new Audio(NOTIFICATION_SOUND_URL);
+        const saved = localStorage.getItem("nestbyeden.appSoundEnabled");
+        if (saved !== null) setSoundEnabled(saved === "true");
+    }, []);
 
-  useEffect(() => {
-    localStorage.setItem('nestbyeden.appSoundEnabled', soundEnabled.toString());
-  }, [soundEnabled]);
+    useEffect(() => {
+        localStorage.setItem("nestbyeden.appSoundEnabled", soundEnabled.toString());
+    }, [soundEnabled]);
 
-  const extractGearNames = useCallback((request: any): string[] => {
-    if (request.gear_request_gears && Array.isArray(request.gear_request_gears) && request.gear_request_gears.length > 0) {
-      return request.gear_request_gears.map((item: any) => {
-        const name = item.gears?.name || 'Unknown Gear';
-        const qty = item.quantity > 1 ? ` x ${item.quantity}` : '';
-        return `${name}${qty}`;
-      });
-    }
-    return [];
-  }, []);
+    useEffect(() => {
+        setPage(1);
+    }, [filterStatus, debouncedKeyword, pageSize]);
 
-  const fetchRequests = useCallback(async () => {
-    setLoading(true);
-    setFetchError(null);
-    setIsRefreshing(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('page', String(page));
-      params.set('pageSize', String(pageSize));
-      if (filterStatus && filterStatus !== 'all') params.set('status', filterStatus);
-      params.set('_t', String(Date.now()));
+    const extractGearNames = useCallback((request: Record<string, unknown>): string[] => {
+        const lines = request.gear_request_gears;
+        if (!Array.isArray(lines) || lines.length === 0) return [];
+        return lines.map((item: Record<string, unknown>) => {
+            const gears = item.gears as Record<string, unknown> | undefined;
+            const name = (gears?.name as string) || "Unknown gear";
+            const qty = Number(item.quantity) > 1 ? ` x ${item.quantity}` : "";
+            return `${name}${qty}`;
+        });
+    }, []);
 
-      const response = await apiGet<{ data: any[]; total: number; error: string | null }>(`/api/requests?${params.toString()}`);
-      if (response.error) throw new Error(response.error);
+    const fetchRequests = useCallback(async () => {
+        setLoading(true);
+        setFetchError(null);
+        setIsRefreshing(true);
+        try {
+            const params = new URLSearchParams();
+            params.set("page", String(page));
+            params.set("pageSize", String(pageSize));
+            if (filterStatus && filterStatus !== "all") params.set("status", filterStatus);
 
-      const processed = response.data.map((request: any) => {
-        const gearNames = extractGearNames(request);
-        const firstName = request.profiles?.full_name?.split(' ')[0] || request.profiles?.full_name || 'User';
-        return {
-          id: request.id,
-          userName: firstName,
-          userEmail: request.profiles?.email,
-          avatarUrl: request.profiles?.avatar_url,
-          userId: request.user_id,
-          gearNames,
-          requestDate: new Date(request.created_at),
-          duration: request.expected_duration || 'Not specified',
-          reason: request.reason || 'Not specified',
-          destination: request.destination || 'Not specified',
-          status: request.status || 'Pending',
-          adminNotes: request.admin_notes || null,
-          checkoutDate: request.checkout_date ? new Date(request.checkout_date) : null,
-          dueDate: request.due_date ? new Date(request.due_date) : null,
-          checkinDate: request.checkin_date ? new Date(request.checkin_date) : null,
-          teamMembers: request.team_members || null,
-          gear_request_gears: request.gear_request_gears
-        };
-      });
+            const response = await apiGet<{ data: Record<string, unknown>[]; total: number; error: string | null }>(
+                `/api/requests?${params.toString()}`
+            );
+            if (response.error) throw new Error(response.error);
 
-      setRequests(processed);
-      setTotal(response.total || 0);
-    } catch (error: any) {
-      setFetchError(error.message || 'Failed to load requests');
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [page, pageSize, filterStatus, extractGearNames]);
+            const processed = response.data.map((request) => {
+                const gearNames = extractGearNames(request);
+                const ownerName = (request.profiles as { full_name?: string } | undefined)?.full_name || "User";
+                const firstName = ownerName.split(" ")[0] || ownerName;
+                const submittedBy = request.submitted_by as { id?: string; full_name?: string; email?: string } | null;
+                const isOnBehalfBooking = Boolean(submittedBy?.id && submittedBy.id !== request.user_id);
 
-  useEffect(() => { fetchRequests(); }, [fetchRequests]);
+                return {
+                    id: request.id as string,
+                    userName: firstName,
+                    userEmail: (request.profiles as { email?: string } | undefined)?.email,
+                    avatarUrl: (request.profiles as { avatar_url?: string } | undefined)?.avatar_url,
+                    userId: request.user_id as string,
+                    submittedByName: isOnBehalfBooking ? submittedBy?.full_name : null,
+                    submittedByEmail: isOnBehalfBooking ? submittedBy?.email : null,
+                    submittedByUserId: isOnBehalfBooking ? submittedBy?.id : null,
+                    isOnBehalfBooking,
+                    gearNames,
+                    requestDate: new Date(request.created_at as string),
+                    duration: (request.expected_duration as string) || "Not specified",
+                    reason: (request.reason as string) || "Not specified",
+                    destination: (request.destination as string) || "Not specified",
+                    status: (request.status as string) || "Pending",
+                    adminNotes: (request.admin_notes as string | null) ?? null,
+                    checkoutDate: request.checkout_date ? new Date(request.checkout_date as string) : null,
+                    dueDate: request.due_date ? new Date(request.due_date as string) : null,
+                    checkinDate: request.checkin_date ? new Date(request.checkin_date as string) : null,
+                    teamMembers: (request.team_members as string | null) ?? null,
+                    gear_request_gears: request.gear_request_gears,
+                };
+            });
 
-  const forceRefresh = () => { setPage(1); fetchRequests(); };
-
-  const handleApprove = async (requestId: string) => {
-    if (isProcessing || processingRequestId) return; // Prevent duplicate clicks
-    
-    setIsProcessing(true);
-    setProcessingRequestId(requestId);
-    
-    try {
-      const resp = await fetch('/api/requests/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId }),
-      });
-      const result = await resp.json();
-      if (!resp.ok || !result.success) {
-        if (result?.correlation_id) {
-          console.error('[Admin Gear Approve] correlation_id:', result.correlation_id);
+            setRequests(processed);
+            setTotal(response.total || 0);
+            setSummaryRefreshKey((key) => key + 1);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Failed to load requests";
+            setFetchError(message);
+        } finally {
+            setLoading(false);
+            setIsRefreshing(false);
         }
-        throw new Error(result?.user_message || result?.error || 'Approval failed');
-      }
+    }, [page, pageSize, filterStatus, extractGearNames]);
 
-      toast({ title: "Approved", description: result?.user_message || "Request approved successfully." });
-      if (soundEnabled && audioRef.current) audioRef.current.play().catch(() => { });
-      fetchRequests();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally { 
-      setIsProcessing(false);
-      setProcessingRequestId(null);
-    }
-  };
+    useEffect(() => {
+        void fetchRequests();
+    }, [fetchRequests]);
 
-  const handleReject = async () => {
-    if (!requestToReject || !rejectionReason.trim()) return;
-    setIsProcessing(true);
-    try {
-      const resp = await fetch('/api/requests/reject', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId: requestToReject, reason: rejectionReason }),
-      });
-      const result = await resp.json().catch(() => null);
-      if (!resp.ok || !result?.success) {
-        if (result?.correlation_id) {
-          console.error('[Admin Gear Reject] correlation_id:', result.correlation_id);
-        }
-        throw new Error(result?.user_message || result?.error || 'Rejection failed');
-      }
-      toast({ title: "Rejected", description: result?.user_message || "Request has been rejected." });
-      setRequestToReject(null);
-      setRejectionReason('');
-      fetchRequests();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally { setIsProcessing(false); }
-  };
-
-  const getStatusBadge = useCallback((status: string) => {
-    const config: any = {
-      pending: { color: "bg-orange-500/10 text-orange-600", icon: <Clock className="h-3 w-3" /> },
-      approved: { color: "bg-green-500/10 text-green-600", icon: <CheckCircle className="h-3 w-3" /> },
-      rejected: { color: "bg-red-500/10 text-red-600", icon: <XCircle className="h-3 w-3" /> },
-      "checked out": { color: "bg-blue-500/10 text-blue-600", icon: <FileText className="h-3 w-3" /> },
-      default: { color: "bg-gray-500/10 text-gray-500", icon: <Search className="h-3 w-3" /> }
+    const forceRefresh = () => {
+        setPage(1);
+        void fetchRequests();
     };
-    const s = status.toLowerCase();
-    const c = config[s] || config.default;
-    return (
-      <Badge variant="outline" className={cn("capitalize flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold border-none rounded-full", c.color)}>
-        {c.icon}
-        {status}
-      </Badge>
+
+    const handleApprove = async (requestId: string) => {
+        if (isProcessing || processingRequestId) return;
+
+        setIsProcessing(true);
+        setProcessingRequestId(requestId);
+
+        try {
+            const resp = await fetch("/api/requests/approve", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ requestId }),
+            });
+            const result = await resp.json();
+            if (!resp.ok || !result.success) {
+                throw new Error(result?.user_message || result?.error || "Approval failed");
+            }
+
+            toast({ title: "Approved", description: result?.user_message || "Request approved successfully." });
+            if (soundEnabled && audioRef.current) audioRef.current.play().catch(() => undefined);
+            void fetchRequests();
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Approval failed";
+            toast({ title: "Error", description: message, variant: "destructive" });
+        } finally {
+            setIsProcessing(false);
+            setProcessingRequestId(null);
+        }
+    };
+
+    const handleReject = async () => {
+        if (!requestToReject || !rejectionReason.trim()) return;
+        setIsProcessing(true);
+        try {
+            const resp = await fetch("/api/requests/reject", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ requestId: requestToReject, reason: rejectionReason }),
+            });
+            const result = await resp.json().catch(() => null);
+            if (!resp.ok || !result?.success) {
+                throw new Error(result?.user_message || result?.error || "Rejection failed");
+            }
+            toast({ title: "Rejected", description: result?.user_message || "Request has been rejected." });
+            setRequestToReject(null);
+            setRejectionReason("");
+            void fetchRequests();
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Rejection failed";
+            toast({ title: "Error", description: message, variant: "destructive" });
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const filteredRequests = useMemo(() => {
+        let filtered = requests;
+
+        if (userFilter !== "all") {
+            const needle = userFilter.toLowerCase();
+            filtered = filtered.filter((r) => r.userName.toLowerCase().includes(needle));
+        }
+
+        if (gearFilter !== "all") {
+            const needle = gearFilter.toLowerCase();
+            filtered = filtered.filter((r) => r.gearNames.some((g) => g.toLowerCase().includes(needle)));
+        }
+
+        if (debouncedKeyword) {
+            const needle = debouncedKeyword.toLowerCase();
+            filtered = filtered.filter(
+                (r) =>
+                    r.userName.toLowerCase().includes(needle) ||
+                    r.userEmail?.toLowerCase().includes(needle) ||
+                    r.reason?.toLowerCase().includes(needle) ||
+                    r.destination?.toLowerCase().includes(needle) ||
+                    r.gearNames.some((g) => g.toLowerCase().includes(needle))
+            );
+        }
+
+        if (dateRange?.from) {
+            const from = startOfDay(dateRange.from);
+            const to = endOfDay(dateRange.to ?? dateRange.from);
+            filtered = filtered.filter((r) => isWithinInterval(r.requestDate, { start: from, end: to }));
+        }
+
+        return filtered;
+    }, [requests, userFilter, gearFilter, debouncedKeyword, dateRange]);
+
+    const uniqueUserNames = useMemo(
+        () => Array.from(new Set(requests.map((r) => r.userName))).sort(),
+        [requests]
     );
-  }, []);
+    const uniqueGearNames = useMemo(
+        () => Array.from(new Set(requests.flatMap((r) => r.gearNames.map((g) => g.split(" x ")[0])))).sort(),
+        [requests]
+    );
 
-  const filteredRequests = useMemo(() => {
-    let filtered = requests;
-    if (filterStatus !== 'all') filtered = filtered.filter(r => r.status.toLowerCase() === filterStatus.toLowerCase());
-    if (userFilter !== 'all') filtered = filtered.filter(r => r.userName.toLowerCase().includes(userFilter.toLowerCase()));
-    if (debouncedKeyword) {
-      const s = debouncedKeyword.toLowerCase();
-      filtered = filtered.filter(r => r.userName.toLowerCase().includes(s) || r.gearNames.some(g => g.toLowerCase().includes(s)));
-    }
-    return filtered;
-  }, [requests, filterStatus, userFilter, debouncedKeyword]);
+    const filterChips = useMemo(() => {
+        const chips: { label: string; onRemove: () => void }[] = [];
+        if (filterStatus !== "all") {
+            chips.push({ label: `Status: ${filterStatus}`, onRemove: () => setFilterStatus("all") });
+        }
+        if (keyword) {
+            chips.push({ label: `Search: "${keyword}"`, onRemove: () => setKeyword("") });
+        }
+        if (userFilter !== "all") {
+            chips.push({ label: `User: ${userFilter}`, onRemove: () => setUserFilter("all") });
+        }
+        if (gearFilter !== "all") {
+            chips.push({ label: `Gear: ${gearFilter}`, onRemove: () => setGearFilter("all") });
+        }
+        if (dateRange?.from) {
+            const label = dateRange.to
+                ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d")}`
+                : format(dateRange.from, "MMM d, yyyy");
+            chips.push({ label: `Date: ${label}`, onRemove: () => setDateRange(undefined) });
+        }
+        return chips;
+    }, [filterStatus, keyword, userFilter, gearFilter, dateRange]);
 
-  const uniqueUserNames = useMemo(() => Array.from(new Set(requests.map(r => r.userName))).sort(), [requests]);
-  const uniqueGearNames = useMemo(() => Array.from(new Set(requests.flatMap(r => r.gearNames.map(g => g.split(' x ')[0])))).sort(), [requests]);
+    const hasActiveFilters =
+        filterStatus !== "all" ||
+        keyword !== "" ||
+        userFilter !== "all" ||
+        gearFilter !== "all" ||
+        Boolean(dateRange?.from);
 
-  const downloadRequestsCSV = () => {
-    const headers = ['User', 'Email', 'Gear', 'Date', 'Status', 'Reason', 'Destination'];
-    const rows = filteredRequests.map(r => [
-      r.userName, r.userEmail || '', r.gearNames.join('; '), format(r.requestDate, 'yyyy-MM-dd HH:mm'),
-      r.status, r.reason || '', r.destination || ''
-    ].join(','));
-    const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `gear-requests-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    a.click();
-  };
+    const handleClearAllFilters = () => {
+        setFilterStatus("all");
+        setKeyword("");
+        setUserFilter("all");
+        setGearFilter("all");
+        setDateRange(undefined);
+    };
 
-  const downloadRequestsPDF = () => {
-    const doc = new jsPDF();
-    doc.text('Gear Requests Report', 14, 20);
-    const tableData = filteredRequests.map(r => [
-      r.userName, r.gearNames.join(', '), format(r.requestDate, 'MMM dd, yyyy'), r.status
-    ]);
-    autoTable(doc, {
-      head: [['User', 'Gear', 'Date', 'Status']],
-      body: tableData,
-      startY: 25
-    });
-    doc.save(`gear-requests-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
-  };
+    const downloadRequestsCSV = () => {
+        const headers = ["User", "Email", "Gear", "Date", "Status", "Reason", "Destination"];
+        const rows = filteredRequests.map((r) =>
+            [
+                r.userName,
+                r.userEmail || "",
+                r.gearNames.join("; "),
+                format(r.requestDate, "yyyy-MM-dd HH:mm"),
+                r.status,
+                r.reason || "",
+                r.destination || "",
+            ].join(",")
+        );
+        const csv = [headers.join(","), ...rows].join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `gear-requests-${format(new Date(), "yyyy-MM-dd")}.csv`;
+        a.click();
+    };
 
-  return (
-    <div className="container mx-auto px-6 sm:px-8 lg:px-12 py-12 space-y-12">
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between items-end gap-6">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-semibold tracking-tight">Manage Gear Requests</h1>
-          <p className="text-muted-foreground text-lg max-w-2xl">Review and process team equipment requests.</p>
-        </div>
-        <div className="flex gap-3">
-          <Button variant="outline" size="sm" onClick={forceRefresh} className="rounded-full bg-accent/5 h-10 px-6 gap-2">
-            <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-            Refresh
-          </Button>
-          <div className="flex bg-accent/5 p-1 rounded-full">
-            <Button variant="ghost" size="sm" onClick={downloadRequestsCSV} className="rounded-full h-8 px-4 text-xs font-medium">CSV</Button>
-            <Button variant="ghost" size="sm" onClick={downloadRequestsPDF} className="rounded-full h-8 px-4 text-xs font-medium">PDF</Button>
-          </div>
-        </div>
-      </motion.div>
+    const downloadRequestsPDF = () => {
+        const doc = new jsPDF();
+        doc.text("Gear Requests Report", 14, 20);
+        const tableData = filteredRequests.map((r) => [
+            r.userName,
+            r.gearNames.join(", "),
+            format(r.requestDate, "MMM dd, yyyy"),
+            r.status,
+        ]);
+        autoTable(doc, {
+            head: [["User", "Gear", "Date", "Status"]],
+            body: tableData,
+            startY: 25,
+        });
+        doc.save(`gear-requests-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+    };
 
-      <Card className="border-none bg-accent/5 rounded-3xl shadow-none p-8 space-y-8">
-        <RequestFilters
-          userFilter={userFilter} setUserFilter={setUserFilter}
-          gearFilter={gearFilter} setGearFilter={setGearFilter}
-          keyword={keyword} setKeyword={setKeyword}
-          filterStatus={filterStatus} setFilterStatus={setFilterStatus}
-          dateRange={dateRange} setDateRange={setDateRange}
-          uniqueUserNames={uniqueUserNames}
-          uniqueGearNames={uniqueGearNames}
-          hasActiveFilters={filterStatus !== 'all' || keyword !== '' || userFilter !== 'all' || gearFilter !== 'all'}
-          filterChips={[]}
-          handleClearAllFilters={() => {
-            setFilterStatus('all');
-            setKeyword('');
-            setUserFilter('all');
-            setGearFilter('all');
-          }}
-        />
-
-        <div className="bg-background/40 rounded-2xl overflow-hidden border border-border/40">
-          {loading ? (
-            <div className="p-20 text-center text-muted-foreground animate-pulse">Loading data...</div>
-          ) : fetchError ? (
-            <div className="p-20 text-center text-red-500 font-medium">{fetchError}</div>
-          ) : filteredRequests.length === 0 ? (
-            <div className="p-20 text-center text-muted-foreground">No requests found matching your filters.</div>
-          ) : (
-            <RequestTable
-              requests={filteredRequests as any}
-              loading={false}
-              selectedRequests={selectedRequests}
-              setSelectedRequests={setSelectedRequests}
-              onApprove={handleApprove}
-              onReject={(id) => setRequestToReject(id)}
-              onView={(req: any) => { setSelectedRequest(req); setIsDetailsOpen(true); }}
-              isProcessing={isProcessing}
-              processingRequestId={processingRequestId}
-              getStatusBadge={getStatusBadge}
+    return (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4 }}
+            className="space-y-6 pb-8"
+        >
+            <RequestPageHeader
+                isRefreshing={isRefreshing}
+                onRefresh={forceRefresh}
+                onExportCsv={downloadRequestsCSV}
+                onExportPdf={downloadRequestsPDF}
             />
-          )}
-        </div>
 
-        <div className="flex justify-between items-center py-4 px-2">
-          <div className="text-sm text-muted-foreground">
-            Showing <span className="font-semibold text-foreground">{filteredRequests.length}</span> requests
-          </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" disabled={page === 1} onClick={() => setPage(page - 1)} className="rounded-full h-10 px-6">Previous</Button>
-            <div className="flex items-center justify-center h-10 w-10 rounded-full bg-primary text-primary-foreground font-semibold">{page}</div>
-            <Button variant="ghost" disabled={page * pageSize >= total} onClick={() => setPage(page + 1)} className="rounded-full h-10 px-6">Next</Button>
-          </div>
-        </div>
-      </Card>
+            <RequestStatsCards summary={summary} loading={summaryLoading} />
 
-      <AlertDialog open={!!requestToReject} onOpenChange={(o) => !o && setRequestToReject(null)}>
-        <AlertDialogContent className="rounded-3xl border-none">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reject Request</AlertDialogTitle>
-            <AlertDialogDescription>Provide a reason for rejection.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="py-4"><Input value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} placeholder="Reason..." className="bg-accent/5 border-none h-12" /></div>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleReject} className="rounded-full bg-red-600">Reject</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            <Card className="overflow-hidden border-border/50 shadow-sm">
+                <CardContent className="space-y-4 border-b bg-muted/20 p-4 md:p-6">
+                    <RequestFilters
+                        userFilter={userFilter}
+                        setUserFilter={setUserFilter}
+                        gearFilter={gearFilter}
+                        setGearFilter={setGearFilter}
+                        keyword={keyword}
+                        setKeyword={setKeyword}
+                        filterStatus={filterStatus}
+                        setFilterStatus={setFilterStatus}
+                        dateRange={dateRange}
+                        setDateRange={setDateRange}
+                        uniqueUserNames={uniqueUserNames}
+                        uniqueGearNames={uniqueGearNames}
+                        hasActiveFilters={hasActiveFilters}
+                        filterChips={filterChips}
+                        handleClearAllFilters={handleClearAllFilters}
+                    />
+                </CardContent>
 
-      {selectedRequest?.id && (
-        <ViewRequestModal requestId={selectedRequest.id} open={isDetailsOpen} onOpenChange={setIsDetailsOpen} />
-      )}
-    </div>
-  );
+                <CardContent className="p-0">
+                    {fetchError && (
+                        <div className="border-b bg-destructive/5 px-4 py-3 text-center text-sm font-medium text-destructive">
+                            {fetchError}
+                        </div>
+                    )}
+
+                    {loading && requests.length === 0 ? (
+                        <div className="p-6">
+                            <ListSkeleton rows={6} />
+                        </div>
+                    ) : filteredRequests.length === 0 ? (
+                        <div className="px-4 py-16 text-center">
+                            <p className="font-medium text-foreground">No requests found</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Try adjusting filters or refresh to load the latest queue.
+                            </p>
+                            {hasActiveFilters && (
+                                <Button variant="outline" size="sm" className="mt-4" onClick={handleClearAllFilters}>
+                                    Clear filters
+                                </Button>
+                            )}
+                        </div>
+                    ) : (
+                        <RequestTable
+                            requests={filteredRequests}
+                            loading={loading}
+                            selectedRequests={selectedRequests}
+                            setSelectedRequests={setSelectedRequests}
+                            onApprove={handleApprove}
+                            onReject={setRequestToReject}
+                            onView={(req) => {
+                                setSelectedRequest(req as GearRequest);
+                                setIsDetailsOpen(true);
+                            }}
+                            isProcessing={isProcessing}
+                            processingRequestId={processingRequestId}
+                        />
+                    )}
+                </CardContent>
+
+                {filteredRequests.length > 0 && (
+                    <CardFooter className="border-t bg-muted/10 px-4 py-4">
+                        <PaginationFooter
+                            page={page}
+                            pageSize={pageSize}
+                            total={total}
+                            onPageChange={setPage}
+                            pageSizeOptions={PAGE_SIZE_OPTIONS}
+                            onPageSizeChange={setPageSize}
+                            pageSizeLabel="Rows per page"
+                            itemLabel="request"
+                            summary={
+                                selectedRequests.length > 0
+                                    ? `${selectedRequests.length} selected · ${total} total`
+                                    : undefined
+                            }
+                            className="w-full border-0 bg-transparent p-0"
+                        />
+                    </CardFooter>
+                )}
+            </Card>
+
+            <AlertDialog
+                open={Boolean(requestToReject)}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setRequestToReject(null);
+                        setRejectionReason("");
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Reject request</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Provide a reason so the requester understands why this booking was declined.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <Textarea
+                        value={rejectionReason}
+                        onChange={(e) => setRejectionReason(e.target.value)}
+                        placeholder="e.g. Equipment unavailable for those dates..."
+                        rows={4}
+                        className="resize-none"
+                    />
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                void handleReject();
+                            }}
+                            disabled={isProcessing || !rejectionReason.trim()}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isProcessing ? "Rejecting…" : "Reject request"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {selectedRequest?.id && (
+                <ViewRequestModal
+                    requestId={selectedRequest.id}
+                    initialRequest={selectedRequest}
+                    open={isDetailsOpen}
+                    onOpenChange={(open) => {
+                        setIsDetailsOpen(open);
+                        if (!open) setSelectedRequest(null);
+                    }}
+                />
+            )}
+        </motion.div>
+    );
 }
 
 export default function ManageRequestsPage() {
-  return <Suspense fallback={<div className="p-20 text-center">Loading...</div>}><ManageRequestsContent /></Suspense>;
+    return (
+        <Suspense
+            fallback={
+                <div className="p-8">
+                    <ListSkeleton rows={6} />
+                </div>
+            }
+        >
+            <ManageRequestsContent />
+        </Suspense>
+    );
 }

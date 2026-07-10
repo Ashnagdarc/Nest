@@ -114,10 +114,25 @@ export const gearQueries = {
         };
     },
 
-    // Get gear utilization stats (optimized for dashboard)
+    // Inventory summary for admin dashboards (accurate DB counts, not paginated rows)
+    getInventorySummary: async () => {
+        return await apiGet<{
+            data: { total: number; available: number; checkedOut: number; maintenance: number } | null;
+            error: string | null;
+        }>("/api/gears/inventory-summary");
+    },
+
+    // @deprecated Use getInventorySummary
     getGearUtilizationStats: async () => {
-        return await apiGet<{ data: { category: string; status: string }[]; error: string | null }>(`/api/gears?fields=category,status`);
-    }
+        const summary = await apiGet<{
+            data: { total: number; available: number; checkedOut: number; maintenance: number } | null;
+            error: string | null;
+        }>("/api/gears/inventory-summary");
+        if (summary.error || !summary.data) {
+            return { data: [], error: summary.error };
+        }
+        return { data: [], error: null, summary: summary.data };
+    },
 };
 
 /**

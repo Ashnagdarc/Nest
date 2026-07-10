@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { getRouteAuthContext, requireActiveAdmin } from '@/app/api/_utils/route-auth';
 
 export async function GET(request: NextRequest) {
@@ -21,13 +21,13 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const supabase = await createSupabaseServerClient(true);
+        const supabase = await createSupabaseAdminClient();
 
         const offset = (page - 1) * limit;
 
         const query = supabase
             .from('announcements')
-            .select('*, profiles(full_name, avatar_url)')
+            .select('*, profiles!announcements_created_by_fkey(full_name, avatar_url)', { count: 'exact' })
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
                 .from('announcements')
                 .select(`
           *, 
-          profiles(full_name, avatar_url),
+          profiles!announcements_created_by_fkey(full_name, avatar_url),
           read_announcements!inner(id, user_id, announcement_id)
         `, { count: 'exact' })
                 .eq('read_announcements.user_id', userId)

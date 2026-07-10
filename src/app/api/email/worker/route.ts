@@ -7,6 +7,22 @@ const RESEND_FROM = process.env.RESEND_FROM || 'Nest by Eden Oasis <onboarding@r
 
 export const runtime = 'nodejs';
 
+type EmailLogRow = {
+  id: string;
+  recipient: string;
+  subject: string | null;
+  html_body: string | null;
+  status: string | null;
+  attempt_count: number | null;
+  max_retries: number | null;
+};
+
+type ClaimedEmailLogRow = {
+  id: string;
+  attempt_count: number | null;
+  max_retries: number | null;
+};
+
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   const isBearerAuthorized = !!process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
@@ -25,7 +41,7 @@ export async function GET(req: NextRequest) {
   const batchSize = Math.max(1, Math.min(100, Number(process.env.EMAIL_WORKER_BATCH_SIZE || 25)));
   const nowIso = new Date().toISOString();
 
-  const { data: dueLogs, error: fetchError } = await (supabase as any)
+  const { data: dueLogs, error: fetchError } = await supabase
     .from('email_logs')
     .select('id, recipient, subject, html_body, status, attempt_count, max_retries')
     .in('status', ['queued', 'failed'])
@@ -38,7 +54,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (!dueLogs || dueLogs.length === 0) {
-    await (supabase as any).from('audit_logs').insert({
+    await supabase.from('audit_logs').insert({
       actor_id: null,
       entity_type: 'worker',
       entity_id: 'email',
@@ -52,9 +68,9 @@ export async function GET(req: NextRequest) {
   let sent = 0;
   let deadLetter = 0;
 
-  for (const row of dueLogs) {
+  for (const row of (dueLogs || []) as EmailLogRow[]) {
     const claimIso = new Date().toISOString();
-    const { data: claimedRows } = await (supabase as any)
+    const { data: claimedRows } = await supabase
       .from('email_logs')
       .update({
         status: 'processing',
@@ -70,7 +86,7 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
-    const claimed = claimedRows[0];
+    const claimed = claimedRows[0] as ClaimedEmailLogRow;
     const attemptsUsed = Number(claimed.attempt_count || 0);
     const maxRetries = Number(claimed.max_retries || 3);
 
@@ -87,9 +103,9 @@ export async function GET(req: NextRequest) {
       });
 
       const doneIso = new Date().toISOString();
-      await (supabase as any).from('email_logs').update({
+      await supabase.from('email_logs').update({
         status: 'sent',
-        provider_message_id: String((result as any)?.data?.id || ''),
+        provider_message_id: String(result.data?.id || ''),
         error_message: null,
         processed_at: doneIso,
         next_attempt_at: doneIso,
@@ -98,12 +114,12 @@ export async function GET(req: NextRequest) {
 
       sent++;
       processed++;
-    } catch (error: any) {
-      const errMessage = error?.message || 'Unknown email worker error';
+    } catch (error: unknown) {
+      const errMessage = error instanceof Error ? error.message : 'Unknown email worker error';
       const doneIso = new Date().toISOString();
 
       if (attemptsUsed >= maxRetries) {
-        await (supabase as any).from('email_logs').update({
+        await supabase.from('email_logs').update({
           status: 'dead_letter',
           error_message: errMessage,
           processed_at: doneIso,
@@ -113,7 +129,7 @@ export async function GET(req: NextRequest) {
       } else {
         const backoffMinutes = Math.min(60, Math.max(1, Math.pow(2, attemptsUsed - 1)));
         const nextAttemptAt = new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString();
-        await (supabase as any).from('email_logs').update({
+        await supabase.from('email_logs').update({
           status: 'failed',
           error_message: errMessage,
           next_attempt_at: nextAttemptAt,
@@ -125,7 +141,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  await (supabase as any).from('audit_logs').insert({
+  await supabase.from('audit_logs').insert({
     actor_id: null,
     entity_type: 'worker',
     entity_id: 'email',

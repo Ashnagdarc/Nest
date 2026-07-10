@@ -19,6 +19,16 @@ export async function GET() {
             .from('gear_requests')
             .select(`
                 *,
+                profiles:user_id (
+                    id,
+                    full_name,
+                    email
+                ),
+                submitted_by:submitted_by_user_id (
+                    id,
+                    full_name,
+                    email
+                ),
                 gear_request_gears (
                     id,
                     quantity,
@@ -37,7 +47,7 @@ export async function GET() {
                     )
                 )
             `)
-            .eq('user_id', userId)
+            .or(`user_id.eq.${userId},submitted_by_user_id.eq.${userId}`)
             .order('created_at', { ascending: false });
 
         // Handle database query errors

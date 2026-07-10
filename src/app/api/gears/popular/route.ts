@@ -1,8 +1,14 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireActiveAdminRoute } from '@/lib/api/route-auth';
 
 export async function GET(request: NextRequest) {
     try {
+        const authContext = await requireActiveAdminRoute();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const supabase = await createSupabaseServerClient(true);
         const { searchParams } = new URL(request.url);
         const startDate = searchParams.get('start_date');
@@ -56,13 +62,15 @@ export async function GET(request: NextRequest) {
 
         // If no data, return empty array instead of null
         return NextResponse.json(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Failed to fetch popular gears';
+        const stack = error instanceof Error ? error.stack : undefined;
         console.error('Unexpected error in popular gears endpoint:', error);
         return NextResponse.json(
             {
                 error: 'Failed to fetch popular gears',
-                message: error.message,
-                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+                message,
+                stack: process.env.NODE_ENV === 'development' ? stack : undefined
             },
             { status: 500 }
         );

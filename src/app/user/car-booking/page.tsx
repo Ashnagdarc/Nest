@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import {
   createCarBooking,
   listCarBookings,
@@ -23,19 +23,19 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { TimeWheelPicker } from "@/components/car-booking/TimeWheelPicker";
+import { Badge } from "@/components/ui/badge";
+import { PaginationFooter } from "@/components/ui/PaginationFooter";
+import { cn } from "@/lib/utils";
 import {
-  TimePicker,
-  TimePickerContent,
-  TimePickerHour,
-  TimePickerInput,
-  TimePickerInputGroup,
-  TimePickerLabel,
-  TimePickerMinute,
-  TimePickerPeriod,
-  TimePickerSeparator,
-  TimePickerTrigger,
-} from "@/components/ui/time-picker";
-import { Controller } from "react-hook-form";
+  Calendar,
+  Car,
+  Check,
+  Clock,
+  RefreshCw,
+  X,
+} from "lucide-react";
+import Image from "next/image";
 
 // ============================================================================
 // TYPES
@@ -76,26 +76,21 @@ type CarBookingFormValues = {
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      {/* Header Skeleton */}
       <div className="space-y-2">
-        <div className="h-10 bg-neutral-800 w-64 animate-pulse"></div>
-        <div className="h-4 bg-neutral-800 w-96 animate-pulse"></div>
+        <div className="h-9 w-56 animate-pulse rounded-lg bg-muted" />
+        <div className="h-4 w-80 animate-pulse rounded bg-muted" />
       </div>
-
-      {/* Tabs Skeleton */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-12 bg-neutral-800 animate-pulse"></div>
+      <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/40 p-1">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-10 animate-pulse rounded-lg bg-muted" />
         ))}
       </div>
-
-      {/* Content Skeleton */}
       <div className="space-y-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="space-y-3 bg-neutral-900 p-4">
-            <div className="h-4 bg-neutral-800 w-48 animate-pulse"></div>
-            <div className="h-4 bg-neutral-800 w-full animate-pulse"></div>
-            <div className="h-4 bg-neutral-800 w-3/4 animate-pulse"></div>
+        {[1, 2].map((i) => (
+          <div key={i} className="space-y-3 rounded-2xl border border-border bg-card p-5">
+            <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+            <div className="h-11 w-full animate-pulse rounded-lg bg-muted" />
+            <div className="h-11 w-full animate-pulse rounded-lg bg-muted" />
           </div>
         ))}
       </div>
@@ -108,25 +103,23 @@ function LoadingSkeleton() {
 // ============================================================================
 
 function StatusBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    Pending: "bg-orange-500/20 text-orange-400 border border-orange-500/30",
-    Approved: "bg-green-500/20 text-green-400 border border-green-500/30",
-    Completed: "bg-blue-500/20 text-blue-400 border border-blue-500/30",
-    Rejected: "bg-red-500/20 text-red-400 border border-red-500/30",
-    Cancelled: "bg-red-500/20 text-red-400 border border-red-500/30",
-    Available: "bg-green-500/20 text-green-400 border border-green-500/30",
-    "In Use": "bg-orange-500/20 text-orange-400 border border-orange-500/30",
-    Maintenance: "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
-    Damaged: "bg-red-500/20 text-red-400 border border-red-500/30",
-    Retired: "bg-gray-500/20 text-gray-300 border border-gray-500/30",
+  const styles: Record<string, string> = {
+    Pending: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    Approved: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    Completed: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400",
+    Rejected: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
+    Cancelled: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
+    Available: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    "In Use": "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-400",
+    Maintenance: "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+    Damaged: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
+    Retired: "border-border bg-muted text-muted-foreground",
   };
 
   return (
-    <span
-      className={`px-3 py-1 text-xs font-medium ${colorMap[status] || "bg-gray-500/20 text-gray-400"}`}
-    >
+    <Badge variant="outline" className={cn("rounded-full font-medium", styles[status])}>
       {status}
-    </span>
+    </Badge>
   );
 }
 
@@ -138,11 +131,10 @@ function EmptyState({
   description: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 border border-neutral-800">
-      <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
-      <p className="text-muted-foreground text-center max-w-sm">
-        {description}
-      </p>
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-16 text-center">
+      <Car className="mb-3 h-10 w-10 text-muted-foreground/40" />
+      <h3 className="mb-2 text-lg font-semibold text-foreground">{title}</h3>
+      <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
     </div>
   );
 }
@@ -168,55 +160,51 @@ function BookingCard({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-neutral-900 p-4 space-y-3 border border-neutral-800 hover:bg-neutral-800 transition-colors"
+      className="rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
     >
       <div className="flex justify-between items-start gap-3">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
             <p className="font-medium text-foreground text-sm">
               {booking.employee_name}
             </p>
             <StatusBadge status={booking.status} />
           </div>
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p className="text-foreground text-xs font-medium">
-              {booking.date_of_use} — {booking.time_slot}
+          <div className="space-y-1.5 text-sm text-muted-foreground">
+            <p className="flex items-center gap-2 text-foreground">
+              <Calendar className="h-3.5 w-3.5 shrink-0" />
+              {booking.date_of_use} · {booking.time_slot}
             </p>
             {carLabel && (
-              <p className="text-muted-foreground">
-                Vehicle: {carLabel} {carPlate && `(${carPlate})`}
+              <p className="flex items-center gap-2">
+                <Car className="h-3.5 w-3.5 shrink-0" />
+                {carLabel} {carPlate && `(${carPlate})`}
               </p>
             )}
-            {booking.purpose && (
-              <p className="text-muted-foreground">
-                Purpose: {booking.purpose}
-              </p>
-            )}
+            {booking.purpose && <p>Purpose: {booking.purpose}</p>}
           </div>
         </div>
       </div>
 
-      <div className="grid gap-2">
-        {canReturn && (
-          <Button
-            size="sm"
-            onClick={() => onReturn?.(booking)}
-            className="w-full text-xs h-8 bg-green-600 hover:bg-green-700 text-white"
-          >
-            Return Car
-          </Button>
-        )}
-        {canCancel && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onCancel?.(booking)}
-            className="w-full text-xs h-8"
-          >
-            Delete Booking
-          </Button>
-        )}
-      </div>
+      {(canReturn || canCancel) && (
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          {canReturn && (
+            <Button size="sm" onClick={() => onReturn?.(booking)} className="flex-1">
+              Return car
+            </Button>
+          )}
+          {canCancel && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onCancel?.(booking)}
+              className="flex-1"
+            >
+              Cancel booking
+            </Button>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -235,56 +223,64 @@ function FleetCard({
   isSelected?: boolean;
 }) {
   return (
-    <motion.button
-      initial={{ opacity: 0, scale: 0.95 }}
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
       onClick={() => !isDisabled && onSelect?.(car.id)}
-      disabled={isDisabled}
+      onKeyDown={(event) => {
+        if (!isDisabled && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onSelect?.(car.id);
+        }
+      }}
       title={disabledReason}
-      className={`group transition-all border border-neutral-800 ${
+      className={cn(
+        "group overflow-hidden rounded-2xl border bg-card text-left transition-all",
         isDisabled
-          ? "opacity-50 cursor-not-allowed"
-          : `hover:border-orange-500/50 hover:scale-105 cursor-pointer ${isSelected ? "border-orange-500" : ""}`
-      }`}
+          ? "cursor-not-allowed opacity-50"
+          : "cursor-pointer hover:border-primary/40 hover:shadow-md",
+        isSelected && "border-primary ring-2 ring-primary/20",
+      )}
     >
-      <div className="bg-neutral-900">
-        {/* Image */}
-        <div className="relative h-32 bg-neutral-800 overflow-hidden flex items-center justify-center">
-          {car.image_url ? (
-            <img
-              src={car.image_url}
-              alt={car.label}
-              className="w-full h-full object-cover group-hover:scale-110 transition-transform"
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground bg-neutral-800">
-              <p className="text-xs">No Image</p>
-            </div>
+      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+        {car.image_url ? (
+          <Image
+            src={car.image_url}
+            alt={car.label}
+            fill
+            sizes="(max-width: 640px) 50vw, 25vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            unoptimized
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            <Car className="h-8 w-8 opacity-40" />
+          </div>
+        )}
+        {isSelected && (
+          <div className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+            <Check className="h-4 w-4" />
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2 p-3">
+        <div>
+          <p className="truncate text-sm font-semibold text-foreground">{car.label}</p>
+          <p className="text-xs text-muted-foreground">{car.plate || "No plate"}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <StatusBadge status={car.status || "Unknown"} />
+          {car.in_use && (
+            <Badge variant="outline" className="rounded-full border-orange-500/30 text-orange-600 dark:text-orange-400">
+              In use
+            </Badge>
           )}
         </div>
-
-        {/* Info */}
-        <div className="p-3 space-y-2">
-          <div>
-            <p className="font-semibold text-foreground text-sm truncate">
-              {car.label}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {car.plate || "No Plate"}
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between gap-2">
-            <StatusBadge status={car.status || "Unknown"} />
-            {car.in_use && (
-              <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-1">
-                In Use
-              </span>
-            )}
-          </div>
-        </div>
       </div>
-    </motion.button>
+    </motion.div>
   );
 }
 
@@ -299,15 +295,16 @@ function TabButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`flex-1 py-3 px-4 font-medium transition-all border-b-2 text-sm ${
+      className={cn(
+        "flex-1 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
         active
-          ? "bg-orange-500 text-white border-orange-500"
-          : "bg-neutral-800 text-muted-foreground border-neutral-700 hover:bg-neutral-700"
-      }`}
+          ? "bg-background text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
+      )}
     >
-      <span className="hidden sm:inline">{label}</span>
-      <span className="sm:hidden text-xs">{label.split(" ")[0]}</span>
+      {label}
     </button>
   );
 }
@@ -337,13 +334,14 @@ function NewBookingTab({
     defaultValues: {
       employeeName: "",
       dateOfUse: "",
-      timeSlot: "",
+      timeSlot: "09:00 AM",
       preferredCarId: "",
     },
   });
 
   const preferredCarId = watch("preferredCarId");
   const selectedCar = carStatus.find((c) => c.id === preferredCarId);
+  const today = new Date().toISOString().split("T")[0];
 
   const handleFormSubmit = async (data: CarBookingFormValues) => {
     await onSubmit(data);
@@ -351,183 +349,139 @@ function NewBookingTab({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="max-w-2xl mx-auto"
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
-        {/* Booking Details Section */}
-        <Card className="bg-neutral-900 border-neutral-800">
-          <CardHeader>
-            <CardTitle className="text-base">Booking Details</CardTitle>
+        <Card className="border-border/50">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-semibold">Booking details</CardTitle>
+            <CardDescription>
+              Enter when you need the vehicle. We&apos;ll confirm availability after you submit.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Employee Name */}
+          <CardContent className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Employee Name <span className="text-orange-500">*</span>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Employee name <span className="text-destructive">*</span>
               </label>
               <Input
-                placeholder="Your name"
+                placeholder="Your full name"
                 {...register("employeeName", {
                   required: "Employee name is required",
                 })}
-                className="h-11 bg-neutral-800 border-neutral-700 text-foreground focus:border-orange-500 transition-colors"
+                className="h-11"
               />
               {errors.employeeName && (
-                <p className="text-xs text-red-400 mt-2">
-                  {errors.employeeName.message}
-                </p>
+                <p className="mt-2 text-xs text-destructive">{errors.employeeName.message}</p>
               )}
             </div>
 
-            {/* Date */}
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Date of Use <span className="text-orange-500">*</span>
-              </label>
-              <Input
-                type="date"
-                {...register("dateOfUse", { required: "Date is required" })}
-                className="h-11 bg-neutral-800 border-neutral-700 text-foreground focus:border-orange-500 transition-colors"
-              />
-              {errors.dateOfUse && (
-                <p className="text-xs text-red-400 mt-2">
-                  {errors.dateOfUse.message}
-                </p>
-              )}
-            </div>
-
-            {/* Time Slot */}
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Start Time <span className="text-orange-500">*</span>
-              </label>
-              <Controller
-                name="timeSlot"
-                control={control}
-                rules={{ required: "Start time is required" }}
-                render={({ field }) => (
-                  <TimePicker
-                    className="w-full"
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    name={field.name}
-                  >
-                    <TimePickerLabel>Select booking time</TimePickerLabel>
-                    <TimePickerInputGroup>
-                      <TimePickerInput
-                        segment="hour"
-                        className="h-11 bg-neutral-800 border-neutral-700 focus:border-orange-500 transition-colors"
-                      />
-                      <TimePickerSeparator>:</TimePickerSeparator>
-                      <TimePickerInput
-                        segment="minute"
-                        className="h-11 bg-neutral-800 border-neutral-700 focus:border-orange-500 transition-colors"
-                      />
-                      <TimePickerInput
-                        segment="period"
-                        className="h-11 bg-neutral-800 border-neutral-700 focus:border-orange-500 transition-colors"
-                      />
-                      <TimePickerTrigger />
-                    </TimePickerInputGroup>
-                    <TimePickerContent>
-                      <TimePickerHour />
-                      <TimePickerMinute />
-                      <TimePickerPeriod />
-                    </TimePickerContent>
-                  </TimePicker>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div>
+                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  Date of use <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  type="date"
+                  min={today}
+                  {...register("dateOfUse", { required: "Date is required" })}
+                  className="h-11"
+                />
+                {errors.dateOfUse && (
+                  <p className="mt-2 text-xs text-destructive">{errors.dateOfUse.message}</p>
                 )}
-              />
-              {errors.timeSlot && (
-                <p className="text-xs text-red-400 mt-2">
-                  {errors.timeSlot.message}
-                </p>
-              )}
+              </div>
+
+              <div>
+                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  Start time <span className="text-destructive">*</span>
+                </label>
+                <Controller
+                  name="timeSlot"
+                  control={control}
+                  rules={{ required: "Start time is required" }}
+                  render={({ field }) => (
+                    <TimeWheelPicker value={field.value} onChange={field.onChange} />
+                  )}
+                />
+                {errors.timeSlot && (
+                  <p className="mt-2 text-xs text-destructive">{errors.timeSlot.message}</p>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Vehicle Selection - Visual Grid */}
-        <Card className="bg-neutral-900 border-neutral-800">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Select a Vehicle (Optional)
+        <Card className="border-border/50">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-semibold">
+              Vehicle preference <span className="font-normal text-muted-foreground">(optional)</span>
             </CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              Click on a vehicle to select it, or leave blank and we&apos;ll assign
-              the best available option
-            </p>
+            <CardDescription>
+              Tap an available vehicle to request it, or skip and we&apos;ll assign the best option.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Selected Car Preview */}
             {selectedCar && (
               <motion.div
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-orange-500/10 border border-orange-500/30 p-4 flex items-center gap-4"
+                className="flex items-center gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4"
               >
-                {selectedCar.image_url ? (
-                  <img
-                    src={selectedCar.image_url}
-                    alt={selectedCar.label}
-                    className="w-20 h-20 object-cover"
-                  />
-                ) : (
-                  <div className="w-20 h-20 bg-neutral-800 flex items-center justify-center">
-                    <span className="text-muted-foreground text-xs">
-                      No Image
-                    </span>
-                  </div>
-                )}
-                <div className="flex-1">
-                  <p className="font-semibold text-foreground">
-                    {selectedCar.label}
-                  </p>
+                <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                  {selectedCar.image_url ? (
+                    <Image
+                      src={selectedCar.image_url}
+                      alt={selectedCar.label}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <Car className="h-6 w-6 text-muted-foreground/50" />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground">{selectedCar.label}</p>
                   <p className="text-sm text-muted-foreground">
-                    {selectedCar.plate || "No Plate"}
+                    {selectedCar.plate || "No plate"}
                   </p>
-                  <StatusBadge status={selectedCar.status || "Unknown"} />
+                  <div className="mt-2">
+                    <StatusBadge status={selectedCar.status || "Unknown"} />
+                  </div>
                 </div>
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setValue("preferredCarId", "")}
-                  className="whitespace-nowrap"
+                  aria-label="Clear vehicle selection"
                 >
-                  Clear Selection
+                  <X className="h-4 w-4" />
                 </Button>
               </motion.div>
             )}
 
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-3">
-                All Vehicles
-              </p>
-              <FleetStatusTab
-                cars={carStatus.map((car) => ({
-                  ...car,
-                  status: car.status || "Unknown",
-                  in_use: car.in_use,
-                }))}
-                onSelectCar={(carId) => setValue("preferredCarId", carId)}
-                selectedCarId={preferredCarId}
-              />
-            </div>
+            <FleetStatusTab
+              cars={carStatus.map((car) => ({
+                ...car,
+                status: car.status || "Unknown",
+                in_use: car.in_use,
+              }))}
+              onSelectCar={(carId) => setValue("preferredCarId", carId)}
+              selectedCarId={preferredCarId}
+            />
           </CardContent>
         </Card>
 
-        {/* Submit Button */}
-        <Button
-          type="submit"
-          disabled={isSubmitting}
-          size="lg"
-          className="w-full h-10 bg-orange-500 hover:bg-orange-600 text-white font-semibold"
-        >
-          {isSubmitting ? "Submitting..." : "Request Vehicle"}
-        </Button>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button type="submit" disabled={isSubmitting} size="lg" className="h-11 px-8 sm:min-w-[200px]">
+            {isSubmitting ? "Submitting..." : "Request vehicle"}
+          </Button>
+        </div>
       </form>
     </motion.div>
   );
@@ -542,6 +496,8 @@ function MyBookingsTab({
   isReturning,
   onCancelConfirm,
   onReturnConfirm,
+  onDismissCancelDialog,
+  onDismissReturnDialog,
   cancelDialog,
   returnDialog,
 }: {
@@ -553,6 +509,8 @@ function MyBookingsTab({
   isReturning: boolean;
   onCancelConfirm: () => Promise<void>;
   onReturnConfirm: () => Promise<void>;
+  onDismissCancelDialog: () => void;
+  onDismissReturnDialog: () => void;
   cancelDialog: { open: boolean; booking: CarBooking | null };
   returnDialog: { open: boolean; booking: CarBooking | null };
 }) {
@@ -610,52 +568,45 @@ function MyBookingsTab({
         />
       )}
 
-      {/* Cancel Dialog */}
-      <Dialog open={cancelDialog.open} onOpenChange={() => {}}>
-        <DialogContent className="bg-neutral-900 border-neutral-800">
+      <Dialog open={cancelDialog.open} onOpenChange={(open) => !open && onDismissCancelDialog()}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Cancel Booking?</DialogTitle>
+            <DialogTitle>Cancel booking?</DialogTitle>
             <DialogDescription>
-              {cancelDialog.booking?.employee_name} -{" "}
-              {cancelDialog.booking?.date_of_use}{" "}
+              {cancelDialog.booking?.employee_name} — {cancelDialog.booking?.date_of_use}{" "}
               {cancelDialog.booking?.time_slot}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => {}}>
-              Keep Booking
+            <Button variant="outline" onClick={onDismissCancelDialog}>
+              Keep booking
             </Button>
             <Button
               variant="destructive"
               onClick={onCancelConfirm}
               disabled={isCancelling}
             >
-              {isCancelling ? "Cancelling..." : "Cancel Booking"}
+              {isCancelling ? "Cancelling..." : "Cancel booking"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={returnDialog.open} onOpenChange={() => {}}>
-        <DialogContent className="bg-neutral-900 border-neutral-800">
+      <Dialog open={returnDialog.open} onOpenChange={(open) => !open && onDismissReturnDialog()}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Return Car Now?</DialogTitle>
+            <DialogTitle>Return car now?</DialogTitle>
             <DialogDescription>
-              {returnDialog.booking?.employee_name} -{" "}
-              {returnDialog.booking?.date_of_use}{" "}
+              {returnDialog.booking?.employee_name} — {returnDialog.booking?.date_of_use}{" "}
               {returnDialog.booking?.time_slot}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => {}}>
-              Keep Booking
+            <Button variant="outline" onClick={onDismissReturnDialog}>
+              Keep booking
             </Button>
-            <Button
-              onClick={onReturnConfirm}
-              disabled={isReturning}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              {isReturning ? "Returning..." : "Return Car"}
+            <Button onClick={onReturnConfirm} disabled={isReturning}>
+              {isReturning ? "Returning..." : "Return car"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -698,29 +649,26 @@ function FleetStatusTab({
   } as const;
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-8"
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
       {(
         [
-          ["Available Vehicles", "Available", "text-green-400", false],
-          ["In Use", "In Use", "text-orange-400", true],
-          ["Maintenance", "Maintenance", "text-yellow-400", true],
-          ["Damaged", "Damaged", "text-red-400", true],
-          ["Retired", "Retired", "text-gray-400", true],
-          ["Other", "Other", "text-sky-400", true],
+          ["Available to book", "Available", false],
+          ["Currently in use", "In Use", true],
+          ["Under maintenance", "Maintenance", true],
+          ["Damaged", "Damaged", true],
+          ["Retired", "Retired", true],
+          ["Other", "Other", true],
         ] as const
-      ).map(([title, key, headingColor, disabled]) => {
+      ).map(([title, key, disabled]) => {
         const items = grouped[key];
         if (items.length === 0) return null;
         return (
           <div key={title}>
-            <h3 className={`text-sm font-semibold mb-3 ${headingColor}`}>
-              {title}
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+              <span className="text-xs text-muted-foreground">{items.length} vehicle{items.length !== 1 ? "s" : ""}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {items.map((car) => (
                 <FleetCard
                   key={car.id}
@@ -766,8 +714,6 @@ function HistoryTab({
   isLoading: boolean;
   onPageChange: (page: number) => void;
 }) {
-  const totalPages = Math.ceil(total / pageSize);
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -787,32 +733,15 @@ function HistoryTab({
             ))}
           </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between gap-2 mt-6 pt-4 border-t border-neutral-800">
-              <p className="text-xs text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onPageChange(currentPage - 1)}
-                  disabled={currentPage === 1 || isLoading}
-                >
-                  Previous
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onPageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages || isLoading}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
+          <PaginationFooter
+            page={currentPage}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={onPageChange}
+            itemLabel="booking"
+            disabled={isLoading}
+            className="mt-4 border-t border-border pt-4"
+          />
         </>
       ) : (
         <EmptyState
@@ -1066,47 +995,41 @@ export default function UserCarBookingPageRefactored() {
 
   if (!isMounted) {
     return (
-      <div className="min-h-screen bg-black py-8 px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-5xl">
-          <LoadingSkeleton />
-        </div>
+      <div className="w-full max-w-5xl mx-auto space-y-6">
+        <LoadingSkeleton />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black py-8 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl space-y-6">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
-        >
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-foreground">
-              Book a Vehicle
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Request or manage your vehicle bookings
-            </p>
+    <div className="w-full max-w-5xl mx-auto space-y-6">
+      <motion.header
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+      >
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Car className="h-5 w-5" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Book a vehicle</h1>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => loadData()}
-            className="h-10 w-full sm:w-auto"
-          >
-            Refresh
-          </Button>
-        </motion.div>
+          <p className="text-sm text-muted-foreground sm:pl-[52px]">
+            Request a vehicle or manage your active bookings.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => loadData()} className="h-10 gap-2 self-start">
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </Button>
+      </motion.header>
 
-        {/* Tabs */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-3 gap-0 bg-neutral-900 border border-neutral-800"
-        >
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="grid grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1"
+      >
           <TabButton
             active={activeTab === "booking"}
             label="New Booking"
@@ -1150,6 +1073,8 @@ export default function UserCarBookingPageRefactored() {
                 isReturning={isReturning}
                 onCancelConfirm={handleCancelConfirm}
                 onReturnConfirm={handleReturnConfirm}
+                onDismissCancelDialog={() => setCancelDialog({ open: false, booking: null })}
+                onDismissReturnDialog={() => setReturnDialog({ open: false, booking: null })}
                 cancelDialog={cancelDialog}
                 returnDialog={returnDialog}
               />
@@ -1167,7 +1092,6 @@ export default function UserCarBookingPageRefactored() {
             )}
           </motion.div>
         </AnimatePresence>
-      </div>
     </div>
   );
 }

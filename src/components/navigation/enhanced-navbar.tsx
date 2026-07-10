@@ -19,7 +19,9 @@ import {
     User,
     Package,
     ChevronDown,
-    BusFront
+    BusFront,
+    Car,
+    Megaphone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -58,7 +60,7 @@ const userNavItems: NavItem[] = [
     {
         href: '/user/car-booking',
         label: 'Book a Car',
-        icon: PlusSquare,
+        icon: Car,
         description: 'Request a car booking'
     },
     {
@@ -84,6 +86,12 @@ const userNavItems: NavItem[] = [
         label: 'History',
         icon: History,
         description: 'Past activities'
+    },
+    {
+        href: '/user/announcements',
+        label: 'Announcements',
+        icon: Megaphone,
+        description: 'Latest company updates'
     },
     {
         href: '/user/notifications',
@@ -309,7 +317,7 @@ export default function EnhancedNavbar({
                                             <p className="text-xs text-muted-foreground">{currentUser?.email}</p>
                                         </div>
                                         <div className="p-2 space-y-1">
-                                            {navItems.slice(6).map((item) => (
+                                            {desktopNavItems.slice(6).map((item) => (
                                                 <Link
                                                     key={item.href}
                                                     href={item.href}

@@ -1,23 +1,49 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { ThemeLogo } from "@/components/ui/theme-logo";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Bell, ChevronDown, LogOut, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useUserProfile } from "@/components/providers/user-profile-provider";
 import { NotificationBell } from "@/components/NotificationBell";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface DashboardHeaderProps {
-    userType?: 'admin' | 'user';
+    userType?: "admin" | "user";
 }
 
-export function DashboardHeader({ userType = 'user' }: DashboardHeaderProps) {
+function getInitials(name: string | null | undefined) {
+    if (!name?.trim()) return "?";
+    return name
+        .split(" ")
+        .filter(Boolean)
+        .map((part) => part[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2);
+}
+
+export function DashboardHeader({ userType = "user" }: DashboardHeaderProps) {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const supabase = createClient();
     const { profile: currentUser } = useUserProfile();
+
+    const settingsPath = userType === "admin" ? "/admin/settings" : "/user/settings";
+    const notificationsPath =
+        userType === "admin" ? "/admin/notifications" : "/user/notifications";
 
     const handleLogout = async () => {
         setIsLoading(true);
@@ -32,29 +58,78 @@ export function DashboardHeader({ userType = 'user' }: DashboardHeaderProps) {
         }
     };
 
-    const getInitials = (name: string | null = "") =>
-        name ? name.split(" ").map((n) => n[0]).join("").toUpperCase() : "?";
+    const displayName = currentUser?.full_name?.trim() || "User";
+    const displayEmail = currentUser?.email ?? "";
 
     return (
-        <header className="flex items-center justify-between p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex items-center space-x-3">
-                <ThemeLogo width={56} height={56} className="h-14 w-14 lg:h-16 lg:w-16" />
-            </div>
-            <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-1 h-4" />
+            <div className="flex-1" />
+            <div className="flex items-center gap-1 sm:gap-2">
                 <NotificationBell userType={userType} userId={currentUser?.id} />
-                <Avatar className="h-8 w-8">
-                    <AvatarImage
-                        src={currentUser?.avatar_url || (currentUser?.email ? `https://picsum.photos/seed/${currentUser.email}/100/100` : undefined)}
-                        alt={currentUser?.full_name || "User"}
-                    />
-                    <AvatarFallback className="text-xs">
-                        {getInitials(currentUser?.full_name)}
-                    </AvatarFallback>
-                </Avatar>
-                <Button variant="ghost" size="sm" onClick={handleLogout} className="text-xs px-2">
-                    Logout
-                </Button>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            className="h-9 gap-2 px-2"
+                            aria-label="Open account menu"
+                        >
+                            <Avatar className="h-8 w-8">
+                                <AvatarImage
+                                    src={currentUser?.avatar_url ?? undefined}
+                                    alt={displayName}
+                                />
+                                <AvatarFallback className="text-xs">
+                                    {getInitials(currentUser?.full_name)}
+                                </AvatarFallback>
+                            </Avatar>
+                            <span className="hidden max-w-[10rem] truncate text-sm font-medium sm:inline">
+                                {displayName}
+                            </span>
+                            <ChevronDown className="hidden h-4 w-4 text-muted-foreground sm:block" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuLabel className="font-normal">
+                            <div className="flex flex-col gap-0.5">
+                                <span className="truncate font-medium">{displayName}</span>
+                                {displayEmail ? (
+                                    <span className="truncate text-xs text-muted-foreground">
+                                        {displayEmail}
+                                    </span>
+                                ) : null}
+                            </div>
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                            <Link href={settingsPath} className="cursor-pointer">
+                                <Settings className="mr-2 h-4 w-4" />
+                                Settings
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            className="cursor-pointer"
+                            onSelect={() => router.push(notificationsPath)}
+                        >
+                            <Bell className="mr-2 h-4 w-4" />
+                            Notifications
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            className="cursor-pointer text-destructive focus:text-destructive"
+                            disabled={isLoading}
+                            onSelect={(event) => {
+                                event.preventDefault();
+                                void handleLogout();
+                            }}
+                        >
+                            <LogOut className="mr-2 h-4 w-4" />
+                            {isLoading ? "Logging out..." : "Logout"}
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
         </header>
     );
-} 
+}

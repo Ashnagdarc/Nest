@@ -4,6 +4,7 @@ import { minimalEmailLayout, sendGearRequestEmail, sendCarReturnConfirmationEmai
 import { transitionBooking } from '@/lib/bookings-v2/service';
 import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
 import { randomUUID } from 'crypto';
+import { sitePath } from '@/lib/site-url';
 
 export async function POST(request: NextRequest) {
     const correlationId = randomUUID();
@@ -247,7 +248,7 @@ export async function POST(request: NextRequest) {
                                     ]
                                 }],
                                 ctaLabel: 'View bookings',
-                                ctaHref: 'https://nestbyeden.app/admin/manage-car-bookings',
+                                ctaHref: sitePath('/admin/manage-car-bookings'),
                                 footerNote: 'Nest by Eden Oasis · Vehicle management',
                             });
                             await sendGearRequestEmail({

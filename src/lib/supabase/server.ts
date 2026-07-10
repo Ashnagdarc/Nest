@@ -23,6 +23,7 @@
 'use server';
 
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import type { Database } from '@/types/supabase';
 
@@ -163,7 +164,26 @@ export async function createSupabaseServerClient(isAdmin = false) {
   )
 }
 
-// Function specifically for creating a client with admin privileges (service role key)
+// Dedicated service-role client for privileged admin operations.
+// Must not attach user session cookies, or RLS will block cross-user updates.
 export async function createSupabaseAdminClient() {
-  return createSupabaseServerClient(true);
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    console.error('Supabase Service Role Key or URL is missing. Check environment variables.');
+    throw new Error('Supabase Service Role Key or URL is missing.');
+  }
+
+  return createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    global: {
+      fetch: (url, options = {}) => {
+        return fetch(url, {
+          ...options,
+          signal: AbortSignal.timeout(20000),
+        });
+      },
+    },
+  });
 }

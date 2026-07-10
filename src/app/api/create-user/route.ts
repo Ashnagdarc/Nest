@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
         } catch {
             return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
         }
-        const { email, password, fullName } = await request.json();
+        const { email, password, fullName, role, status } = await request.json();
 
         const adminContext = await requireActiveAdminRouteUser();
         if ('errorResponse' in adminContext) {
@@ -55,8 +55,20 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // The profile will be automatically created by the handle_new_user trigger
-        // But we can verify it was created
+        const profileUpdates: { role?: string; status?: string } = {};
+        if (typeof role === 'string' && role.trim()) profileUpdates.role = role;
+        if (typeof status === 'string' && status.trim()) profileUpdates.status = status;
+
+        if (Object.keys(profileUpdates).length > 0) {
+            const { error: profileUpdateError } = await supabase
+                .from('profiles')
+                .update(profileUpdates)
+                .eq('id', authData.user.id);
+            if (profileUpdateError) {
+                console.error('Error updating created profile:', profileUpdateError);
+            }
+        }
+
         const { data: createdProfile, error: createdProfileError } = await supabase
             .from('profiles')
             .select('*')
@@ -65,12 +77,11 @@ export async function POST(request: NextRequest) {
 
         if (createdProfileError) {
             console.error('Error fetching created profile:', createdProfileError);
-            // Don't fail the request, as the trigger might just be taking time
         }
 
         return NextResponse.json({
             user: authData.user,
-            profile: createdProfile
+            profile: createdProfile,
         });
 
     } catch (error) {

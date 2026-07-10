@@ -1,1172 +1,188 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from '@/components/ui/separator';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Save, Bell, Lock, User, Settings, Image as ImageIcon } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { usePushNotifications } from '@/hooks/usePushNotifications';
-import { createClient } from '@/lib/supabase/client'; // Import Supabase client
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-import { useIsMobile } from '@/hooks/use-mobile'; // Add this import for responsive handling
-import { useUserProfile } from '@/components/providers/user-profile-provider';
-import { ImageCropperModal } from '@/components/ui/ImageCropperModal';
-import { apiGet } from '@/lib/apiClient';
-import { isFileList, isFile } from '@/lib/utils/browser-safe';
-import SystemOverview from '@/components/admin/SystemOverview';
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Settings } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AppSettingsSection } from "@/components/admin/settings/AppSettingsSection";
+import { NotificationSettingsSection } from "@/components/settings/NotificationSettingsSection";
+import { PasswordSettingsSection } from "@/components/settings/PasswordSettingsSection";
+import {
+    ProfileSettingsSection,
+    type ProfileFormValues,
+} from "@/components/settings/ProfileSettingsSection";
+import { SettingsSkeleton } from "@/components/settings/SettingsSkeleton";
+import {
+    mergeNotificationPreferences,
+    type NotificationPreferences,
+    type UserProfileSettings,
+} from "@/components/settings/types";
+import { useUserProfile } from "@/components/providers/user-profile-provider";
+import { useToast } from "@/hooks/use-toast";
+import { apiGet, apiPatch } from "@/lib/apiClient";
 
-// --- Schemas ---
-const phoneRegex = new RegExp(
-    /^([+]?[\s0-9]+)?(\d{3}|[(]\d{3}[)])?([-]?[\s]?)(\d{3})([-]?[\s]?)(\d{4})$/
-);
-
-const profileSchema = z.object({
-    fullName: z.string().min(2, { message: 'Full name must be at least 2 characters.' }),
-    email: z.string().email(), // Display only
-    phone: z.string().regex(phoneRegex, { message: 'Invalid phone number format.' }).optional().or(z.literal('')),
-    department: z.string().optional(),
-    profilePicture: z.any().optional(), // Use z.any() for file inputs
-});
-
-const passwordSchema = z.object({
-    // currentPassword field removed as Supabase re-authentication is not typically needed for password update if user is already logged in
-    newPassword: z.string().min(8, { message: 'New password must be at least 8 characters.' }),
-    confirmNewPassword: z.string(),
-}).refine(data => data.newPassword === data.confirmNewPassword, {
-    message: 'New passwords do not match.',
-    path: ['confirmNewPassword'],
-});
-
-const brandingSchema = z.object({
-    logo: z.any().optional(),
-});
-
-// App settings schema - essential application configuration only
-const appSettingsSchema = z.object({
-    autoApproveRequests: z.boolean(),
-    maxCheckoutDuration: z.number().min(1, "Must be at least 1 day"),
-    requireAdminApproval: z.boolean(),
-});
-
-
-type ProfileFormValues = z.infer<typeof profileSchema>;
-type PasswordFormValues = z.infer<typeof passwordSchema>;
-type BrandingFormValues = z.infer<typeof brandingSchema>;
-type AppSettingsFormValues = z.infer<typeof appSettingsSchema>;
-
-// Define simple types rather than relying on generated Database types
-type Profile = {
-    id: string;
-    email: string;
-    full_name: string | null;
-    avatar_url: string | null;
-    phone: string | null;
-    department: string | null;
-    role: string;
-    updated_at: string;
-    [key: string]: any; // Allow for additional properties
-};
-
-type AppSetting = {
-    key: string;
-    value: string | null;
-    updated_at: string;
-};
-
-type ProfileUpdate = {
-    full_name?: string | null;
-    phone?: string | null;
-    department?: string | null;
-    avatar_url?: string | null;
-    updated_at?: string;
-    [key: string]: any; // Allow for additional update properties
-};
-
-// Add at the top:
-const ADMIN_PROFILE_FORM_DRAFT_KEY = "admin-profile-form-draft";
-
-// --- Component ---
 export default function AdminSettingsPage() {
-    const { toast } = useToast();
     const router = useRouter();
-    const supabase = createClient();
-    const isMobile = useIsMobile();
+    const { toast } = useToast();
     const { refreshProfile } = useUserProfile();
 
-    // --- State ---
-    const [adminUser, setAdminUser] = useState<Profile | null>(null);
-    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-    const [currentLogoUrl, setCurrentLogoUrl] = useState<string | undefined>(undefined);
-    const [isLoadingUser, setIsLoadingUser] = useState(true);
-    const [isProfileLoading, setIsProfileLoading] = useState(false);
-    const [isPasswordLoading, setIsPasswordLoading] = useState(false);
-    const [isBrandingLoading, setIsBrandingLoading] = useState(false);
-    const [isAppSettingsLoading, setIsAppSettingsLoading] = useState(false);
-    const [showCropper, setShowCropper] = useState(false);
-    const [rawImage, setRawImage] = useState<string | null>(null);
-    const [croppedFile, setCroppedFile] = useState<File | null>(null);
-    
-    // Notification preferences state (3-channel model)
-    const [notificationPreferences, setNotificationPreferences] = useState<Record<string, any>>({
-        in_app: {},
-        email: {},
-        push: {},
-    });
-    const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
-    const { enable: enablePush, isSupported: isPushSupported } = usePushNotifications();
+    const [profile, setProfile] = useState<UserProfileSettings | null>(null);
+    const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(
+        mergeNotificationPreferences(null),
+    );
+    const [loading, setLoading] = useState(true);
+    const [savingProfile, setSavingProfile] = useState(false);
+    const [savingPassword, setSavingPassword] = useState(false);
 
-    // --- Forms ---
-    const profileForm = useForm<ProfileFormValues>({
-        resolver: zodResolver(profileSchema),
-        defaultValues: { fullName: '', email: '', phone: '', department: '', profilePicture: undefined },
-    });
+    const loadProfile = useCallback(async () => {
+        setLoading(true);
+        try {
+            const { data, error } = await apiGet<{ data: UserProfileSettings | null; error: string | null }>(
+                "/api/users/profile",
+            );
+            if (error) throw new Error(error);
+            if (!data) throw new Error("Profile not found");
 
-    // Restore draft from localStorage on mount
-    useEffect(() => {
-        const draft = localStorage.getItem(ADMIN_PROFILE_FORM_DRAFT_KEY);
-        if (draft) {
-            try {
-                const values = JSON.parse(draft);
-                profileForm.reset({ ...profileForm.getValues(), ...values });
-            } catch { }
-        }
-    }, [profileForm]);
-
-    // Save form state to localStorage on change
-    useEffect(() => {
-        const subscription = profileForm.watch((values) => {
-            // Don't persist File objects (profilePicture)
-            const { profilePicture, ...rest } = values;
-            localStorage.setItem(ADMIN_PROFILE_FORM_DRAFT_KEY, JSON.stringify(rest));
-        });
-        return () => subscription.unsubscribe();
-    }, [profileForm]);
-
-    // Clear draft on submit
-    const clearAdminProfileDraft = () => localStorage.removeItem(ADMIN_PROFILE_FORM_DRAFT_KEY);
-
-    const passwordForm = useForm<PasswordFormValues>({ resolver: zodResolver(passwordSchema), defaultValues: { newPassword: '', confirmNewPassword: '' } });
-    const brandingForm = useForm<BrandingFormValues>({ resolver: zodResolver(brandingSchema), defaultValues: { logo: undefined } });
-    const appSettingsForm = useForm<AppSettingsFormValues>({
-        resolver: zodResolver(appSettingsSchema),
-        defaultValues: {
-            autoApproveRequests: false,
-            maxCheckoutDuration: 7,
-            requireAdminApproval: true,
-        },
-    });
-
-
-    // --- Effects ---
-    useEffect(() => {
-        const fetchData = async () => {
-            setIsLoadingUser(true);
-            console.log("AdminSettings: Fetching initial data...");
-
-            const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-            if (authError || !user) {
-                console.error("AdminSettings: Auth error or no user found.", authError);
-                toast({ title: "Error", description: "Not authenticated or session expired.", variant: "destructive" });
-                setIsLoadingUser(false);
-                router.push('/login');
+            if (data.role !== "Admin") {
+                toast({
+                    title: "Unauthorized",
+                    description: "You do not have permission to view admin settings.",
+                    variant: "destructive",
+                });
+                router.replace("/admin/dashboard");
                 return;
             }
 
-            // Get avatar URL from user metadata
-            console.log("AdminSettings: User authenticated, getting metadata for ID:", user.id);
-            const avatarUrlFromMetadata = user.user_metadata?.avatar_url || null;
-            setAvatarUrl(avatarUrlFromMetadata);
-            console.log("AdminSettings: Avatar URL from metadata:", avatarUrlFromMetadata);
+            setProfile(data);
+            setNotificationPreferences(mergeNotificationPreferences(data.notification_preferences));
+        } catch (error) {
+            console.error("Failed to load admin settings:", error);
+            toast({
+                title: "Could not load settings",
+                description: error instanceof Error ? error.message : "Please try again.",
+                variant: "destructive",
+            });
+            setProfile(null);
+        } finally {
+            setLoading(false);
+        }
+    }, [router, toast]);
 
-            // Fetch admin profile from API
-            const { data: profileData, error: profileError } = await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/profile`);
+    useEffect(() => {
+        void loadProfile();
+    }, [loadProfile]);
 
-            if (profileError) {
-                console.error("AdminSettings: Error fetching admin profile:", profileError);
-                toast({ title: "Error", description: "Could not load admin profile data.", variant: "destructive" });
-                setAdminUser(null); // Indicate profile fetch failed
-            } else if (profileData) {
-                console.log("AdminSettings: Profile fetched:", profileData);
-                setAdminUser(profileData);
-                profileForm.reset({
-                    fullName: profileData.full_name || '',
-                    email: profileData.email || user.email || '',
-                    phone: profileData.phone || '',
-                    department: profileData.department || '',
-                    profilePicture: undefined,
+    const handleProfileSave = async (values: ProfileFormValues, avatarFile?: File) => {
+        if (!profile) return;
+        setSavingProfile(true);
+
+        try {
+            let avatarUrl = profile.avatar_url;
+
+            if (avatarFile) {
+                const formData = new FormData();
+                formData.append("file", avatarFile);
+                const uploadResponse = await fetch("/api/users/avatar", {
+                    method: "POST",
+                    body: formData,
                 });
-
-                // Check admin role
-                if (profileData.role !== 'Admin') {
-                    console.warn("AdminSettings: User does not have Admin role. Redirecting.");
-                    toast({ title: "Unauthorized", description: "You do not have permission to view admin settings.", variant: "destructive" });
-                    router.push('/user/dashboard'); // Redirect non-admins
-                    setIsLoadingUser(false);
-                    return; // Stop further execution for non-admins
+                if (!uploadResponse.ok) {
+                    const payload = await uploadResponse.json().catch(() => ({}));
+                    throw new Error(
+                        typeof payload.error === "string" ? payload.error : "Could not upload profile picture.",
+                    );
                 }
-            } else {
-                console.error("AdminSettings: Admin profile document not found");
-                toast({ title: "Error", description: "Admin profile not found.", variant: "destructive" });
-                setAdminUser(null);
+                const payload = await uploadResponse.json();
+                avatarUrl = payload.url || avatarUrl;
             }
 
-            // Fetch app settings from Supabase 'app_settings' table
-            try {
-                console.log("AdminSettings: Fetching app settings...");
-                // Assuming settings are stored as key-value pairs
-                const { data: settingsData, error: settingsError } = await supabase
-                    .from('app_settings')
-                    .select('*');
-
-                if (settingsError) {
-                    console.error("AdminSettings: Error fetching app settings:", settingsError.message);
-                    throw new Error("Could not load app settings.");
-                }
-
-                if (settingsData) {
-                    console.log("AdminSettings: Settings data fetched:", settingsData);
-                    const settings: Partial<AppSettingsFormValues & { logoUrl?: string }> = {};
-                    settingsData.forEach((setting: AppSetting) => {
-                        if (setting.key === 'logoUrl') settings.logoUrl = setting.value ?? undefined;
-                        if (setting.key === 'auto_approve_requests') settings.autoApproveRequests = setting.value === 'true';
-                        if (setting.key === 'max_request_duration_days') settings.maxCheckoutDuration = parseInt(setting.value || '7', 10);
-                        if (setting.key === 'require_admin_approval') settings.requireAdminApproval = setting.value === 'true';
-                    });
-
-                    setCurrentLogoUrl(settings.logoUrl);
-                    appSettingsForm.reset({
-                        autoApproveRequests: settings.autoApproveRequests ?? false,
-                        maxCheckoutDuration: settings.maxCheckoutDuration ?? 7,
-                        requireAdminApproval: settings.requireAdminApproval ?? true,
-                    });
-                    console.log("AdminSettings: App settings form reset with fetched values.");
-                } else {
-                    console.warn("AdminSettings: No app settings data found. Using defaults.");
-                    setCurrentLogoUrl(undefined);
-                }
-            } catch (settingsError) {
-                console.error("AdminSettings: Error processing app settings:", settingsError);
-            }
-
-            // Fetch notification preferences from admin's profile
-            try {
-                console.log("AdminSettings: Fetching admin notification preferences...");
-                const { data: profileData } = await supabase
-                    .from('profiles')
-                    .select('notification_preferences')
-                    .eq('id', user.id)
-                    .single();
-
-                if (profileData?.notification_preferences) {
-                    console.log("AdminSettings: Notification preferences loaded:", profileData.notification_preferences);
-                    setNotificationPreferences(profileData.notification_preferences);
-                } else {
-                    console.log("AdminSettings: No notification preferences found, using defaults.");
-                    // Initialize with default structure (8 events per channel matching user settings)
-                    const defaultPrefs = {
-                        in_app: {
-                            approved: true,
-                            rejected: true,
-                            due_soon: true,
-                            returned: true,
-                            overdue: true,
-                            damaged: true,
-                            maintenance_reminder: true,
-                            system_alert: true,
-                        },
-                        email: {
-                            approved: true,
-                            rejected: true,
-                            due_soon: true,
-                            returned: true,
-                            overdue: true,
-                            damaged: true,
-                            maintenance_reminder: true,
-                            system_alert: true,
-                        },
-                        push: {
-                            approved: true,
-                            rejected: true,
-                            due_soon: true,
-                            returned: true,
-                            overdue: true,
-                            damaged: true,
-                            maintenance_reminder: true,
-                            system_alert: true,
-                        },
-                    };
-                    setNotificationPreferences(defaultPrefs);
-                }
-            } catch (notifError) {
-                console.error("AdminSettings: Error fetching notification preferences:", notifError);
-                setNotificationPreferences({
-                    in_app: {},
-                    email: {},
-                    push: {},
-                });
-            }
-
-            setIsLoadingUser(false);
-        };
-        fetchData();
-    }, []);
-
-    // --- Handlers ---
-
-    // Helper to save individual app settings (key-value)
-    const saveSetting = async (key: string, value: string | number | boolean | null) => {
-        console.log(`AdminSettings: Saving setting - Key: ${key}, Value: ${value}`);
-        const { error } = await supabase
-            .from('app_settings')
-            .upsert(
-                { key: key, value: String(value), updated_at: new Date().toISOString() },
-                { onConflict: 'key' } // Update if key exists, insert otherwise
+            const { data, error } = await apiPatch<{ data: UserProfileSettings | null; error: string | null }>(
+                "/api/users/profile",
+                {
+                    full_name: values.fullName,
+                    phone: values.phone || null,
+                    department: values.department || null,
+                    avatar_url: avatarUrl,
+                },
             );
 
-        if (error) {
-            console.error(`Error saving setting ${key}:`, error.message);
-            toast({ title: "Error", description: `Could not save setting: ${key}.`, variant: "destructive" });
-            return false;
-        }
-        console.log(`AdminSettings: Setting ${key} saved successfully.`);
-        return true;
-    };
-
-
-    const onProfileSubmit = async (data: ProfileFormValues) => {
-        if (!adminUser) {
-            toast({ title: "Error", description: "User data not loaded.", variant: "destructive" });
-            return;
-        }
-        setIsProfileLoading(true);
-        console.log("AdminSettings: Submitting profile update...");
-
-        let newAvatarUrl: string | null = avatarUrl; // Start with current URL from state
-
-        // --- Handle Profile Picture Upload (Supabase Storage) ---
-        let file: File | undefined = undefined;
-        if (data.profilePicture) {
-            if (isFileList(data.profilePicture)) {
-                file = data.profilePicture[0];
-            } else if (isFile(data.profilePicture)) {
-                file = data.profilePicture;
-            }
-        }
-        if (file) {
-            const storagePath = `avatars/${adminUser.id}/${Date.now()}_${file.name}`;
-            console.log("AdminSettings: Uploading new avatar file", file, "to", storagePath);
-
-            // --- Delete old avatar if exists ---
-            if (avatarUrl) {
-                try {
-                    const urlParts = new URL(avatarUrl);
-                    const pathSegments = urlParts.pathname.split('/');
-                    const bucketIndex = pathSegments.findIndex(segment => segment === 'avatars');
-                    if (bucketIndex !== -1) {
-                        const oldStoragePath = pathSegments.slice(bucketIndex + 1).join('/');
-                        console.log("AdminSettings: Attempting to remove old avatar at path:", oldStoragePath);
-                        const { error: removeError } = await supabase.storage
-                            .from('avatars')
-                            .remove([oldStoragePath]);
-                        if (removeError) {
-                            console.error("Error removing old avatar:", removeError.message);
-                        } else {
-                            console.log("Old avatar removed from Storage.");
-                        }
-                    } else {
-                        console.warn("Could not determine old avatar path from URL:", avatarUrl);
-                    }
-                } catch (urlParseError) {
-                    console.error("Error parsing old avatar URL:", urlParseError);
-                }
+            if (error) throw new Error(error);
+            if (data) {
+                setProfile(data);
+                setNotificationPreferences(mergeNotificationPreferences(data.notification_preferences));
             }
 
-            // --- Upload new avatar ---
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(storagePath, file);
-
-            if (uploadError) {
-                console.error("Error uploading avatar to Storage:", uploadError);
-                toast({ title: "Upload Failed", description: "Could not upload profile picture.", variant: "destructive" });
-            } else {
-                console.log("New avatar uploaded, getting public URL...");
-                const { data: urlData } = supabase.storage
-                    .from('avatars')
-                    .getPublicUrl(uploadData.path);
-                newAvatarUrl = urlData?.publicUrl || newAvatarUrl;
-                console.log("New avatar URL:", newAvatarUrl);
-                setAvatarUrl(newAvatarUrl);
-            }
-        }
-
-        // --- Update Supabase Auth User Metadata (Optional but good practice) ---
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            console.log("AdminSettings: Updating Supabase Auth metadata...");
-            const { error: updateAuthError } = await supabase.auth.updateUser({
-                data: {
-                    full_name: data.fullName,
-                    avatar_url: newAvatarUrl,
-                }
+            toast({
+                title: "Profile updated",
+                description: "Your changes have been saved.",
             });
-            if (updateAuthError) {
-                console.error("Error updating Supabase Auth user metadata:", updateAuthError);
-            } else {
-                console.log("Supabase Auth metadata updated.");
-            }
-        }
-
-        // --- Update Supabase Profile Table ---
-        console.log("AdminSettings: Updating profile table...");
-        const profileUpdateData: ProfileUpdate = {
-            full_name: data.fullName,
-            phone: data.phone || null,
-            department: data.department || null,
-            avatar_url: newAvatarUrl,
-            updated_at: new Date().toISOString(),
-        };
-
-        // Log for debugging
-        console.log("AdminSettings: Profile update data:", profileUpdateData);
-
-        const { error: profileUpdateError } = await supabase
-            .from('profiles')
-            .update(profileUpdateData)
-            .eq('id', adminUser.id);
-
-        if (profileUpdateError) {
-            console.error("Error updating Supabase profile:", profileUpdateError.message);
-            toast({ title: "Update Failed", description: "Could not save profile changes.", variant: "destructive" });
-        } else {
-            console.log("AdminSettings: Profile table updated successfully.");
-            // Optimistically update local state
-            setAdminUser((prev: Profile | null) => prev ? { ...prev, ...profileUpdateData } : null);
-            profileForm.reset({
-                ...profileForm.getValues(),
-                fullName: data.fullName,
-                phone: data.phone || '',
-                department: data.department || '',
-                profilePicture: undefined,
-            });
-            toast({ title: "Profile Updated", description: "Your profile information has been saved." });
             await refreshProfile();
-        }
-
-        setIsProfileLoading(false);
-        clearAdminProfileDraft();
-    };
-
-    const onPasswordSubmit = async (data: PasswordFormValues) => {
-        setIsPasswordLoading(true);
-        console.log("AdminSettings: Attempting to change password...");
-
-        const { error } = await supabase.auth.updateUser({
-            password: data.newPassword
-        });
-
-        if (error) {
-            console.error("Supabase password update error:", error);
-            // Provide more specific feedback
-            if (error.message.includes("Password should be stronger")) {
-                passwordForm.setError("newPassword", { message: "Password is too weak. Please choose a stronger one." });
-                toast({ title: "Password Change Failed", description: "New password is too weak.", variant: "destructive" });
-            } else if (error.message.includes("requires recent login")) {
-                toast({ title: "Re-authentication Required", description: "Please log out and log back in to change your password.", variant: "destructive", duration: 7000 });
-            }
-            else {
-                toast({ title: "Password Change Failed", description: error.message || "An unexpected error occurred.", variant: "destructive" });
-            }
-        } else {
-            toast({ title: "Password Changed", description: "Your password has been updated successfully." });
-            passwordForm.reset();
-        }
-
-        setIsPasswordLoading(false);
-    };
-
-    const onBrandingSubmit = async (data: BrandingFormValues) => {
-        setIsBrandingLoading(true);
-        console.log("AdminSettings: Submitting branding update...");
-        let newLogoUrl: string | undefined = currentLogoUrl; // Start with current
-
-        if (data.logo && data.logo.length > 0) {
-            const file = data.logo[0] as File;
-            const storagePath = `branding/logo_${Date.now()}.${file.name.split('.').pop()}`;
-            console.log("AdminSettings: Uploading new logo to", storagePath);
-
-            // --- Delete old logo if exists ---
-            if (currentLogoUrl) {
-                try {
-                    const urlParts = new URL(currentLogoUrl);
-                    const pathSegments = urlParts.pathname.split('/');
-                    // Find the bucket name index, assuming 'branding' or similar
-                    const bucketIndex = pathSegments.findIndex(segment => segment === 'branding'); // Adjust bucket name if needed
-                    if (bucketIndex !== -1) {
-                        const oldStoragePath = pathSegments.slice(bucketIndex + 1).join('/');
-                        console.log("AdminSettings: Attempting to remove old logo at path:", oldStoragePath);
-                        const { error: removeError } = await supabase.storage
-                            .from('branding') // *** Ensure 'branding' bucket exists ***
-                            .remove([oldStoragePath]);
-                        if (removeError) {
-                            console.error("Error removing old logo:", removeError.message);
-                        } else {
-                            console.log("Old logo removed from Storage.");
-                        }
-                    } else {
-                        console.warn("Could not determine old logo path from URL:", currentLogoUrl);
-                    }
-                } catch (e) { console.error(e) }
-            }
-
-            // --- Upload new logo ---
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('branding') // *** Ensure 'branding' bucket exists ***
-                .upload(storagePath, file);
-
-            if (uploadError) {
-                console.error("Error uploading logo to Storage:", uploadError);
-                toast({ title: "Upload Failed", description: "Could not upload new logo.", variant: "destructive" });
-            } else {
-                console.log("New logo uploaded, getting public URL...");
-                const { data: urlData } = supabase.storage
-                    .from('branding')
-                    .getPublicUrl(uploadData.path);
-                newLogoUrl = urlData?.publicUrl || undefined;
-                console.log("New logo URL:", newLogoUrl);
-
-                // Save the new URL to Supabase app_settings
-                const saved = await saveSetting('logoUrl', newLogoUrl || ''); // Save empty string if null/undefined
-                if (saved) {
-                    setCurrentLogoUrl(newLogoUrl); // Update state
-                    toast({ title: "Branding Updated", description: "Application logo has been updated." });
-                } else {
-                    // Revert potentially optimistic UI updates if save failed
-                }
-            }
-        } else {
-            toast({ title: "No Logo Submitted", description: "Please select a logo file to upload.", variant: "default" });
-        }
-
-        brandingForm.reset({ logo: undefined }); // Clear file input
-        setIsBrandingLoading(false);
-    };
-
-    // Handler for saving general app settings
-    const onAppSettingsSubmit = async (data: AppSettingsFormValues) => {
-        setIsAppSettingsLoading(true);
-        console.log("AdminSettings: Saving app settings:", data);
-
-        // Save only essential app configuration settings
-        const savePromises = [
-            saveSetting('auto_approve_requests', data.autoApproveRequests),
-            saveSetting('max_request_duration_days', data.maxCheckoutDuration),
-            saveSetting('require_admin_approval', data.requireAdminApproval),
-        ];
-
-        try {
-            const results = await Promise.all(savePromises);
-            if (results.every(Boolean)) {
-                toast({ title: "App Settings Saved", description: "Application settings have been updated." });
-            } else {
-                toast({ title: "Partial Error", description: "Some settings could not be saved. Check logs.", variant: "destructive" });
-            }
         } catch (error) {
-            console.error("Error saving app settings batch:", error);
-            toast({ title: "Error", description: "Failed to save application settings.", variant: "destructive" });
+            toast({
+                title: "Update failed",
+                description: error instanceof Error ? error.message : "Could not update profile.",
+                variant: "destructive",
+            });
         } finally {
-            setIsAppSettingsLoading(false);
+            setSavingProfile(false);
         }
     };
 
-    // Handle notification preference changes
-    const handleNotificationChange = (channel: string, event: string, value: boolean) => {
-        console.log(`AdminSettings: Toggling notification - Channel: ${channel}, Event: ${event}, Value: ${value}`);
-        setNotificationPreferences((prev) => ({
-            ...prev,
-            [channel]: {
-                ...(prev[channel] || {}),
-                [event]: value,
-            },
-        }));
-    };
+    if (loading) return <SettingsSkeleton />;
 
-    // Save notification preferences to admin's profile
-    const handleSaveNotificationSettings = async () => {
-        setIsLoadingNotifications(true);
-        console.log("AdminSettings: Saving notification preferences:", notificationPreferences);
-
-        try {
-            if (!adminUser) {
-                toast({ title: "Error", description: "Admin user data not loaded.", variant: "destructive" });
-                setIsLoadingNotifications(false);
-                return;
-            }
-
-            const { error } = await supabase
-                .from('profiles')
-                .update({ notification_preferences: notificationPreferences })
-                .eq('id', adminUser.id);
-
-            if (error) {
-                console.error("Error saving notification preferences:", error.message);
-                toast({ title: "Error", description: "Could not save notification preferences.", variant: "destructive" });
-            } else {
-                console.log("AdminSettings: Notification preferences saved successfully.");
-                toast({ title: "Preferences Saved", description: "Notification preferences have been updated." });
-            }
-        } catch (error) {
-            console.error("AdminSettings: Error in handleSaveNotificationSettings:", error);
-            toast({ title: "Error", description: "Failed to save notification preferences.", variant: "destructive" });
-        } finally {
-            setIsLoadingNotifications(false);
-        }
-    };
-
-    // Handle enabling push notifications
-    const handleEnablePush = async () => {
-        console.log("AdminSettings: Enabling push notifications...");
-        try {
-            await enablePush();
-            // Update push channel to all true
-            setNotificationPreferences((prev) => ({
-                ...prev,
-                push: {
-                    approved: true,
-                    rejected: true,
-                    due_soon: true,
-                    returned: true,
-                    overdue: true,
-                    damaged: true,
-                    maintenance_reminder: true,
-                    system_alert: true,
-                },
-            }));
-            toast({ title: "Success", description: "Push notifications have been enabled." });
-        } catch (error) {
-            console.error("AdminSettings: Error enabling push notifications:", error);
-            toast({ title: "Error", description: "Could not enable push notifications.", variant: "destructive" });
-        }
-    };
-
-    const getInitials = (name: string | null = "") => name ? name.split(' ').map(n => n[0]).join('').toUpperCase() : 'A';
-
-    // --- Variants ---
-    const cardVariants = { hidden: { opacity: 0, y: 20 }, visible: (i: number = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5, ease: "easeOut" }, }), };
-
-    // --- Render Loading/Error States ---
-    if (isLoadingUser) return <div className="flex justify-center items-center h-64">Loading admin settings...</div>;
-    if (!adminUser) return <div className="text-destructive text-center mt-10">Could not load admin data. Please ensure you are logged in as an Admin.</div>;
+    if (!profile) {
+        return (
+            <div className="mx-auto w-full max-w-5xl rounded-xl border border-dashed border-border px-6 py-16 text-center">
+                <p className="text-muted-foreground">Could not load admin settings. Try signing in again.</p>
+            </div>
+        );
+    }
 
     return (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-8 max-w-full"
-        >
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Admin Settings</h1>
+        <div className="mx-auto w-full max-w-5xl space-y-6">
+            <header className="space-y-1">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Settings className="h-5 w-5" />
+                    </div>
+                    <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin settings</h1>
+                </div>
+                <p className="text-sm text-muted-foreground sm:pl-[52px]">
+                    Your account, notifications, and organisation-wide gear rules.
+                </p>
+            </header>
 
-            {/* System Overview */}
-            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={0}>
-                <SystemOverview />
-            </motion.div>
+            <Tabs defaultValue="profile" className="space-y-6">
+                <TabsList className="grid w-full max-w-2xl grid-cols-2 sm:grid-cols-4">
+                    <TabsTrigger value="profile">Profile</TabsTrigger>
+                    <TabsTrigger value="security">Security</TabsTrigger>
+                    <TabsTrigger value="notifications">Notifications</TabsTrigger>
+                    <TabsTrigger value="app">App</TabsTrigger>
+                </TabsList>
 
-            {/* Admin Profile Settings */}
-            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={1}>
-                <Card className="overflow-hidden">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><User className="h-5 w-5 text-primary flex-shrink-0" /> Admin Profile</CardTitle>
-                        <CardDescription className="text-sm">Update your personal details.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Form {...profileForm}>
-                            <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4">
-                                    <Avatar className="h-16 w-16 flex-shrink-0">
-                                        <AvatarImage key={avatarUrl} src={avatarUrl || 'https://picsum.photos/seed/adminsettings/100/100'} alt={adminUser.full_name || ''} data-ai-hint="admin avatar settings" />
-                                        <AvatarFallback>{getInitials(adminUser.full_name)}</AvatarFallback>
-                                    </Avatar>
-                                    <FormField
-                                        control={profileForm.control}
-                                        name="profilePicture"
-                                        render={({ field }) => (
-                                            <FormItem className="flex-grow w-full">
-                                                <FormLabel>Update Profile Picture</FormLabel>
-                                                <FormControl>
-                                                    <Input
-                                                        type="file"
-                                                        accept="image/*"
-                                                        onChange={async (e) => {
-                                                            const file = e.target.files?.[0];
-                                                            console.log('File input onChange fired. File:', file);
-                                                            if (file) {
-                                                                const reader = new FileReader();
-                                                                reader.onload = (ev) => {
-                                                                    console.log('FileReader loaded. DataURL:', ev.target?.result);
-                                                                    setRawImage(ev.target?.result as string);
-                                                                    setShowCropper(true);
-                                                                    console.log('setRawImage and setShowCropper(true) called.');
-                                                                };
-                                                                reader.readAsDataURL(file);
-                                                            }
-                                                        }}
-                                                        onBlur={field.onBlur}
-                                                        name={field.name}
-                                                        className="text-xs w-full"
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={profileForm.control} name="fullName" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                    <FormField control={profileForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} disabled /></FormControl><FormDescription className="text-xs">Email cannot be changed here.</FormDescription><FormMessage /></FormItem>)} />
-                                    <FormField control={profileForm.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Phone Number <span className="text-muted-foreground text-xs">(Optional)</span></FormLabel><FormControl><Input type="tel" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                    <FormField control={profileForm.control} name="department" render={({ field }) => (<FormItem><FormLabel>Department/Team <span className="text-muted-foreground text-xs">(Optional)</span></FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                </div>
-                                <div className="flex justify-end">
-                                    <Button type="submit" disabled={isProfileLoading}>
-                                        <Save className="mr-2 h-4 w-4 flex-shrink-0" />
-                                        <span className="truncate">{isProfileLoading ? 'Saving Profile...' : 'Save Profile'}</span>
-                                    </Button>
-                                </div>
-                            </form>
-                        </Form>
-                    </CardContent>
-                </Card>
-            </motion.div>
+                <TabsContent value="profile" className="space-y-6">
+                    <ProfileSettingsSection
+                        profile={profile}
+                        saving={savingProfile}
+                        onSave={handleProfileSave}
+                    />
+                </TabsContent>
 
-            {/* Admin Password Settings */}
-            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={2}>
-                <Card className="overflow-hidden">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><Lock className="h-5 w-5 text-primary flex-shrink-0" /> Change Password</CardTitle>
-                        <CardDescription className="text-sm">Update your account password.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Form {...passwordForm}>
-                            <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
-                                {/* Removed current password field as Supabase doesn't require it for logged-in user update */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-sm">New Password</FormLabel>
-                                            <FormControl><Input type="password" placeholder="Min. 8 characters" {...field} /></FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                    <FormField control={passwordForm.control} name="confirmNewPassword" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-sm">Confirm New Password</FormLabel>
-                                            <FormControl><Input type="password" placeholder="Retype new password" {...field} /></FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                </div>
-                                <div className="flex justify-end">
-                                    <Button type="submit" disabled={isPasswordLoading}>
-                                        <Save className="mr-2 h-4 w-4 flex-shrink-0" />
-                                        <span className="truncate">{isPasswordLoading ? 'Updating Password...' : 'Update Password'}</span>
-                                    </Button>
-                                </div>
-                            </form>
-                        </Form>
-                    </CardContent>
-                </Card>
-            </motion.div>
+                <TabsContent value="security">
+                    <PasswordSettingsSection saving={savingPassword} onSavingChange={setSavingPassword} />
+                </TabsContent>
 
-            {/* Branding Settings */}
-            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={3}>
-                <Card className="overflow-hidden">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><ImageIcon className="h-5 w-5 text-primary flex-shrink-0" /> Branding</CardTitle>
-                        <CardDescription className="text-sm">Customize the application's appearance. Ensure 'branding' bucket exists in Supabase Storage.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Form {...brandingForm}>
-                            <form onSubmit={brandingForm.handleSubmit(onBrandingSubmit)} className="space-y-4">
-                                <div className="flex flex-wrap items-center gap-4 mb-4">
-                                    <p className="font-medium text-sm">Current Logo:</p>
-                                    {currentLogoUrl ? (
-                                        <Image
-                                            key={currentLogoUrl}
-                                            src={currentLogoUrl}
-                                            alt="Current Nest by Eden Oasis Logo"
-                                            width={40}
-                                            height={40}
-                                            className="rounded-md border p-1 bg-white"
-                                            data-ai-hint="app logo preview"
-                                            unoptimized // Often needed for Supabase Storage URLs
-                                        />
-                                    ) : (
-                                        <span className="text-muted-foreground text-sm">No logo set</span>
-                                    )}
-                                </div>
-                                <FormField
-                                    control={brandingForm.control}
-                                    name="logo"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-sm">Upload New Logo</FormLabel>
-                                            <FormControl>
-                                                <Input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    onChange={(e) => field.onChange(e.target.files)}
-                                                    onBlur={field.onBlur}
-                                                    name={field.name}
-                                                    className="w-full text-sm"
-                                                />
-                                            </FormControl>
-                                            <FormDescription className="text-xs">Recommended size: 80x80 pixels. Supports JPG, PNG, SVG.</FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <div className="flex justify-end">
-                                    <Button type="submit" disabled={isBrandingLoading}>
-                                        <Save className="mr-2 h-4 w-4 flex-shrink-0" />
-                                        <span className="truncate">{isBrandingLoading ? 'Saving Logo...' : 'Save Logo'}</span>
-                                    </Button>
-                                </div>
-                            </form>
-                        </Form>
-                    </CardContent>
-                </Card>
-            </motion.div>
+                <TabsContent value="notifications">
+                    <NotificationSettingsSection
+                        preferences={notificationPreferences}
+                        onPreferencesChange={setNotificationPreferences}
+                    />
+                </TabsContent>
 
-
-            {/* App Settings (General, Notifications, Security, System) */}
-            <motion.div initial="hidden" animate="visible" variants={cardVariants} custom={4}>
-                <Card className="overflow-hidden">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg md:text-xl"><Settings className="h-5 w-5 text-primary flex-shrink-0" /> Application Settings</CardTitle>
-                        <CardDescription className="text-sm">Configure general application behavior, security, and system settings.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Form {...appSettingsForm}>
-                            <form onSubmit={appSettingsForm.handleSubmit(onAppSettingsSubmit)} className="space-y-6">
-                                <div className="space-y-4 p-3 sm:p-4 border rounded-md">
-                                    <h3 className="font-medium text-base md:text-lg">General</h3>
-                                    <Separator className="my-2" />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="autoApproveRequests"
-                                        render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
-                                                <div className="space-y-0.5 pr-2">
-                                                    <FormLabel className="text-sm">Auto-Approve Requests</FormLabel>
-                                                    <FormDescription className="text-xs sm:text-sm">
-                                                        Automatically approve gear requests upon submission.
-                                                    </FormDescription>
-                                                </div>
-                                                <FormControl>
-                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                                </FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="requireAdminApproval"
-                                        render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
-                                                <div className="space-y-0.5 pr-2">
-                                                    <FormLabel className="text-sm">Require Admin Approval</FormLabel>
-                                                    <FormDescription className="text-xs sm:text-sm">
-                                                        Require admin approval for all gear requests.
-                                                    </FormDescription>
-                                                </div>
-                                                <FormControl>
-                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                                </FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="maxCheckoutDuration"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-sm">Maximum Checkout Duration (Days)</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="1" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 0)} />
-                                                </FormControl>
-                                                <FormDescription className="text-xs sm:text-sm">
-                                                    Set the default maximum number of days a gear item can be checked out.
-                                                </FormDescription>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
-
-                                <div className="space-y-4 p-3 sm:p-4 border rounded-md">
-                                    <h3 className="font-medium text-base md:text-lg flex items-center gap-2"><Bell className="h-4 w-4 flex-shrink-0" /> Notifications</h3>
-                                    <Separator className="my-2" />
-                                    
-                                    {/* Email Notifications */}
-                                    <div className="space-y-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-md">
-                                        <h4 className="font-medium text-sm">Email Notifications</h4>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                            {Object.entries(notificationPreferences.email || {}).map(([event, enabled]) => (
-                                                <FormItem key={`email-${event}`} className="flex items-center space-x-2">
-                                                    <Switch
-                                                        checked={enabled as boolean}
-                                                        onCheckedChange={(checked) => handleNotificationChange('email', event, checked)}
-                                                    />
-                                                    <FormLabel className="text-xs cursor-pointer">
-                                                        {event.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                                                    </FormLabel>
-                                                </FormItem>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* In-App Notifications */}
-                                    <div className="space-y-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-md">
-                                        <h4 className="font-medium text-sm">In-App Notifications</h4>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                            {Object.entries(notificationPreferences.in_app || {}).map(([event, enabled]) => (
-                                                <FormItem key={`in_app-${event}`} className="flex items-center space-x-2">
-                                                    <Switch
-                                                        checked={enabled as boolean}
-                                                        onCheckedChange={(checked) => handleNotificationChange('in_app', event, checked)}
-                                                    />
-                                                    <FormLabel className="text-xs cursor-pointer">
-                                                        {event.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                                                    </FormLabel>
-                                                </FormItem>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Push Notifications */}
-                                    <div className="space-y-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-md">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h4 className="font-medium text-sm">Push Notifications</h4>
-                                                {!isPushSupported && (
-                                                    <p className="text-xs text-destructive mt-1">
-                                                        Push notifications are not supported on your device or browser
-                                                    </p>
-                                                )}
-                                            </div>
-                                            {isPushSupported && (
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={handleEnablePush}
-                                                    disabled={isLoadingNotifications}
-                                                >
-                                                    {isLoadingNotifications ? 'Enabling...' : 'Enable'}
-                                                </Button>
-                                            )}
-                                        </div>
-                                        {isPushSupported && (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                {Object.entries(notificationPreferences.push || {}).map(([event, enabled]) => (
-                                                    <FormItem key={`push-${event}`} className="flex items-center space-x-2">
-                                                        <Switch
-                                                            checked={enabled as boolean}
-                                                            disabled={!isPushSupported}
-                                                            onCheckedChange={(checked) => handleNotificationChange('push', event, checked)}
-                                                        />
-                                                        <FormLabel className="text-xs cursor-pointer">
-                                                            {event.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                                                        </FormLabel>
-                                                    </FormItem>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <Button
-                                        type="button"
-                                        onClick={handleSaveNotificationSettings}
-                                        disabled={isLoadingNotifications}
-                                        className="w-full"
-                                    >
-                                        {isLoadingNotifications ? 'Saving...' : 'Save Notification Preferences'}
-                                    </Button>
-                                </div>
-
-                                <div className="space-y-4 p-3 sm:p-4 border rounded-md">
-                                    <h3 className="font-medium text-base md:text-lg flex items-center gap-2"><Lock className="h-4 w-4 flex-shrink-0" /> Security</h3>
-                                    <Separator className="my-2" />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="enableTwoFactor"
-                                        render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
-                                                <div className="space-y-0.5 pr-2">
-                                                    <FormLabel className="text-sm">Enable Two-Factor Authentication</FormLabel>
-                                                    <FormDescription className="text-xs sm:text-sm">
-                                                        Require 2FA for all admin accounts.
-                                                    </FormDescription>
-                                                </div>
-                                                <FormControl>
-                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                                </FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="passwordMinLength"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-sm">Minimum Password Length</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="6" max="32" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 8)} />
-                                                </FormControl>
-                                                <FormDescription className="text-xs sm:text-sm">
-                                                    Minimum number of characters required for passwords.
-                                                </FormDescription>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="sessionTimeout"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-sm">Session Timeout (Minutes)</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="5" max="480" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 120)} />
-                                                </FormControl>
-                                                <FormDescription className="text-xs sm:text-sm">
-                                                    How long users stay logged in before requiring re-authentication.
-                                                </FormDescription>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="enableAuditLogs"
-                                        render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
-                                                <div className="space-y-0.5 pr-2">
-                                                    <FormLabel className="text-sm">Enable Audit Logs</FormLabel>
-                                                    <FormDescription className="text-xs sm:text-sm">
-                                                        Log all admin actions for security and compliance.
-                                                    </FormDescription>
-                                                </div>
-                                                <FormControl>
-                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                                </FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
-
-                                <div className="space-y-4 p-3 sm:p-4 border rounded-md">
-                                    <h3 className="font-medium text-base md:text-lg flex items-center gap-2"><Settings className="h-4 w-4 flex-shrink-0" /> System</h3>
-                                    <Separator className="my-2" />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="maintenanceMode"
-                                        render={({ field }) => (
-                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 sm:p-3 shadow-sm">
-                                                <div className="space-y-0.5 pr-2">
-                                                    <FormLabel className="text-sm">Maintenance Mode</FormLabel>
-                                                    <FormDescription className="text-xs sm:text-sm">
-                                                        Temporarily disable the application for maintenance.
-                                                    </FormDescription>
-                                                </div>
-                                                <FormControl>
-                                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                                </FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="backupFrequency"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-sm">Backup Frequency</FormLabel>
-                                                <FormControl>
-                                                    <select
-                                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        {...field}
-                                                    >
-                                                        <option value="daily">Daily</option>
-                                                        <option value="weekly">Weekly</option>
-                                                        <option value="monthly">Monthly</option>
-                                                    </select>
-                                                </FormControl>
-                                                <FormDescription className="text-xs sm:text-sm">
-                                                    How often to create automated backups.
-                                                </FormDescription>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={appSettingsForm.control}
-                                        name="maxFileSize"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-sm">Maximum File Upload Size (MB)</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" className="max-w-[120px] sm:max-w-[150px]" min="1" max="100" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 10)} />
-                                                </FormControl>
-                                                <FormDescription className="text-xs sm:text-sm">
-                                                    Maximum size for file uploads (images, documents, etc.).
-                                                </FormDescription>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
-
-                                <div className="flex justify-end pt-2">
-                                    <Button type="submit" disabled={isAppSettingsLoading}>
-                                        <Save className="mr-2 h-4 w-4 flex-shrink-0" />
-                                        <span className="truncate">{isAppSettingsLoading ? "Saving App Settings..." : "Save App Settings"}</span>
-                                    </Button>
-                                </div>
-                            </form>
-                        </Form>
-                    </CardContent>
-                </Card>
-            </motion.div>
-
-            {showCropper && (
-                (() => { console.log('Rendering ImageCropperModal. showCropper:', showCropper, 'rawImage:', rawImage); return null; })(),
-                <ImageCropperModal
-                    open={showCropper}
-                    imageSrc={rawImage}
-                    onClose={() => setShowCropper(false)}
-                    onCropComplete={async (croppedBlob) => {
-                        const croppedFile = new File([croppedBlob], 'avatar.jpg', { type: 'image/jpeg' });
-                        setCroppedFile(croppedFile);
-                        profileForm.setValue('profilePicture', croppedFile);
-                        setShowCropper(false);
-                    }}
-                    aspect={1}
-                />
-            )}
-
-        </motion.div>
+                <TabsContent value="app">
+                    <AppSettingsSection />
+                </TabsContent>
+            </Tabs>
+        </div>
     );
 }

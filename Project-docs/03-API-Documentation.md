@@ -4,7 +4,7 @@
 **Document Version:** 1.0  
 **Last Updated:** October 16, 2025  
 **Author:** Daniel Chinonso Samuel  
-**Base URL:** `https://nest-eden-oasis.vercel.app`
+**Base URL:** `https://www.nestbyeden.app`
 
 ---
 
@@ -37,7 +37,7 @@ The Nest API provides programmatic access to the asset management system. All AP
 
 | Environment | Base URL |
 |-------------|----------|
-| Production | `https://nest-eden-oasis.vercel.app/api` |
+| Production | `https://www.nestbyeden.app/api` |
 | Staging | `https://nest-staging.vercel.app/api` |
 | Development | `http://localhost:9002/api` |
 
@@ -1232,7 +1232,7 @@ GOOGLE_CHAT_WEBHOOK_URL=https://chat.googleapis.com/v1/spaces/.../messages?key=.
 ```typescript
 // Using fetch API
 async function getGears() {
-  const response = await fetch('https://nest-eden-oasis.vercel.app/api/gears', {
+  const response = await fetch('https://www.nestbyeden.app/api/gears', {
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
@@ -1250,7 +1250,7 @@ async function getGears() {
 
 // Create request
 async function createRequest(requestData) {
-  const response = await fetch('https://nest-eden-oasis.vercel.app/api/requests', {
+  const response = await fetch('https://www.nestbyeden.app/api/requests', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -1270,7 +1270,7 @@ async function createRequest(requestData) {
 ```python
 import requests
 
-BASE_URL = "https://nest-eden-oasis.vercel.app/api"
+BASE_URL = "https://www.nestbyeden.app/api"
 
 def get_gears(access_token):
     headers = {
@@ -1309,12 +1309,12 @@ def create_request(access_token, request_data):
 
 ```bash
 # Get equipment list
-curl -X GET "https://nest-eden-oasis.vercel.app/api/gears" \
+curl -X GET "https://www.nestbyeden.app/api/gears" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json"
 
 # Create request
-curl -X POST "https://nest-eden-oasis.vercel.app/api/requests" \
+curl -X POST "https://www.nestbyeden.app/api/requests" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1327,7 +1327,7 @@ curl -X POST "https://nest-eden-oasis.vercel.app/api/requests" \
   }'
 
 # Approve request (Admin)
-curl -X POST "https://nest-eden-oasis.vercel.app/api/requests/approve" \
+curl -X POST "https://www.nestbyeden.app/api/requests/approve" \
   -H "Authorization: Bearer ADMIN_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

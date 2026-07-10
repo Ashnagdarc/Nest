@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { getRouteAuthContext } from '@/app/api/_utils/route-auth';
+import { getSiteUrl, sitePath } from '@/lib/site-url';
 
 // Helper function to map table names to valid notification types
 function getNotificationType(table: string): string {
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
 
         const supabase = await createSupabaseServerClient(true) as SupabaseClient<Database>;
         const appSettings = await getAppSettings(supabase);
-        const BRAND_LOGO_URL = appSettings['brand_logo_url'] || 'https://nestbyeden.app/logo.png';
+        const BRAND_LOGO_URL = appSettings['brand_logo_url'] || `${getSiteUrl()}/logo.png`;
         const BRAND_COLOR = appSettings['brand_primary_color'] || '#ff6300';
         const notificationDefaults = appSettings['notification_defaults'] ? JSON.parse(appSettings['notification_defaults']) : { email: true, push: true, in_app: true };
 
@@ -119,7 +120,7 @@ export async function POST(req: NextRequest) {
            <p><strong>User:</strong> ${record.requester_name || 'N/A'}</p>
            <p><strong>Gear:</strong> ${record.gear_name || 'N/A'}</p>
            <p><strong>Reason:</strong> ${record.reason || 'N/A'}</p>
-           <p>View request in <a href="https://nestbyeden.app/admin/manage-requests">Nest by Eden Oasis</a>.</p>
+           <p>View request in <a href="${sitePath('/admin/manage-requests')}">Nest by Eden Oasis</a>.</p>
            <hr>
            <small style="color: #888;">Nest by Eden Oasis Team</small>
          </div>
@@ -206,7 +207,7 @@ export async function POST(req: NextRequest) {
             <img src="${BRAND_LOGO_URL}" alt="Nest by Eden Oasis" style="height: 40px; margin-bottom: 16px;">
             <h2 style="color: ${BRAND_COLOR};">New Equipment Check-In</h2>
             <p>A piece of equipment has been checked in and is now available.</p>
-            <p>View check-ins in <a href="https://nestbyeden.app/admin/checkins">Nest by Eden Oasis</a>.</p>
+            <p>View check-ins in <a href="${sitePath('/admin/checkins')}">Nest by Eden Oasis</a>.</p>
             <hr>
             <small style="color: #888;">Nest by Eden Oasis Team</small>
           </div>

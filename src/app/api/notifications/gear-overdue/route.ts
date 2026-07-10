@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
+import { sendGearRequestEmail } from '@/lib/email';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
+import { sitePath } from '@/lib/site-url';
 
 export async function POST(req: NextRequest) {
     if (process.env.CRON_SECRET && req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -65,25 +67,21 @@ export async function POST(req: NextRequest) {
             }
 
             if (userProfile.email) {
-                await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/send-gear-email`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to: userProfile.email,
-                        subject: `Overdue Gear Notice: ${userGearMap[userId].gearNames.join(', ')}`,
-                        html: `
-                            <h2>Overdue Gear Notice</h2>
-                            <p>Dear ${userProfile.full_name},</p>
-                            <p>The following gear is overdue for return:</p>
-                            <ul>
-                                ${userGearMap[userId].gearNames.map(name => `<li>${name}</li>`).join('')}
-                            </ul>
-                            <p>Earliest due date: <b>${earliestDue.toLocaleDateString()}</b> (${overdueDays} days overdue)</p>
-                            <p>Please return your gear as soon as possible to avoid penalties.</p>
-                            <br/>
-                            <p>— Nest by Eden Oasis Team</p>
-                        `,
-                    }),
+                await sendGearRequestEmail({
+                    to: userProfile.email,
+                    subject: `Overdue Gear Notice: ${userGearMap[userId].gearNames.join(', ')}`,
+                    html: `
+                        <h2>Overdue Gear Notice</h2>
+                        <p>Dear ${userProfile.full_name},</p>
+                        <p>The following gear is overdue for return:</p>
+                        <ul>
+                            ${userGearMap[userId].gearNames.map(name => `<li>${name}</li>`).join('')}
+                        </ul>
+                        <p>Earliest due date: <b>${earliestDue.toLocaleDateString()}</b> (${overdueDays} days overdue)</p>
+                        <p>Please return your gear as soon as possible to avoid penalties.</p>
+                        <br/>
+                        <p>— Nest by Eden Oasis Team</p>
+                    `,
                 });
             }
 
@@ -96,7 +94,7 @@ export async function POST(req: NextRequest) {
             });
 
             try {
-                await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifications/overdue-reminder`, {
+                await fetch(sitePath('/api/notifications/overdue-reminder'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -122,24 +120,20 @@ export async function POST(req: NextRequest) {
             if (admins && Array.isArray(admins)) {
                 for (const admin of admins) {
                     if (!admin.email) continue;
-                    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/send-gear-email`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            to: admin.email,
-                            subject: `Overdue Gear Alert: ${userProfile.full_name}`,
-                            html: `
-                                <h2>Overdue Gear Alert</h2>
-                                <p>User <b>${userProfile.full_name}</b> (${userProfile.email}) has overdue gear:</p>
-                                <ul>
-                                    ${userGearMap[userId].gearNames.map(name => `<li>${name}</li>`).join('')}
-                                </ul>
-                                <p>Earliest due date: <b>${earliestDue.toLocaleDateString()}</b> (${overdueDays} days overdue)</p>
-                                <p>Please follow up as needed.</p>
-                                <br/>
-                                <p>— Nest by Eden Oasis System</p>
-                            `,
-                        }),
+                    await sendGearRequestEmail({
+                        to: admin.email,
+                        subject: `Overdue Gear Alert: ${userProfile.full_name}`,
+                        html: `
+                            <h2>Overdue Gear Alert</h2>
+                            <p>User <b>${userProfile.full_name}</b> (${userProfile.email}) has overdue gear:</p>
+                            <ul>
+                                ${userGearMap[userId].gearNames.map(name => `<li>${name}</li>`).join('')}
+                            </ul>
+                            <p>Earliest due date: <b>${earliestDue.toLocaleDateString()}</b> (${overdueDays} days overdue)</p>
+                            <p>Please follow up as needed.</p>
+                            <br/>
+                            <p>— Nest by Eden Oasis System</p>
+                        `,
                     });
                 }
             }

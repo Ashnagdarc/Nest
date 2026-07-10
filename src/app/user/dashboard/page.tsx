@@ -1,407 +1,224 @@
-// User dashboard for Nest by Eden Oasis. Provides real-time asset management, stats, and notifications.
+// User dashboard for Nest by Eden Oasis. Provides real-time asset stats, notifications, and activity.
 
 "use client";
 
-import { motion } from 'framer-motion';
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { motion } from "framer-motion";
+import {
+    ArrowUpDown,
+    ArrowUpRight,
+    Box,
+    Clock,
+    PackageCheck,
+    Search,
+    type LucideIcon,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PackageCheck, Clock, Box, Search, ArrowUpDown, ArrowUpRight, Activity, Megaphone, Bell } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { Badge } from "@/components/ui/badge";
 import { QuickActions } from "@/components/dashboard/QuickActions";
+import { NotificationsCard } from "@/components/dashboard/NotificationsCard";
+import { RecentActivityCard } from "@/components/dashboard/RecentActivityCard";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { logError } from '@/lib/logger';
-import { useToast } from "@/hooks/use-toast";
-import { useUnifiedDashboard } from '@/hooks/dashboard/use-unified-dashboard';
-import { apiGet } from '@/lib/apiClient';
-import React from 'react';
+import { logError } from "@/lib/logger";
+import { useUnifiedDashboard } from "@/hooks/dashboard/use-unified-dashboard";
+import { apiGet } from "@/lib/apiClient";
 
-// User profile data structure
 interface Profile {
-  id: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  department: string | null;
-  email: string | null;
-  role: 'Admin' | 'User';
-  status: 'Active' | 'Inactive' | 'Suspended';
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+    department: string | null;
+    email: string | null;
+    role: "Admin" | "User";
+    status: "Active" | "Inactive" | "Suspended";
 }
 
-/**
- * Main user dashboard component with real-time asset management interface.
- * Updated to follow Apple's Human Interface Guidelines for minimal, clean design.
- */
-export default function UserDashboardPage() {
-  const { toast } = useToast();
-  const supabase = createClient();
+interface StatCard {
+    title: string;
+    value: number;
+    icon: LucideIcon;
+    iconClass: string;
+    badgeClass: string;
+    link: string;
+    description: string;
+}
 
-  // Use unified dashboard data
-  const { data: dashboardData, loading: isLoading, error: dashboardError, refetch } = useUnifiedDashboard();
-  const [mounted, setMounted] = useState(false);
-
-  const [userData, setUserData] = useState<Profile | null>(null);
-
-  // Fetch user profile
-  useEffect(() => {
-    setMounted(true);
-    const fetchUserProfile = async () => {
-      try {
-        const { data: profile, error } = await apiGet<{ data: Profile | null; error: string | null }>(`/api/users/profile`);
-        if (error && error !== '') {
-          logError(error, 'fetchUserProfile');
-        } else if (profile) {
-          setUserData(profile);
-        }
-      } catch (error) {
-        // Only log if it's a real error, not an empty object
-        if (error && (typeof error === 'string' || error instanceof Error || (typeof error === 'object' && Object.keys(error).length > 0))) {
-          logError(error, 'fetchUserProfile');
-        }
-      }
-    };
-
-    fetchUserProfile();
-  }, []);
-
-  // Transform dashboard data into the format expected by the existing UI
-  const userStats = [
-    {
-      title: 'Checked Out Gears',
-      value: dashboardData?.stats.checked_out_equipment || 0,
-      icon: PackageCheck,
-      color: 'text-blue-500',
-      bgColor: 'bg-blue-500/10',
-      link: '/user/my-requests',
-      description: 'Currently in your possession'
-    },
-    {
-      title: 'Overdue Gears',
-      value: dashboardData?.overdue_items?.length || 0,
-      icon: Clock,
-      color: 'text-red-500',
-      bgColor: 'bg-red-500/10',
-      link: '/user/check-in',
-      description: 'Past due date - please return'
-    },
-    {
-      title: 'Available Gears',
-      value: dashboardData?.stats.available_equipment || 0,
-      icon: Box,
-      color: 'text-green-500',
-      bgColor: 'bg-green-500/10',
-      link: '/user/browse',
-      description: 'Ready for checkout'
-    },
-  ];
-
-  const cardVariants = {
+const cardVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: {
-        delay: i * 0.1,
-        duration: 0.4,
-        ease: "easeOut",
-      },
+        opacity: 1,
+        y: 0,
+        transition: { delay: i * 0.1, duration: 0.4, ease: "easeOut" as const },
     }),
-  };
+};
 
-  // Check if data is still loading
-  const isDataLoading = isLoading;
-  const toLocalYmd = (dateValue: string): string => {
-    const d = new Date(dateValue);
-    if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleDateString('en-CA');
-  };
+export default function UserDashboardPage() {
+    const { data: dashboardData, loading: isLoading, refetch } = useUnifiedDashboard();
+    const [mounted, setMounted] = useState(false);
+    const [profile, setProfile] = useState<Profile | null>(null);
 
-  return (
-    <ErrorBoundary>
-      <div className="container mx-auto px-6 sm:px-8 lg:px-12 py-8 sm:py-12 lg:py-16 space-y-8 sm:space-y-12">
-        {/* Header Section */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 sm:gap-8"
-        >
-          <div className="flex-1 min-w-0">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground truncate leading-tight">
-              Welcome back, {userData?.full_name || 'User'}
-            </h1>
-            <p className="text-muted-foreground mt-2 text-base sm:text-lg lg:text-xl leading-relaxed">
-              {userData?.department ? `${userData.department} Department` : 'Dashboard'}
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row items-stretch gap-3 sm:gap-4 w-full sm:w-auto">
-            <Link href="/user/browse" className="w-full sm:w-auto">
-              <Button className="gap-3 w-full sm:w-auto min-h-[48px] text-base">
-                <Search className="h-5 w-5" />
-                <span className="hidden xs:inline">Browse Gear</span>
-                <span className="xs:hidden">Browse</span>
-              </Button>
-            </Link>
-            <Link href="/user/check-in" className="w-full sm:w-auto">
-              <Button variant="outline" className="gap-3 w-full sm:w-auto min-h-[48px] text-base">
-                <ArrowUpDown className="h-5 w-5" />
-                <span className="hidden xs:inline">Check-in Gear</span>
-                <span className="xs:hidden">Check-in</span>
-              </Button>
-            </Link>
-          </div>
-        </motion.div>
+    useEffect(() => {
+        setMounted(true);
 
-        {/* Quick Actions Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
-          <QuickActions />
-        </motion.div>
+        const fetchUserProfile = async () => {
+            try {
+                const { data, error } = await apiGet<{ data: Profile | null; error: string | null }>(
+                    "/api/users/profile"
+                );
+                if (error) {
+                    logError(error, "fetchUserProfile");
+                } else if (data) {
+                    setProfile(data);
+                }
+            } catch (error) {
+                if (error instanceof Error || typeof error === "string") {
+                    logError(error, "fetchUserProfile");
+                }
+            }
+        };
 
-        {/* Stats Cards */}
-        {isDataLoading ? (
-          <LoadingState variant="cards" count={3} />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {userStats.map((stat, i) => (
-              <motion.div
-                key={stat.title}
-                custom={i}
-                initial="hidden"
-                animate="visible"
-                variants={cardVariants}
-                className="w-full"
-              >
-                <Card className="h-full hover:shadow-lg transition-all duration-300 border-border/50">
-                  <CardHeader className="flex flex-row items-center justify-between pb-3 p-6">
-                    <CardTitle className="text-base sm:text-lg lg:text-xl font-semibold flex items-center gap-3 truncate">
-                      {React.createElement(stat.icon, { className: `h-6 w-6 sm:h-7 sm:w-7 ${stat.color} flex-shrink-0` })}
-                      <span className="truncate">{stat.title}</span>
-                    </CardTitle>
-                    <Badge
-                      className={
-                        'text-sm sm:text-base px-3 sm:px-4 py-1.5 font-bold shadow-none flex-shrink-0 rounded-lg ' +
-                        (stat.title === 'Checked Out Gears' ? 'bg-blue-600 text-white' :
-                          stat.title === 'Overdue Gears' ? 'bg-red-600 text-white' :
-                            stat.title === 'Available Gears' ? 'bg-green-600 text-white' :
-                              'bg-gray-600 text-white')
-                      }
-                    >
-                      {stat.value}
-                    </Badge>
-                  </CardHeader>
-                  <CardContent className="p-6 pt-0">
-                    <p className="text-sm sm:text-base text-muted-foreground mb-4 line-clamp-2 leading-relaxed">{stat.description}</p>
-                    {stat.value === 0 && (
-                      <div className="text-sm text-muted-foreground italic">No {stat.title.toLowerCase()}.</div>
-                    )}
-                    <Link href={stat.link} className="text-blue-500 hover:underline text-sm sm:text-base inline-flex items-center gap-2">
-                      View details
-                      <ArrowUpRight className="h-4 w-4" />
-                    </Link>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        )}
+        fetchUserProfile();
+    }, []);
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8">
-          {/* Left Column */}
-          <div className="space-y-6 sm:space-y-8">
-            {/* Notifications */}
-            <Card>
-              <CardHeader className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Notifications
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => { window.location.href = '/user/notifications'; }}>View all</Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={async () => {
-                      try {
-                        await fetch('/api/notifications/mark-read', { method: 'PUT', credentials: 'include' });
-                        if (typeof window !== 'undefined') {
-                          // optimistic refresh
-                          setTimeout(() => refetch?.(), 100);
-                        }
-                      } catch (e) {
-                        console.error('Mark all as read failed', e);
-                      }
-                    }}
-                  >
-                    Mark all as read
-                  </Button>
+    const handleMarkAllRead = async () => {
+        try {
+            await fetch("/api/notifications/mark-read", { method: "PUT", credentials: "include" });
+            refetch?.();
+        } catch (error) {
+            logError(error, "markAllNotificationsRead");
+        }
+    };
+
+    const stats: StatCard[] = [
+        {
+            title: "Checked Out Gears",
+            value: dashboardData?.stats.checked_out_equipment ?? 0,
+            icon: PackageCheck,
+            iconClass: "text-blue-500",
+            badgeClass: "bg-blue-600 text-white",
+            link: "/user/my-requests",
+            description: "Currently in your possession",
+        },
+        {
+            title: "Overdue Gears",
+            value: dashboardData?.overdue_items?.length ?? 0,
+            icon: Clock,
+            iconClass: "text-red-500",
+            badgeClass: "bg-red-600 text-white",
+            link: "/user/check-in",
+            description: "Past due date - please return",
+        },
+        {
+            title: "Available Gears",
+            value: dashboardData?.stats.available_equipment ?? 0,
+            icon: Box,
+            iconClass: "text-green-500",
+            badgeClass: "bg-green-600 text-white",
+            link: "/user/browse",
+            description: "Ready for checkout",
+        },
+    ];
+
+    return (
+        <ErrorBoundary>
+            <div className="w-full max-w-7xl mx-auto space-y-6 sm:space-y-8">
+                {/* Header */}
+                <motion.header
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6"
+                >
+                    <div className="min-w-0">
+                        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground leading-tight truncate">
+                            Welcome back, {profile?.full_name || "User"}
+                        </h1>
+                        <p className="text-muted-foreground mt-1.5 text-sm sm:text-base lg:text-lg">
+                            {profile?.department ? `${profile.department} Department` : "Here's what's happening with your gear"}
+                        </p>
+                    </div>
+                    <div className="flex flex-col xs:flex-row items-stretch gap-3 w-full md:w-auto shrink-0">
+                        <Button asChild className="gap-2 min-h-[44px]">
+                            <Link href="/user/browse">
+                                <Search className="h-4 w-4" />
+                                Browse Gear
+                            </Link>
+                        </Button>
+                        <Button asChild variant="outline" className="gap-2 min-h-[44px]">
+                            <Link href="/user/check-in">
+                                <ArrowUpDown className="h-4 w-4" />
+                                Check-in Gear
+                            </Link>
+                        </Button>
+                    </div>
+                </motion.header>
+
+                {/* Quick Actions */}
+                <motion.section
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.1 }}
+                    aria-label="Quick actions"
+                >
+                    <QuickActions />
+                </motion.section>
+
+                {/* Stats */}
+                {isLoading ? (
+                    <LoadingState variant="cards" count={3} />
+                ) : (
+                    <section aria-label="Your stats" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                        {stats.map((stat, i) => (
+                            <motion.div
+                                key={stat.title}
+                                custom={i}
+                                initial="hidden"
+                                animate="visible"
+                                variants={cardVariants}
+                            >
+                                <Card className="h-full hover:shadow-lg transition-shadow duration-300 border-border/50">
+                                    <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+                                        <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2.5 min-w-0">
+                                            <stat.icon className={`h-5 w-5 sm:h-6 sm:w-6 shrink-0 ${stat.iconClass}`} />
+                                            <span className="truncate">{stat.title}</span>
+                                        </CardTitle>
+                                        <Badge className={`text-sm px-3 py-1 font-bold shadow-none shrink-0 rounded-lg ${stat.badgeClass}`}>
+                                            {stat.value}
+                                        </Badge>
+                                    </CardHeader>
+                                    <CardContent className="pt-0">
+                                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{stat.description}</p>
+                                        <Link
+                                            href={stat.link}
+                                            className="text-primary hover:underline text-sm inline-flex items-center gap-1.5"
+                                        >
+                                            View details
+                                            <ArrowUpRight className="h-4 w-4" />
+                                        </Link>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        ))}
+                    </section>
+                )}
+
+                {/* Notifications & Activity */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
+                    <NotificationsCard
+                        notifications={dashboardData?.notifications ?? []}
+                        isLoading={isLoading}
+                        onMarkAllRead={handleMarkAllRead}
+                    />
+                    <RecentActivityCard
+                        activity={dashboardData?.recent_activity ?? []}
+                        isLoading={isLoading}
+                        mounted={mounted}
+                    />
                 </div>
-              </CardHeader>
-              <CardContent>
-                {isDataLoading ? (
-                  <div className="space-y-3">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="flex items-center space-x-3">
-                        <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
-                          <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  (() => {
-                    const all = dashboardData?.notifications || [];
-                    const READ_VISIBILITY_MS = 24 * 60 * 60 * 1000;
-                    const cutoff = Date.now() - READ_VISIBILITY_MS;
-                    const unread = all.filter(n => !n.is_read);
-                    const read = all.filter(n => n.is_read && new Date(n.updated_at || n.created_at).getTime() >= cutoff);
-                    return (
-                      <div className="space-y-4">
-                        <div>
-                          <h4 className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100">Unread</h4>
-                          <div className="space-y-3">
-                            {unread.slice(0, 5).map((n) => (
-                              <div key={n.id} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                                <div className="h-8 w-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
-                                  <Bell className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                </div>
-                                <div className="flex-1">
-                                  <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">{n.title || n.type}</h4>
-                                  <p className="text-xs text-gray-600 dark:text-gray-300">{n.message}</p>
-                                </div>
-                                <Badge className="text-xs">New</Badge>
-                              </div>
-                            ))}
-                            {unread.length === 0 && (
-                              <p className="text-gray-500 text-sm">No unread notifications</p>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100">Read</h4>
-                          <div className="space-y-3">
-                            {read.slice(0, Math.max(0, 5 - Math.min(unread.length, 5))).map((n) => (
-                              <div key={n.id} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                                <div className="h-8 w-8 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">
-                                  <Bell className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                </div>
-                                <div className="flex-1">
-                                  <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">{n.title || n.type}</h4>
-                                  <p className="text-xs text-gray-600 dark:text-gray-300">{n.message}</p>
-                                </div>
-                                <Badge variant="secondary" className="text-xs">Read</Badge>
-                              </div>
-                            ))}
-                            {read.length === 0 && (
-                              <p className="text-gray-500 text-sm">No read notifications</p>
-                            )}
-                          </div>
-                        </div>
-                        {all.length === 0 && (
-                          <p className="text-gray-500 text-sm">No notifications</p>
-                        )}
-                      </div>
-                    );
-                  })()
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Column */}
-          <div className="space-y-6 sm:space-y-8">
-            {/* Recent Activity */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-5 w-5" />
-                  Recent Activity
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isDataLoading ? (
-                  <div className="space-y-3">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="flex items-center space-x-3">
-                        <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
-                          <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {(() => {
-                      const items = dashboardData?.recent_activity || [];
-                      if (items.length === 0) return <p className="text-gray-500 text-sm">No recent activity</p>;
-                      const groups = new Map<string, typeof items>();
-                      for (const a of items) {
-                        const key = toLocalYmd(a.timestamp);
-                        if (!key) continue;
-                        const arr = (groups.get(key) || []) as any;
-                        arr.push(a);
-                        groups.set(key, arr);
-                      }
-                      const ordered = Array.from(groups.entries()).sort((a, b) => a[0] > b[0] ? -1 : 1);
-                      const pretty = (k: string) => {
-                        const today = toLocalYmd(new Date().toISOString());
-                        const y = toLocalYmd(new Date(Date.now() - 86400000).toISOString());
-                        if (k === today) return 'Today';
-                        if (k === y) return 'Yesterday';
-                        return k;
-                      };
-                      return ordered.map(([k, arr]) => (
-                        <details key={k} className="rounded border">
-                          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-semibold flex items-center justify-between">
-                            <span>{pretty(k)}</span>
-                            <span className="text-muted-foreground text-xs">{arr.length}</span>
-                          </summary>
-                          <div className="space-y-2 p-2 pt-0">
-                            {arr.slice(0, 20).map((activity: any) => {
-                              const when = new Date(activity.timestamp);
-                              const rel = mounted ? (() => {
-                                const diff = (when.getTime() - Date.now()) / 1000;
-                                const abs = Math.abs(diff);
-                                if (abs < 60) return `${Math.round(abs)}s ago`;
-                                if (abs < 3600) return `${Math.round(abs / 60)}m ago`;
-                                if (abs < 86400) return `${Math.round(abs / 3600)}h ago`;
-                                return `${when.toISOString().slice(11, 16)}Z`;
-                              })() : `${when.toISOString().slice(11, 16)}Z`;
-                              const text = activity.type === 'request' ? `Request ${activity.action} • ${activity.item}` : `${activity.action} • ${activity.item}`;
-                              return (
-                                <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg bg-card border">
-                                  <div className="h-8 w-8 rounded-full flex items-center justify-center bg-primary/15">
-                                    <Activity className="h-4 w-4 text-primary" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <p className="text-sm font-medium text-foreground">{text}</p>
-                                    <p className="text-xs text-muted-foreground">{rel}</p>
-                                  </div>
-                                  <Badge variant="secondary" className="text-xs">{activity.status}</Badge>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </details>
-                      ));
-                    })()}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-    </ErrorBoundary>
-  );
+            </div>
+        </ErrorBoundary>
+    );
 }

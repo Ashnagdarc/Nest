@@ -5,6 +5,7 @@ import { enqueuePushNotification } from '@/lib/push-queue';
 import { transitionBooking } from '@/lib/bookings-v2/service';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
+import { getSiteUrl, sitePath } from '@/lib/site-url';
 
 /**
  * Calculates due date based on request duration
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest) {
         // Load request first
         const { data: req, error: reqErr } = await supabase
             .from('gear_requests')
-            .select('id, user_id, status, due_date, expected_duration, reason, destination')
+            .select('id, user_id, submitted_by_user_id, status, due_date, expected_duration, reason, destination')
             .eq('id', requestId)
             .maybeSingle();
         if (reqErr || !req) {
@@ -332,6 +333,23 @@ export async function POST(request: NextRequest) {
                     console.log('[Gear Approval] Push notification queued for user');
                 }
 
+                // Notify the person who submitted on behalf of someone else
+                if (req.submitted_by_user_id && req.submitted_by_user_id !== req.user_id) {
+                    const submitterPush = await enqueuePushNotification(
+                        supabase,
+                        {
+                            userId: req.submitted_by_user_id,
+                            title: 'Booking you submitted was approved',
+                            body: `The request you submitted for ${userProfile.full_name || 'a colleague'} was approved.`,
+                            data: { request_id: requestId, type: 'gear_approval_submitter' },
+                        },
+                        { requestUrl: request.url, context: 'Gear Approval Submitter' },
+                    );
+                    if (!submitterPush.success) {
+                        console.error('[Gear Approval] Failed to queue submitter push:', submitterPush.error);
+                    }
+                }
+
                 // Send notification email to all admins about the approval
                 try {
                     const { data: admins } = await supabase
@@ -394,13 +412,13 @@ export async function POST(request: NextRequest) {
                                                                 </table>
                                                             </div>
                                                             <div style="text-align: center; margin: 32px 0;">
-                                                                <a href="https://nestbyeden.app/admin/manage-requests" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">View All Requests</a>
+                                                                <a href="${sitePath('/admin/manage-requests')}" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">View All Requests</a>
                                                             </div>
                                                             <p style="margin-top: 32px; font-size: 14px; color: #6b7280; line-height: 1.6;">User has been notified and can now pick up the equipment.</p>
                                                         </div>
                                                         <div style="background-color: #f7fafc; padding: 20px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                                                             <p style="margin: 0; font-size: 14px; color: #718096;">
-                                                                This is an automated notification from <a href="https://nestbyeden.app" style="color: #10b981; text-decoration: none;"><strong>Nest by Eden Oasis</strong></a><br>
+                                                                This is an automated notification from <a href="${getSiteUrl()}" style="color: #10b981; text-decoration: none;"><strong>Nest by Eden Oasis</strong></a><br>
                                                                 Equipment Management System
                                                             </p>
                                                         </div>

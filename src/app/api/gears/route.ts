@@ -1,5 +1,6 @@
 import { createSupabaseApiClient } from '@/lib/supabase/api-client';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
 export async function GET(request: NextRequest) {
     try {
@@ -24,6 +25,8 @@ export async function GET(request: NextRequest) {
         const search = searchParams.get('search');
         const page = parseInt(searchParams.get('page') || '1', 10);
         const pageSize = parseInt(searchParams.get('pageSize') || '10', 10);
+        const hasExplicitPagination = searchParams.has('page') || searchParams.has('pageSize');
+        const isFieldProjectionOnly = Boolean(fields) && !hasExplicitPagination;
         const offset = (page - 1) * pageSize;
         const limit = pageSize;
 
@@ -54,6 +57,31 @@ export async function GET(request: NextRequest) {
             return query;
         };
 
+        type StatusQueryable<T> = T & {
+            in: (column: string, values: string[]) => T;
+            eq: (column: string, value: string) => T;
+            gt: (column: string, value: number) => T;
+        };
+
+        /** Apply status filter consistently to both count and data queries. */
+        const applyStatusFilter = <T,>(query: StatusQueryable<T>): StatusQueryable<T> => {
+            if (!status || status === 'all') {
+                return query;
+            }
+            if (status === 'Available') {
+                return query.in('status', ['Available', 'Partially Available']).gt('available_quantity', 0);
+            }
+            return query.eq('status', status);
+        };
+
+        /** Exclude soft-deleted inventory from default listings and stats. */
+        const applyActiveInventoryFilter = <T,>(query: ExclusionQueryable<T>): ExclusionQueryable<T> => {
+            if (!status || status === 'all') {
+                return query.neq('status', 'Deleted');
+            }
+            return query;
+        };
+
         // Build the base query for filters
         let baseQuery;
         if (fields) {
@@ -62,17 +90,8 @@ export async function GET(request: NextRequest) {
         } else {
             baseQuery = supabase.from('gears').select('*', { count: 'exact' });
         }
-        if (status && status !== 'all') {
-            // FIX: For Available status, show both Available and Partially Available gears (both have available_quantity > 0)
-            if (status === 'Available') {
-                baseQuery = baseQuery.in('status', ['Available', 'Partially Available']).gt('available_quantity', 0);
-            } else {
-                baseQuery = baseQuery.eq('status', status);
-            }
-        } else if (status === 'all') {
-            // For 'all' status, show all gears except those with 0 available_quantity when status is Available or Partially Available
-            baseQuery = baseQuery.or('status.not.in.(Available,Partially Available),available_quantity.gt.0');
-        }
+        baseQuery = applyStatusFilter(baseQuery);
+        baseQuery = applyActiveInventoryFilter(baseQuery);
         if (category && category !== 'all') {
             baseQuery = baseQuery.eq('category', category);
         }
@@ -99,17 +118,8 @@ export async function GET(request: NextRequest) {
         } else {
             dataQuery = supabase.from('gears').select('*');
         }
-        if (status && status !== 'all') {
-            // FIX: For Available status, ensure both status is Available AND available_quantity > 0
-            if (status === 'Available') {
-                dataQuery = dataQuery.eq('status', status).gt('available_quantity', 0);
-            } else {
-                dataQuery = dataQuery.eq('status', status);
-            }
-        } else if (status === 'all') {
-            // For 'all' status, still don't show items with 0 available_quantity as Available
-            dataQuery = dataQuery.not('status', 'eq', 'Available').or('status.eq.Available,available_quantity.gt.0');
-        }
+        dataQuery = applyStatusFilter(dataQuery);
+        dataQuery = applyActiveInventoryFilter(dataQuery);
         if (category && category !== 'all') {
             dataQuery = dataQuery.eq('category', category);
         }
@@ -119,7 +129,10 @@ export async function GET(request: NextRequest) {
             dataQuery = dataQuery.in('id', idArray);
         }
         dataQuery = applySearch(dataQuery, search);
-        dataQuery = dataQuery.order('name').range(offset, offset + limit - 1);
+        dataQuery = dataQuery.order('name');
+        if (!isFieldProjectionOnly) {
+            dataQuery = dataQuery.range(offset, offset + limit - 1);
+        }
 
         const { data, error } = await dataQuery;
 
@@ -145,22 +158,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const supabase = createSupabaseApiClient(true);
-
-        // Check for admin authorization
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-            return NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // Verify admin role before allowing gear creation
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-        if (profileError || profile?.role !== 'Admin') {
-            return NextResponse.json({ data: null, error: 'Unauthorized: Admin access required' }, { status: 403 });
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
+            return NextResponse.json({ data: null, error: (await authContext.errorResponse.json()).error }, { status: authContext.errorResponse.status });
         }
 
         const body = await request.json();

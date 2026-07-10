@@ -1,342 +1,230 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Megaphone, PlusCircle, Trash2, Edit } from 'lucide-react';
-import { format } from 'date-fns';
-import { useToast } from '@/hooks/use-toast';
+import { useMemo, useState } from 'react';
+import { Megaphone, Newspaper } from 'lucide-react';
 import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose, DialogTrigger
-} from '@/components/ui/dialog';
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { ListSkeleton } from '@/components/dashboard/ListSkeleton';
+import ErrorDisplay from '@/components/ui/error-display';
+import { AnnouncementCard, AnnouncementsEmptyState } from '@/components/announcements/AnnouncementCard';
+import { AnnouncementFormDialog, type AnnouncementFormValues } from '@/components/announcements/AnnouncementFormDialog';
+import { AnnouncementsPageHeader } from '@/components/announcements/AnnouncementsPageHeader';
+import type { Announcement } from '@/components/announcements/types';
+import { useAnnouncements } from '@/hooks/announcements/useAnnouncements';
 import { createClient } from '@/lib/supabase/client';
-import { useSuccessFeedback } from '@/hooks/use-success-feedback';
-// import { Database } from '@/types/supabase';
-
-// Initialize Supabase client
-const supabase = createClient();
-
-// Temporary type definitions since supabase.ts isn't available
-type AnnouncementRow = {
-    id: string;
-    title: string;
-    content: string;
-    created_at: string;
-    created_by: string | null;
-    updated_at?: string;
-};
-
-
-// Original type definition using the Database type
-// type AnnouncementRow = Database['public']['Tables']['announcements']['Row'];
-// type AnnouncementInsert = Database['public']['Tables']['announcements']['Insert'];
-
-type Announcement = {
-    id: string;
-    title: string;
-    content: string;
-    createdAt: Date;
-    created_by: string | null;
-};
 
 export default function AnnouncementsPage() {
     const { toast } = useToast();
-    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [newTitle, setNewTitle] = useState('');
-    const [newContent, setNewContent] = useState('');
-    const [sendNotifications, setSendNotifications] = useState(true);
-    const { showSuccessFeedback, showErrorFeedback, loading, setLoading } = useSuccessFeedback();
+    const supabase = createClient();
+    const {
+        announcements,
+        total,
+        loading,
+        isRefreshing,
+        error,
+        fetchAnnouncements,
+    } = useAnnouncements(100);
 
-    useEffect(() => {
-        fetchAnnouncements();
-    }, []);
+    const [search, setSearch] = useState('');
+    const [formOpen, setFormOpen] = useState(false);
+    const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
+    const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<Announcement | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
-    async function fetchAnnouncements() {
-        console.log("Admin: Fetching announcements...");
+    const filteredAnnouncements = useMemo(() => {
+        const query = search.trim().toLowerCase();
+        if (!query) return announcements;
+        return announcements.filter(
+            (item) =>
+                item.title.toLowerCase().includes(query) ||
+                item.content.toLowerCase().includes(query) ||
+                item.authorName?.toLowerCase().includes(query)
+        );
+    }, [announcements, search]);
+
+    const openCreateDialog = () => {
+        setFormMode('create');
+        setSelectedAnnouncement(null);
+        setFormOpen(true);
+    };
+
+    const openEditDialog = (announcement: Announcement) => {
+        setFormMode('edit');
+        setSelectedAnnouncement(announcement);
+        setFormOpen(true);
+    };
+
+    const handleSubmit = async (values: AnnouncementFormValues) => {
+        setIsSubmitting(true);
         try {
-            const response = await fetch('/api/announcements?limit=100&page=1', { cache: 'no-store' });
-            if (!response.ok) {
-                toast({
-                    title: "Error",
-                    description: "Failed to fetch announcements. Please refresh the page.",
-                    variant: "destructive"
-                });
-                return;
-            }
-
-            const payload = await response.json();
-            const rows = Array.isArray(payload?.announcements) ? payload.announcements : [];
-            if (rows.length) {
-                setAnnouncements(rows.map((a: AnnouncementRow) => ({
-                    id: a.id,
-                    title: a.title,
-                    content: a.content,
-                    createdAt: new Date(a.created_at),
-                    created_by: a.created_by || null,
-                })));
-            }
-        } catch (e) {
-            console.error("Unexpected error in fetchAnnouncements:", e);
-            toast({
-                title: "Error",
-                description: "An unexpected error occurred while fetching announcements.",
-                variant: "destructive"
-            });
-        }
-    }
-
-    const handleAddAnnouncement = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newTitle || !newContent) {
-            showErrorFeedback({ toast: { title: "Error", description: "Title and content cannot be empty." } });
-            return;
-        }
-        setLoading(true);
-        try {
-            // Step 1: Check user auth status (for debugging)
             const { data: { user } } = await supabase.auth.getUser();
-            console.log("Current user:", user);
+            if (!user) throw new Error('You must be logged in to manage announcements.');
 
-            if (!user) {
-                toast({ title: "Error", description: "You must be logged in to post announcements.", variant: "destructive" });
-                setLoading(false);
-                return;
-            }
+            if (formMode === 'create') {
+                const response = await fetch('/api/announcements', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: values.title,
+                        content: values.content,
+                        author_id: user.id,
+                        send_notifications: values.sendNotifications,
+                    }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Failed to create announcement');
 
-            // Step 2: Get the user profile info with role (for debugging)
-            const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('role, id')
-                .eq('id', user.id)
-                .single();
-
-            console.log("User profile:", profileData, "Error:", profileError);
-
-            // Step 3: Use the new API with notification support
-            const response = await fetch('/api/announcements', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    title: newTitle,
-                    content: newContent,
-                    author_id: user.id,
-                    send_notifications: sendNotifications
-                }),
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error || 'Failed to create announcement');
-            }
-
-            console.log("Announcement posted successfully:", result);
-
-            // Reset form and update UI on success
-            setNewTitle('');
-            setNewContent('');
-            setIsModalOpen(false);
-
-            // Show success message with notification stats
-            let successMessage = "Announcement posted successfully.";
-            if (sendNotifications && result.stats) {
-                successMessage += ` Sent ${result.stats.notificationsSent} notifications and ${result.stats.emailsSent} emails.`;
-                if (result.stats.errors && result.stats.errors.length > 0) {
-                    successMessage += ` (${result.stats.errors.length} errors occurred)`;
+                let description = 'Announcement published successfully.';
+                if (values.sendNotifications && result.stats) {
+                    description += ` Sent ${result.stats.notificationsSent} notifications and ${result.stats.emailsSent} emails.`;
                 }
+                toast({ title: 'Published', description });
+            } else if (selectedAnnouncement) {
+                const response = await fetch(`/api/announcements/${selectedAnnouncement.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: values.title,
+                        content: values.content,
+                    }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Failed to update announcement');
+                toast({ title: 'Updated', description: 'Announcement saved successfully.' });
             }
 
-            showSuccessFeedback({
-                toast: {
-                    title: "Success",
-                    description: successMessage
-                },
-                onSuccess: () => setTimeout(() => { fetchAnnouncements(); }, 500)
-            });
-        } catch (e: any) {
-            showErrorFeedback({ toast: { title: "Error", description: e.message || "Failed to post announcement." } });
+            setFormOpen(false);
+            setSelectedAnnouncement(null);
+            await fetchAnnouncements({ silent: true });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Action failed';
+            toast({ title: 'Error', description: message, variant: 'destructive' });
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
-    const handleDeleteAnnouncement = async (announcementId: string) => {
-        // Optimistic UI update
-        setAnnouncements((prev) => prev.filter((a) => a.id !== announcementId));
-        setLoading(true);
+    const handleDelete = async () => {
+        if (!deleteTarget) return;
+        setIsDeleting(true);
         try {
-            const response = await fetch(`/api/announcements/${announcementId}`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-            });
+            const response = await fetch(`/api/announcements/${deleteTarget.id}`, { method: 'DELETE' });
             const result = await response.json();
-            if (!response.ok || result?.error) {
-                throw new Error(result?.details || result?.error || 'Failed to delete announcement');
-            }
-            showSuccessFeedback({ toast: { title: 'Deleted', description: 'Announcement deleted successfully.' } });
-            // Re-fetch after a short delay to account for DB replication lag
-            setTimeout(() => { fetchAnnouncements(); }, 300);
-        } catch (e: any) {
-            // Revert optimistic update on error
-            await fetchAnnouncements();
-            showErrorFeedback({ toast: { title: 'Error', description: e.message || 'Failed to delete announcement.' } });
+            if (!response.ok) throw new Error(result.error || 'Failed to delete announcement');
+            toast({ title: 'Deleted', description: 'Announcement removed.' });
+            setDeleteTarget(null);
+            await fetchAnnouncements({ silent: true });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Failed to delete announcement';
+            toast({ title: 'Error', description: message, variant: 'destructive' });
         } finally {
-            setLoading(false);
-        }
-    };
-
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        visible: {
-            opacity: 1,
-            transition: {
-                staggerChildren: 0.1
-            }
-        }
-    };
-
-    const itemVariants = {
-        hidden: { y: 20, opacity: 0 },
-        visible: {
-            y: 0,
-            opacity: 1
+            setIsDeleting(false);
         }
     };
 
     return (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="space-y-6"
-        >
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <h1 className="text-3xl font-bold text-foreground">Announcements</h1>
-                <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                    <DialogTrigger asChild>
-                        <Button>
-                            <PlusCircle className="mr-2 h-4 w-4" /> Create New Announcement
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[525px]">
-                        <div className="max-h-[100dvh] overflow-y-auto px-1 pb-32 sm:pb-8">
-                            <DialogHeader>
-                                <DialogTitle>Create New Announcement</DialogTitle>
-                                <DialogDescription>
-                                    Write and post a new announcement for all users.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <form onSubmit={handleAddAnnouncement} className="space-y-4 py-4">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="announcement-title">Title</Label>
-                                    <Input
-                                        id="announcement-title"
-                                        value={newTitle}
-                                        onChange={(e) => setNewTitle(e.target.value)}
-                                        placeholder="Announcement Title"
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="announcement-content">Content</Label>
-                                    <Textarea
-                                        id="announcement-content"
-                                        value={newContent}
-                                        onChange={(e) => setNewContent(e.target.value)}
-                                        placeholder="Write your announcement here..."
-                                        rows={5}
-                                    />
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <input
-                                        type="checkbox"
-                                        id="send-notifications"
-                                        checked={sendNotifications}
-                                        onChange={(e) => setSendNotifications(e.target.checked)}
-                                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                                    />
-                                    <Label htmlFor="send-notifications" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                        Send notifications and emails to all users
-                                    </Label>
-                                </div>
-                                <DialogFooter>
-                                    <DialogClose asChild>
-                                        <Button type="button" variant="outline">Cancel</Button>
-                                    </DialogClose>
-                                    <Button type="submit" disabled={loading}>
-                                        {loading ? 'Posting...' : 'Post Announcement'}
-                                    </Button>
-                                </DialogFooter>
-                            </form>
+        <div className="mx-auto w-full max-w-4xl space-y-6">
+            <AnnouncementsPageHeader
+                title="Announcements"
+                description="Publish updates and keep everyone informed."
+                isRefreshing={isRefreshing}
+                onRefresh={() => void fetchAnnouncements({ silent: true })}
+                onCreate={openCreateDialog}
+                createLabel="New announcement"
+            />
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Card className="border-border/50">
+                    <CardContent className="flex items-center gap-3 p-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                            <Newspaper className="h-5 w-5 text-primary" />
                         </div>
-                    </DialogContent>
-                </Dialog>
+                        <div>
+                            <p className="text-xs text-muted-foreground">Total published</p>
+                            <p className="text-2xl font-semibold">{loading ? '—' : total}</p>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="border-border/50 sm:col-span-2">
+                    <CardContent className="p-4">
+                        <Input
+                            placeholder="Search by title, message, or author..."
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                        />
+                    </CardContent>
+                </Card>
             </div>
 
-            {/* List of Existing Announcements */}
-            <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="space-y-4"
-            >
-                {announcements.length > 0 ? (
-                    announcements.map((announcement) => (
-                        <motion.div key={announcement.id} variants={itemVariants}>
-                            <Card>
-                                <CardHeader>
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <CardTitle className="flex items-center gap-2">
-                                                <Megaphone className="h-5 w-5 text-primary" />
-                                                {announcement.title}
-                                            </CardTitle>
-                                            <CardDescription className="text-xs mt-1">
-                                                Posted by {announcement.created_by || 'Unknown'} on {format(announcement.createdAt, 'PPP')}
-                                            </CardDescription>
-                                        </div>
-                                        <div className="flex gap-1">
-                                            <Button variant="ghost" size="icon" disabled> {/* TODO: Implement Edit */}
-                                                <Edit className="h-4 w-4" />
-                                                <span className="sr-only">Edit</span>
-                                            </Button>
-                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteAnnouncement(announcement.id)}>
-                                                <Trash2 className="h-4 w-4" />
-                                                <span className="sr-only">Delete</span>
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-sm whitespace-pre-wrap">{announcement.content}</p>
-                                </CardContent>
-                            </Card>
-                        </motion.div>
-                    ))
-                ) : (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.2 }}
-                    >
-                        <Card className="text-center py-10">
-                            <CardContent>
-                                <Megaphone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                                <p className="text-muted-foreground">No announcements posted yet.</p>
-                                <Button variant="link" className="mt-2" onClick={() => setIsModalOpen(true)}>
-                                    Create your first announcement
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
-                )}
-            </motion.div>
-        </motion.div>
+            {error ? (
+                <ErrorDisplay error={error} onRetry={() => void fetchAnnouncements()} />
+            ) : loading ? (
+                <ListSkeleton rows={4} />
+            ) : filteredAnnouncements.length === 0 ? (
+                <AnnouncementsEmptyState onCreate={announcements.length === 0 ? openCreateDialog : undefined} />
+            ) : (
+                <div className="space-y-4">
+                    {filteredAnnouncements.map((announcement) => (
+                        <AnnouncementCard
+                            key={announcement.id}
+                            announcement={announcement}
+                            showAdminActions
+                            expanded
+                            onEdit={() => openEditDialog(announcement)}
+                            onDelete={() => setDeleteTarget(announcement)}
+                        />
+                    ))}
+                </div>
+            )}
+
+            <AnnouncementFormDialog
+                open={formOpen}
+                mode={formMode}
+                announcement={selectedAnnouncement}
+                isSubmitting={isSubmitting}
+                onOpenChange={(open) => {
+                    setFormOpen(open);
+                    if (!open) setSelectedAnnouncement(null);
+                }}
+                onSubmit={handleSubmit}
+            />
+
+            <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete announcement</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Delete &quot;{deleteTarget?.title}&quot;? This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(event) => {
+                                event.preventDefault();
+                                void handleDelete();
+                            }}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </div>
     );
 }

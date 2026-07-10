@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import {
+    requireAuthenticatedRouteUser as requireAuthenticatedBase,
+    requireActiveAdminRouteUser as requireActiveAdminBase,
+} from '@/lib/api-auth';
 
 type AuthenticatedContext = {
-    authSupabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
-    user: NonNullable<Awaited<ReturnType<Awaited<ReturnType<typeof createSupabaseServerClient>>['auth']['getUser']>>['data']['user']>;
+    authSupabase: Awaited<ReturnType<typeof import('@/lib/supabase/server').createSupabaseServerClient>>;
+    user: NonNullable<Awaited<ReturnType<Awaited<ReturnType<typeof import('@/lib/supabase/server').createSupabaseServerClient>>['auth']['getUser']>>['data']['user']>;
 };
 
 type ActiveAdminContext = AuthenticatedContext & {
-    adminSupabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+    adminSupabase: Awaited<ReturnType<typeof import('@/lib/supabase/server').createSupabaseAdminClient>>;
 };
 
 type AuthFailure = {
@@ -15,38 +18,30 @@ type AuthFailure = {
 };
 
 export async function requireAuthenticatedRouteUser(): Promise<AuthenticatedContext | AuthFailure> {
-    const authSupabase = await createSupabaseServerClient();
-    const { data: { user }, error: authError } = await authSupabase.auth.getUser();
-
-    if (authError || !user) {
+    const authContext = await requireAuthenticatedBase();
+    if ('errorResponse' in authContext) {
         return {
             errorResponse: NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 })
         };
     }
 
-    return { authSupabase, user };
+    return {
+        authSupabase: authContext.authSupabase,
+        user: authContext.user,
+    };
 }
 
 export async function requireActiveAdminRoute(): Promise<ActiveAdminContext | AuthFailure> {
-    const authContext = await requireAuthenticatedRouteUser();
+    const authContext = await requireActiveAdminBase();
     if ('errorResponse' in authContext) {
-        return authContext;
-    }
-
-    const adminSupabase = await createSupabaseServerClient(true);
-    const { data: profile, error: profileError } = await adminSupabase
-        .from('profiles')
-        .select('role, status')
-        .eq('id', authContext.user.id)
-        .maybeSingle();
-
-    const isActiveAdmin = !profileError && profile?.role === 'Admin' && profile?.status === 'Active';
-
-    if (!isActiveAdmin) {
         return {
             errorResponse: NextResponse.json({ data: null, error: 'Forbidden' }, { status: 403 })
-        };
+        }
     }
 
-    return { ...authContext, adminSupabase };
+    return {
+        authSupabase: authContext.authSupabase,
+        user: authContext.user,
+        adminSupabase: authContext.adminSupabase,
+    };
 }

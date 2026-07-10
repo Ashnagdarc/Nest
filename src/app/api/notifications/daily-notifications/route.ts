@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/client';
 import { normalizeNotificationInsert, normalizeNotificationType } from '@/lib/notification-type';
+import { sitePath } from '@/lib/site-url';
 
 const DUE_SOON_TYPE = 'Due Soon';
 const DUE_SOON_SUBTYPE = 'due_soon';
@@ -86,7 +87,7 @@ async function handleGearOverdue() {
 
             // Send Email
             if (userProfile.email) {
-                await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifications/overdue-reminder`, {
+                await fetch(sitePath('/api/notifications/overdue-reminder'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

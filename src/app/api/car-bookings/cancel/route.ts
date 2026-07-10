@@ -3,8 +3,9 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingCancellationEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
 import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
-import { normalizeNotificationInsert, normalizeNotificationType } from '@/lib/notification-type';
+import { normalizeNotificationInsert } from '@/lib/notification-type';
 import { randomUUID } from 'crypto';
+import { sitePath } from '@/lib/site-url';
 
 export async function POST(request: NextRequest) {
     const correlationId = randomUUID();
@@ -13,16 +14,19 @@ export async function POST(request: NextRequest) {
     const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
         NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: userMessage, error_code: errorCode, correlation_id: correlationId, error }, { status });
     try {
+        const userClient = await createSupabaseServerClient();
         const admin = await createSupabaseServerClient(true);
+        const { data: authData, error: authError } = await userClient.auth.getUser();
+        const userId = authData.user?.id || null;
+        if (authError || !userId) {
+            return fail(401, 'Unauthorized', 'Authentication required.', 'CAR_BOOKING_UNAUTHORIZED');
+        }
+
         const { bookingId, reason } = await request.json();
         
         if (!bookingId) {
             return fail(400, 'bookingId is required', 'Missing booking reference.', 'BOOKING_ID_REQUIRED');
         }
-
-        // Get current user
-        const { data: me } = await admin.auth.getUser();
-        const userId = me.user?.id || null;
 
         // Fetch the booking
         const { data: booking, error: selErr } = await admin
@@ -38,11 +42,11 @@ export async function POST(request: NextRequest) {
         // Check if user is admin or owns the booking
         const { data: profile } = await admin
             .from('profiles')
-            .select('role')
+            .select('role, status')
             .eq('id', userId)
             .single();
         
-        const isAdmin = profile?.role === 'Admin';
+        const isAdmin = profile?.role === 'Admin' && profile?.status === 'Active';
         const isOwner = booking.requester_id === userId;
 
         if (!isAdmin && !isOwner) {
@@ -121,7 +125,7 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-            const { data: aggregate } = await (admin as any)
+            const { data: aggregate } = await admin
                 .from('bookings')
                 .select('id')
                 .eq('source_type', 'car_booking')
@@ -268,7 +272,7 @@ export async function POST(request: NextRequest) {
                                     ]
                                 }],
                                 ctaLabel: 'View bookings',
-                                ctaHref: 'https://nestbyeden.app/admin/manage-car-bookings',
+                                ctaHref: sitePath('/admin/manage-car-bookings'),
                                 footerNote: 'Nest by Eden Oasis · Vehicle management',
                             });
                             await sendGearRequestEmail({

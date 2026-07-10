@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 import { createHash } from 'crypto';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getSiteUrl, sitePath } from '@/lib/site-url';
 
 
 
@@ -14,16 +15,13 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const RESEND_FROM = process.env.RESEND_FROM || 'Nest by Eden Oasis <onboarding@resend.dev>';
 const EMAIL_RETRY_DELAY_MINUTES = 5;
 
-const resolveBaseUrl = (): string | null => {
-  const explicitBase =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    null;
-
-  if (explicitBase) return explicitBase.replace(/\/+$/, '');
+function resolveBaseUrl(): string | null {
+  if (process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_BASE_URL) {
+    return getSiteUrl();
+  }
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return null;
-};
+  return getSiteUrl();
+}
 
 async function triggerEmailWorker() {
   const baseUrl = resolveBaseUrl();
@@ -195,18 +193,6 @@ function formatDate(dateString: string): string {
   });
 }
 
-// Helper function to create gear list HTML
-function createGearListHTML(gears: Array<{ name: string; id?: string; condition?: string }>): string {
-  if (!gears || gears.length === 0) return '<p><em>No gear specified</em></p>';
-
-  return gears.map(gear => `
-    <div class="gear-item">
-      <span class="gear-name">${gear.name}</span>
-      ${gear.condition ? `<span class="gear-status status-${gear.condition.toLowerCase()}">${gear.condition}</span>` : ''}
-    </div>
-  `).join('');
-}
-
 export async function sendGearRequestEmail({
   to,
   subject,
@@ -247,7 +233,7 @@ export async function sendWelcomeEmail({ to, userName }: { to: string; userName?
     greeting: `Hello${userName ? ` ${userName}` : ''},`,
     message: 'Welcome to Nest by Eden Oasis. Your account is ready and you can now request and manage equipment and car bookings.',
     ctaLabel: 'Open dashboard',
-    ctaHref: 'https://nestbyeden.app/user',
+    ctaHref: sitePath('/user'),
   });
   return sendGearRequestEmail({
     to,
@@ -272,7 +258,7 @@ export async function sendAnnouncementEmail({
   authorName: string;
   announcementId: string;
 }) {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://nest-eden-oasis.vercel.app';
+  const siteUrl = getSiteUrl();
   const announcementUrl = `${siteUrl}/user/announcements?announcement=${announcementId}`;
 
   const html = minimalEmailLayout({
@@ -335,7 +321,7 @@ export async function sendApprovalEmail({
       'Return items by the due date.',
     ],
     ctaLabel: 'View request',
-    ctaHref: 'https://nestbyeden.app/user/my-requests',
+    ctaHref: sitePath('/user/my-requests'),
   });
 
   return sendGearRequestEmail({
@@ -379,7 +365,7 @@ export async function sendRejectionEmail({
       'You can submit a new request with updated details.',
     ],
     ctaLabel: 'View requests',
-    ctaHref: 'https://nestbyeden.app/user/my-requests',
+    ctaHref: sitePath('/user/my-requests'),
   });
 
   return sendGearRequestEmail({
@@ -430,7 +416,7 @@ export async function sendCheckinApprovalEmail({
       },
     ],
     ctaLabel: 'View history',
-    ctaHref: 'https://nestbyeden.app/user/history',
+    ctaHref: sitePath('/user/history'),
   });
 
   return sendGearRequestEmail({
@@ -480,7 +466,7 @@ export async function sendCheckinRejectionEmail({
       'Contact admin if you need help.',
     ],
     ctaLabel: 'View check-in history',
-    ctaHref: 'https://nestbyeden.app/user/history',
+    ctaHref: sitePath('/user/history'),
   });
 
   return sendGearRequestEmail({
@@ -550,8 +536,8 @@ export async function sendCheckinSubmissionEmail({
         ],
     ctaLabel: audience === 'admin' ? 'Review check-ins' : 'View history',
     ctaHref: audience === 'admin'
-      ? 'https://nestbyeden.app/admin/manage-checkins'
-      : 'https://nestbyeden.app/user/history',
+      ? sitePath('/admin/manage-checkins')
+      : sitePath('/user/history'),
   });
 
   return sendGearRequestEmail({
@@ -588,12 +574,61 @@ export async function sendRequestReceivedEmail({
       'You will receive an email update once a decision is made.',
     ],
     ctaLabel: 'Track request',
-    ctaHref: 'https://nestbyeden.app/user/my-requests',
+    ctaHref: sitePath('/user/my-requests'),
   });
 
   return sendGearRequestEmail({
     to,
     subject: 'Equipment request received',
+    html,
+  });
+}
+
+/** Notify a colleague that equipment was booked for them by someone else. */
+export async function sendEquipmentBookedForYouEmail({
+  to,
+  recipientName,
+  bookerName,
+  gearList,
+  reason,
+  destination,
+  duration,
+  requestId,
+}: {
+  to: string;
+  recipientName: string;
+  bookerName: string;
+  gearList: string;
+  reason?: string;
+  destination?: string;
+  duration?: string;
+  requestId?: string;
+}) {
+  const gears = gearList.split('\n').map((line) => line.trim()).filter(Boolean);
+  const html = minimalEmailLayout({
+    title: 'Equipment booked for you',
+    preheader: `${bookerName} booked equipment on your behalf`,
+    greeting: `Hello ${recipientName || 'there'},`,
+    message: `${bookerName} has submitted an equipment request on your behalf. You will be notified when it is approved.`,
+    sections: [{
+      heading: 'Requested items',
+      rows: gears.map((line) => ({ label: line.replace(/^\d+\.\s*/, ''), value: 'Pending review' })),
+    }, {
+      heading: 'Details',
+      rows: [
+        ...(reason ? [{ label: 'Reason', value: reason }] : []),
+        ...(destination ? [{ label: 'Destination', value: destination }] : []),
+        ...(duration ? [{ label: 'Duration', value: duration }] : []),
+        ...(requestId ? [{ label: 'Request ID', value: requestId }] : []),
+      ],
+    }],
+    ctaLabel: 'View my requests',
+    ctaHref: sitePath('/user/my-requests'),
+  });
+
+  return sendGearRequestEmail({
+    to,
+    subject: `Equipment booked for you by ${bookerName}`,
     html,
   });
 }
@@ -680,9 +715,10 @@ export async function sendReservationApprovedEmail_DISABLED({
     }
 
     return { success: true, data };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Email Error] Reservation approved:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -765,9 +801,10 @@ export async function sendReservationRejectedEmail_DISABLED({
     }
 
     return { success: true, data };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Email Error] Reservation rejected:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -856,9 +893,10 @@ export async function sendReservationCancelledEmail_DISABLED({
     }
 
     return { success: true, data };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Email Error] Reservation cancelled:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -946,9 +984,10 @@ export async function sendReservationReminderEmail_DISABLED({
     }
 
     return { success: true, data };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Email Error] Reservation reminder:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -993,7 +1032,7 @@ export async function sendOverdueReminderEmail({
       'Contact admin if you need support.',
     ],
     ctaLabel: 'Check in equipment',
-    ctaHref: 'https://nestbyeden.app/user/check-in',
+    ctaHref: sitePath('/user/check-in'),
   });
 
   return sendGearRequestEmail({
@@ -1185,7 +1224,7 @@ export async function sendCarBookingRequestEmail({
       'You will receive an update by email once a decision is made.',
     ],
     ctaLabel: 'View booking',
-    ctaHref: 'https://nestbyeden.app/user/car-booking',
+    ctaHref: sitePath('/user/car-booking'),
   });
 
   return sendGearRequestEmail({
@@ -1231,7 +1270,7 @@ export async function sendCarBookingApprovalEmail({
       'Return the vehicle at the scheduled end time.',
     ],
     ctaLabel: 'View booking',
-    ctaHref: 'https://nestbyeden.app/user/car-booking',
+    ctaHref: sitePath('/user/car-booking'),
   });
 
   return sendGearRequestEmail({
@@ -1273,7 +1312,7 @@ export async function sendCarBookingRejectionEmail({
       'You may submit a new request with updated details.',
     ],
     ctaLabel: 'View booking page',
-    ctaHref: 'https://nestbyeden.app/user/car-booking',
+    ctaHref: sitePath('/user/car-booking'),
   });
 
   return sendGearRequestEmail({
@@ -1315,7 +1354,7 @@ export async function sendCarReturnConfirmationEmail({
       ]
     }],
     ctaLabel: 'View booking history',
-    ctaHref: 'https://nestbyeden.app/user/car-booking',
+    ctaHref: sitePath('/user/car-booking'),
   });
 
   return sendGearRequestEmail({
@@ -1360,7 +1399,7 @@ export async function sendCarBookingCancellationEmail({
       ]
     }],
     ctaLabel: 'View bookings',
-    ctaHref: 'https://nestbyeden.app/user/car-booking',
+    ctaHref: sitePath('/user/car-booking'),
   });
 
   return sendGearRequestEmail({
@@ -1412,7 +1451,7 @@ export async function sendGearRequestApprovalEmail({
       },
     ],
     ctaLabel: 'View request details',
-    ctaHref: `https://nestbyeden.app/user/gear-requests${requestId ? '?request=' + requestId : ''}`,
+    ctaHref: sitePath(`/user/gear-requests${requestId ? `?request=${requestId}` : ''}`),
   });
 
   return sendGearRequestEmail({
@@ -1465,7 +1504,7 @@ export async function sendGearRequestRejectionEmail({
       'Submit a new request if needed.',
     ],
     ctaLabel: 'Submit new request',
-    ctaHref: 'https://nestbyeden.app/user/gear-requests',
+    ctaHref: sitePath('/user/gear-requests'),
   });
 
   return sendGearRequestEmail({
@@ -1534,7 +1573,7 @@ export async function sendBookingLifecycleEmail({
     try {
       const supabase = await createSupabaseServerClient(true);
 
-      const { data: assignment } = await (supabase as any)
+      const { data: assignment } = await supabase
         .from('car_assignment')
         .select('car_id')
         .eq('booking_id', booking.source_id)
@@ -1542,7 +1581,7 @@ export async function sendBookingLifecycleEmail({
 
       let carLabel = 'Assigned car';
       if (assignment?.car_id) {
-        const { data: car } = await (supabase as any)
+        const { data: car } = await supabase
           .from('cars')
           .select('label,plate')
           .eq('id', assignment.car_id)
@@ -1607,12 +1646,12 @@ export async function sendBookingLifecycleEmail({
       }] : []),
     ],
     ctaLabel: 'View bookings',
-    ctaHref: 'https://nestbyeden.app/user/my-requests',
+    ctaHref: sitePath('/user/my-requests'),
   });
 
   const supabase = await createSupabaseServerClient(true);
   const nowIso = new Date().toISOString();
-  const { data: existingLog } = await (supabase as any)
+  const { data: existingLog } = await supabase
     .from('email_logs')
     .select('id,status')
     .eq('recipient', to)
@@ -1624,7 +1663,7 @@ export async function sendBookingLifecycleEmail({
     return { success: true, deduped: true };
   }
 
-  await (supabase as any).from('email_logs').upsert({
+  await supabase.from('email_logs').upsert({
     booking_id: booking.id,
     provider: 'resend',
     template_name: 'booking_lifecycle_update',
@@ -1642,7 +1681,7 @@ export async function sendBookingLifecycleEmail({
   const wasSent = !!result.success;
   const failedNextAttemptAt = new Date(Date.now() + EMAIL_RETRY_DELAY_MINUTES * 60 * 1000).toISOString();
 
-  await (supabase as any).from('email_logs').upsert({
+  await supabase.from('email_logs').upsert({
     booking_id: booking.id,
     provider: 'resend',
     template_name: 'booking_lifecycle_update',
@@ -1650,7 +1689,7 @@ export async function sendBookingLifecycleEmail({
     payload_hash: payloadHash,
     status: wasSent ? 'sent' : 'failed',
     error_message: wasSent ? null : result.error || 'Unknown email error',
-    provider_message_id: wasSent ? String((result as any).result?.data?.id || '') : null,
+    provider_message_id: wasSent ? String(result.result?.data?.id || '') : null,
     attempt_count: 1,
     last_attempt_at: nowIso,
     processed_at: wasSent ? nowIso : null,

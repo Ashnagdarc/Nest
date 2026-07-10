@@ -6,13 +6,23 @@ import { defineConfig } from "eslint/config";
 
 export default defineConfig([
   {
+    ignores: [".next/**", "node_modules/**", "build/**", "dist/**", "coverage/**"],
+  },
+  {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
     plugins: { js },
     extends: ["js/recommended"],
   },
   { files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"], languageOptions: { globals: globals.browser } },
   tseslint.configs.recommended,
-  pluginReact.configs.flat.recommended,
+  {
+    ...pluginReact.configs.flat.recommended,
+    settings: {
+      react: {
+        version: "detect",
+      },
+    },
+  },
   // Custom rule override at the very end to take precedence
   {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],

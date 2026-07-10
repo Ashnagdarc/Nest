@@ -1,62 +1,26 @@
-import { type User } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
-
-type Profile = {
-    role: string | null;
-    status: string | null;
-};
-
-export type RouteAuthContext = {
-    authSupabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
-    user: User;
-    profile: Profile | null;
-    isActiveAdmin: boolean;
-};
+import {
+    getRouteAuthContext as getRouteAuthContextBase,
+    requireActiveAdminRouteUser,
+    hasValidCronSecret as hasValidCronSecretBase,
+} from '@/lib/api-auth';
 
 export async function getRouteAuthContext() {
-    const authSupabase = await createSupabaseServerClient();
-    const { data: { user }, error: authError } = await authSupabase.auth.getUser();
-
-    if (authError || !user) {
-        return {
-            errorResponse: NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        };
-    }
-
-    const { data: profile } = await authSupabase
-        .from('profiles')
-        .select('role, status')
-        .eq('id', user.id)
-        .maybeSingle();
-
-    return {
-        authSupabase,
-        user,
-        profile: profile ?? null,
-        isActiveAdmin: profile?.role === 'Admin' && profile?.status === 'Active'
-    };
+    return getRouteAuthContextBase();
 }
 
 export async function requireActiveAdmin() {
-    const authContext = await getRouteAuthContext();
+    const authContext = await requireActiveAdminRouteUser();
     if ('errorResponse' in authContext) {
-        return authContext;
-    }
-
-    if (!authContext.isActiveAdmin) {
+        const payload = await authContext.errorResponse.json();
         return {
-            errorResponse: NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+            errorResponse: NextResponse.json(payload, { status: authContext.errorResponse.status })
         };
     }
 
-    return {
-        ...authContext,
-        adminSupabase: await createSupabaseAdminClient()
-    };
+    return authContext;
 }
 
 export function hasValidCronSecret(request: NextRequest) {
-    const authHeader = request.headers.get('authorization');
-    return Boolean(process.env.CRON_SECRET) && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+    return hasValidCronSecretBase(request);
 }

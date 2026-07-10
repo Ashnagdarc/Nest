@@ -1,35 +1,25 @@
 "use client";
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, AlertTriangle, AlertCircle, ChevronDown } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from 'react';
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createSystemNotification } from '@/lib/notifications';
 import { groupBy } from 'lodash';
-
-type Checkin = {
-  id: string;
-  userId: string;
-  userName: string;
-  avatarUrl?: string | null;
-  gearId: string;
-  quantity: number;
-  gearName: string;
-  checkinDate: Date | null;
-  notes: string;
-  status: string;
-  condition: string;
-  damageNotes: string | null;
-  requestId: string | null;
-};
+import { ListSkeleton } from "@/components/dashboard/ListSkeleton";
+import { CheckinPageHeader } from "@/components/admin/checkins/CheckinPageHeader";
+import { CheckinStatsCards } from "@/components/admin/checkins/CheckinStatsCards";
+import { PendingCheckinGroupCard } from "@/components/admin/checkins/PendingCheckinGroupCard";
+import { RecentCheckinGroupCard } from "@/components/admin/checkins/RecentCheckinGroupCard";
+import { CheckinEmptyState } from "@/components/admin/checkins/CheckinEmptyState";
+import type { Checkin, RequestSummary } from "@/components/admin/checkins/types";
+import { useCheckinSummary } from "@/hooks/admin/useCheckinSummary";
 
 type ApiCheckinRow = {
   id: string;
@@ -53,25 +43,6 @@ type ApiCheckinRow = {
     name?: string | null;
     current_request_id?: string | null;
   }> | null;
-};
-
-type RequestLineSummary = {
-  requestId: string;
-  gearId: string;
-  gearName: string;
-  requestedQty: number;
-  completedQty: number;
-  pendingQty: number;
-  outstandingQty: number;
-};
-
-type RequestSummary = {
-  requestId: string;
-  totalRequestedQty: number;
-  totalCompletedQty: number;
-  totalPendingQty: number;
-  totalOutstandingQty: number;
-  lines: RequestLineSummary[];
 };
 
 const MAX_PAGES_PER_LOAD = 10;
@@ -115,9 +86,11 @@ export default function ManageCheckinsPage() {
   const { toast } = useToast();
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [page, setPage] = useState<number>(1);
-  const [limit] = useState<number>(5);
+  const [limit] = useState<number>(10);
   const [loadingCheckins, setLoadingCheckins] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [summaryRefreshKey, setSummaryRefreshKey] = useState(0);
+  const { summary, loading: summaryLoading } = useCheckinSummary(summaryRefreshKey);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [displayableTotal, setDisplayableTotal] = useState<number | null>(null);
@@ -336,6 +309,7 @@ export default function ManageCheckinsPage() {
       setDisplayableTotal((pagination.total ?? 0) - (pendingTotal ?? 0));
 
       setHasMore((pagination.total ?? 0) > fetchPage * limit);
+      setSummaryRefreshKey((key) => key + 1);
     } catch (error) {
       console.error('Unexpected error in fetchCheckins:', error);
       toast({
@@ -405,6 +379,7 @@ export default function ManageCheckinsPage() {
       setTotalCount(latestTotal);
       setDisplayableTotal(latestTotal - latestPendingTotal);
       setGroupsToShow(targetGroups);
+      setSummaryRefreshKey((key) => key + 1);
     } catch (error) {
       console.error('Failed to load more check-ins:', error);
       toast({
@@ -1021,176 +996,66 @@ export default function ManageCheckinsPage() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="container mx-auto py-6 space-y-6"
+      className="space-y-6 pb-8"
     >
-      {/* Header Section */}
-      <div className="flex justify-between items-center border-b pb-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Manage Check-ins</h1>
-          <p className="text-muted-foreground mt-1">Review and process gear returns</p>
-        </div>
-      </div>
+      <CheckinPageHeader
+        isRefreshing={loadingCheckins || loadingMore}
+        onRefresh={() => void fetchCheckins()}
+      />
 
-      {/* Stats Overview */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Pending Approvals</p>
-                <h3 className="text-2xl font-bold mt-1">
-                  {checkins.filter(c => c.status === 'Pending Admin Approval').length}
-                </h3>
-              </div>
-              <div className="p-3 bg-orange-100 rounded-full">
-                <AlertCircle className="h-5 w-5 text-orange-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <CheckinStatsCards summary={summary} loading={summaryLoading} />
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Completed Today</p>
-                <h3 className="text-2xl font-bold mt-1">
-                  {checkins.filter(c =>
-                    c.status === 'Completed' &&
-                    c.checkinDate?.toDateString() === new Date().toDateString()
-                  ).length}
-                </h3>
-              </div>
-              <div className="p-3 bg-green-100 rounded-full">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Damaged Items</p>
-                <h3 className="text-2xl font-bold mt-1">
-                  {checkins.filter(c => c.condition === 'Damaged').length}
-                </h3>
-              </div>
-              <div className="p-3 bg-red-100 rounded-full">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Content */}
       <div className="grid gap-6">
-        {/* Pending Check-ins */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Pending Check-ins</CardTitle>
-            <CardDescription>Review and approve gear returns that need attention.</CardDescription>
+        <Card className="border-border/50">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <CardTitle>Pending check-ins</CardTitle>
+                <CardDescription>Review and approve gear returns that need attention.</CardDescription>
+              </div>
+              {summary.pending > 0 && (
+                <Badge variant="secondary" className="rounded-full">
+                  {summary.pending} pending
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="space-y-8"
-            >
-              {Object.entries(groupedPendingCheckins).map(([groupKey, group]) => {
-                const typedGroup: Checkin[] = group as Checkin[];
-                const requestId = groupKey.startsWith('req::') ? groupKey.replace('req::', '') : null;
-                const requestSummary = requestId ? requestSummaries[requestId] : null;
-                return (
-                  <motion.div
-                    key={groupKey}
-                    variants={itemVariants}
-                    className="border rounded-lg p-4 bg-card hover:bg-accent/5 transition-colors"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-3">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-lg">
-                              {requestId ? `Request: ${requestId.slice(0, 8)}` : `Group: ${typedGroup[0].checkinDate?.toLocaleDateString() || 'No Date'}`}
-                            </h3>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Submitted by {typedGroup[0].userName}
-                          </p>
-                        </div>
-                        {requestSummary && (
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            <Badge variant="secondary">Requested: {requestSummary.totalRequestedQty}</Badge>
-                            <Badge variant="outline">Completed: {requestSummary.totalCompletedQty}</Badge>
-                            <Badge variant="outline">Pending: {requestSummary.totalPendingQty}</Badge>
-                            <Badge variant={requestSummary.totalOutstandingQty > 0 ? 'destructive' : 'secondary'}>
-                              Outstanding: {requestSummary.totalOutstandingQty}
-                            </Badge>
-                          </div>
-                        )}
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {requestSummary ? (
-                            requestSummary.lines.map((line) => (
-                              <Badge
-                                key={`${line.requestId}-${line.gearId}`}
-                                variant={line.outstandingQty > 0 ? 'outline' : 'secondary'}
-                              >
-                                {line.gearName} req x{line.requestedQty} | done {line.completedQty} | pending {line.pendingQty} | left {line.outstandingQty}
-                              </Badge>
-                            ))
-                          ) : (
-                            typedGroup.map((c: Checkin) => (
-                              <Badge key={c.id} variant={c.condition === 'Damaged' ? 'destructive' : 'outline'}>
-                                {c.gearName} x{c.quantity} ({c.condition})
-                              </Badge>
-                            ))
-                          )}
-                        </div>
-                        {typedGroup.some((c: Checkin) => c.notes) && (
-                          <div className="bg-muted p-3 rounded-md mt-2">
-                            <p className="text-sm font-medium">Notes:</p>
-                            <p className="text-sm text-muted-foreground">{typedGroup.map((c: Checkin) => c.notes).filter((note: string) => Boolean(note)).join(' | ')}</p>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-green-600 hover:text-green-800 hover:bg-green-50"
-                          onClick={() => handleApproveAllInGroup(groupKey)}
-                          loading={isApproving}
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Approve All
-                        </Button>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-              {pendingCheckins.length === 0 && (
-                <div className="text-center py-12">
-                  <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">All Caught Up!</h3>
-                  <p className="text-muted-foreground">
-                    No pending check-ins to review at the moment.
-                  </p>
-                </div>
-              )}
-            </motion.div>
+            {loadingCheckins && pendingCheckins.length === 0 ? (
+              <ListSkeleton rows={3} />
+            ) : (
+              <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="space-y-4"
+              >
+                {Object.entries(groupedPendingCheckins).map(([groupKey, group]) => {
+                  const typedGroup = group as Checkin[];
+                  const requestId = groupKey.startsWith('req::') ? groupKey.replace('req::', '') : null;
+                  const requestSummary = requestId ? requestSummaries[requestId] : null;
+                  return (
+                    <motion.div key={groupKey} variants={itemVariants}>
+                      <PendingCheckinGroupCard
+                        groupKey={groupKey}
+                        items={typedGroup}
+                        requestSummary={requestSummary}
+                        onApproveAll={handleApproveAllInGroup}
+                        isApproving={isApproving}
+                      />
+                    </motion.div>
+                  );
+                })}
+                {pendingCheckins.length === 0 && <CheckinEmptyState />}
+              </motion.div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Recent Activity */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Check-ins</CardTitle>
-            <CardDescription>History of recently processed check-ins.</CardDescription>
+        <Card className="border-border/50">
+          <CardHeader className="pb-3">
+            <CardTitle>Recent check-ins</CardTitle>
+            <CardDescription>History of recently processed returns.</CardDescription>
           </CardHeader>
           <CardContent>
             <motion.div
@@ -1199,102 +1064,42 @@ export default function ManageCheckinsPage() {
               animate="visible"
               className="space-y-4"
             >
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-muted-foreground">
-                  Showing {checkins.filter(c => c.status !== 'Pending Admin Approval').length} of {displayableTotal ?? totalCount ?? '-'} recent check-ins
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                <p>
+                  Showing {checkins.filter(c => c.status !== 'Pending Admin Approval').length} of{' '}
+                  {displayableTotal ?? totalCount ?? '—'} recent check-ins
                 </p>
-                {totalCount !== null && (
-                  <p className="text-sm text-muted-foreground">Total: {totalCount}</p>
-                )}
+                {totalCount !== null && <p>Total records: {totalCount}</p>}
               </div>
               {loadingCheckins ? (
-                // Loading placeholders
-                [1,2,3].map(i => (
-                  <motion.div key={`skeleton-${i}`} variants={itemVariants} className="border rounded-lg p-4 bg-card animate-pulse">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="h-5 w-48 bg-muted rounded mb-2" />
-                        <div className="h-4 w-36 bg-muted rounded" />
-                      </div>
-                      <div className="h-6 w-12 bg-muted rounded" />
-                    </div>
-                  </motion.div>
-                ))
+                <ListSkeleton rows={4} />
               ) : (
                 <>
-                  {orderedGroups.slice(0, groupsToShow).map(([requestId, items]) => {
+                  {orderedGroups.slice(0, groupsToShow).map(([groupKey, items]) => {
                     const groupItems = items as Checkin[];
-                    const first = groupItems[0];
-                    const isExpanded = !!expandedGroups[requestId];
-                    const itemCount = (expandedItems[requestId] || groupItems).length;
-                    const latestDate = groupItems.reduce((latest: Date | null, it) => {
-                      if (!it.checkinDate) return latest;
-                      if (!latest) return it.checkinDate;
-                      return it.checkinDate > latest ? it.checkinDate : latest;
-                    }, null);
-
                     return (
-                      <motion.div key={requestId} variants={itemVariants} className="border rounded-lg p-4 bg-card">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-10 w-10">
-                              {first.avatarUrl ? (
-                                <AvatarImage src={first.avatarUrl} />
-                              ) : (
-                                <AvatarFallback className="text-xs">{first.userName?.slice(0,2)}</AvatarFallback>
-                              )}
-                            </Avatar>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h3 className="font-semibold">{first.userName}</h3>
-                                <Badge variant={first.status === 'Completed' ? 'default' : (first.status === 'Rejected' ? 'destructive' : 'secondary')}>{first.status}</Badge>
-                              </div>
-                              <p className="text-sm text-muted-foreground">Processed on { (latestDate || first.checkinDate)?.toLocaleDateString() }</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <p className="text-sm text-muted-foreground">{itemCount} item{itemCount > 1 ? 's' : ''}</p>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleToggleGroup(requestId, first)}
-                              aria-expanded={isExpanded}
-                              aria-controls={`group-${requestId}`}
-                            >
-                              <ChevronDown className={`h-4 w-4 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                            </Button>
-                          </div>
-                        </div>
-                          <AnimatePresence initial={false}>
-                            {isExpanded && (
-                              <motion.div
-                                key="expanded"
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.18 }}
-                                style={{ overflow: 'hidden' }}
-                                className="mt-3"
-                              >
-                                <div className="flex flex-wrap gap-2">
-                                  {(expandedItems[requestId] || groupItems).map(c => (
-                                    <Badge key={c.id} variant={c.condition === 'Damaged' ? 'destructive' : 'outline'}>
-                                      {c.gearName} ({c.condition})
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
+                      <motion.div key={groupKey} variants={itemVariants}>
+                        <RecentCheckinGroupCard
+                          groupKey={groupKey}
+                          items={groupItems}
+                          isExpanded={!!expandedGroups[groupKey]}
+                          expandedItems={expandedItems[groupKey] || []}
+                          onToggle={handleToggleGroup}
+                        />
                       </motion.div>
                     );
                   })}
 
-                  {/* Load more button */}
-                  {hasMore && (
-                    <div className="text-center mt-2">
-                      <Button onClick={handleLoadMore} loading={loadingMore} variant="ghost">
-                        {loadingMore ? 'Loading...' : 'Load more'}
+                  {orderedGroups.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-border bg-muted/10 px-6 py-10 text-center text-sm text-muted-foreground">
+                      No processed check-ins yet.
+                    </div>
+                  )}
+
+                  {(hasMore || groupsToShow < orderedGroups.length) && (
+                    <div className="pt-2 text-center">
+                      <Button onClick={handleLoadMore} loading={loadingMore} variant="outline" size="sm">
+                        {loadingMore ? 'Loading…' : 'Load more'}
                       </Button>
                     </div>
                   )}

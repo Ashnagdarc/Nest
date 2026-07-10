@@ -37,6 +37,7 @@ export interface UnifiedDashboardData {
         // Notification stats
         unread_notifications: number;
         total_notifications: number;
+        pending_car_bookings?: number;
     };
 
     gears: Array<{
@@ -151,6 +152,19 @@ export interface UnifiedDashboardData {
         checked_out_to: string | null;
         due_date: string;
         status: string;
+    }>;
+
+    car_bookings?: Array<{
+        id: string;
+        employee_name: string;
+        date_of_use: string;
+        status: string;
+        created_at: string;
+        updated_at: string;
+        requester_id?: string;
+        start_time?: string | null;
+        end_time?: string | null;
+        time_slot?: string | null;
     }>;
 }
 

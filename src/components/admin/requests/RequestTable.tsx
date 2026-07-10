@@ -1,11 +1,15 @@
-import React from "react";
+"use client";
+
+import { format } from "date-fns";
+import { Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format } from "date-fns";
-import { Clock, ExternalLink, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { getRequestStatusConfig } from "@/components/admin/requests/request-status";
+import { RequestRowActions } from "@/components/admin/requests/RequestRowActions";
+import { cn } from "@/lib/utils";
 
 export interface GearRequest {
     id: string;
@@ -15,7 +19,10 @@ export interface GearRequest {
     gearNames: string[];
     requestDate: Date;
     status: string;
-    updatedAt?: Date;
+    destination?: string;
+    duration?: string;
+    submittedByName?: string | null;
+    isOnBehalfBooking?: boolean;
 }
 
 interface RequestTableProps {
@@ -28,154 +35,242 @@ interface RequestTableProps {
     onView: (req: GearRequest) => void;
     isProcessing: boolean;
     processingRequestId: string | null;
-    getStatusBadge: (status: string) => React.ReactNode;
 }
 
-const RequestTable: React.FC<RequestTableProps> = ({
-    requests, loading, selectedRequests, setSelectedRequests,
-    onApprove, onReject, onView, isProcessing, processingRequestId, getStatusBadge
-}) => {
-    if (loading) return <div className="p-20 text-center text-muted-foreground animate-pulse">Loading data...</div>;
-    if (requests.length === 0) return null;
+function countGearUnits(names: string[]): number {
+    return names.reduce((sum, name) => {
+        const match = name.match(/ x (\d+)$/);
+        return sum + (match ? Number(match[1]) : 1);
+    }, 0);
+}
 
-    const totalItems = (names: string[]) => {
-        let total = 0;
-        for (const n of names) {
-            const m = n.match(/ x (\d+)$/);
-            total += m ? Number(m[1]) : 1;
-        }
-        return total;
-    };
+function RequestStatusBadge({ status }: { status: string }) {
+    const config = getRequestStatusConfig(status);
+    const Icon = config.icon;
+    return (
+        <Badge variant="secondary" className={cn("gap-1 border-0 font-normal", config.className)}>
+            <Icon className="h-3 w-3" />
+            {config.label}
+        </Badge>
+    );
+}
+
+export default function RequestTable({
+    requests,
+    loading,
+    selectedRequests,
+    setSelectedRequests,
+    onApprove,
+    onReject,
+    onView,
+    isProcessing,
+    processingRequestId,
+}: RequestTableProps) {
+    if (loading) return null;
+
+    const allSelected = selectedRequests.length === requests.length && requests.length > 0;
 
     return (
-        <div className="w-full">
-            <Table>
-                <TableHeader>
-                    <TableRow className="border-none hover:bg-transparent px-4">
-                        <TableHead className="w-12 h-14">
-                            <Checkbox
-                                checked={selectedRequests.length === requests.length && requests.length > 0}
-                                onCheckedChange={(checked) => {
-                                    if (checked) setSelectedRequests(requests.map(req => req.id));
-                                    else setSelectedRequests([]);
-                                }}
-                                className="rounded-md border-muted-foreground/30"
-                            />
-                        </TableHead>
-                        <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground/60 h-16">User</TableHead>
-                        <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground/60 h-16">Items & Gear</TableHead>
-                        <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground/60 h-16">Timeline</TableHead>
-                        <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground/60 h-16">Status</TableHead>
-                        <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground/60 h-16 text-right">Actions</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {requests.map(req => {
-                        const isSelected = selectedRequests.includes(req.id);
-                        return (
-                            <TableRow
-                                key={req.id}
-                                className={`group border-b border-border/40 transition-all ${isSelected ? 'bg-primary/5' : 'hover:bg-accent/5'}`}
-                            >
-                                <TableCell className="h-16">
-                                    <Checkbox
-                                        checked={isSelected}
-                                        onCheckedChange={checked => {
-                                            if (checked) setSelectedRequests([...selectedRequests, req.id]);
-                                            else setSelectedRequests(selectedRequests.filter(id => id !== req.id));
-                                        }}
-                                        className="rounded-md border-muted-foreground/30"
-                                    />
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex items-center gap-3">
-                                        <Avatar className="h-9 w-9 border border-border/50 shadow-sm">
-                                            <AvatarImage src={req.avatarUrl || undefined} alt={req.userName} />
-                                            <AvatarFallback className="bg-accent text-xs font-bold">{req.userName?.[0] || '?'}</AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex flex-col min-w-0">
-                                            <span className="text-sm font-semibold truncate text-foreground/90">{req.userName}</span>
-                                            <span className="text-xs text-muted-foreground truncate opacity-70">{req.userEmail}</span>
+        <TooltipProvider delayDuration={300}>
+            {/* Mobile */}
+            <div className="divide-y md:hidden">
+                {requests.map((req) => (
+                    <RequestMobileCard
+                        key={req.id}
+                        request={req}
+                        selected={selectedRequests.includes(req.id)}
+                        onSelect={(checked) => {
+                            if (checked) setSelectedRequests([...selectedRequests, req.id]);
+                            else setSelectedRequests(selectedRequests.filter((id) => id !== req.id));
+                        }}
+                        onApprove={() => onApprove(req.id)}
+                        onReject={() => onReject(req.id)}
+                        onView={() => onView(req)}
+                        isProcessing={isProcessing}
+                        processingRequestId={processingRequestId}
+                    />
+                ))}
+            </div>
+
+            {/* Desktop */}
+            <div className="hidden max-h-[min(70vh,720px)] overflow-auto md:block">
+                <Table>
+                    <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
+                        <TableRow className="hover:bg-transparent">
+                            <TableHead className="w-12 pl-4">
+                                <Checkbox
+                                    checked={allSelected}
+                                    onCheckedChange={(checked) => {
+                                        if (checked) setSelectedRequests(requests.map((r) => r.id));
+                                        else setSelectedRequests([]);
+                                    }}
+                                    aria-label="Select all requests on page"
+                                />
+                            </TableHead>
+                            <TableHead className="min-w-[200px]">Requester</TableHead>
+                            <TableHead className="min-w-[240px]">Equipment</TableHead>
+                            <TableHead className="min-w-[120px]">Submitted</TableHead>
+                            <TableHead className="min-w-[120px]">Status</TableHead>
+                            <TableHead className="min-w-[220px] pr-4 text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {requests.map((req) => {
+                            const isPending = req.status.toLowerCase() === "pending";
+                            const isSelected = selectedRequests.includes(req.id);
+                            const unitCount = countGearUnits(req.gearNames);
+
+                            return (
+                                <TableRow
+                                    key={req.id}
+                                    className={cn(
+                                        "cursor-pointer transition-colors",
+                                        isSelected ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/40"
+                                    )}
+                                    onClick={() => onView(req)}
+                                >
+                                    <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
+                                        <Checkbox
+                                            checked={isSelected}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) setSelectedRequests([...selectedRequests, req.id]);
+                                                else setSelectedRequests(selectedRequests.filter((id) => id !== req.id));
+                                            }}
+                                            aria-label={`Select request from ${req.userName}`}
+                                        />
+                                    </TableCell>
+                                    <TableCell className="py-3">
+                                        <RequesterCell request={req} />
+                                    </TableCell>
+                                    <TableCell className="py-3">
+                                        <GearListCell names={req.gearNames} unitCount={unitCount} />
+                                    </TableCell>
+                                    <TableCell className="py-3">
+                                        <div className="space-y-0.5">
+                                            <p className="text-sm font-medium">{format(req.requestDate, "MMM d, yyyy")}</p>
+                                            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                <Clock className="h-3 w-3" />
+                                                {format(req.requestDate, "h:mm a")}
+                                            </p>
                                         </div>
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex flex-col gap-1.5 max-w-[300px]">
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {req.gearNames.slice(0, 3).map((gear, idx) => (
-                                                <Badge key={idx} variant="outline" className="text-xs bg-accent/10 border-none px-2.5 py-1 font-medium text-foreground/80">
-                                                    {gear}
-                                                </Badge>
-                                            ))}
-                                            {req.gearNames.length > 3 && (
-                                                <span className="text-xs text-muted-foreground font-medium flex items-center">
-                                                    +{req.gearNames.length - 3} more
-                                                </span>
-                                            )}
-                                        </div>
-                                        <span className="text-xs text-muted-foreground/50 transition-opacity group-hover:opacity-100 opacity-0">
-                                            Total: {totalItems(req.gearNames)} units
-                                        </span>
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-medium">{format(req.requestDate, 'MMM d, yyyy')}</span>
-                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                                            <Clock className="h-3.5 w-3.5 opacity-50" />
-                                            {format(req.requestDate, 'h:mm a')}
-                                        </div>
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    {getStatusBadge(req.status)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <div className="flex items-center justify-end gap-2 pr-2">
-                                        {req.status.toLowerCase() === 'pending' && (
-                                            <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
-                                                <Button 
-                                                    size="icon" 
-                                                    variant="ghost" 
-                                                    className="h-8 w-8 rounded-full text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed" 
-                                                    onClick={() => onApprove(req.id)}
-                                                    disabled={isProcessing}
-                                                >
-                                                    {processingRequestId === req.id ? (
-                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                    ) : (
-                                                        <CheckCircle className="h-4 w-4" />
-                                                    )}
-                                                </Button>
-                                                <Button 
-                                                    size="icon" 
-                                                    variant="ghost" 
-                                                    className="h-8 w-8 rounded-full text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed" 
-                                                    onClick={() => onReject(req.id)}
-                                                    disabled={isProcessing}
-                                                >
-                                                    <XCircle className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        )}
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => onView(req)}
-                                            className="rounded-full h-9 px-4 text-sm font-semibold gap-2 transition-all hover:bg-accent/10"
-                                        >
-                                            View
-                                            <ExternalLink className="h-3.5 w-3.5 opacity-40" />
-                                        </Button>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        );
-                    })}
-                </TableBody>
-            </Table>
+                                    </TableCell>
+                                    <TableCell className="py-3">
+                                        <RequestStatusBadge status={req.status} />
+                                    </TableCell>
+                                    <TableCell className="py-3 pr-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                        <RequestRowActions
+                                            isPending={isPending}
+                                            isProcessing={isProcessing}
+                                            isThisProcessing={processingRequestId === req.id}
+                                            onApprove={() => onApprove(req.id)}
+                                            onReject={() => onReject(req.id)}
+                                            onView={() => onView(req)}
+                                        />
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            </div>
+        </TooltipProvider>
+    );
+}
+
+function RequesterCell({ request }: { request: GearRequest }) {
+    return (
+        <div className="flex items-center gap-3">
+            <Avatar className="h-9 w-9 border">
+                <AvatarImage src={request.avatarUrl || undefined} alt={request.userName} />
+                <AvatarFallback className="text-xs font-semibold">
+                    {request.userName?.[0]?.toUpperCase() || "?"}
+                </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+                <p className="truncate font-medium">{request.userName}</p>
+                {request.userEmail && (
+                    <p className="truncate text-xs text-muted-foreground">{request.userEmail}</p>
+                )}
+                {request.isOnBehalfBooking && request.submittedByName && (
+                    <p className="mt-0.5 truncate text-[11px] text-blue-600 dark:text-blue-400">
+                        Booked by {request.submittedByName}
+                    </p>
+                )}
+            </div>
         </div>
     );
-};
+}
 
-export default RequestTable;
+function GearListCell({ names, unitCount }: { names: string[]; unitCount: number }) {
+    return (
+        <div className="space-y-1.5">
+            <div className="flex flex-wrap gap-1">
+                {names.slice(0, 2).map((gear, idx) => (
+                    <Badge key={idx} variant="outline" className="max-w-[200px] truncate text-xs font-normal">
+                        {gear}
+                    </Badge>
+                ))}
+                {names.length > 2 && (
+                    <Badge variant="secondary" className="text-xs font-normal">
+                        +{names.length - 2} more
+                    </Badge>
+                )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+                {names.length} item{names.length === 1 ? "" : "s"} · {unitCount} unit{unitCount === 1 ? "" : "s"}
+            </p>
+        </div>
+    );
+}
+
+function RequestMobileCard({
+    request,
+    selected,
+    onSelect,
+    onApprove,
+    onReject,
+    onView,
+    isProcessing,
+    processingRequestId,
+}: {
+    request: GearRequest;
+    selected: boolean;
+    onSelect: (checked: boolean) => void;
+    onApprove: () => void;
+    onReject: () => void;
+    onView: () => void;
+    isProcessing: boolean;
+    processingRequestId: string | null;
+}) {
+    const isPending = request.status.toLowerCase() === "pending";
+    const unitCount = countGearUnits(request.gearNames);
+
+    return (
+        <div className={cn("flex flex-col gap-3 p-4 sm:flex-row", selected && "bg-primary/5")}>
+            <div className="flex gap-3">
+                <div className="pt-1">
+                    <Checkbox checked={selected} onCheckedChange={(checked) => onSelect(checked === true)} />
+                </div>
+                <button type="button" className="min-w-0 flex-1 text-left" onClick={onView}>
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                        <RequesterCell request={request} />
+                        <RequestStatusBadge status={request.status} />
+                    </div>
+                    <GearListCell names={request.gearNames} unitCount={unitCount} />
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        {format(request.requestDate, "MMM d, yyyy · h:mm a")}
+                    </p>
+                </button>
+            </div>
+            <RequestRowActions
+                compact
+                isPending={isPending}
+                isProcessing={isProcessing}
+                isThisProcessing={processingRequestId === request.id}
+                onApprove={onApprove}
+                onReject={onReject}
+                onView={onView}
+            />
+        </div>
+    );
+}

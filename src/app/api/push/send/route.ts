@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import webPush from 'web-push';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
+import { getRouteAuthContext } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 
@@ -29,19 +30,37 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 
 export async function POST(req: NextRequest) {
     try {
-        const { userId, title, body, data } = await req.json();
+        const authContext = await getRouteAuthContext();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
 
-        if (!userId) {
+        const { userId, title, body, data } = await req.json() as {
+            userId?: string;
+            title?: string;
+            body?: string;
+            data?: Record<string, unknown>;
+        };
+
+        const targetUserId = authContext.isActiveAdmin
+            ? (userId || authContext.user.id)
+            : authContext.user.id;
+
+        if (authContext.isActiveAdmin && !targetUserId) {
             return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
         }
 
-        const supabase = await createSupabaseServerClient();
+        if (!authContext.isActiveAdmin && userId && userId !== authContext.user.id) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const supabase = await createSupabaseAdminClient();
         
         // Fetch user's push subscriptions
         const { data: tokenRows } = await supabase
             .from('user_push_tokens')
             .select('token')
-            .eq('user_id', userId);
+            .eq('user_id', targetUserId);
 
         if (!tokenRows || tokenRows.length === 0) {
             return NextResponse.json({ error: 'No active subscriptions found' }, { status: 404 });
@@ -56,7 +75,7 @@ export async function POST(req: NextRequest) {
         let sentCount = 0;
         const errors = [];
 
-        console.log(`[Push Edge] Sending to ${tokenRows.length} subscriptions for user ${userId}`);
+        console.log(`[Push Edge] Sending to ${tokenRows.length} subscriptions for user ${targetUserId}`);
 
         for (const row of tokenRows) {
             try {
@@ -73,15 +92,18 @@ export async function POST(req: NextRequest) {
                     
                     sentCount++;
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
+                const parsedToken = JSON.parse(row.token) as { endpoint?: string };
+                const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error ? (error as { statusCode?: number }).statusCode : undefined;
+                const message = error instanceof Error ? error.message : 'Unknown push error';
                 console.error('[Push Edge] Send failed:', {
-                    statusCode: error.statusCode,
-                    message: error.message,
-                    endpoint: JSON.parse(row.token).endpoint?.split('/').pop()
+                    statusCode,
+                    message,
+                    endpoint: parsedToken.endpoint?.split('/').pop()
                 });
 
                 // Clean up invalid tokens (410 Gone, 404 Not Found)
-                if (error.statusCode === 410 || error.statusCode === 404) {
+                if (statusCode === 410 || statusCode === 404) {
                     await supabase
                         .from('user_push_tokens')
                         .delete()
@@ -90,8 +112,8 @@ export async function POST(req: NextRequest) {
                 }
 
                 errors.push({
-                    endpoint: JSON.parse(row.token).endpoint?.split('/').pop(),
-                    error: error.message
+                    endpoint: parsedToken.endpoint?.split('/').pop(),
+                    error: message
                 });
             }
         }
@@ -101,15 +123,17 @@ export async function POST(req: NextRequest) {
             sentCount,
             totalTokens: tokenRows.length,
             errors: errors.length > 0 ? errors : undefined,
-            runtime: 'edge'
+            runtime: 'nodejs'
         });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        const stack = error instanceof Error ? error.stack : undefined;
         console.error('[Push Edge] Function error:', error);
         return NextResponse.json({
             success: false,
-            error: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            error: message,
+            stack: process.env.NODE_ENV === 'development' ? stack : undefined
         }, { status: 500 });
     }
 }

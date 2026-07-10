@@ -1,14 +1,37 @@
-import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
-console.log('SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
-console.log('SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 8) + '...');
+const ALLOWED_UPDATE_FIELDS = ['full_name', 'role', 'status', 'phone', 'department'] as const;
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-    const { id } = params;
+type AllowedUpdateField = (typeof ALLOWED_UPDATE_FIELDS)[number];
+
+function pickAllowedUpdates(body: Record<string, unknown>) {
+    const updates: Partial<Record<AllowedUpdateField, unknown>> = {};
+    for (const field of ALLOWED_UPDATE_FIELDS) {
+        if (field in body) {
+            updates[field] = body[field];
+        }
+    }
+    return updates;
+}
+
+export async function GET(
+    _request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const { id } = await params;
     try {
-        const supabase = await createSupabaseServerClient();
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', id).single();
+        const adminContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in adminContext) {
+            return adminContext.errorResponse;
+        }
+
+        const { data, error } = await adminContext.adminSupabase
+            .from('profiles')
+            .select('*')
+            .eq('id', id)
+            .single();
+
         if (error) throw error;
         return NextResponse.json({ data, error: null });
     } catch {
@@ -16,57 +39,79 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
-    const { id } = params;
+export async function PUT(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const { id } = await params;
     try {
-        const supabase = await createSupabaseServerClient();
-        const body = await request.json();
-        // Only update users that are not soft-deleted
-        const { data, error } = await supabase.from('profiles').update(body).eq('id', id).is('deleted_at', null).select().single();
-        if (error) throw error;
+        const adminContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in adminContext) {
+            return adminContext.errorResponse;
+        }
+
+        const body = (await request.json()) as Record<string, unknown>;
+        const updates = pickAllowedUpdates(body);
+
+        if (Object.keys(updates).length === 0) {
+            return NextResponse.json({ data: null, error: 'No valid fields to update' }, { status: 400 });
+        }
+
+        const { data, error } = await adminContext.adminSupabase
+            .from('profiles')
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq('id', id)
+            .select()
+            .maybeSingle();
+
+        if (error) {
+            console.error('Failed to update user:', error);
+            return NextResponse.json({ data: null, error: error.message }, { status: 500 });
+        }
+
+        if (!data) {
+            return NextResponse.json({ data: null, error: 'User not found or update not permitted' }, { status: 404 });
+        }
+
         return NextResponse.json({ data, error: null });
-    } catch {
-        return NextResponse.json({ data: null, error: 'Failed to update user' }, { status: 500 });
+    } catch (error) {
+        console.error('Failed to update user:', error);
+        const message = error instanceof Error ? error.message : 'Failed to update user';
+        return NextResponse.json({ data: null, error: message }, { status: 500 });
     }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
-    const { id } = params;
+export async function DELETE(
+    _request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const { id } = await params;
     try {
-        // Verify caller is admin
-        const supabaseServer = await createSupabaseServerClient();
-        const {
-            data: { user },
-        } = await supabaseServer.auth.getUser();
-        if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        const { data: profile } = await supabaseServer.from('profiles').select('role').eq('id', user.id).single();
-        if (!profile || String(profile.role).toLowerCase() !== 'admin') {
-            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+        const adminContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in adminContext) {
+            return adminContext.errorResponse;
         }
 
-        // Use service role for privileged operations
-        const supabaseAdmin = await createSupabaseAdminClient();
+        const { adminSupabase, user } = adminContext;
+        if (user.id === id) {
+            return NextResponse.json({ success: false, error: 'You cannot delete your own account' }, { status: 400 });
+        }
 
-        // Best-effort: mark profile as deleted (soft delete) to preserve history
-        const { error: softErr } = await supabaseAdmin
+        const { error: softErr } = await adminSupabase
             .from('profiles')
             .update({ deleted_at: new Date().toISOString(), status: 'Inactive' })
             .eq('id', id);
         if (softErr) console.error('Soft-delete profile failed (non-fatal):', softErr);
 
-        // Hard-delete auth user (removes from auth.users). This requires service role
-        const { error: authDelErr } = await supabaseAdmin.auth.admin.deleteUser(id);
+        const { error: authDelErr } = await adminSupabase.auth.admin.deleteUser(id);
         if (authDelErr) {
             console.error('Auth delete failed:', authDelErr);
             return NextResponse.json({ success: false, error: 'Failed to delete auth user' }, { status: 500 });
         }
-
-        // If you maintain user-owned storage, clean-up can be added here
-        // (non-blocking in this implementation)
 
         return NextResponse.json({ success: true, error: null });
     } catch (err) {
         console.error('API DELETE error:', err);
         return NextResponse.json({ success: false, error: 'Failed to delete user' }, { status: 500 });
     }
-} 
+}

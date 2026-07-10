@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import type { ProcessedGear } from '@/components/check-in/types';
 
-// Types from the check-in page
+export type { ProcessedGear } from '@/components/check-in/types';
+
 export type Gear = {
     id: string;
     status: string;
@@ -12,22 +14,7 @@ export type Gear = {
     current_request_id?: string | null;
     last_checkout_date?: string | null;
     image_url?: string | null;
-};
-
-export type ProcessedGear = {
-    id: string;
-    name: string;
-    category: string;
-    status: string;
-    checked_out_to: string | null;
-    current_request_id: string | null;
-    last_checkout_date: string | null;
-    due_date: string | null;
-    image_url: string | null;
-    requested_quantity: number;
-    completed_return_quantity: number;
-    pending_return_quantity: number;
-    returnable_quantity: number;
+    serial_number?: string | null;
 };
 
 export function useCheckedOutGears(userId: string | null, toast: (params: { title: string; description: string; variant?: string }) => void) {
@@ -69,7 +56,15 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
             }, 0);
             console.log('Found pending check-ins:', { rows: (pendingCheckIns || []).length, quantity: pendingQtyTotal });
 
-            type RequestLineRow = { gear_request_id: string; gear_id: string; quantity: number | null; gear?: any };
+            type RequestLineRow = {
+                gear_request_id: string;
+                gear_id: string;
+                quantity: number | null;
+                gear?: Gear | null;
+                request_destination?: string | null;
+                request_reason?: string | null;
+                request_created_at?: string | null;
+            };
             type ReturnRow = { request_id: string | null; gear_id: string; status: string; quantity: number | null };
 
             let requestLines: RequestLineRow[] = [];
@@ -91,13 +86,22 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                 const activeStatuses = new Set(['Approved', 'Checked Out', 'Partially Checked Out', 'Overdue']);
 
                 requestLines = userRequests
-                    .filter((request: { id?: string | null; status?: string | null }) => {
+                    .filter((request: { id?: string | null; status?: string | null; user_id?: string | null }) => {
                         const status = String(request?.status || '');
                         const isActive = activeStatuses.has(status);
-                        if (isActive && request?.id) activeRequestIds.add(String(request.id));
-                        return isActive;
+                        const isEquipmentOwner = String(request?.user_id || '') === userId;
+                        if (isActive && isEquipmentOwner && request?.id) {
+                            activeRequestIds.add(String(request.id));
+                        }
+                        return isActive && isEquipmentOwner;
                     })
-                    .flatMap((request: { id?: string | null; gear_request_gears?: Array<{ gear_id?: string | null; quantity?: number | null; gears?: any }> }) => {
+                    .flatMap((request: {
+                        id?: string | null;
+                        destination?: string | null;
+                        reason?: string | null;
+                        created_at?: string | null;
+                        gear_request_gears?: Array<{ gear_id?: string | null; quantity?: number | null; gears?: Gear | null }>;
+                    }) => {
                         const requestId = String(request.id || '');
                         const lines = Array.isArray(request.gear_request_gears) ? request.gear_request_gears : [];
                         return lines
@@ -105,7 +109,10 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                                 gear_request_id: requestId,
                                 gear_id: String(line?.gear_id || ''),
                                 quantity: line?.quantity ?? 1,
-                                gear: line?.gears || null
+                                gear: line?.gears || null,
+                                request_destination: request.destination ?? null,
+                                request_reason: request.reason ?? null,
+                                request_created_at: request.created_at ?? null,
                             }))
                             .filter((line) => Boolean(line.gear_id));
                     }) as RequestLineRow[];
@@ -146,12 +153,22 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
             }
 
             const requestedByKey = new Map<string, number>();
-            const lineMetaByKey = new Map<string, any>();
+            const lineMetaByKey = new Map<string, {
+                gear: Gear | null;
+                request_destination?: string | null;
+                request_reason?: string | null;
+                request_created_at?: string | null;
+            }>();
             requestLines.forEach((line) => {
                 const key = `${line.gear_request_id || ''}::${line.gear_id}`;
                 requestedByKey.set(key, (requestedByKey.get(key) || 0) + Math.max(1, Number(line.quantity ?? 1)));
-                if (!lineMetaByKey.has(key) && line.gear) {
-                    lineMetaByKey.set(key, line.gear);
+                if (!lineMetaByKey.has(key)) {
+                    lineMetaByKey.set(key, {
+                        gear: line.gear || null,
+                        request_destination: line.request_destination,
+                        request_reason: line.request_reason,
+                        request_created_at: line.request_created_at,
+                    });
                 }
             });
 
@@ -173,7 +190,8 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                     const completed = completedByKey.get(key) || 0;
                     const pending = Math.max(pendingByKey.get(key) || 0, pendingFromReturnsByKey.get(key) || 0);
                     const returnable = Math.max(0, requested - completed - pending);
-                    const gear = lineMetaByKey.get(key) || {};
+                    const meta = lineMetaByKey.get(key);
+                    const gear = meta?.gear || {};
 
                     return {
                         id: gearId,
@@ -185,6 +203,10 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                         last_checkout_date: (gear?.last_checkout_date as string | null) || null,
                         due_date: (gear?.due_date as string | null) || null,
                         image_url: (gear?.image_url as string | null) || null,
+                        serial_number: (gear?.serial_number as string | null) || null,
+                        request_destination: meta?.request_destination ?? null,
+                        request_reason: meta?.request_reason ?? null,
+                        request_created_at: meta?.request_created_at ?? null,
                         requested_quantity: requested,
                         completed_return_quantity: completed,
                         pending_return_quantity: pending,
@@ -236,7 +258,7 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
 
         // Request lifecycle updates can change what is returnable.
         const requestChannel = supabase
-            .channel('request_changes')
+            .channel(`checkin_request_changes_${userId}`)
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',
@@ -247,7 +269,7 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
 
         // Set up real-time subscription for check-in changes to update immediately when check-ins are submitted/approved
         const checkinChannel = supabase
-            .channel('checkin_changes')
+            .channel(`checkin_changes_${userId}`)
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',

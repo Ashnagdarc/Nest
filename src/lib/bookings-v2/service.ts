@@ -3,6 +3,37 @@ import { enqueuePushNotification } from '@/lib/push-queue';
 import { sendBookingLifecycleEmail } from '@/lib/email';
 import type { BookingCreateInput, BookingLifecycleStatus, BookingTransitionInput } from './types';
 
+type RpcError = { message: string } | null;
+
+type BookingItemPayload = {
+  item_type: 'gear' | 'car';
+  quantity: number;
+  status: string;
+  metadata?: Record<string, unknown>;
+};
+
+type BookingAggregateRpcResult = {
+  booking?: {
+    id: string;
+    reference: string;
+    status: string;
+    requester_id: string;
+    source_type?: string | null;
+    source_id?: string | null;
+    start_at?: string | null;
+    end_at?: string | null;
+  };
+  items?: BookingItemPayload[];
+  idempotent?: boolean;
+};
+
+type RpcCapableSupabase = Awaited<ReturnType<typeof createSupabaseServerClient>> & {
+  rpc: (
+    fn: string,
+    args: Record<string, unknown>
+  ) => Promise<{ data: BookingAggregateRpcResult | null; error: RpcError }>;
+};
+
 const TRANSITIONS: Record<BookingLifecycleStatus, BookingLifecycleStatus[]> = {
   pending: ['approved', 'cancelled', 'failed'],
   approved: ['checked_out', 'active', 'completed', 'cancelled', 'failed'],
@@ -27,6 +58,7 @@ const toLegacyBookingStatus = (status: BookingLifecycleStatus): string => {
 
 export async function createBookingAggregate(input: BookingCreateInput) {
   const supabase = await createSupabaseServerClient(true);
+  const rpcSupabase = supabase as RpcCapableSupabase;
   const itemsPayload = input.items.map((item, index) => ({
     itemType: item.itemType,
     gearId: item.itemType === 'gear' ? item.gearId : null,
@@ -36,7 +68,7 @@ export async function createBookingAggregate(input: BookingCreateInput) {
     idempotencyKey: input.idempotencyKey ? `${input.idempotencyKey}:item:${index}` : null,
   }));
 
-  const { data: rpcResult, error: rpcError } = await (supabase as any).rpc('create_booking_with_items_atomic', {
+  const { data: rpcResult, error: rpcError } = await rpcSupabase.rpc('create_booking_with_items_atomic', {
     p_source_type: input.sourceType,
     p_source_id: input.sourceId || null,
     p_requester_id: input.requesterId,
@@ -66,7 +98,7 @@ export async function createBookingAggregate(input: BookingCreateInput) {
 export async function transitionBooking(input: BookingTransitionInput) {
   const supabase = await createSupabaseServerClient(true);
 
-  const { data: booking, error: bookingErr } = await (supabase as any)
+  const { data: booking, error: bookingErr } = await supabase
     .from('bookings')
     .select('*')
     .eq('id', input.bookingId)
@@ -81,7 +113,8 @@ export async function transitionBooking(input: BookingTransitionInput) {
     throw new Error(`Invalid booking transition from ${current} to ${input.nextStatus}`);
   }
 
-  const { data: rpcResult, error: rpcError } = await (supabase as any).rpc('transition_booking_atomic', {
+  const rpcSupabase = supabase as RpcCapableSupabase;
+  const { data: rpcResult, error: rpcError } = await rpcSupabase.rpc('transition_booking_atomic', {
     p_booking_id: input.bookingId,
     p_next_status: input.nextStatus,
     p_changed_by: input.changedBy || null,
@@ -119,24 +152,25 @@ export async function transitionBooking(input: BookingTransitionInput) {
   if (requesterProfile?.email) {
     const emailResult = await sendBookingLifecycleEmail({
       booking: updatedBooking,
-      items: (items || []) as any[],
+      items: (items || []) as BookingItemPayload[],
       to: requesterProfile.email,
       userName: requesterProfile.full_name || 'User',
       transition: input.nextStatus,
     });
 
     if (!emailResult.success) {
-      await (supabase as any).from('audit_logs').insert({
+      const emailError = 'error' in emailResult ? emailResult.error : 'Unknown email error';
+      await supabase.from('audit_logs').insert({
         actor_id: input.changedBy || null,
         entity_type: 'booking',
         entity_id: input.bookingId,
         action: 'email_send_failed',
-        metadata: { message: emailResult.error, transition: input.nextStatus },
+        metadata: { message: emailError, transition: input.nextStatus },
       });
     }
   }
 
-  await enqueuePushNotification(supabase as any, {
+  await enqueuePushNotification(supabase, {
     userId: updatedBooking.requester_id,
     title: `Booking ${input.nextStatus.replace('_', ' ')}`,
     body: `Booking ${updatedBooking.reference} is now ${input.nextStatus.replace('_', ' ')}.`,
@@ -147,7 +181,7 @@ export async function transitionBooking(input: BookingTransitionInput) {
     },
   }, { context: 'Booking Lifecycle' });
 
-  await (supabase as any).from('audit_logs').insert({
+  await supabase.from('audit_logs').insert({
     actor_id: input.changedBy || null,
     entity_type: 'booking',
     entity_id: updatedBooking.id,

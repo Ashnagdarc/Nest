@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from "next";
 import { Lato } from "next/font/google";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
+import "@ncdai/react-wheel-picker/style.css";
 import { ThemeProvider } from "next-themes";
 import { NotificationProvider } from "@/components/notifications/NotificationProvider";
 import { UserProfileProvider } from "@/components/providers/user-profile-provider";
@@ -13,6 +14,7 @@ import { Favicon } from "@/components/ui/theme-favicon";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SessionRecoveryInitializer } from "@/components/SessionRecoveryInitializer";
+import { getSiteUrl } from "@/lib/site-url";
 
 // Patch console.error for Supabase real-time polling fallback
 if (typeof window !== 'undefined') {
@@ -64,7 +66,7 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://nest-eden-oasis.vercel.app'),
+  metadataBase: new URL(getSiteUrl()),
   openGraph: {
     type: "website",
     locale: "en_US",

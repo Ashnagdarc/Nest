@@ -46,7 +46,7 @@
 **Step 1: Navigate to Signup Page**
 
 1. Open your web browser
-2. Go to: `https://nest-eden-oasis.vercel.app`
+2. Go to: `https://www.nestbyeden.app`
 3. Click **"Sign Up"** button on the home page
 
 **Step 2: Fill Registration Form**
@@ -78,7 +78,7 @@ Enter the following information:
 
 ### First Login
 
-1. Go to `https://nest-eden-oasis.vercel.app/login`
+1. Go to `https://www.nestbyeden.app/login`
 2. Enter your email and password
 3. Click **"Log In"**
 4. You'll be redirected to your dashboard

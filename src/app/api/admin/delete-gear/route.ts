@@ -1,41 +1,23 @@
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
 export async function DELETE(request: NextRequest) {
     try {
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
+            return NextResponse.json(
+                { error: (await authContext.errorResponse.json()).error },
+                { status: authContext.errorResponse.status }
+            );
+        }
+
+        const supabase = authContext.adminSupabase;
         const { gearId } = await request.json();
 
         if (!gearId) {
             return NextResponse.json(
                 { error: 'Gear ID is required' },
                 { status: 400 }
-            );
-        }
-
-        // Create Supabase client with admin privileges
-        const supabase = await createSupabaseServerClient(true);
-
-        // Get the user's session
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !user) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-
-        // Check if user is admin
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-        if (profile?.role !== 'admin') {
-            return NextResponse.json(
-                { error: 'Admin access required' },
-                { status: 403 }
             );
         }
 
@@ -54,10 +36,11 @@ export async function DELETE(request: NextRequest) {
             { status: 200 }
         );
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Failed to delete gear';
         console.error('Error deleting gear:', error);
         return NextResponse.json(
-            { error: error.message || 'Failed to delete gear' },
+            { error: message },
             { status: 500 }
         );
     }

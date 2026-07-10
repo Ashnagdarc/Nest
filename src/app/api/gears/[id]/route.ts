@@ -1,7 +1,8 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;
         console.log("API: Fetching gear with ID:", id);
@@ -26,27 +27,37 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const { id } = await params;
-        const supabase = await createSupabaseServerClient();
-        const body = await request.json();
+        const supabase = authContext.adminSupabase;
+        const body = await _request.json();
         const { data, error } = await supabase.from('gears').update(body).eq('id', id).select().single();
         if (error) throw error;
         return NextResponse.json({ data, error: null });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ data: null, error: 'Failed to update gear' }, { status: 500 });
     }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const { id } = await params;
-        const supabase = await createSupabaseServerClient();
+        const supabase = authContext.adminSupabase;
         const { error } = await supabase.from('gears').delete().eq('id', id);
         if (error) throw error;
         return NextResponse.json({ success: true });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ success: false, error: 'Failed to delete gear' }, { status: 500 });
     }
 } 
