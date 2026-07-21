@@ -117,7 +117,6 @@ export async function POST(request: NextRequest) {
         const pushMessage = `Your check-in for ${gearName} has been rejected. Reason: ${reason}. Please contact support for assistance.`;
 
         const queueResult = await enqueuePushNotification(
-            supabase,
             {
                 userId,
                 title: pushTitle,

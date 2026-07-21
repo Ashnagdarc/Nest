@@ -334,7 +334,6 @@ export async function POST(req: NextRequest) {
             if (sendPush) {
                 try {
                     const queueResult = await enqueuePushNotification(
-                        supabase,
                         {
                             userId: targetId,
                             title,

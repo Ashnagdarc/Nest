@@ -289,7 +289,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
             const pushMessage = `Your request for ${gearNames} has been cancelled.`;
 
             const queueResult = await enqueuePushNotification(
-                supabase,
                 {
                     userId: requestData.user_id,
                     title: pushTitle,
@@ -323,7 +322,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
             for (const admin of admins) {
                 const queueResult = await enqueuePushNotification(
-                    supabase,
                     {
                         userId: admin.id,
                         title: pushTitle,

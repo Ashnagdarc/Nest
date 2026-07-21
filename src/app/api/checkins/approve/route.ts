@@ -122,7 +122,6 @@ export async function POST(request: NextRequest) {
         const pushMessage = `Your check-in for ${gearLabel} has been approved. Thank you for returning the equipment.`;
 
         const queueResult = await enqueuePushNotification(
-            supabase,
             {
                 userId,
                 title: pushTitle,

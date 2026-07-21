@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { sendGearRequestEmail, sendEquipmentBookedForYouEmail, sendRequestReceivedEmail } from '@/lib/email';
 import { enqueuePushNotification, triggerPushWorker } from '@/lib/push-queue';
@@ -463,7 +463,7 @@ export async function POST(request: NextRequest) {
             // This prevents timeout issues from slow email delivery
             process.nextTick(async () => {
                 try {
-                    const notificationSupabase = await createSupabaseServerClient(true);
+                    const notificationSupabase = await createSupabaseAdminClient();
                     const gearNames = normalizedLines
                         .map((line) => gearMap.get(line.gear_id)?.name)
                         .filter((name): name is string => Boolean(name));
@@ -525,7 +525,6 @@ export async function POST(request: NextRequest) {
                         }
 
                         await enqueuePushNotification(
-                            notificationSupabase,
                             {
                                 userId: ownerProfile.id,
                                 title: isOnBehalfBooking ? 'Equipment booked for you' : 'Request submitted',
@@ -589,7 +588,6 @@ export async function POST(request: NextRequest) {
                             admins.map((admin) => {
                                 if (!admin.id) return Promise.resolve();
                                 return enqueuePushNotification(
-                                    notificationSupabase,
                                     {
                                         userId: admin.id,
                                         title: pushTitle,

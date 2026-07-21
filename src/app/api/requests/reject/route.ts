@@ -204,7 +204,6 @@ export async function POST(req: Request) {
                     const pushMessage = `Your request for ${gearNames} has been rejected.${reason ? ` Reason: ${reason}` : ''}`;
 
                     const queueResult = await enqueuePushNotification(
-                        adminSupabase,
                         {
                             userId: requestData.user_id,
                             title: pushTitle,

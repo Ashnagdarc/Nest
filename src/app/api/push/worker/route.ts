@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import webPush from 'web-push';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     try {
-        const supabase = await createSupabaseServerClient(true);
+        const supabase = await createSupabaseAdminClient();
         const runStartedAt = new Date().toISOString();
 
         console.log('[Push Worker] Starting queue processing...');

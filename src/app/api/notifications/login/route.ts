@@ -132,7 +132,6 @@ export async function POST(req: NextRequest) {
                 .maybeSingle();
 
             const queueResult = await enqueuePushNotification(
-                supabase,
                 {
                     userId: user.id,
                     title,

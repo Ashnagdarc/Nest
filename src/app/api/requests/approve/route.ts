@@ -314,7 +314,6 @@ export async function POST(request: NextRequest) {
                 const pushMessage = `Your request for ${gearNames} has been approved. Due back: ${new Date(calculatedDueDate).toLocaleDateString()}.`;
 
                 const queueResult = await enqueuePushNotification(
-                    supabase,
                     {
                         userId: req.user_id,
                         title: pushTitle,
@@ -336,7 +335,6 @@ export async function POST(request: NextRequest) {
                 // Notify the person who submitted on behalf of someone else
                 if (req.submitted_by_user_id && req.submitted_by_user_id !== req.user_id) {
                     const submitterPush = await enqueuePushNotification(
-                        supabase,
                         {
                             userId: req.submitted_by_user_id,
                             title: 'Booking you submitted was approved',

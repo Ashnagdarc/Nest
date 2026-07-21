@@ -170,7 +170,7 @@ export async function transitionBooking(input: BookingTransitionInput) {
     }
   }
 
-  await enqueuePushNotification(supabase, {
+  await enqueuePushNotification({
     userId: updatedBooking.requester_id,
     title: `Booking ${input.nextStatus.replace('_', ' ')}`,
     body: `Booking ${updatedBooking.reference} is now ${input.nextStatus.replace('_', ' ')}.`,

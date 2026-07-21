@@ -1,5 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { getSiteUrl } from '@/lib/site-url';
 
 type PushPayload = {
@@ -75,7 +74,6 @@ export async function triggerPushWorker(options: { requestUrl?: string; context?
 }
 
 export async function enqueuePushNotification(
-  supabase: SupabaseClient<Database>,
   payload: PushPayload,
   options: QueueOptions = {}
 ) {
@@ -91,6 +89,7 @@ export async function enqueuePushNotification(
       ? data.dedupe_key.trim()
       : null;
 
+  const supabase = await createSupabaseAdminClient();
   const { error } = await supabase.from('push_notification_queue').insert({
     user_id: userId,
     title,
