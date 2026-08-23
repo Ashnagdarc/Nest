@@ -2,7 +2,7 @@
   "name": "nest-by-eden-oasis",
   "version": "0.1.0",
   "private": true,
-  "description": "Nest by Eden Oasis - Comprehensive Asset Management System",
+  "description": "Asset and equipment management system for internal business workflows.",
   "keywords": [
     "asset management",
     "equipment tracking",
@@ -16,7 +16,7 @@
     "build": "next build",
     "analyze": "ANALYZE=true next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "generate-icons": "node scripts/generate-pwa-icons.js",
     "test": "jest",
