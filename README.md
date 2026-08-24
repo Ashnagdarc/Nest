@@ -14,7 +14,7 @@ Nest replaces ad-hoc equipment tracking with a shared workspace for inventory, a
 
 ## Stack
 
-Next.js 15 · TypeScript · Supabase · PostgreSQL · Tailwind CSS · React Query · Zod
+Next.js 16.2.7 · TypeScript · Supabase (Auth, PostgreSQL, Storage, and Realtime) · Tailwind CSS · React Query · Zod
 
 ## Repository structure
 
@@ -22,12 +22,13 @@ Next.js 15 · TypeScript · Supabase · PostgreSQL · Tailwind CSS · React Quer
 - `src/components` — reusable interface and dashboard components
 - `src/hooks` and `src/services` — client-side data and domain logic
 - `supabase` — migrations, policies, and functions
-- `tests` — end-to-end coverage
+- `src/app/api/__tests__` — API-focused Jest coverage
+- `tests` — Playwright end-to-end coverage
 - `Project-docs` — fuller product, technical, and operational documentation
 
 ## Run locally
 
-Requirements: Node.js 18+ and a Supabase project.
+Requirements: Node.js 20+ and a Supabase project.
 
 ```bash
 npm install
@@ -46,11 +47,11 @@ Set the required Supabase values in `.env.local`. Optional email, web-push, webh
 ```bash
 npm run lint
 npm run typecheck
-npm test
+npm run test
 npm run build
 ```
 
-Browser tests require a running configured application and test accounts:
+Browser tests require a running, configured application and test accounts:
 
 ```bash
 npm run test:e2e
@@ -62,4 +63,4 @@ The detailed project material is kept in [`Project-docs`](Project-docs/README.md
 
 ## Notes
 
-This repository intentionally contains no dashboard screenshots because it uses company data. The public logo assets are included, but product screens should only be added after sensitive information is removed.
+This repository intentionally contains no dashboard screenshots because the application uses company data. Public logo assets are included, but product screens should only be added after sensitive information is removed.
