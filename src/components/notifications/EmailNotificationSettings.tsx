@@ -5,11 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Bell, Mail, CheckCircle, XCircle, Clock, AlertTriangle, Package } from 'lucide-react';
+import { Bell, Mail, CheckCircle, XCircle, AlertTriangle, Package } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { createSupabaseClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 
 interface EmailPreferences {
     gear_requests: boolean;
@@ -40,7 +39,7 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const { toast } = useToast();
-    const supabase = createSupabaseClient();
+    const supabase = createClient();
 
     useEffect(() => {
         loadPreferences();
@@ -274,7 +273,8 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
                                         </div>
                                         <Switch
                                             id={notification.key}
-                                            checked={preferences[notification.key]}
+                                            checked={notification.key === 'overdue_reminders' ? true : preferences[notification.key]}
+                                            disabled={notification.key === 'overdue_reminders'}
                                             onCheckedChange={(checked) => handlePreferenceChange(notification.key, checked)}
                                         />
                                     </div>

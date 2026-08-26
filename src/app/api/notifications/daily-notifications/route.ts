@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/client';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { normalizeNotificationInsert, normalizeNotificationType } from '@/lib/notification-type';
-import { sitePath } from '@/lib/site-url';
+import { sendOverdueReminderEmail } from '@/lib/email';
 
 const DUE_SOON_TYPE = 'Due Soon';
 const DUE_SOON_SUBTYPE = 'due_soon';
@@ -9,6 +9,29 @@ const PENDING_ALERT_TYPE = 'Pending Alert';
 const PENDING_ALERT_SUBTYPE = 'pending_alert';
 const OFFICE_CLOSING_TYPE = 'Office Closing';
 const OFFICE_CLOSING_SUBTYPE = 'office_closing';
+const OVERDUE_SUBTYPE = 'gear_overdue_email';
+
+type OverdueRequestRow = {
+    id: string;
+    user_id: string;
+    submitted_by_user_id: string | null;
+    due_date: string;
+    status: string;
+    gear_request_gears: Array<{
+        quantity: number | null;
+        gears: { name: string | null } | Array<{ name: string | null }> | null;
+    }> | null;
+};
+
+type OverdueRecipient = {
+    requestIds: Set<string>;
+    gearList: Array<{ name: string; dueDate: string }>;
+    earliestDueDate: string;
+};
+
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error || 'Unknown error');
+}
 
 export async function GET(req: NextRequest) {
     return POST(req);
@@ -49,77 +72,118 @@ export async function POST(req: NextRequest) {
 
 // 1. Notify users about Overdue Gear
 async function handleGearOverdue() {
-    const supabase = createClient();
+    const supabase = await createSupabaseAdminClient();
     const now = new Date();
     try {
-        const { data: overdueGears, error } = await supabase
-            .from('gears')
-            .select('id, name, due_date, checked_out_to')
-            .in('status', ['Checked Out', 'Partially Checked Out'])
+        const { data: overdueRequests, error } = await supabase
+            .from('gear_requests')
+            .select(`
+                id,
+                user_id,
+                submitted_by_user_id,
+                due_date,
+                status,
+                gear_request_gears (
+                    quantity,
+                    gears (name)
+                )
+            `)
+            .in('status', ['Approved', 'Checked Out', 'Partially Checked Out', 'Overdue'])
+            .not('due_date', 'is', null)
             .lt('due_date', now.toISOString());
 
         if (error) return { error: error.message, sent: 0 };
-        if (!overdueGears || overdueGears.length === 0) return { message: 'No overdue gear found.', sent: 0 };
+        if (!overdueRequests || overdueRequests.length === 0) {
+            return { message: 'No overdue gear requests found.', sent: 0 };
+        }
 
-        const userGearMap: Record<string, { userId: string; gearNames: string[]; dueDates: string[] }> = {};
-        for (const gear of overdueGears) {
-            if (!gear.checked_out_to) continue;
-            if (!userGearMap[gear.checked_out_to]) {
-                userGearMap[gear.checked_out_to] = { userId: gear.checked_out_to, gearNames: [], dueDates: [] };
+        const recipients = new Map<string, OverdueRecipient>();
+        for (const request of overdueRequests as unknown as OverdueRequestRow[]) {
+            const recipientIds = new Set(
+                [request.user_id, request.submitted_by_user_id].filter((id): id is string => Boolean(id))
+            );
+            const gearList = (request.gear_request_gears || []).map((line) => {
+                const gear = Array.isArray(line.gears) ? line.gears[0] : line.gears;
+                const quantity = Math.max(1, Number(line.quantity ?? 1));
+                return {
+                    name: `${gear?.name || 'Equipment'} (x${quantity})`,
+                    dueDate: request.due_date,
+                };
+            });
+
+            for (const recipientId of recipientIds) {
+                const current = recipients.get(recipientId) || {
+                    requestIds: new Set<string>(),
+                    gearList: [],
+                    earliestDueDate: request.due_date,
+                };
+                current.requestIds.add(request.id);
+                current.gearList.push(...gearList);
+                if (new Date(request.due_date) < new Date(current.earliestDueDate)) {
+                    current.earliestDueDate = request.due_date;
+                }
+                recipients.set(recipientId, current);
             }
-            userGearMap[gear.checked_out_to].gearNames.push(gear.name);
-            userGearMap[gear.checked_out_to].dueDates.push(gear.due_date);
         }
 
         let notificationsSent = 0;
-        for (const userId in userGearMap) {
-            const { data: userProfile } = await supabase.from('profiles').select('full_name, email').eq('id', userId).single();
-            if (!userProfile) continue;
-            const dueDates = userGearMap[userId].dueDates.map(d => new Date(d));
-            const earliestDue = dueDates.reduce((a, b) => (a < b ? a : b));
-            const overdueDays = Math.floor((now.getTime() - earliestDue.getTime()) / (1000 * 60 * 60 * 24));
+        const startOfToday = new Date(now);
+        startOfToday.setHours(0, 0, 0, 0);
+
+        for (const [recipientId, reminder] of recipients) {
+            const { data: userProfile } = await supabase
+                .from('profiles')
+                .select('full_name, email')
+                .eq('id', recipientId)
+                .maybeSingle();
+            if (!userProfile?.email) continue;
+
+            const overdueDays = Math.max(
+                1,
+                Math.ceil((now.getTime() - new Date(reminder.earliestDueDate).getTime()) / (1000 * 60 * 60 * 24))
+            );
 
             // Check if already notified TODAY for this type
             const { data: existing } = await supabase.from('notifications')
-                .select('id').eq('user_id', userId).eq('type', 'Overdue')
-                .gte('created_at', new Date(now.setHours(0, 0, 0, 0)).toISOString());
+                .select('id')
+                .eq('user_id', recipientId)
+                .eq('type', 'Overdue')
+                .contains('metadata', { subtype: OVERDUE_SUBTYPE })
+                .gte('created_at', startOfToday.toISOString());
             if (existing && existing.length > 0) continue;
 
-            // Send Email
-            if (userProfile.email) {
-                await fetch(sitePath('/api/notifications/overdue-reminder'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userId,
-                        gearList: userGearMap[userId].gearNames.map((name, i) => ({ name, dueDate: userGearMap[userId].dueDates[i] })),
-                        dueDate: earliestDue.toISOString(),
-                        overdueDays,
-                    }),
-                });
+            const emailResult = await sendOverdueReminderEmail({
+                to: userProfile.email,
+                userName: userProfile.full_name || 'there',
+                gearList: reminder.gearList,
+                dueDate: reminder.earliestDueDate,
+                overdueDays,
+            });
+            if (!emailResult.success) {
+                console.error('[Daily Notifications] Failed overdue email:', emailResult.error);
+                continue;
             }
 
-            // Update status
-            await supabase.from('gear_requests').update({ status: 'Overdue' })
-                .eq('user_id', userId).in('status', ['Checked Out', 'Partially Checked Out']).lt('due_date', now.toISOString());
-
-            // Log Notification
-            await supabase.from('notifications').insert({
-                user_id: userId,
+            await supabase.from('notifications').insert(normalizeNotificationInsert({
+                user_id: recipientId,
                 type: 'Overdue',
                 title: 'Overdue Gear Notification',
-                message: `Overdue gear: ${userGearMap[userId].gearNames.join(', ')}`,
+                message: `Overdue gear: ${reminder.gearList.map((gear) => gear.name).join(', ')}`,
                 is_read: false,
                 category: 'System',
-            });
+                metadata: {
+                    subtype: OVERDUE_SUBTYPE,
+                    request_ids: Array.from(reminder.requestIds),
+                },
+            }));
 
             // Queue push notification
             const { error: pushError } = await supabase.from('push_notification_queue').insert([
                 {
-                    user_id: userId,
+                    user_id: recipientId,
                     title: 'Overdue Gear Notification',
-                    body: `Overdue gear: ${userGearMap[userId].gearNames.join(', ')}`,
-                    data: { type: 'overdue', gear_names: userGearMap[userId].gearNames },
+                    body: `Overdue gear: ${reminder.gearList.map((gear) => gear.name).join(', ')}`,
+                    data: { type: 'overdue', request_ids: Array.from(reminder.requestIds) },
                     status: 'pending'
                 }
             ]);
@@ -127,15 +191,29 @@ async function handleGearOverdue() {
 
             notificationsSent++;
         }
+
+        const requestIdsToMarkOverdue = (overdueRequests as unknown as OverdueRequestRow[])
+            .filter((request) => request.status !== 'Overdue')
+            .map((request) => request.id);
+        if (requestIdsToMarkOverdue.length > 0) {
+            const { error: updateError } = await supabase
+                .from('gear_requests')
+                .update({ status: 'Overdue', updated_at: now.toISOString() })
+                .in('id', requestIdsToMarkOverdue);
+            if (updateError) {
+                console.error('[Daily Notifications] Failed to mark requests overdue:', updateError.message);
+            }
+        }
+
         return { message: 'Overdue notifications sent.', sent: notificationsSent };
-    } catch (err: any) {
-        return { error: err.message || 'Unknown error', sent: 0 };
+    } catch (err: unknown) {
+        return { error: errorMessage(err), sent: 0 };
     }
 }
 
 // 2. Notify users before gear is due (Due Soon)
 async function handleDueSoon() {
-    const supabase = createClient();
+    const supabase = await createSupabaseAdminClient();
     const now = new Date();
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -203,14 +281,14 @@ async function handleDueSoon() {
             sent++;
         }
         return { message: 'Due Soon notifications sent.', sent };
-    } catch (err: any) {
-        return { error: err.message, sent: 0 };
+    } catch (err: unknown) {
+        return { error: errorMessage(err), sent: 0 };
     }
 }
 
 // 3. Notify Admins if request pending > 1 hour
 async function handlePendingRequests() {
-    const supabase = createClient();
+    const supabase = await createSupabaseAdminClient();
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
     try {
@@ -262,8 +340,8 @@ async function handlePendingRequests() {
         }
 
         return { message: 'Pending request alerts sent.', sent };
-    } catch (err: any) {
-        return { error: err.message, sent: 0 };
+    } catch (err: unknown) {
+        return { error: errorMessage(err), sent: 0 };
     }
 }
 
@@ -288,7 +366,7 @@ async function handleOfficeClosing() {
         // return { message: 'Not closing time yet.', sent: 0 }; 
     }
 
-    const supabase = createClient();
+    const supabase = await createSupabaseAdminClient();
     try {
         // Check if we sent 'Office Closing' today
         const { data: existing } = await supabase.from('notifications')
@@ -336,7 +414,7 @@ async function handleOfficeClosing() {
         if (pushError) console.error('[Daily Notifications] Failed to queue office closing pushes:', pushError);
 
         return { message: 'Office closing notifications sent.', sent: users.length };
-    } catch (err: any) {
-        return { error: err.message, sent: 0 };
+    } catch (err: unknown) {
+        return { error: errorMessage(err), sent: 0 };
     }
 }

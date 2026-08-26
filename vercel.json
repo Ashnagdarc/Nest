@@ -9,6 +9,10 @@
       "schedule": "30 8 * * *"
     },
     {
+      "path": "/api/notifications/daily-notifications",
+      "schedule": "15 8 * * *"
+    },
+    {
       "path": "/api/internal/auto-return-cars",
       "schedule": "0 17 * * *"
     },
