@@ -46,6 +46,7 @@ type ApiCheckinRow = {
 };
 
 const MAX_PAGES_PER_LOAD = 10;
+const PENDING_CHECKINS_PAGE_SIZE = 100;
 
 const getRecentGroupKey = (checkin: Checkin) => {
   if (checkin.requestId) return `req::${checkin.requestId}`;
@@ -111,12 +112,9 @@ export default function ManageCheckinsPage() {
 
   async function fetchCheckinsPage(fetchPage: number) {
     const checkinsUrl = `/api/checkins?limit=${limit}&page=${fetchPage}`;
-    const pendingUrl = `/api/checkins?limit=1&page=1&status=${encodeURIComponent('Pending Admin Approval')}`;
+    const pendingUrl = `/api/checkins?limit=${PENDING_CHECKINS_PAGE_SIZE}&page=1&status=${encodeURIComponent('Pending Admin Approval')}`;
 
-    const [checkinsRes, pendingRes] = await Promise.all([
-      fetch(checkinsUrl),
-      fetch(pendingUrl)
-    ]);
+    const [checkinsRes, pendingRes] = await Promise.all([fetch(checkinsUrl), fetch(pendingUrl)]);
 
     if (!checkinsRes.ok) {
       const body = await checkinsRes.json().catch(() => null);
@@ -134,10 +132,11 @@ export default function ManageCheckinsPage() {
     const pendingJson = await pendingRes.json();
 
     const checkinsData = checkinsJson.checkins || [];
+    const pendingData = pendingJson.checkins || [];
     const pagination = checkinsJson.pagination || { total: 0, page: fetchPage, limit };
     const pendingTotal = pendingJson.pagination?.total ?? 0;
 
-    const processedCheckins = (checkinsData as ApiCheckinRow[]).map((c) => {
+    const processRows = (rows: ApiCheckinRow[]) => rows.map((c) => {
       const gear = Array.isArray(c.gears) ? c.gears[0] : c.gears;
       return {
         id: c.id,
@@ -155,6 +154,38 @@ export default function ManageCheckinsPage() {
         requestId: c.request_id || gear?.current_request_id || null
       } as Checkin;
     });
+
+    let allPendingRows = processRows(pendingData as ApiCheckinRow[]);
+
+    // A single return can contain more rows than the pending page size. Fetch
+    // every page so the admin sees and approves the complete request group.
+    const pendingPages = Math.ceil(pendingTotal / PENDING_CHECKINS_PAGE_SIZE);
+    if (pendingPages > 1) {
+      const remainingResponses = await Promise.all(
+        Array.from({ length: pendingPages - 1 }, (_, index) =>
+          fetch(`/api/checkins?limit=${PENDING_CHECKINS_PAGE_SIZE}&page=${index + 2}&status=${encodeURIComponent('Pending Admin Approval')}`)
+        )
+      );
+
+      for (const response of remainingResponses) {
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          throw new Error(`Failed to fetch all pending check-ins: ${body?.error || body?.details || response.statusText}`);
+        }
+        const body = await response.json();
+        allPendingRows = mergeCheckinsById(
+          allPendingRows,
+          processRows((body.checkins || []) as ApiCheckinRow[])
+        );
+      }
+    }
+
+    // Pending work must not depend on where it falls in recent-history
+    // pagination. Merge it into every page response and de-duplicate by id.
+    const processedCheckins = mergeCheckinsById(
+      processRows(checkinsData as ApiCheckinRow[]),
+      allPendingRows
+    );
 
     return { processedCheckins, pagination, pendingTotal };
   }
