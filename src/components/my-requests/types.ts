@@ -120,9 +120,7 @@ export function getRequestContextLabel(
 }
 
 export function canCancelRequest(request: GearRequestItem, currentUserId: string | null) {
-  return (
-    !!currentUserId &&
-    request.user_id === currentUserId &&
-    request.status.toLowerCase() === "pending"
-  );
+  const isParty =
+    request.user_id === currentUserId || request.submitted_by_user_id === currentUserId;
+  return !!currentUserId && isParty && request.status.toLowerCase() === "pending";
 }

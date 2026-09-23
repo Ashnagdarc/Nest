@@ -2,50 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestApprovalEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
-import { transitionBooking } from '@/lib/bookings-v2/service';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
 import { getSiteUrl, sitePath } from '@/lib/site-url';
-
-/**
- * Calculates due date based on request duration
- * 
- * Why: Requests specify duration as human-readable string ("24hours", "1 week").
- * We convert this to ISO timestamp for database storage and notifications.
- * 
- * Uses UTC to avoid timezone issues with multi-location teams.
- * 
- * @param duration - Duration string from request form
- * @returns ISO timestamp for when gear is due back
- */
-const calculateDueDate = (duration: string): string => {
-    const now = new Date();
-    const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()));
-
-    let dueDate: Date;
-
-    switch (duration) {
-        case "24hours": dueDate = new Date(utcNow.getTime() + 24 * 60 * 60 * 1000); break;
-        case "48hours": dueDate = new Date(utcNow.getTime() + 48 * 60 * 60 * 1000); break;
-        case "72hours": dueDate = new Date(utcNow.getTime() + 72 * 60 * 60 * 1000); break;
-        case "1 week": dueDate = new Date(utcNow.getTime() + 7 * 24 * 60 * 60 * 1000); break;
-        case "2 weeks": dueDate = new Date(utcNow.getTime() + 14 * 24 * 60 * 60 * 1000); break;
-        case "Month": dueDate = new Date(utcNow.getTime() + 30 * 24 * 60 * 60 * 1000); break;
-        case "1year": dueDate = new Date(utcNow.getTime() + 365 * 24 * 60 * 60 * 1000); break;
-        default: dueDate = new Date(utcNow.getTime() + 7 * 24 * 60 * 60 * 1000); break;
-    }
-    return dueDate.toISOString();
-};
-
-/** Keep the sooner return time when one item is split across two bookings. */
-const earlierDueDate = (current: string | null | undefined, next: string): string => {
-    if (!current) return next;
-    const currentMs = new Date(current).getTime();
-    const nextMs = new Date(next).getTime();
-    if (Number.isNaN(currentMs)) return next;
-    if (Number.isNaN(nextMs)) return current;
-    return currentMs <= nextMs ? current : next;
-};
 
 async function requireAdminContext() {
     const authSupabase = await createSupabaseServerClient();
@@ -168,83 +127,8 @@ export async function POST(request: NextRequest) {
             return fail(400, 'No line items recorded for this request.', 'This request has no items to approve.', 'REQUEST_HAS_NO_ITEMS');
         }
 
-        // Validate availability and collect updates
-        console.log('🔍 Processing lines:', lines);
-        const updates: Array<{
-            gear_id: string;
-            newAvailable: number;
-            newStatus: string;
-            unitsAlreadyOut: boolean;
-            due_date: string | null;
-        }> = [];
-        for (const line of lines) {
-            const { data: g, error: gErr } = await supabase
-                .from('gears')
-                .select('id, name, available_quantity, quantity, status, due_date')
-                .eq('id', line.gear_id)
-                .maybeSingle();
-            if (gErr || !g) {
-                return fail(400, 'Gear not found for line', 'One or more selected items no longer exist.', 'GEAR_NOT_FOUND');
-            }
-            const totalQuantity = typeof g.quantity === 'number' && !Number.isNaN(g.quantity) ? g.quantity : 0;
-            const baseAvailable = typeof g.available_quantity === 'number' && !Number.isNaN(g.available_quantity)
-                ? g.available_quantity
-                : totalQuantity;
-            if (baseAvailable < line.quantity) {
-                return fail(409, `Not enough available units for ${g.name}. Requested ${line.quantity}, available ${baseAvailable}.`, 'Some items are no longer available for checkout.', 'INSUFFICIENT_GEAR_QUANTITY');
-            }
-            const newAvailable = Math.max(0, baseAvailable - line.quantity);
-            // Use proper status progression: Available -> Partially Available -> Checked Out
-            const newStatus = newAvailable === baseAvailable ? 'Available' :
-                newAvailable > 0 ? 'Partially Available' : 'Checked Out';
-            console.log(`🔍 Gear ${g.name}: ${baseAvailable} available, requesting ${line.quantity}, new available: ${newAvailable}, new status: ${newStatus}`);
-            updates.push({
-                gear_id: g.id,
-                newAvailable,
-                newStatus,
-                unitsAlreadyOut: totalQuantity > baseAvailable,
-                due_date: typeof g.due_date === 'string' ? g.due_date : null,
-            });
-        }
-
-        // Calculate due date based on expected duration at approval time
-        const calculatedDueDate = calculateDueDate(req.expected_duration || '1 week');
-
-        // Apply updates
-        for (const upd of updates) {
-            // A gear row can name only one holder. If units are already out on
-            // another booking, keep the counts and leave holder fields empty so
-            // the later approval does not take over the earlier booking.
-            const holderFields = upd.unitsAlreadyOut
-                ? {
-                    checked_out_to: null,
-                    current_request_id: null,
-                    due_date: earlierDueDate(upd.due_date, calculatedDueDate),
-                }
-                : {
-                    checked_out_to: req.user_id,
-                    current_request_id: requestId,
-                    last_checkout_date: new Date().toISOString(),
-                    due_date: calculatedDueDate,
-                };
-            const { error: uErr } = await supabase
-                .from('gears')
-                .update({
-                    available_quantity: upd.newAvailable,
-                    status: upd.newStatus,
-                    ...holderFields,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', upd.gear_id);
-            if (uErr) {
-                return fail(500, `Failed to update gear availability: ${uErr.message}`, 'Could not update inventory right now.', 'GEAR_AVAILABILITY_UPDATE_FAILED');
-            }
-        }
-
-        // Note: gear_ids field doesn't exist in gear_requests table
-        // Gear-to-request associations are handled by gear_request_gears junction table
-        const distinctGearIds = Array.from(new Set(lines.map(l => l.gear_id)));
-
+        // The booking row has to exist before the locked checkout so stock,
+        // request status, and the booking return time commit together.
         try {
             let { data: aggregate } = await (supabase as any)
                 .from('bookings')
@@ -259,7 +143,7 @@ export async function POST(request: NextRequest) {
                     sourceId: requestId,
                     requesterId: req.user_id,
                     startAt: new Date().toISOString(),
-                    endAt: calculatedDueDate,
+                    endAt: null,
                     idempotencyKey: `legacy-gear-create:${requestId}`,
                     metadata: {
                         reason: req.reason || null,
@@ -272,43 +156,39 @@ export async function POST(request: NextRequest) {
                         quantity: line.quantity,
                     })),
                 });
-
-                const { data: createdAggregate } = await (supabase as any)
-                    .from('bookings')
-                    .select('id,status')
-                    .eq('source_type', 'gear_request')
-                    .eq('source_id', requestId)
-                    .maybeSingle();
-                aggregate = createdAggregate;
-            }
-
-            if (aggregate?.id) {
-                await transitionBooking({
-                    bookingId: aggregate.id,
-                    nextStatus: 'approved',
-                    changedBy: adminUser.id,
-                    reason: 'Legacy approval route sync',
-                    metadata: { legacy_route: '/api/requests/approve' },
-                    idempotencyKey: `legacy-approve:${requestId}`,
-                });
             }
         } catch (syncError) {
-            console.error('[Gear Approval] Failed syncing status to v2 booking lifecycle:', syncError);
-            return fail(500, 'Failed to update booking lifecycle state.', 'We could not complete approval right now. Please try again.', 'BOOKING_LIFECYCLE_SYNC_FAILED');
+            console.error('[Gear Approval] Failed to prepare booking:', syncError);
+            return fail(500, 'Failed to prepare booking.', 'We could not complete approval right now. Please try again.', 'BOOKING_LIFECYCLE_SYNC_FAILED');
         }
 
-        const { error: approveErr } = await supabase
-            .from('gear_requests')
-            .update({
-                approved_at: new Date().toISOString(),
-                due_date: calculatedDueDate,
-                updated_by: adminUser.id,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', requestId);
-        if (approveErr) {
-            return fail(500, `Approved but failed to persist due date: ${approveErr.message}`, 'Request approved, but some details could not be saved.', 'REQUEST_METADATA_PERSIST_FAILED');
+        const { data: approval, error: approvalError } = await (supabase as any).rpc('approve_gear_request_atomic', {
+            p_request_id: requestId,
+            p_actor_id: adminUser.id,
+        });
+
+        if (approvalError) {
+            const message = approvalError.message || 'Approval failed';
+            console.error('[Gear Approval] Atomic checkout failed:', message);
+            if (message.includes('INSUFFICIENT')) {
+                return fail(409, message, 'Some items are no longer available for checkout.', 'INSUFFICIENT_GEAR_QUANTITY');
+            }
+            if (message.includes('NO_ITEMS')) {
+                return fail(400, message, 'This request has no items to approve.', 'REQUEST_HAS_NO_ITEMS');
+            }
+            if (message.includes('NOT_PENDING')) {
+                return fail(409, message, 'This request can no longer be approved.', 'REQUEST_NOT_PENDING');
+            }
+            return fail(500, message, 'We could not complete approval right now. Please try again.', 'GEAR_AVAILABILITY_UPDATE_FAILED');
         }
+
+        if (approval?.idempotent) {
+            return ok({ user_message: 'Request is already approved.' });
+        }
+
+        const calculatedDueDate = typeof approval?.due_date === 'string'
+            ? approval.due_date
+            : new Date().toISOString();
 
         // Status history table not present; relying on gear_requests.approved_at/updated_at fields
 
@@ -513,7 +393,7 @@ export async function POST(request: NextRequest) {
             // Don't fail the request if email fails
         }
 
-        console.log('🔍 Request approved successfully:', { updated: updates.length, gear_ids: distinctGearIds });
+        console.log('🔍 Request approved successfully:', { requestId, due_date: calculatedDueDate });
         return ok({ user_message: 'Request approved successfully.' });
     } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';

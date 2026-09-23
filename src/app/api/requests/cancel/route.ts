@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     const { data: reqRow, error: reqErr } = await admin
       .from('gear_requests')
-      .select('id, user_id, status, created_at, reason, destination, expected_duration')
+      .select('id, user_id, submitted_by_user_id, status, created_at, reason, destination, expected_duration')
       .eq('id', request_id)
       .single();
 
@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
     }
 
-    if (reqRow.user_id !== user.id) {
+    const isOwner = reqRow.user_id === user.id;
+    const isSubmitter = reqRow.submitted_by_user_id === user.id;
+    if (!isOwner && !isSubmitter) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
         await createBookingAggregate({
           sourceType: 'gear_request',
           sourceId: request_id,
-          requesterId: user.id,
+          requesterId: reqRow.user_id,
           startAt: reqRow.created_at ?? new Date().toISOString(),
           endAt: null,
           idempotencyKey: `legacy-gear-create:${request_id}`,

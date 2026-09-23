@@ -4,7 +4,6 @@ import { sendGearRequestRejectionEmail, sendGearRequestEmail } from '@/lib/email
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { enqueuePushNotification } from '@/lib/push-queue';
-import { transitionBooking } from '@/lib/bookings-v2/service';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
 import { getSiteUrl, sitePath } from '@/lib/site-url';
@@ -121,15 +120,18 @@ export async function POST(req: Request) {
                 aggregate = createdAggregate;
             }
 
-            if (aggregate?.id) {
-                await transitionBooking({
-                    bookingId: aggregate.id,
-                    nextStatus: 'failed',
-                    changedBy: adminUser.id,
-                    reason: reason || 'Request rejected via legacy route',
-                    metadata: { legacy_route: '/api/requests/reject' },
-                    idempotencyKey: `legacy-reject:${requestId}`,
-                });
+            if (!aggregate?.id) {
+                throw new Error('Booking aggregate was not created');
+            }
+
+            const { error: releaseError } = await (supabase as any).rpc('release_gear_request_atomic', {
+                p_request_id: requestId,
+                p_actor_id: adminUser.id,
+                p_next_status: 'failed',
+                p_reason: reason || 'Request rejected',
+            });
+            if (releaseError) {
+                throw new Error(releaseError.message || 'Failed to release gear');
             }
         } catch (syncError) {
             console.error('[Gear Rejection] Failed syncing status to v2 booking lifecycle:', syncError);

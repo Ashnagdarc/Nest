@@ -64,6 +64,7 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                 request_destination?: string | null;
                 request_reason?: string | null;
                 request_created_at?: string | null;
+                request_due_date?: string | null;
             };
             type ReturnRow = { request_id: string | null; gear_id: string; status: string; quantity: number | null };
 
@@ -100,6 +101,7 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                         destination?: string | null;
                         reason?: string | null;
                         created_at?: string | null;
+                        due_date?: string | null;
                         gear_request_gears?: Array<{ gear_id?: string | null; quantity?: number | null; gears?: Gear | null }>;
                     }) => {
                         const requestId = String(request.id || '');
@@ -113,6 +115,7 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                                 request_destination: request.destination ?? null,
                                 request_reason: request.reason ?? null,
                                 request_created_at: request.created_at ?? null,
+                                request_due_date: request.due_date ?? null,
                             }))
                             .filter((line) => Boolean(line.gear_id));
                     }) as RequestLineRow[];
@@ -158,6 +161,7 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                 request_destination?: string | null;
                 request_reason?: string | null;
                 request_created_at?: string | null;
+                request_due_date?: string | null;
             }>();
             requestLines.forEach((line) => {
                 const key = `${line.gear_request_id || ''}::${line.gear_id}`;
@@ -168,6 +172,7 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                         request_destination: line.request_destination,
                         request_reason: line.request_reason,
                         request_created_at: line.request_created_at,
+                        request_due_date: line.request_due_date,
                     });
                 }
             });
@@ -201,7 +206,7 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                         checked_out_to: (gear?.checked_out_to as string | null) || userId,
                         current_request_id: requestId || null,
                         last_checkout_date: (gear?.last_checkout_date as string | null) || null,
-                        due_date: (gear?.due_date as string | null) || null,
+                        due_date: meta?.request_due_date || (gear?.due_date as string | null) || null,
                         image_url: (gear?.image_url as string | null) || null,
                         serial_number: (gear?.serial_number as string | null) || null,
                         request_destination: meta?.request_destination ?? null,

@@ -221,22 +221,38 @@ async function handleDueSoon() {
     const tomorrowEnd = new Date(tomorrow.setHours(23, 59, 59, 999)).toISOString();
 
     try {
-        // Find gear due tomorrow
-        const { data: dueGears, error } = await supabase
-            .from('gears')
-            .select('id, name, due_date, checked_out_to')
-            .in('status', ['Checked Out', 'Partially Checked Out'])
+        const { data: dueRequests, error } = await supabase
+            .from('gear_requests')
+            .select(`
+                user_id,
+                submitted_by_user_id,
+                due_date,
+                gear_request_gears (
+                    quantity,
+                    gears (name)
+                )
+            `)
+            .in('status', ['Approved', 'Checked Out', 'Partially Checked Out', 'Overdue'])
             .gte('due_date', tomorrowStart)
             .lte('due_date', tomorrowEnd);
 
         if (error) throw error;
-        if (!dueGears || dueGears.length === 0) return { message: 'No gear due soon.', sent: 0 };
+        if (!dueRequests || dueRequests.length === 0) return { message: 'No gear due soon.', sent: 0 };
 
         const userGearMap: Record<string, string[]> = {};
-        for (const gear of dueGears) {
-            if (!gear.checked_out_to) continue;
-            if (!userGearMap[gear.checked_out_to]) userGearMap[gear.checked_out_to] = [];
-            userGearMap[gear.checked_out_to].push(gear.name);
+        for (const request of dueRequests as unknown as OverdueRequestRow[]) {
+            const recipientIds = [request.user_id, request.submitted_by_user_id].filter(
+                (id): id is string => Boolean(id)
+            );
+            const labels = (request.gear_request_gears || []).map((line) => {
+                const gear = Array.isArray(line.gears) ? line.gears[0] : line.gears;
+                const quantity = Math.max(1, Number(line.quantity ?? 1));
+                return `${gear?.name || 'Equipment'} (x${quantity})`;
+            });
+            for (const recipientId of recipientIds) {
+                if (!userGearMap[recipientId]) userGearMap[recipientId] = [];
+                userGearMap[recipientId].push(...labels);
+            }
         }
 
         let sent = 0;

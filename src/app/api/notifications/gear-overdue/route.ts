@@ -13,31 +13,57 @@ export async function POST(req: NextRequest) {
     const now = new Date();
 
     try {
-        // Canonical source of truth for overdue inventory is the gears table.
-        const { data: overdueGears, error } = await supabase
-            .from('gears')
-            .select('id, name, due_date, checked_out_to, status')
-            .not('checked_out_to', 'is', null)
+        // Due time and who to tell live on the booking, not on the shared gear row.
+        const { data: overdueRequests, error } = await supabase
+            .from('gear_requests')
+            .select(`
+                user_id,
+                submitted_by_user_id,
+                due_date,
+                gear_request_gears (
+                    quantity,
+                    gears (name)
+                )
+            `)
+            .in('status', ['Approved', 'Checked Out', 'Partially Checked Out', 'Overdue'])
             .not('due_date', 'is', null)
-            .in('status', ['Checked Out', 'Partially Available', 'Pending Check-in'])
             .lt('due_date', now.toISOString());
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        if (!overdueGears || overdueGears.length === 0) {
+        if (!overdueRequests || overdueRequests.length === 0) {
             return NextResponse.json({ message: 'No overdue gear found.' });
         }
 
         const userGearMap: Record<string, { userId: string; gearNames: string[]; dueDates: string[] }> = {};
-        for (const gear of overdueGears as Array<{ name: string | null; due_date: string | null; checked_out_to: string | null }>) {
-            if (!gear.checked_out_to || !gear.due_date) continue;
-            if (!userGearMap[gear.checked_out_to]) {
-                userGearMap[gear.checked_out_to] = { userId: gear.checked_out_to, gearNames: [], dueDates: [] };
+        for (const request of overdueRequests as Array<{
+            user_id: string;
+            submitted_by_user_id: string | null;
+            due_date: string;
+            gear_request_gears: Array<{
+                quantity: number | null;
+                gears: { name: string | null } | Array<{ name: string | null }> | null;
+            }> | null;
+        }>) {
+            const recipientIds = [request.user_id, request.submitted_by_user_id].filter(
+                (id): id is string => Boolean(id)
+            );
+            const labels = (request.gear_request_gears || []).map((line) => {
+                const gear = Array.isArray(line.gears) ? line.gears[0] : line.gears;
+                const quantity = Math.max(1, Number(line.quantity ?? 1));
+                return `${gear?.name || 'Equipment'} (x${quantity})`;
+            });
+            for (const recipientId of recipientIds) {
+                if (!userGearMap[recipientId]) {
+                    userGearMap[recipientId] = { userId: recipientId, gearNames: [], dueDates: [] };
+                }
+                for (const label of labels) {
+                    userGearMap[recipientId].gearNames.push(label);
+                    userGearMap[recipientId].dueDates.push(request.due_date);
+                }
             }
-            userGearMap[gear.checked_out_to].gearNames.push(gear.name || 'Unknown Gear');
-            userGearMap[gear.checked_out_to].dueDates.push(gear.due_date);
         }
 
         for (const userId of Object.keys(userGearMap)) {

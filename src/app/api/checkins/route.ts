@@ -214,6 +214,13 @@ export async function POST(request: NextRequest) {
                 );
             }
 
+            if (error.message?.includes('CHECKIN_OVER_RETURN') || error.message?.includes('CHECKIN_NO_LINE')) {
+                return NextResponse.json(
+                    { error: 'Return quantity exceeds what this booking still has out', code: 'CHECKIN_OVER_RETURN' },
+                    { status: 409 }
+                );
+            }
+
             console.error('Error creating check-in:', error);
             return NextResponse.json(
                 { error: 'Failed to create check-in', details: error.message },
