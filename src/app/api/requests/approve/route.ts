@@ -37,6 +37,16 @@ const calculateDueDate = (duration: string): string => {
     return dueDate.toISOString();
 };
 
+/** Keep the sooner return time when one item is split across two bookings. */
+const earlierDueDate = (current: string | null | undefined, next: string): string => {
+    if (!current) return next;
+    const currentMs = new Date(current).getTime();
+    const nextMs = new Date(next).getTime();
+    if (Number.isNaN(currentMs)) return next;
+    if (Number.isNaN(nextMs)) return current;
+    return currentMs <= nextMs ? current : next;
+};
+
 async function requireAdminContext() {
     const authSupabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await authSupabase.auth.getUser();
@@ -160,19 +170,26 @@ export async function POST(request: NextRequest) {
 
         // Validate availability and collect updates
         console.log('🔍 Processing lines:', lines);
-        const updates: Array<{ gear_id: string; newAvailable: number; newStatus: string }> = [];
+        const updates: Array<{
+            gear_id: string;
+            newAvailable: number;
+            newStatus: string;
+            unitsAlreadyOut: boolean;
+            due_date: string | null;
+        }> = [];
         for (const line of lines) {
             const { data: g, error: gErr } = await supabase
                 .from('gears')
-                .select('id, name, available_quantity, quantity, status')
+                .select('id, name, available_quantity, quantity, status, due_date')
                 .eq('id', line.gear_id)
                 .maybeSingle();
             if (gErr || !g) {
                 return fail(400, 'Gear not found for line', 'One or more selected items no longer exist.', 'GEAR_NOT_FOUND');
             }
+            const totalQuantity = typeof g.quantity === 'number' && !Number.isNaN(g.quantity) ? g.quantity : 0;
             const baseAvailable = typeof g.available_quantity === 'number' && !Number.isNaN(g.available_quantity)
                 ? g.available_quantity
-                : (typeof g.quantity === 'number' ? g.quantity : 0);
+                : totalQuantity;
             if (baseAvailable < line.quantity) {
                 return fail(409, `Not enough available units for ${g.name}. Requested ${line.quantity}, available ${baseAvailable}.`, 'Some items are no longer available for checkout.', 'INSUFFICIENT_GEAR_QUANTITY');
             }
@@ -181,7 +198,13 @@ export async function POST(request: NextRequest) {
             const newStatus = newAvailable === baseAvailable ? 'Available' :
                 newAvailable > 0 ? 'Partially Available' : 'Checked Out';
             console.log(`🔍 Gear ${g.name}: ${baseAvailable} available, requesting ${line.quantity}, new available: ${newAvailable}, new status: ${newStatus}`);
-            updates.push({ gear_id: g.id, newAvailable, newStatus });
+            updates.push({
+                gear_id: g.id,
+                newAvailable,
+                newStatus,
+                unitsAlreadyOut: totalQuantity > baseAvailable,
+                due_date: typeof g.due_date === 'string' ? g.due_date : null,
+            });
         }
 
         // Calculate due date based on expected duration at approval time
@@ -189,15 +212,27 @@ export async function POST(request: NextRequest) {
 
         // Apply updates
         for (const upd of updates) {
+            // A gear row can name only one holder. If units are already out on
+            // another booking, keep the counts and leave holder fields empty so
+            // the later approval does not take over the earlier booking.
+            const holderFields = upd.unitsAlreadyOut
+                ? {
+                    checked_out_to: null,
+                    current_request_id: null,
+                    due_date: earlierDueDate(upd.due_date, calculatedDueDate),
+                }
+                : {
+                    checked_out_to: req.user_id,
+                    current_request_id: requestId,
+                    last_checkout_date: new Date().toISOString(),
+                    due_date: calculatedDueDate,
+                };
             const { error: uErr } = await supabase
                 .from('gears')
                 .update({
                     available_quantity: upd.newAvailable,
                     status: upd.newStatus,
-                    checked_out_to: req.user_id,
-                    current_request_id: requestId,
-                    last_checkout_date: new Date().toISOString(),
-                    due_date: calculatedDueDate,
+                    ...holderFields,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', upd.gear_id);
@@ -267,6 +302,7 @@ export async function POST(request: NextRequest) {
             .update({
                 approved_at: new Date().toISOString(),
                 due_date: calculatedDueDate,
+                updated_by: adminUser.id,
                 updated_at: new Date().toISOString()
             })
             .eq('id', requestId);
@@ -332,8 +368,44 @@ export async function POST(request: NextRequest) {
                     console.log('[Gear Approval] Push notification queued for user');
                 }
 
-                // Notify the person who submitted on behalf of someone else
+                const approvalNotice = `Your request for ${gearNames} was approved by an admin. Due back: ${new Date(calculatedDueDate).toLocaleDateString()}.`;
+                await supabase.from('notifications').insert({
+                    user_id: req.user_id,
+                    title: 'Request approved',
+                    message: approvalNotice,
+                    type: 'System',
+                    is_read: false,
+                });
+
+                // The booker and the person who will use the equipment are often different.
+                // Push alone is not enough: it dies when that person has no device token.
                 if (req.submitted_by_user_id && req.submitted_by_user_id !== req.user_id) {
+                    const { data: submitterProfile } = await supabase
+                        .from('profiles')
+                        .select('email, full_name')
+                        .eq('id', req.submitted_by_user_id)
+                        .maybeSingle();
+
+                    await supabase.from('notifications').insert({
+                        user_id: req.submitted_by_user_id,
+                        title: 'Booking you submitted was approved',
+                        message: `The request you submitted for ${userProfile.full_name || 'a colleague'} was approved. Due back: ${new Date(calculatedDueDate).toLocaleDateString()}.`,
+                        type: 'System',
+                        is_read: false,
+                    });
+
+                    if (submitterProfile?.email && submitterProfile.email !== userProfile.email) {
+                        await sendGearRequestApprovalEmail({
+                            to: submitterProfile.email,
+                            userName: submitterProfile.full_name || 'User',
+                            gearList: gearListFormatted,
+                            dueDate: calculatedDueDate,
+                            requestId,
+                            reason: req.expected_duration ? `${req.expected_duration}` : undefined,
+                            destination: req.destination || undefined,
+                        });
+                    }
+
                     const submitterPush = await enqueuePushNotification(
                         {
                             userId: req.submitted_by_user_id,
