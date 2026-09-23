@@ -272,15 +272,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         let gearNames = 'Equipment';
         const { data: gearLines, error: gearLinesError } = await supabase
             .from('gear_request_gears')
-            .select('gears(name)')
+            .select('gear_id, gears(name)')
             .eq('gear_request_id', id);
 
         if (gearLinesError) {
             console.error('[Gear Request Cancel] Failed to load gear names:', gearLinesError);
         } else {
-            const names = (gearLines ?? [])
-                .map((line) => line.gears?.name)
-                .filter((name): name is string => Boolean(name));
+            // Junction rows can repeat a gear. Count each gear once, matching a lookup by gear id.
+            const seenGearIds = new Set<string>();
+            const names: string[] = [];
+            for (const line of gearLines ?? []) {
+                const name = line.gears?.name;
+                if (!name || seenGearIds.has(line.gear_id)) continue;
+                seenGearIds.add(line.gear_id);
+                names.push(name);
+            }
             if (names.length === 1) {
                 gearNames = names[0];
             } else if (names.length > 1) {

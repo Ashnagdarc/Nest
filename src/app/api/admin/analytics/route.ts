@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
             const { data: damageResult, error: damageError } = await supabase
                 .from('gear_maintenance')
                 .select('id')
-                .eq('status', 'Damage Report')
+                .ilike('description', '%Damage%')
                 .gte('created_at', fromDate)
                 .lte('created_at', toDate);
 
