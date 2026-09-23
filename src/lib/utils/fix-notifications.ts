@@ -15,9 +15,7 @@ export async function fixNotificationPermissions() {
         });
 
         if (rlsError) {
-            logError('Failed to enable RLS', {
-                error: rlsError
-            });
+            logError(rlsError, 'Failed to enable RLS');
         }
 
         // Drop existing policies
@@ -40,9 +38,7 @@ export async function fixNotificationPermissions() {
         });
 
         if (dropError) {
-            logError('Failed to drop existing policies', {
-                error: dropError
-            });
+            logError(dropError, 'Failed to drop existing policies');
         }
 
         // Create new policies
@@ -111,10 +107,7 @@ export async function fixNotificationPermissions() {
             });
 
             if (policyError) {
-                logError('Failed to create policy', {
-                    error: policyError,
-                    policy
-                });
+                logError(policyError, 'Failed to create policy');
             }
         }
 
@@ -126,9 +119,7 @@ export async function fixNotificationPermissions() {
         });
 
         if (grantError) {
-            logError('Failed to grant permissions', {
-                error: grantError
-            });
+            logError(grantError, 'Failed to grant permissions');
         }
 
         // Create index
@@ -140,16 +131,12 @@ export async function fixNotificationPermissions() {
         });
 
         if (indexError) {
-            logError('Failed to create index', {
-                error: indexError
-            });
+            logError(indexError, 'Failed to create index');
         }
 
         return { success: true };
     } catch (error) {
-        logError('Unexpected error in fixNotificationPermissions', {
-            error
-        });
+        logError(error, 'Unexpected error in fixNotificationPermissions');
         return { success: false, error };
     }
 } 

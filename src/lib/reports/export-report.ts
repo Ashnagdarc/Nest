@@ -1,6 +1,6 @@
-import { format } from 'date-fns';
+import {format} from 'date-fns';
 import type { AdminReportData } from '@/lib/reports/types';
-import { cell, escapeCsv, escapeHtml, percentOf, reportFilenameStem, sumRow } from '@/lib/reports/export-helpers';
+import {escapeCsv, escapeHtml, percentOf, reportFilenameStem, sumRow} from '@/lib/reports/export-helpers';
 
 const EXPORT_STYLES = `
   body { font-family: Calibri, Arial, sans-serif; color: #111827; margin: 28px; }

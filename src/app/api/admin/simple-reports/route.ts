@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
                     created_at,
                     updated_at,
                     due_date,
-                    profiles:user_id (id, full_name, email)
+                    profiles!gear_requests_user_id_fkey (id, full_name, email)
                 `)
                 .gte('created_at', fromDate)
                 .lte('created_at', toDate)
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
                     checkin_date,
                     quantity,
                     gears (id, name, category),
-                    profiles:user_id (id, full_name, email)
+                    profiles!checkins_user_id_fkey (id, full_name, email)
                 `)
                 .gte('checkin_date', fromDate)
                 .lte('checkin_date', toDate)
@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
                 notes: maint.description,
                 details: { maintenanceId: maint.id }
             }))
-        ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        ].sort((a, b) => new Date(b.timestamp ?? 0).getTime() - new Date(a.timestamp ?? 0).getTime())
             .slice(0, 20);
 
         // Weekly trends (simplified)

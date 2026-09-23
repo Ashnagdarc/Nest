@@ -39,7 +39,7 @@ export default function UserNotificationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
-  const { toast } = useToast();
+  useToast();
   const { showSuccessFeedback, showErrorFeedback, setLoading } = useSuccessFeedback();
 
   useEffect(() => {

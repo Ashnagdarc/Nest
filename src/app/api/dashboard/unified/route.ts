@@ -24,7 +24,7 @@ const compactListMessage = (value: string | null | undefined): string => {
     return truncateText(text, 180);
 };
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
     try {
         // Use proper server client with user authentication
         const supabase = await createSupabaseServerClient();
@@ -172,7 +172,7 @@ export async function GET(request: NextRequest) {
             message: compactListMessage(notif.message),
         }));
         const users = usersResult.data || [];
-        const cars = (carsResult.data || []).filter(c => c.active);
+        void  (carsResult.data || []).filter(c => c.active);
         const carBookings = carBookingsResult.data || [];
 
         const gearsWithStates = gears.map(gear => ({

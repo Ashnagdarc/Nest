@@ -7,10 +7,9 @@
  * @hook
  */
 
-import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { useToast } from "@/hooks/use-toast";
-import { apiGet } from '@/lib/apiClient';
+import {useState, useEffect, useMemo} from 'react';
+import {useToast} from "@/hooks/use-toast";
+import {apiGet} from '@/lib/apiClient';
 
 interface InventoryItem {
     id: string;

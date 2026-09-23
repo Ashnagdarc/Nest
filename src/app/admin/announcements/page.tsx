@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from 'react';
-import { Megaphone, Newspaper } from 'lucide-react';
+import {useMemo, useState} from 'react';
+import {Newspaper} from 'lucide-react';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -12,17 +12,17 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
-import { ListSkeleton } from '@/components/dashboard/ListSkeleton';
+import {Card, CardContent} from '@/components/ui/card';
+import {Input} from '@/components/ui/input';
+import {useToast} from '@/hooks/use-toast';
+import {ListSkeleton} from '@/components/dashboard/ListSkeleton';
 import ErrorDisplay from '@/components/ui/error-display';
-import { AnnouncementCard, AnnouncementsEmptyState } from '@/components/announcements/AnnouncementCard';
-import { AnnouncementFormDialog, type AnnouncementFormValues } from '@/components/announcements/AnnouncementFormDialog';
-import { AnnouncementsPageHeader } from '@/components/announcements/AnnouncementsPageHeader';
+import {AnnouncementCard, AnnouncementsEmptyState} from '@/components/announcements/AnnouncementCard';
+import {AnnouncementFormDialog, type AnnouncementFormValues} from '@/components/announcements/AnnouncementFormDialog';
+import {AnnouncementsPageHeader} from '@/components/announcements/AnnouncementsPageHeader';
 import type { Announcement } from '@/components/announcements/types';
-import { useAnnouncements } from '@/hooks/announcements/useAnnouncements';
-import { createClient } from '@/lib/supabase/client';
+import {useAnnouncements} from '@/hooks/announcements/useAnnouncements';
+import {createClient} from '@/lib/supabase/client';
 
 export default function AnnouncementsPage() {
     const { toast } = useToast();

@@ -1,6 +1,12 @@
 import * as React from "react";
 
-type PossibleRef<T> = React.Ref<T> | undefined;
+/** Accept callback refs, object refs, legacy refs, and nullish. */
+type PossibleRef<T> =
+  | React.Ref<T>
+  | React.LegacyRef<T>
+  | React.RefObject<T | null>
+  | null
+  | undefined;
 
 /**
  * Set a given ref to a given value
@@ -11,8 +17,8 @@ function setRef<T>(ref: PossibleRef<T>, value: T) {
     return ref(value);
   }
 
-  if (ref !== null && ref !== undefined) {
-    ref.current = value;
+  if (ref !== null && ref !== undefined && typeof ref === "object") {
+    (ref as React.MutableRefObject<T | null>).current = value;
   }
 }
 
@@ -42,7 +48,7 @@ function composeRefs<T>(...refs: PossibleRef<T>[]): React.RefCallback<T> {
           if (typeof cleanup === "function") {
             cleanup();
           } else {
-            setRef(refs[i], null);
+            setRef(refs[i], null as T);
           }
         }
       };

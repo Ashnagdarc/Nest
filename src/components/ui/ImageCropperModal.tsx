@@ -12,7 +12,7 @@ interface ImageCropperModalProps {
     aspect?: number; // e.g. 1 for square
 }
 
-function getCroppedImg(imageSrc: string, crop: any, zoom: number, aspect: number): Promise<Blob> {
+function getCroppedImg(imageSrc: string, crop: any, _zoom: number, _aspect: number): Promise<Blob> {
     return new Promise((resolve, reject) => {
         const image = new window.Image();
         image.src = imageSrc;

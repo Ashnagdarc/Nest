@@ -810,7 +810,7 @@ export function useManageGearsPage() {
       const { data: { user } } = await supabase.auth.getUser();
 
       // Add the maintenance record
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('gear_maintenance')
         .insert([
           {

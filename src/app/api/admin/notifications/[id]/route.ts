@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireActiveAdmin } from '@/app/api/_utils/route-auth';
 
-export async function PUT(
-    request: NextRequest,
+export async function PUT(request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
@@ -73,8 +72,7 @@ export async function PUT(
     }
 }
 
-export async function DELETE(
-    request: NextRequest,
+export async function DELETE(_request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {

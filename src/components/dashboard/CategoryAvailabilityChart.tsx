@@ -124,17 +124,17 @@ export function CategoryAvailabilityChart() {
                             <Tooltip content={<CustomTooltip />} />
                             <Legend />
                             <Bar dataKey="available" name="Available" stackId="stack" >
-                                {categoryData.map((entry, index) => (
+                                {categoryData.map((_, index) => (
                                     <Cell key={`available-${index}`} fill={colors.available} />
                                 ))}
                             </Bar>
                             <Bar dataKey="checked_out" name="Checked Out" stackId="stack">
-                                {categoryData.map((entry, index) => (
+                                {categoryData.map((_, index) => (
                                     <Cell key={`checkout-${index}`} fill={colors.checked_out} />
                                 ))}
                             </Bar>
                             <Bar dataKey="maintenance" name="Maintenance" stackId="stack">
-                                {categoryData.map((entry, index) => (
+                                {categoryData.map((_, index) => (
                                     <Cell key={`maintenance-${index}`} fill={colors.maintenance} />
                                 ))}
                             </Bar>

@@ -23,7 +23,6 @@ import autoTable from "jspdf-autotable";
 import { apiGet } from "@/lib/apiClient";
 import { ListSkeleton } from "@/components/dashboard/ListSkeleton";
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import RequestFilters from "@/components/admin/requests/RequestFilters";
 import RequestTable from "@/components/admin/requests/RequestTable";
 import { RequestPageHeader } from "@/components/admin/requests/RequestPageHeader";

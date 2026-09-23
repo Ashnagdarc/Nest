@@ -108,13 +108,13 @@ export async function createSupabaseServerClient(isAdmin = false) {
         key,
         {
           cookies: {
-            get(name: string) {
+            get(_name: string) {
               return undefined;
             },
-            set(name: string, value: string, options: CookieOptions) {
+            set(_name: string, _value: string, _options: CookieOptions) {
               // No-op for API routes
             },
-            remove(name: string, options: CookieOptions) {
+            remove(_name: string, _options: CookieOptions) {
               // No-op for API routes
             },
           },

@@ -114,10 +114,6 @@ function carLabel(assignment: CarAssignmentRow | undefined): string {
     return car?.label?.trim() || 'Unknown car';
 }
 
-function carPlate(assignment: CarAssignmentRow | undefined): string {
-    if (!assignment) return '';
-    return rel(assignment.cars)?.plate?.trim() || '';
-}
 
 function returnedLabel(status: string, dateOfUse: string, today: string): string {
     if (status === 'Completed') return 'Yes';

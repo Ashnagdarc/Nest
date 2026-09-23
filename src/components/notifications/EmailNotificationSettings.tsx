@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Bell, Mail, CheckCircle, XCircle, AlertTriangle, Package } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
+import type { Json } from '@/types/supabase';
 
 interface EmailPreferences {
     gear_requests: boolean;
@@ -53,16 +54,21 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
                 .eq('id', userId)
                 .single();
 
-            if (profile?.notification_preferences?.email) {
+            const prefs = profile?.notification_preferences as
+                | { email?: Partial<EmailPreferences> }
+                | null
+                | undefined;
+
+            if (prefs?.email) {
                 setPreferences({
-                    gear_requests: profile.notification_preferences.email.gear_requests ?? true,
-                    gear_approvals: profile.notification_preferences.email.gear_approvals ?? true,
-                    gear_rejections: profile.notification_preferences.email.gear_rejections ?? true,
-                    gear_checkins: profile.notification_preferences.email.gear_checkins ?? true,
-                    gear_checkouts: profile.notification_preferences.email.gear_checkouts ?? true,
-                    overdue_reminders: profile.notification_preferences.email.overdue_reminders ?? true,
-                    maintenance_alerts: profile.notification_preferences.email.maintenance_alerts ?? true,
-                    system_notifications: profile.notification_preferences.email.system_notifications ?? true,
+                    gear_requests: prefs.email.gear_requests ?? true,
+                    gear_approvals: prefs.email.gear_approvals ?? true,
+                    gear_rejections: prefs.email.gear_rejections ?? true,
+                    gear_checkins: prefs.email.gear_checkins ?? true,
+                    gear_checkouts: prefs.email.gear_checkouts ?? true,
+                    overdue_reminders: prefs.email.overdue_reminders ?? true,
+                    maintenance_alerts: prefs.email.maintenance_alerts ?? true,
+                    system_notifications: prefs.email.system_notifications ?? true,
                 });
             }
         } catch (error) {
@@ -89,7 +95,8 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
                 .eq('id', userId)
                 .single();
 
-            const currentPrefs = currentProfile?.notification_preferences || {};
+            const currentPrefs =
+                (currentProfile?.notification_preferences as Record<string, unknown> | null) || {};
 
             // Merge: preserve in_app and push channels, update only email
             const updatedPreferences = {
@@ -100,7 +107,7 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
             const { error } = await supabase
                 .from('profiles')
                 .update({
-                    notification_preferences: updatedPreferences,
+                    notification_preferences: updatedPreferences as unknown as Json,
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', userId);

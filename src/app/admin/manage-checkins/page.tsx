@@ -453,7 +453,7 @@ export default function ManageCheckinsPage() {
       const { data: adminProfile } = await supabase
         .from('profiles')
         .select('full_name, email')
-        .eq('id', user?.id)
+        .eq('id', user?.id ?? '')
         .single();
 
       let group: Checkin[] = loadedGroup;
@@ -785,7 +785,7 @@ export default function ManageCheckinsPage() {
       const { data: adminProfile } = await supabase
         .from('profiles')
         .select('full_name, email')
-        .eq('id', user?.id)
+        .eq('id', user?.id ?? '')
         .single();
       // Fetch user profile
       const { data: userProfileForChat } = await supabase
@@ -979,7 +979,7 @@ export default function ManageCheckinsPage() {
       const { data: adminProfile } = await supabase
         .from('profiles')
         .select('full_name, email')
-        .eq('id', user?.id)
+        .eq('id', user?.id ?? '')
         .single();
       const { data: userProfileForChat } = await supabase
         .from('profiles')

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
     try {
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
         // Example: Fetch total gears, users, requests
         const [gears, users, requests] = await Promise.all([
             supabase.from('gears').select('id'),

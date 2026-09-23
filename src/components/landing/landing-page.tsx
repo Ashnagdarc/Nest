@@ -10,10 +10,10 @@ import FlipWordsHero from "./FlipWordsHero";
 import { ThemeLogo } from "@/components/ui/theme-logo";
 
 export default function LandingPage() {
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [configError, setConfigError] = useState<string | null>(null);
+    const [configError, setConfigError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [, setLogoUrl] = useState('/Nest-logo.png');
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {

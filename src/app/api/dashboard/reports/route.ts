@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
     try {
-        const supabase = createSupabaseServerClient();
+        const supabase = await createSupabaseServerClient();
         // Example: Fetch usage report (customize as needed)
         const { searchParams } = new URL(request.url);
         const from = searchParams.get('from');

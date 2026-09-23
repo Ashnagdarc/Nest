@@ -196,7 +196,7 @@ export function useCheckedOutGears(userId: string | null, toast: (params: { titl
                     const pending = Math.max(pendingByKey.get(key) || 0, pendingFromReturnsByKey.get(key) || 0);
                     const returnable = Math.max(0, requested - completed - pending);
                     const meta = lineMetaByKey.get(key);
-                    const gear = meta?.gear || {};
+                    const gear: Partial<Gear> = meta?.gear || {};
 
                     return {
                         id: gearId,

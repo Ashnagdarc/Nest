@@ -47,13 +47,19 @@ export function defaultNotificationPreferences(): NotificationPreferences {
 }
 
 export function mergeNotificationPreferences(
-  raw: Partial<NotificationPreferences> | null | undefined,
+  raw: Partial<NotificationPreferences> | Record<string, unknown> | string | number | boolean | null | undefined,
 ): NotificationPreferences {
   const defaults = defaultNotificationPreferences();
+  if (!raw || typeof raw !== 'object') {
+    return defaults;
+  }
+  const email = 'email' in raw ? (raw as NotificationPreferences).email : undefined;
+  const inApp = 'in_app' in raw ? (raw as NotificationPreferences).in_app : undefined;
+  const push = 'push' in raw ? (raw as NotificationPreferences).push : undefined;
   return {
-    email: { ...defaults.email, ...(raw?.email ?? {}) },
-    in_app: { ...defaults.in_app, ...(raw?.in_app ?? {}) },
-    push: { ...defaults.push, ...(raw?.push ?? {}) },
+    email: { ...defaults.email, ...(email ?? {}) },
+    in_app: { ...defaults.in_app, ...(inApp ?? {}) },
+    push: { ...defaults.push, ...(push ?? {}) },
   };
 }
 

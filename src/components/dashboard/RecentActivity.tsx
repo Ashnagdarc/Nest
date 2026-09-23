@@ -16,8 +16,8 @@ interface RecentActivityProps {
     embedded?: boolean;
 }
 
-export function RecentActivity({ embedded = false }: RecentActivityProps) {
-    const { activities, loading, refetch } = useRecentActivity();
+export function RecentActivity(_props: RecentActivityProps = {}) {
+    const { activities, loading } = useRecentActivity();
     const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
     if (loading) {

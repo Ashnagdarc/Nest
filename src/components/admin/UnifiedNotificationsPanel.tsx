@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Calendar, CheckSquare, Clock } from "lucide-react";
+import { useState, useEffect } from 'react';
+import {createClient} from '@/lib/supabase/client';
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
+import {Badge} from "@/components/ui/badge";
+import {Button} from "@/components/ui/button";
+import {CheckSquare, Clock} from "lucide-react";
 import Link from 'next/link';
 
 interface BookingItem {
@@ -35,7 +35,7 @@ interface RequestItem {
 
 export function UnifiedNotificationsPanel() {
     const supabase = createClient();
-    const [pendingBookings, setPendingBookings] = useState<BookingItem[]>([]);
+    const [, setPendingBookings] = useState<BookingItem[]>([]);
     const [pendingRequests, setPendingRequests] = useState<RequestItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 

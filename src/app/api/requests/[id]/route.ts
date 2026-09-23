@@ -136,11 +136,11 @@ export async function GET(
         }
 
         // If no gear names found from junction table, try to fetch from gear_ids
-        if (gearNames.length === 0 && requestData.gear_ids && Array.isArray(requestData.gear_ids)) {
+        if (gearNames.length === 0 && (requestData as { gear_ids?: string[] }).gear_ids && Array.isArray((requestData as { gear_ids?: string[] }).gear_ids)) {
             const { data: gearsData, error: gearsError } = await supabase
                 .from('gears')
                 .select('id, name, category')
-                .in('id', requestData.gear_ids);
+                .in('id', (requestData as { gear_ids?: string[] }).gear_ids);
 
             if (!gearsError && gearsData) {
                 // Aggregate counts by name from concrete ids
@@ -252,7 +252,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         // Get request details before deletion for notifications
         const { data: requestData, error: requestError } = await supabase
             .from('gear_requests')
-            .select('user_id, status, reason, destination, gear_ids')
+            .select('user_id, status, reason, destination')
             .eq('id', id)
             .single();
 
@@ -263,11 +263,11 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
         // Get gear names for notification
         let gearNames = 'Equipment';
-        if (requestData.gear_ids && Array.isArray(requestData.gear_ids)) {
+        if ((requestData as { gear_ids?: string[] }).gear_ids && Array.isArray((requestData as { gear_ids?: string[] }).gear_ids)) {
             const { data: gears } = await supabase
                 .from('gears')
                 .select('name')
-                .in('id', requestData.gear_ids);
+                .in('id', (requestData as { gear_ids?: string[] }).gear_ids);
 
             if (gears && gears.length > 0) {
                 const names = gears.map(g => g.name).filter(Boolean);

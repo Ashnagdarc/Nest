@@ -134,7 +134,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         setError(null);
         try {
             // Use centralized API client PUT endpoint
-            const { data, error } = await apiPut<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });
+            const { error } = await apiPut<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });
             if (error) {
                 setError(`Failed to mark notification as read: ${error}`);
                 return false;
@@ -159,7 +159,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         setError(null);
         try {
             // Use bulk update via PUT (server handles current user session)
-            const { data, error } = await apiPut<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
+            const { error } = await apiPut<{ data: Notification[]; error: string | null }>(`/api/notifications/mark-read`, {});
             if (error) {
                 setError(`Failed to mark all notifications as read: ${error}`);
                 return false;
@@ -218,7 +218,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             .channel('notifications')
             .on('postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-                (payload: { new: Notification }) => {
+                (payload) => {
                     // Reset notification state for new notification
                     resetNotificationState(payload.new.id);
 
@@ -231,7 +231,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             )
             .on('postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-                (payload: { new: Notification }) => {
+                () => {
                     // Update notifications list when notification is marked as read
                     fetchNotifications();
                 }

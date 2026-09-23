@@ -72,7 +72,15 @@ export async function POST(request: NextRequest) {
             .maybeSingle();
         if (updErr) return fail(400, updErr.message, 'Could not complete booking right now.', 'CAR_BOOKING_COMPLETE_FAILED');
         
-        let finalRow = updatedRow;
+        type FinalBookingRow = {
+            id: string;
+            status: string;
+            employee_name: string | null;
+            date_of_use: string | null;
+            time_slot: string | null;
+            updated_at: string | null;
+        };
+        let finalRow: FinalBookingRow | null = updatedRow;
         
         // If no row returned, double-check current status and treat as success if already completed
         if (!updatedRow) {
@@ -143,13 +151,6 @@ export async function POST(request: NextRequest) {
                 date_of_use: existing.date_of_use,
                 time_slot: existing.time_slot,
                 updated_at: new Date().toISOString()
-            } as {
-                id: string;
-                status: string;
-                employee_name: string | null;
-                date_of_use: string | null;
-                time_slot: string | null;
-                updated_at: string | null;
             };
         }
 

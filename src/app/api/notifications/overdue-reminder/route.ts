@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendOverdueReminderEmail } from '@/lib/email';
 import type { Database } from '@/types/supabase';
+import { asNotificationPrefs } from '@/lib/utils/json-prefs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { hasValidCronSecret, requireActiveAdmin } from '@/app/api/_utils/route-auth';
 
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Check user notification preferences
-        const prefs = user.notification_preferences || {};
+        const prefs = asNotificationPrefs(user.notification_preferences);
         const sendEmail = prefs.email?.overdue_reminders ?? true; // Default to true for overdue reminders
 
         if (!sendEmail) {

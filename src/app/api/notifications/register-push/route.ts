@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     // Upsert: if token exists, update it; otherwise insert
     // Supabase JS SDK requires onConflict array to specify which column triggers the conflict
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('user_push_tokens')
       .upsert(record, { onConflict: 'token' });
     if (error) {

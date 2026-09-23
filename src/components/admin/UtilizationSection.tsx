@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
-import { Loader2, TrendingUp, TrendingDown, Activity, BarChart3, Zap, ChevronDown, ChevronUp } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast";
+import {useEffect, useState} from 'react';
+import {createClient} from '@/lib/supabase/client';
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
+import {Button} from "@/components/ui/button";
+import {Loader2, TrendingUp, TrendingDown, Activity, BarChart3, Zap, ChevronDown} from 'lucide-react';
+import {useToast} from "@/hooks/use-toast";
 import ErrorDisplay from '@/components/ui/error-display';
 
 type UtilizationData = {
@@ -166,7 +165,7 @@ export function UtilizationSection() {
                                     <>
                                         <div className="w-px h-4 bg-gray-600" />
                                         <div className="flex gap-1">
-                                            {utilizationData.slice(0, 3).map((item, index) => {
+                                            {utilizationData.slice(0, 3).map((item) => {
                                                 const config = getUtilizationConfig(item.utilization);
                                                 return (
                                                     <div
@@ -234,7 +233,7 @@ export function UtilizationSection() {
                             </div>
                         ) : (
                             <div className="space-y-2">
-                                {utilizationData.slice(0, 5).map((item, index) => {
+                                {utilizationData.slice(0, 5).map((item) => {
                                     const config = getUtilizationConfig(item.utilization);
                                     const StatusIcon = config.icon;
 

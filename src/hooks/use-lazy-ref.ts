@@ -1,13 +1,17 @@
 import * as React from "react";
 
-function useLazyRef<T>(fn: () => T) {
+type InitializedRef<T> = {
+  readonly current: T;
+};
+
+function useLazyRef<T>(fn: () => T): InitializedRef<T> {
   const ref = React.useRef<T | null>(null);
 
   if (ref.current === null) {
     ref.current = fn();
   }
 
-  return ref as React.RefObject<T>;
+  return ref as InitializedRef<T>;
 }
 
 export { useLazyRef };

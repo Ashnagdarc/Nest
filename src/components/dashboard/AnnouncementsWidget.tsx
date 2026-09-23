@@ -1,17 +1,16 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { Megaphone } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { formatDistanceToNow } from 'date-fns';
+import {useState, useEffect} from 'react';
+import {Megaphone} from 'lucide-react';
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
+import {Button} from "@/components/ui/button";
+import {formatDistanceToNow} from 'date-fns';
 import Link from 'next/link';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from './EmptyState';
-import { logger } from '@/utils/logger';
-import { createSupabaseSubscription } from '@/utils/supabase-subscription';
-import { fetchAnnouncements } from '@/lib/api/queries';
-import { createClient } from '@/lib/supabase/client';
+import {Skeleton} from '@/components/ui/skeleton';
+import {logger} from '@/utils/logger';
+import {createSupabaseSubscription} from '@/utils/supabase-subscription';
+import {fetchAnnouncements} from '@/lib/api/queries';
+import {createClient} from '@/lib/supabase/client';
 
 type Announcement = {
     id: string;

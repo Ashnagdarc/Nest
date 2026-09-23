@@ -310,7 +310,13 @@ async function handlePendingRequests() {
     try {
         const { data: pendingRequests, error } = await supabase
             .from('gear_requests')
-            .select('id, created_at, requester_name, gear_name')
+            .select(`
+                id,
+                created_at,
+                reason,
+                profiles!gear_requests_user_id_fkey (full_name, email),
+                gear_request_gears (gears (name))
+            `)
             .eq('status', 'Pending')
             .lt('created_at', oneHourAgo);
 
@@ -342,7 +348,13 @@ async function handlePendingRequests() {
 
             if (existing && existing.length > 0) continue; // Already alerted for this request
 
-            const message = `Request from ${req.requester_name} for ${req.gear_name} has been pending for over 1 hour.`;
+            const requester =
+                (req.profiles as { full_name?: string | null; email?: string | null } | null)?.full_name
+                || (req.profiles as { email?: string | null } | null)?.email
+                || 'Unknown user';
+            const gearLines = (req.gear_request_gears as Array<{ gears?: { name?: string | null } | null }> | null) || [];
+            const gearName = gearLines.map((g) => g.gears?.name).filter(Boolean).join(', ') || req.reason || 'equipment';
+            const message = `Request from ${requester} for ${gearName} has been pending for over 1 hour.`;
 
             // Notify all admins
             for (const admin of admins) {

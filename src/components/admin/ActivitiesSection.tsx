@@ -1,14 +1,11 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { motion, AnimatePresence } from '@/lib/motion-fallback';
-import { Loader2, Calendar, User, ArrowRight, Activity, TrendingUp, TrendingDown, Filter, MoreHorizontal } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast";
-import ErrorDisplay from '@/components/ui/error-display';
-import { Badge } from '@/components/ui/badge';
-import { formatDistanceToNow } from 'date-fns';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import {createClient} from '@/lib/supabase/client';
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
+import {Button} from "@/components/ui/button";
+import {Calendar, User, ArrowRight, Activity} from 'lucide-react';
+import {useToast} from "@/hooks/use-toast";
+import {Badge} from '@/components/ui/badge';
+import {formatDistanceToNow} from 'date-fns';
 
 type UserActivity = {
     id: string;
@@ -20,57 +17,20 @@ type UserActivity = {
     timestamp?: Date;
 };
 
-type ProfileData = {
-    id: string;
-    full_name?: string;
-    email?: string;
-    updated_at: string;
-    created_at: string;
-};
-
-type GearActivityData = {
-    id: string;
-    name?: string;
-    created_at: string;
-    owner_id?: string;
-    profiles?: {
-        full_name?: string;
-        email?: string;
-    };
-};
-
 export function ActivitiesSection() {
     const supabase = createClient();
     const { toast } = useToast();
     const [isLoading, setIsLoading] = useState(true);
-    const [isLoadingMore, setIsLoadingMore] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [, setError] = useState<string | null>(null);
     const [activities, setActivities] = useState<UserActivity[]>([]);
-    const [page, setPage] = useState(1);
-    const [hasMore, setHasMore] = useState(false);
-    const [isCollapsed, setIsCollapsed] = useState(false);
-    const [canLoadMore, setCanLoadMore] = useState(true);
+    const [, setPage] = useState(1);
+    const [, setHasMore] = useState(false);
+    const [isCollapsed] = useState(false);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
-    const [lastScrollTop, setLastScrollTop] = useState(0);
-    const [isAutoScrolling, setIsAutoScrolling] = useState(true);
-    const [isPaused, setIsPaused] = useState(false);
+    const [isAutoScrolling] = useState(true);
+    const [isPaused] = useState(false);
     const autoScrollIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const ITEMS_PER_PAGE = 8;
-
-    // Infinite scroll handler
-    const handleScroll = useCallback((event: Event) => {
-        const target = event.target as HTMLElement;
-        const scrollTop = target.scrollTop;
-        const scrollHeight = target.scrollHeight;
-        const clientHeight = target.clientHeight;
-
-        // Load more when scrolling up near the top (upward infinite scroll)
-        if (scrollTop < 100 && scrollTop < lastScrollTop && hasMore && !isLoadingMore && canLoadMore) {
-            loadMoreActivities();
-        }
-
-        setLastScrollTop(scrollTop);
-    }, [hasMore, isLoadingMore, canLoadMore, lastScrollTop]);
 
     // Auto-scroll functionality
     const startAutoScroll = useCallback(() => {
@@ -110,14 +70,6 @@ export function ActivitiesSection() {
         }
     }, []);
 
-    const handleMouseEnter = useCallback(() => {
-        setIsPaused(true);
-    }, []);
-
-    const handleMouseLeave = useCallback(() => {
-        setIsPaused(false);
-    }, []);
-
     useEffect(() => {
         fetchActivities(true);
     }, []);
@@ -141,20 +93,6 @@ export function ActivitiesSection() {
             }
         };
     }, []);
-
-    const loadMoreActivities = useCallback(async () => {
-        if (isLoadingMore || !hasMore) return;
-
-        setIsLoadingMore(true);
-        try {
-            await fetchActivities(false, page + 1);
-            setPage(prev => prev + 1);
-        } catch (error) {
-            console.error('Error loading more activities:', error);
-        } finally {
-            setIsLoadingMore(false);
-        }
-    }, [isLoadingMore, hasMore, page]);
 
     async function fetchActivities(reset = false, pageNum = 1) {
         if (reset) {
@@ -188,18 +126,20 @@ export function ActivitiesSection() {
             let activityList: UserActivity[] = [];
 
             if (profiles && profiles.length > 0) {
-                activityList = profiles.map((profile: ProfileData) => {
+                activityList = profiles.map((profile) => {
+                    const updatedAt = profile.updated_at ? new Date(profile.updated_at) : new Date();
+                    const createdAt = profile.created_at ? new Date(profile.created_at) : updatedAt;
                     // Check if this is a new profile (created_at and updated_at are close)
-                    const isNewProfile = new Date(profile.updated_at).getTime() - new Date(profile.created_at).getTime() < 1000 * 60 * 5; // 5 minutes difference
+                    const isNewProfile = updatedAt.getTime() - createdAt.getTime() < 1000 * 60 * 5; // 5 minutes difference
 
                     return {
                         id: profile.id,
                         user: profile.full_name || profile.email || 'User',
                         action: isNewProfile ? 'account was created' : 'profile was updated',
-                        time: profile.updated_at ? timeAgo(new Date(profile.updated_at)) : '',
+                        time: profile.updated_at ? timeAgo(updatedAt) : '',
                         icon: isNewProfile ? User : Activity,
-                        type: 'profile',
-                        timestamp: new Date(profile.updated_at)
+                        type: 'profile' as const,
+                        timestamp: updatedAt
                     };
                 });
             }
@@ -212,14 +152,14 @@ export function ActivitiesSection() {
                 .limit(Math.ceil(ITEMS_PER_PAGE / 2));
 
             if (!gearsError && gears && gears.length > 0 && pageNum === 1) {
-                const gearActivities = gears.map((gear: GearActivityData) => ({
+                const gearActivities = gears.map((gear) => ({
                     id: gear.id,
                     user: 'Admin',
                     action: `added ${gear.name || 'equipment'}`,
                     time: gear.created_at ? timeAgo(new Date(gear.created_at)) : '',
                     icon: ArrowRight,
                     type: 'gear' as const,
-                    timestamp: new Date(gear.created_at)
+                    timestamp: gear.created_at ? new Date(gear.created_at) : new Date()
                 }));
 
                 activityList = [...activityList, ...gearActivities];
@@ -264,35 +204,6 @@ export function ActivitiesSection() {
         if (diff < 3600) return `${Math.floor(diff / 60)} mins ago`;
         if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
         return `${Math.floor(diff / 86400)} days ago`;
-    }
-
-    function getActivityConfig(type: string) {
-        switch (type) {
-            case 'profile':
-                return {
-                    bgColor: 'bg-blue-500/10',
-                    borderColor: 'border-blue-500/30',
-                    iconColor: 'text-blue-400'
-                };
-            case 'gear':
-                return {
-                    bgColor: 'bg-green-500/10',
-                    borderColor: 'border-green-500/30',
-                    iconColor: 'text-green-400'
-                };
-            case 'system':
-                return {
-                    bgColor: 'bg-purple-500/10',
-                    borderColor: 'border-purple-500/30',
-                    iconColor: 'text-purple-400'
-                };
-            default:
-                return {
-                    bgColor: 'bg-gray-500/10',
-                    borderColor: 'border-gray-500/30',
-                    iconColor: 'text-gray-400'
-                };
-        }
     }
 
     if (isLoading) {

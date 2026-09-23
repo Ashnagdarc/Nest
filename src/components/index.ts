@@ -106,5 +106,5 @@ export { AnnouncementPopup } from './AnnouncementPopup';
 export { DashboardHeader } from './DashboardHeader';
 
 // Error Boundaries
-export { default as ErrorBoundary } from './ErrorBoundary';
+export { ErrorBoundary } from './ErrorBoundary';
 export { SupabaseErrorBoundary } from './supabase-error-boundary'; 

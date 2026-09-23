@@ -7,15 +7,15 @@
  * @component
  */
 
-import React, { useState, useEffect } from 'react';
-import { DateRange } from 'react-day-picker';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { FileText, FileSpreadsheet, Loader2, Download, BarChart3, Users, Package, TrendingUp } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { useState } from 'react';
+import {DateRange} from 'react-day-picker';
+import {Button} from '@/components/ui/button';
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
+import {Skeleton} from "@/components/ui/skeleton";
+import {Alert, AlertDescription} from "@/components/ui/alert";
+import {FileText, FileSpreadsheet, Loader2, BarChart3, Users, Package, TrendingUp} from 'lucide-react';
+import {Badge} from '@/components/ui/badge';
+import {ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell} from 'recharts';
 
 interface SimpleReportProps {
     dateRange: DateRange | undefined;
@@ -145,7 +145,8 @@ export function SimpleReport({ dateRange }: SimpleReportProps) {
     };
 
     // Chart colors
-    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const _colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+    void _colors;
 
     return (
         <div className="space-y-6">

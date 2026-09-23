@@ -24,11 +24,10 @@ import React, {
     useRef
 } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { createClient } from '@/lib/supabase/client'
+import {createClient} from '@/lib/supabase/client'
 import type { Database } from '@/types/supabase'
-import { useToast } from '@/hooks/use-toast'
-import { apiGet } from '@/lib/apiClient'
-import { calculateAccurateDashboardCounts } from '@/lib/utils/fix-dashboard-counts';
+import {useToast} from '@/hooks/use-toast'
+import {apiGet} from '@/lib/apiClient'
 
 // Type definitions for cleaner code and better IntelliSense
 type Gear = Database['public']['Tables']['gears']['Row']
@@ -301,7 +300,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         const totalEquipment = gears.reduce((sum, gear) => sum + (gear.quantity ?? 1), 0);
 
         // Get pending check-ins to identify gears that shouldn't count as available
-        const pendingCheckinGearIds = new Set<string>();
+        void (new Set<string>());
         // Note: This would need to be fetched from the server, but for now we'll use the available_quantity field
         // which should be updated by our database triggers
 

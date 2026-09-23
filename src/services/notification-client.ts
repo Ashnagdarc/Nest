@@ -10,7 +10,6 @@
  * @since 2024-01-15
  */
 
-import { createClient } from '@/lib/supabase/client'
 import type {
     Notification,
     NotificationData
@@ -25,16 +24,12 @@ import { apiGet, apiPost, apiPatch } from '@/lib/apiClient';
  * server-side dependencies that would cause Next.js bundling issues.
  */
 export class ClientNotificationService {
-    private supabase: ReturnType<typeof createClient>
-
     /**
      * Initialize Client Notification Service
      * 
      * Creates a new notification service instance using only the browser client.
      */
-    constructor() {
-        this.supabase = createClient()
-    }
+    constructor() {}
 
     /**
      * Create In-App Notification (Client-Side)
@@ -70,7 +65,7 @@ export class ClientNotificationService {
      * 
      * Marks a notification as read using the browser client.
      */
-    async markAsRead(notificationId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+    async markAsRead(notificationId: string, _userId: string): Promise<{ success: boolean; error?: string }> {
         try {
             // Use centralized API client
             const { error } = await apiPatch<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });

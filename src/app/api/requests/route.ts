@@ -36,7 +36,7 @@ async function requireAuthenticatedUser() {
 async function requireAdminUser() {
     const authContext = await requireAuthenticatedUser();
     if ('errorResponse' in authContext) {
-        return authContext;
+        return { errorResponse: authContext.errorResponse };
     }
 
     const adminSupabase = await createSupabaseServerClient(true);
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Get all request IDs to fetch gear data
-        const requestIds = requests.map(req => req.id);
+        const requestIds = requests.map((req: { id: string }) => req.id);
 
         // Fetch gear data for all requests
         const { data: gearRequestGears, error: gearError } = await supabase
@@ -152,11 +152,11 @@ export async function GET(request: NextRequest) {
         }
 
         // Combine the data
-        const enrichedRequests = requests.map(request => {
-            const requestGears = gearRequestGears?.filter(grg => grg.gear_request_id === request.id) || [];
+        const enrichedRequests = requests.map((request: { id: string }) => {
+            const requestGears = gearRequestGears?.filter((grg: { gear_request_id: string }) => grg.gear_request_id === request.id) || [];
 
             // Add gear data to the request
-            const gear_request_gears = requestGears.map(grg => ({
+            const gear_request_gears = requestGears.map((grg: { gear_request_id: string; gears: unknown }) => ({
                 ...grg,
                 gears: grg.gears
             }));

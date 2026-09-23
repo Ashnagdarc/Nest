@@ -61,17 +61,17 @@ export function RecentActivityFeed() {
                             {activities.slice(0, 10).map((activity) => (
                                 <div key={activity.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-700/50 transition-colors">
                                     <div className="p-2 rounded-full bg-gray-700">
-                                        {getActivityIcon(activity.activity_type)}
+                                        {getActivityIcon(activity.action)}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="text-sm text-white font-medium truncate">
-                                            {activity.activity_type.charAt(0).toUpperCase() + activity.activity_type.slice(1)} Activity
+                                            {activity.action.charAt(0).toUpperCase() + activity.action.slice(1)} Activity
                                         </div>
                                         <div className="text-xs text-gray-400">
                                             {activity.notes || 'No additional details'}
                                         </div>
                                         <div className="text-xs text-gray-500 mt-1">
-                                            {formatTimeAgo(activity.created_at)}
+                                            {formatTimeAgo(activity.created_at || activity.checkin_date)}
                                         </div>
                                     </div>
                                 </div>

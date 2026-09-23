@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Supabase environment variables not set.' }, { status: 500 });
         }
         const client = createClient(supabaseUrl, anonKey);
-        const { data, error } = await client.auth.resetPasswordForEmail(email, {
+        const { error } = await client.auth.resetPasswordForEmail(email, {
             redirectTo: redirectTo || `${getSiteUrl()}/reset-password`,
         });
         if (error) {
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     // Update the user's password
-    const { data, error } = await adminClient.auth.admin.updateUserById(userId, { password });
+    const { error } = await adminClient.auth.admin.updateUserById(userId, { password });
 
     if (error) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });

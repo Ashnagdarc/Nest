@@ -28,7 +28,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
 import { ThemeLogo } from "@/components/ui/theme-logo";
 
 interface NavItem {
@@ -170,11 +169,9 @@ interface EnhancedNavbarProps {
 }
 
 export default function EnhancedNavbar({
-    variant = 'user',
-    logoUrl = '/Nest-logo.png'
+    variant = 'user'
 }: EnhancedNavbarProps) {
     const pathname = usePathname();
-    const router = useRouter();
     const supabase = createClient();
     const { profile: currentUser } = useUserProfile();
     const [isMenuOpen, setIsMenuOpen] = useState(false);

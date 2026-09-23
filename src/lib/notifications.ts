@@ -109,7 +109,7 @@ export async function createSystemNotification(
         // Handle both old and new function signatures
         let title: string;
         let message: string;
-        let type: string;
+        let type: string = 'info';
         let targetUserIds: string[] | undefined;
 
         if (userIds !== undefined) {
@@ -159,7 +159,7 @@ export async function createSystemNotification(
             user_id: userId,
             title,
             message,
-            type: 'System', // Use valid type from constraint
+            type: type || 'System', // Use valid type from constraint
             is_read: false,
             created_at: new Date().toISOString()
         }));

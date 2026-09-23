@@ -10,7 +10,6 @@
  * @since 2024-01-15
  */
 
-import { createClient } from '@/lib/supabase/client'
 // Server client imported dynamically to avoid bundling in client code
 import type {
   Notification,
@@ -33,8 +32,6 @@ export type { Notification, Profile, NotificationData, NotificationPreferences }
  * @class NotificationService
  */
 export class NotificationService {
-  private supabase: ReturnType<typeof createClient>
-
   /**
    * Initialize Notification Service
    * 
@@ -43,11 +40,10 @@ export class NotificationService {
    * bundling server-side code in client components.
    * 
    * @constructor
-   * @param {boolean} [isServerSide=true] - DEPRECATED: Always uses client-side client now
+   * @param {boolean} [_isServerSide=true] - DEPRECATED: Always uses client-side client now
    */
-  constructor(isServerSide: boolean = true) {
+  constructor(_isServerSide: boolean = true) {
     // Always use client-side to avoid bundling server code in client components
-    this.supabase = createClient()
   }
 
   /**
@@ -221,7 +217,7 @@ export class NotificationService {
    * }
    * ```
    */
-  private async getUserNotificationPreferences(userId: string): Promise<NotificationPreferences | null> {
+  private async getUserNotificationPreferences(_userId: string): Promise<NotificationPreferences | null> {
     try {
       // In a real implementation, this would fetch from a user_preferences table
       // For now, return default preferences
@@ -259,7 +255,7 @@ export class NotificationService {
    * const result = await notificationService.markAsRead('notif-123', 'user-456')
    * ```
    */
-  async markAsRead(notificationId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+  async markAsRead(notificationId: string, _userId: string): Promise<{ success: boolean; error?: string }> {
     try {
       // Use centralized API client
       const { error } = await apiPatch<{ data: Notification; error: string | null }>(`/api/notifications/${notificationId}`, { is_read: true });
@@ -349,7 +345,6 @@ export const notificationService = new NotificationService(false)
 // Re-export client-safe service for explicit client usage
 export {
   clientNotificationService,
-  createEquipmentRequestNotification as createEquipmentRequestNotificationClient,
   ClientNotificationService
 } from './notification-client'
 

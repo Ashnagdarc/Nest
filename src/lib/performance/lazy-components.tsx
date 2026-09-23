@@ -1,5 +1,6 @@
 import dynamic from 'next/dynamic';
-import { ComponentType } from 'react';
+import { ComponentType, ReactNode } from 'react';
+import type { DynamicOptionsLoadingProps } from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // Loading fallback component
@@ -54,7 +55,7 @@ export const LazyDashboardStats = dynamic(
 );
 
 export const LazyRequestStats = dynamic(
-    () => import('@/components/admin/RequestStats').then(m => m.default),
+    () => import('@/components/admin/RequestStats').then(m => ({ default: m.RequestStats })),
     {
         loading: () => <DashboardLoadingFallback />,
         ssr: false,
@@ -62,7 +63,7 @@ export const LazyRequestStats = dynamic(
 );
 
 export const LazyActivitiesSection = dynamic(
-    () => import('@/components/admin/ActivitiesSection').then(m => m.default),
+    () => import('@/components/admin/ActivitiesSection').then(m => ({ default: m.ActivitiesSection })),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -70,7 +71,7 @@ export const LazyActivitiesSection = dynamic(
 );
 
 export const LazyUtilizationSection = dynamic(
-    () => import('@/components/admin/UtilizationSection').then(m => m.default),
+    () => import('@/components/admin/UtilizationSection').then(m => ({ default: m.UtilizationSection })),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -78,42 +79,33 @@ export const LazyUtilizationSection = dynamic(
 );
 
 // Management Components (Heavy tables)
-export const LazyRequestsManagement = dynamic<{ default: ComponentType }>(
-    () => import('@/components/admin/RequestsManagement').then(m => m.default),
+export const LazyRequestsManagement = dynamic(
+    () => import('@/components/admin/RequestsManagement').then(m => ({ default: m.RequestsManagement })),
     {
         loading: () => <TableLoadingFallback />,
         ssr: false,
     }
 );
 
-export const LazyInventoryManagement = dynamic<{ default: ComponentType }>(
-    () => import('@/components/admin/InventoryManagement').then(m => m.default),
+export const LazyInventoryManagement = dynamic(
+    () => import('@/components/admin/InventoryManagement').then(m => ({ default: m.InventoryManagement })),
     {
         loading: () => <TableLoadingFallback />,
         ssr: false,
     }
 );
 
-export const LazyUsersManagement = dynamic<{ default: ComponentType }>(
-    () => import('@/components/admin/UsersManagement').then(m => m.default),
+export const LazyUsersManagement = dynamic(
+    () => import('@/components/admin/UsersManagement').then(m => m.default ?? m.UsersManagement),
     {
         loading: () => <TableLoadingFallback />,
-        ssr: false,
-    }
-);
-
-// Reports Components (Heavy data processing)
-export const LazyWeeklyActivityReport = dynamic(
-    () => import('@/components/reports/WeeklyActivityReport').then(m => m.default),
-    {
-        loading: () => <LoadingFallback />,
         ssr: false,
     }
 );
 
 // User Components
 export const LazyPopularGearWidget = dynamic(
-    () => import('@/components/dashboard/PopularGearWidget').then(m => m.default),
+    () => import('@/components/dashboard/PopularGearWidget').then(m => ({ default: m.PopularGearWidget })),
     {
         loading: () => <LoadingFallback />,
         ssr: true,
@@ -121,7 +113,7 @@ export const LazyPopularGearWidget = dynamic(
 );
 
 export const LazyRecentActivity = dynamic(
-    () => import('@/components/dashboard/RecentActivity').then(m => m.default),
+    () => import('@/components/dashboard/RecentActivity').then(m => ({ default: m.RecentActivity })),
     {
         loading: () => <LoadingFallback />,
         ssr: true,
@@ -129,7 +121,7 @@ export const LazyRecentActivity = dynamic(
 );
 
 export const LazyUpcomingEvents = dynamic(
-    () => import('@/components/dashboard/UpcomingEvents').then(m => m.default),
+    () => import('@/components/dashboard/UpcomingEvents').then(m => ({ default: m.UpcomingEvents })),
     {
         loading: () => <LoadingFallback />,
         ssr: true,
@@ -138,7 +130,7 @@ export const LazyUpcomingEvents = dynamic(
 
 // Modals (Only load when needed)
 export const LazyViewRequestModal = dynamic(
-    () => import('@/components/admin/ViewRequestModal').then(m => m.default),
+    () => import('@/components/admin/ViewRequestModal').then(m => m.default ?? m.ViewRequestModal),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -146,7 +138,7 @@ export const LazyViewRequestModal = dynamic(
 );
 
 export const LazyEditItemModal = dynamic(
-    () => import('@/components/admin/EditItemModal').then(m => m.default),
+    () => import('@/components/admin/EditItemModal').then(m => ({ default: m.EditItemModal })),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -154,7 +146,7 @@ export const LazyEditItemModal = dynamic(
 );
 
 export const LazyAnnouncementPopup = dynamic(
-    () => import('@/components/AnnouncementPopup').then(m => m.default),
+    () => import('@/components/AnnouncementPopup').then(m => ({ default: m.AnnouncementPopup })),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -172,7 +164,7 @@ export const LazyQRScanner = dynamic(
 
 // Image Cropper (Heavy external dependency)
 export const LazyImageCropper = dynamic(
-    () => import('@/components/ui/ImageCropperModal').then(m => m.default),
+    () => import('@/components/ui/ImageCropperModal').then(m => ({ default: m.ImageCropperModal })),
     {
         loading: () => <LoadingFallback />,
         ssr: false,
@@ -185,12 +177,12 @@ export const LazyImageCropper = dynamic(
 export const createLazyComponent = <P extends object>(
     importFunction: () => Promise<{ default: ComponentType<P> }>,
     options?: {
-        fallback?: ComponentType;
+        fallback?: (loadingProps: DynamicOptionsLoadingProps) => ReactNode;
         ssr?: boolean;
     }
 ) => {
     return dynamic(importFunction, {
-        loading: options?.fallback || LoadingFallback,
+        loading: options?.fallback ?? (() => <LoadingFallback />),
         ssr: options?.ssr ?? true,
     });
 };
@@ -217,7 +209,7 @@ export const preloadComponents = {
     },
 
     reports: () => {
-        import('@/components/reports/WeeklyActivityReport');
+        import('@/components/reports/SimpleReport');
     }
 };
 
@@ -232,9 +224,6 @@ export default {
     RequestsManagement: LazyRequestsManagement,
     InventoryManagement: LazyInventoryManagement,
     UsersManagement: LazyUsersManagement,
-
-    // Reports
-    WeeklyActivityReport: LazyWeeklyActivityReport,
 
     // User Components
     PopularGearWidget: LazyPopularGearWidget,
@@ -253,4 +242,4 @@ export default {
     // Utilities
     create: createLazyComponent,
     preload: preloadComponents,
-}; 
+};

@@ -12,7 +12,7 @@ export async function setupRpcFunctions() {
     console.log("Setting up RPC functions...");
 
     // Check if the function already exists to avoid duplicate creation
-    const { data: existingFunctions, error: checkError } = await supabase
+    const { data: existingFunctions, error: checkError } = await (supabase as any)
       .from('_functions')
       .select('name')
       .eq('name', 'get_all_gears')
@@ -165,7 +165,7 @@ export async function verifyAndFixGearsTable() {
     console.log("Verifying gears table structure...");
 
     // First check if the table exists
-    const { data: tables, error: tableError } = await supabase
+    const { data: tables, error: tableError } = await (supabase as any)
       .from('pg_tables')
       .select('tablename')
       .eq('schemaname', 'public')

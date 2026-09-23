@@ -1,5 +1,5 @@
-import { RealtimeChannel, SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
-import { logger, logWarning, logInfo, logDebug, logError } from '@/utils/logger';
+import {RealtimeChannel, SupabaseClient, RealtimePostgresChangesPayload} from '@supabase/supabase-js';
+import {logger, logWarning, logInfo, logDebug} from '@/utils/logger';
 
 type SubscriptionConfig = {
     event: 'INSERT' | 'UPDATE' | 'DELETE' | '*';
@@ -37,8 +37,7 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
     let channel: RealtimeChannel | null = null;
     let pollingTimer: NodeJS.Timeout | null = null;
     let isUsingPolling = false;
-    let lastPollingError: Error | null = null;
-    let consecutiveErrors = 0;
+        let consecutiveErrors = 0;
     let lastPollingData: any[] = [];
 
     // Wrapper for error handling to prevent empty objects
@@ -264,7 +263,6 @@ export function createSupabaseSubscription<T extends Record<string, any>>({
             }
 
             consecutiveErrors = 0;
-            lastPollingError = null;
         };
 
         // Function to detect changes in data

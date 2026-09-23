@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { createClient } from '@/lib/supabase/client';
 import { subscribeToTable } from '@/lib/utils/realtime-utils';
 import { Bell } from 'lucide-react';
 import { format } from 'date-fns';
@@ -19,8 +18,7 @@ interface Notification {
 export function NotificationsSection() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const supabase = createClient();
-
+    
     // Fetch notifications
     const fetchNotifications = async () => {
         const { data, error } = await apiGet<{ data: Notification[]; error: string | null }>(`/api/notifications?limit=10`);

@@ -21,8 +21,9 @@ import {
     sendGearRequestEmail,
     sendRequestReceivedEmail,
 } from '@/lib/email';
-import type { Database } from '@/types/supabase';
+import type { Database, Json } from '@/types/supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { asNotificationPrefs, asRecord } from '@/lib/utils/json-prefs';
 
 type NotificationPreferences = {
     email?: Record<string, boolean | undefined>;
@@ -40,7 +41,7 @@ async function getAppSettings(supabase: SupabaseClient<Database>) {
     const settings: Record<string, string> = {};
     if (data) {
         for (const row of data) {
-            settings[row.key] = row.value;
+            settings[row.key] = row.value ?? '';
         }
     }
     return settings;
@@ -133,8 +134,8 @@ export async function POST(req: NextRequest) {
                      .filter(a => !!a.email)
                      .map(a => ({
                          id: a.id,
-                         email: a.email,
-                         preferences: a.notification_preferences
+                         email: a.email ?? undefined,
+                         preferences: asRecord(a.notification_preferences)
                      }));
                  // ALSO notify the user who made the request
                  if (record.user_id) {
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest) {
                          const userMessage = `Hi ${user.full_name || 'there'}, your request for ${record.gear_name || 'equipment'} has been received and is pending approval.`;
 
                          // Respect user preferences for confirmation
-                         const prefs = user.notification_preferences || {};
+                         const prefs = asNotificationPrefs(user.notification_preferences);
                          const sendEmail = prefs.email?.gear_requests ?? notificationDefaults.email;
                          const sendInApp = prefs.in_app?.gear_requests ?? notificationDefaults.in_app;
 
@@ -158,7 +159,7 @@ export async function POST(req: NextRequest) {
                                      is_read: false,
                                      created_at: new Date().toISOString(),
                                      updated_at: new Date().toISOString(),
-                                     metadata,
+                                     metadata: metadata as Json,
                                      category,
                                  }
                              ]);
@@ -220,8 +221,8 @@ export async function POST(req: NextRequest) {
                       .filter(a => !!a.email)
                       .map(a => ({
                           id: a.id,
-                          email: a.email,
-                          preferences: a.notification_preferences
+                          email: a.email ?? undefined,
+                          preferences: asRecord(a.notification_preferences)
                       }));
                   // Also notify admins by email
                   await notifyAdminsByEmail(title, emailHtml);
@@ -259,7 +260,7 @@ export async function POST(req: NextRequest) {
                 .eq('id', userId)
                 .single();
             if (user) {
-                targets = [{ id: userId, email: user.email ?? undefined, preferences: user.notification_preferences }];
+                targets = [{ id: userId, email: user.email ?? undefined, preferences: asRecord(user.notification_preferences) }];
             }
         }
 
@@ -289,7 +290,7 @@ export async function POST(req: NextRequest) {
                                 is_read: false,
                                 created_at: new Date().toISOString(),
                                 updated_at: new Date().toISOString(),
-                                metadata,
+                                metadata: metadata as Json,
                                 category,
                             },
                         ])

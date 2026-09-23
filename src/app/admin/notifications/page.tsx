@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from '@/components/ui/button';
-import { BellRing, Trash2, CheckCheck, ExternalLink, Settings, CheckCircle, Clock, XCircle, Package, AlertCircle } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { formatDistanceToNow } from 'date-fns';
-import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
-import { cn } from "@/lib/utils";
-import { List } from "lucide-react";
-import { apiGet, apiPost, apiPut } from '@/lib/apiClient';
-import { ScrollArea } from "@/components/ui/scroll-area";
+import {useState, useEffect, useRef} from 'react';
+import {motion} from 'framer-motion';
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import {Button} from '@/components/ui/button';
+import {BellRing, Trash2, CheckCheck, ExternalLink, Settings, CheckCircle, Clock, XCircle, Package, AlertCircle} from 'lucide-react';
+import {Badge} from '@/components/ui/badge';
+import {formatDistanceToNow} from 'date-fns';
+import {createClient} from '@/lib/supabase/client';
+import {useRouter} from 'next/navigation';
+import {cn} from "@/lib/utils";
+import {List} from "lucide-react";
+import {apiGet, apiPut} from '@/lib/apiClient';
+import {ScrollArea} from "@/components/ui/scroll-area";
 
 type ApiNotification = {
   id: string;

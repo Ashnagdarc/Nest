@@ -18,7 +18,7 @@ interface OptimizedRecentActivityProps {
     embedded?: boolean;
 }
 
-export function OptimizedRecentActivity({ activities, gearDetails, loading, embedded = false }: OptimizedRecentActivityProps) {
+export function OptimizedRecentActivity({ activities, gearDetails, loading }: OptimizedRecentActivityProps) {
     if (loading) {
         return (
             <Card>

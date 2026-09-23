@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 }
 
-export async function PUT(request: NextRequest) {
+export async function PUT(_request: NextRequest) {
     try {
         // Mark all notifications as read
         const supabase = await createSupabaseServerClient();

@@ -1,6 +1,11 @@
 import { createClient } from '../supabase/client';
-import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { RealtimeChannel, RealtimePostgresChangesPayload, SupabaseClient } from '@supabase/supabase-js';
 import logger from '../logger';
+
+/** Loose client for information_schema / dynamic relation checks outside Database types */
+function looseClient(): SupabaseClient {
+    return createClient() as unknown as SupabaseClient;
+}
 
 // Configuration
 const POLL_INTERVAL_MS = 1200000; // Extended from 30s to 20min (1200 seconds) to dramatically reduce refresh frequency
@@ -59,7 +64,7 @@ interface RealtimeRecord {
  */
 export async function tableExists(tableName: string): Promise<boolean> {
     try {
-        const supabase = createClient();
+        const supabase = looseClient();
         const { data, error } = await supabase
             .from('information_schema.tables')
             .select('table_name')
@@ -84,7 +89,7 @@ export async function tableExists(tableName: string): Promise<boolean> {
  */
 export async function columnExists(tableName: string, columnName: string): Promise<boolean> {
     try {
-        const supabase = createClient();
+        const supabase = looseClient();
         const { data, error } = await supabase
             .from('information_schema.columns')
             .select('column_name')
@@ -156,7 +161,7 @@ export async function getTableTimestampColumn(tableName: string): Promise<string
 
     // If no standard timestamp column exists, try to get any column for sorting
     try {
-        const supabase = createClient();
+        const supabase = looseClient();
         const { data, error } = await supabase
             .from('information_schema.columns')
             .select('column_name')
@@ -251,7 +256,7 @@ async function pollTableChanges(
                 // For tables without a specific API endpoint, fall back to Supabase
                 logger.error(`No API client function for table ${tableName}, falling back to Supabase`, 'Polling fallback');
 
-                const supabase = createClient();
+                const supabase = looseClient();
                 const exists = await tableExists(tableName);
 
                 if (!exists) {
@@ -369,7 +374,7 @@ export function subscribeToTable(
     callback: (payload: any) => void,
     enableFallback: boolean = true
 ): RealtimeSubscription | null {
-    const supabase = createClient();
+    const supabase = looseClient();
     let retryCount = 0;
     let subscription: RealtimeSubscription | null = null;
 
@@ -576,7 +581,7 @@ export function setupAdminDashboardSubscriptions(callbacks: DashboardCallbacks):
  */
 export async function isTableEnabledForRealtime(tableName: string): Promise<boolean> {
     try {
-        const supabase = createClient();
+        const supabase = looseClient();
         // Create a temporary subscription to test if realtime is enabled
         const channelName = `test-realtime-${tableName}-${Date.now()}`;
         let isEnabled = false;

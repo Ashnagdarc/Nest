@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import {NextResponse} from 'next/server';
+import {createSupabaseServerClient} from '@/lib/supabase/server';
 
 export async function GET() {
     const startTime = Date.now();
@@ -35,7 +35,7 @@ export async function GET() {
         const authStart = Date.now();
         
         // Simple connectivity test
-        const { data, error } = await Promise.race([
+        const { error } = await Promise.race([
             supabase.from('profiles').select('count').limit(1),
             new Promise((_, reject) => 
                 setTimeout(() => reject(new Error('Timeout after 5 seconds')), 5000)

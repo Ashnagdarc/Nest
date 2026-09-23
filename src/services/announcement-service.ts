@@ -6,14 +6,15 @@ export interface AnnouncementData {
     id: string;
     title: string;
     content: string;
-    author_id: string;
-    created_at: string;
+    author_id?: string;
+    created_by?: string | null;
+    created_at: string | null;
 }
 
 export interface UserData {
     id: string;
-    email: string;
-    full_name: string;
+    email: string | null;
+    full_name: string | null;
 }
 
 /**

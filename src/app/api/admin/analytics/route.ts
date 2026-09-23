@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
                     status,
                     created_at,
                     updated_at,
-                    profiles:user_id (
+                    profiles!gear_requests_user_id_fkey (
                         full_name,
                         avatar_url
                     )
