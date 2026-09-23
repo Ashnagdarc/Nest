@@ -172,7 +172,7 @@ export async function GET(_request: NextRequest) {
             message: compactListMessage(notif.message),
         }));
         const users = usersResult.data || [];
-        void  (carsResult.data || []).filter(c => c.active);
+        const cars = (carsResult.data || []).filter(c => c.active);
         const carBookings = carBookingsResult.data || [];
 
         const gearsWithStates = gears.map(gear => ({
@@ -369,6 +369,7 @@ export async function GET(_request: NextRequest) {
                 checkins: isAdmin ? checkins : checkins.filter(checkin => checkin.user_id === user.id),
                 notifications,
                 users: isAdmin ? users : [],
+                cars,
                 recent_activity: recentActivity,
                 popular_gear: [],
                 overdue_items: [],

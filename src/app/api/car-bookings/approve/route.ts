@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingApprovalEmail } from '@/lib/email';
-import { transitionBooking } from '@/lib/bookings-v2/service';
+import { syncBookingTransitionSoft } from '@/lib/bookings-v2/service';
 import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
 import { findApprovedSlotConflict } from '@/lib/car-bookings/overlap';
 import { randomUUID } from 'crypto';
@@ -123,25 +123,24 @@ export async function POST(request: NextRequest) {
             console.warn('[Car Booking Approve] Failed to mark assigned car in service:', syncError);
         }
 
-        try {
-            const { data: aggregate } = await admin
-                .from('bookings')
-                .select('id,status')
-                .eq('source_type', 'car_booking')
-                .eq('source_id', bookingId)
-                .maybeSingle();
-            if (aggregate?.id) {
-                await transitionBooking({
+        const { data: aggregate } = await admin
+            .from('bookings')
+            .select('id,status')
+            .eq('source_type', 'car_booking')
+            .eq('source_id', bookingId)
+            .maybeSingle();
+        if (aggregate?.id) {
+            await syncBookingTransitionSoft(
+                {
                     bookingId: aggregate.id,
                     nextStatus: 'approved',
                     changedBy: approverId,
                     reason: 'Legacy car approval route sync',
                     metadata: { legacy_route: '/api/car-bookings/approve' },
                     idempotencyKey: `legacy-car-approve:${bookingId}`,
-                });
-            }
-        } catch (syncError) {
-            console.error('[Car Booking Approve] Failed syncing status to v2 booking lifecycle:', syncError);
+                },
+                'Car Booking Approve'
+            );
         }
 
         // Get assigned car details early so subsequent notifications can use it safely

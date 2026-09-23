@@ -211,8 +211,13 @@ export class AnnouncementService {
             // Send emails
             const emailPromises = users.map(async (user: UserData) => {
                 try {
+                    if (!user.email) {
+                        errors.push(`Skipped email for user ${user.id}: no email address`);
+                        return false;
+                    }
+
                     const emailResult = await sendAnnouncementEmail({
-                        to: user.email || '',
+                        to: user.email,
                         userName: user.full_name || 'User',
                         announcementTitle: announcement.title,
                         announcementContent: announcement.content,

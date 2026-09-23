@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingCancellationEmail } from '@/lib/email';
-import { transitionBooking } from '@/lib/bookings-v2/service';
+import { syncBookingTransitionSoft } from '@/lib/bookings-v2/service';
 import { getBookedCarId, releaseCarIfNoOtherApproved } from '@/lib/car-bookings/car-status-sync';
 import { normalizeNotificationInsert } from '@/lib/notification-type';
 import { randomUUID } from 'crypto';
@@ -127,25 +127,24 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        try {
-            const { data: aggregate } = await admin
-                .from('bookings')
-                .select('id')
-                .eq('source_type', 'car_booking')
-                .eq('source_id', bookingId)
-                .maybeSingle();
-            if (aggregate?.id) {
-                await transitionBooking({
+        const { data: aggregate } = await admin
+            .from('bookings')
+            .select('id')
+            .eq('source_type', 'car_booking')
+            .eq('source_id', bookingId)
+            .maybeSingle();
+        if (aggregate?.id) {
+            await syncBookingTransitionSoft(
+                {
                     bookingId: aggregate.id,
                     nextStatus: 'cancelled',
                     changedBy: userId,
                     reason: reason || (isAdmin ? 'admin_cancel' : 'user_cancel'),
                     metadata: { legacy_route: '/api/car-bookings/cancel' },
                     idempotencyKey: `legacy-car-cancel:${bookingId}`,
-                });
-            }
-        } catch (syncError) {
-            console.error('[Car Booking Cancel] Failed syncing status to v2 booking lifecycle:', syncError);
+                },
+                'Car Booking Cancel'
+            );
         }
 
         // Delete car assignment if exists (frees the car)

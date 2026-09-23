@@ -1,3 +1,12 @@
+/**
+ * bookings-v2 — INTERNAL lifecycle sync / aggregate mirror.
+ *
+ * Not a public product API. UI and clients must use legacy routes only:
+ *   /api/requests · /api/car-bookings · /api/checkins
+ *
+ * Dual-write helpers: createBookingAggregate, transitionBooking,
+ * syncBookingTransitionSoft. See INDEX.md for call sites and failure policy.
+ */
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { sendBookingLifecycleEmail } from '@/lib/email';
@@ -203,4 +212,22 @@ export async function transitionBooking(input: BookingTransitionInput) {
   });
 
   return { booking: updatedBooking, items: items || [], warnings: [] };
+}
+
+/**
+ * Soft-fail dual-write for legacy car/check-in transitions.
+ * Logs consistently and does not throw so a flaky v2 sync cannot undo a
+ * successful legacy approve/complete/cancel in production.
+ */
+export async function syncBookingTransitionSoft(
+  input: BookingTransitionInput,
+  context: string
+): Promise<boolean> {
+  try {
+    await transitionBooking(input);
+    return true;
+  } catch (error) {
+    console.error(`[${context}] Failed syncing status to v2 booking lifecycle:`, error);
+    return false;
+  }
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingRejectionEmail } from '@/lib/email';
-import { transitionBooking } from '@/lib/bookings-v2/service';
+import { syncBookingTransitionSoft } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
 import { sitePath } from '@/lib/site-url';
 
@@ -46,25 +46,24 @@ export async function POST(request: NextRequest) {
         }).eq('id', bookingId);
         if (error) return fail(400, error.message, 'Could not reject booking right now.', 'CAR_BOOKING_REJECT_FAILED');
 
-        try {
-            const { data: aggregate } = await admin
-                .from('bookings')
-                .select('id')
-                .eq('source_type', 'car_booking')
-                .eq('source_id', bookingId)
-                .maybeSingle();
-            if (aggregate?.id) {
-                await transitionBooking({
+        const { data: aggregate } = await admin
+            .from('bookings')
+            .select('id')
+            .eq('source_type', 'car_booking')
+            .eq('source_id', bookingId)
+            .maybeSingle();
+        if (aggregate?.id) {
+            await syncBookingTransitionSoft(
+                {
                     bookingId: aggregate.id,
                     nextStatus: 'failed',
                     changedBy: actorId,
                     reason: reason || 'Booking rejected via legacy route',
                     metadata: { legacy_route: '/api/car-bookings/reject' },
                     idempotencyKey: `legacy-car-reject:${bookingId}`,
-                });
-            }
-        } catch (syncError) {
-            console.error('[Car Booking Reject] Failed syncing status to v2 booking lifecycle:', syncError);
+                },
+                'Car Booking Reject'
+            );
         }
 
         if (booking.requester_id) {

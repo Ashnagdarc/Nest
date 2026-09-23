@@ -93,15 +93,8 @@ export async function GET(request: NextRequest) {
         // Get damage reports
         const { data: damageReports, error: damageError } = await supabase
             .from('gear_maintenance')
-            .select(`
-        id,
-        created_at,
-        issue_description,
-        status,
-        gears(id, name, category),
-        profiles(id, full_name)
-      `)
-            .eq('type', 'Damage Report')
+            .select('id, created_at, description, status, gear_id, gears(id, name, category)')
+            .ilike('description', '%Damage%')
             .gte('created_at', startDate.toISOString())
             .lte('created_at', endDate.toISOString())
             .order('created_at', { ascending: false });

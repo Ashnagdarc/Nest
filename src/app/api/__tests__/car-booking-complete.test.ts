@@ -13,6 +13,14 @@ jest.mock('@/lib/supabase/server', () => ({
 
 jest.mock('@/lib/bookings-v2/service', () => ({
   transitionBooking: (...args: unknown[]) => mockTransitionBooking(...args),
+  syncBookingTransitionSoft: async (input: unknown, _context: string) => {
+    try {
+      await mockTransitionBooking(input);
+      return true;
+    } catch {
+      return false;
+    }
+  },
 }));
 
 jest.mock('@/lib/car-bookings/car-status-sync', () => ({
@@ -33,11 +41,23 @@ function buildClient(userId: string | null, bookingOwnerId: string | null) {
     },
     from: jest.fn((table: string) => {
       if (table === 'profiles') {
+        const profileResult = {
+          maybeSingle: jest.fn(async () => ({ data: { role: userId === 'admin' ? 'Admin' : 'User', status: 'Active' } })),
+          single: jest.fn(async () => ({ data: { email: 'user@example.com' } })),
+          eq: jest.fn(() => profileResult),
+          then: undefined as unknown,
+        };
+        // Support both .eq().maybeSingle() and .eq().eq() awaited as list
+        Object.assign(profileResult, {
+          // When awaited after chained eqs (admin list), resolve as query result
+        });
         return {
           select: jest.fn(() => ({
             eq: jest.fn(() => ({
-              maybeSingle: jest.fn(async () => ({ data: { role: userId === 'admin' ? 'Admin' : 'User', status: 'Active' } })),
-              single: jest.fn(async () => ({ data: { email: 'user@example.com' } })),
+              ...profileResult,
+              // Make thenable for `const { data: admins } = await admin.from(...).eq().eq()`
+              then: (resolve: (value: { data: Array<{ email: string; full_name: string }>; error: null }) => void) =>
+                resolve({ data: [{ email: 'admin@example.com', full_name: 'Admin' }], error: null }),
             })),
           })),
         };
@@ -97,6 +117,24 @@ function buildClient(userId: string | null, bookingOwnerId: string | null) {
               maybeSingle: jest.fn(async () => ({ data: { label: 'Car 1', plate: 'ABC123' }, error: null })),
             })),
           })),
+        };
+      }
+
+      if (table === 'bookings') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { id: 'agg-1' }, error: null })),
+              })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'notifications' || table === 'push_notification_queue') {
+        return {
+          insert: jest.fn(async () => ({ data: null, error: null })),
         };
       }
 

@@ -14,7 +14,11 @@ Nest replaces ad-hoc equipment tracking with a shared workspace for inventory, a
 
 ## Stack
 
-Next.js 16.2.7 · TypeScript · Supabase (Auth, PostgreSQL, Storage, and Realtime) · Tailwind CSS · React Query · Zod
+Next.js 16.2.7 · TypeScript · Supabase (Auth, PostgreSQL, Storage, and Realtime) · Tailwind CSS · Zod
+
+## Booking model
+
+Legacy `/api/requests`, `/api/car-bookings`, and `/api/checkins` are the product source of truth for the UI; `src/lib/bookings-v2` dual-writes a private `bookings` lifecycle mirror (not a public API).
 
 ## Repository structure
 

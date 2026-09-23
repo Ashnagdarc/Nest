@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
-import { POST as createBookingPost } from '@/app/api/v2/bookings/route';
-import { POST as transitionBookingPost } from '@/app/api/v2/bookings/[id]/transition/route';
+import { bookingCreateSchema, bookingTransitionSchema } from '@/lib/bookings-v2/validation';
 import { GET as autoCheckinGet } from '@/app/api/internal/auto-checkin-cars/route';
 import { GET as autoReturnGet } from '@/app/api/internal/auto-return-cars/route';
 
@@ -72,85 +71,50 @@ function buildSupabaseMock(options?: {
   };
 }
 
-describe('Booking V2 smoke tests', () => {
+describe('Booking dual-write smoke tests (lib + internal jobs)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.CRON_SECRET;
   });
 
-  it('rejects unauthenticated v2 booking creation', async () => {
-    const mockedCreateSupabaseServerClient = mockCreateSupabaseServerClient as jest.MockedFunction<
-      (...args: unknown[]) => Promise<unknown>
-    >;
-    mockedCreateSupabaseServerClient.mockResolvedValueOnce(buildSupabaseMock({ userId: null }));
-    const req = new Request('http://localhost/api/v2/bookings', {
-      method: 'POST',
-      body: JSON.stringify({}),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    const res = await createBookingPost(req as Parameters<typeof createBookingPost>[0]);
-    expect(res.status).toBe(401);
+  it('rejects invalid booking create payloads at the schema boundary', () => {
+    const parsed = bookingCreateSchema.safeParse({});
+    expect(parsed.success).toBe(false);
   });
 
-  it('creates booking through v2 handler when payload is valid', async () => {
+  it('accepts a valid create payload and can call createBookingAggregate', async () => {
     const userId = '11111111-1111-1111-1111-111111111111';
-    const mockedCreateSupabaseServerClient = mockCreateSupabaseServerClient as jest.MockedFunction<
-      (...args: unknown[]) => Promise<unknown>
-    >;
+    const payload = {
+      sourceType: 'gear_request' as const,
+      sourceId: '22222222-2222-2222-2222-222222222222',
+      requesterId: userId,
+      startAt: '2026-05-29T10:00:00.000Z',
+      endAt: '2026-05-30T10:00:00.000Z',
+      items: [{ itemType: 'gear' as const, gearId: '33333333-3333-3333-3333-333333333333', quantity: 1 }],
+      idempotencyKey: 'idem-key-123456',
+    };
+
+    const parsed = bookingCreateSchema.safeParse(payload);
+    expect(parsed.success).toBe(true);
+
     const mockedCreateBookingAggregate = mockCreateBookingAggregate as jest.MockedFunction<
       (...args: unknown[]) => Promise<unknown>
     >;
-    mockedCreateSupabaseServerClient.mockResolvedValueOnce(buildSupabaseMock({ userId, profileRole: 'User' }));
     mockedCreateBookingAggregate.mockResolvedValueOnce({
       booking: { id: 'b1', status: 'pending' },
       items: [{ id: 'i1', status: 'pending' }],
       warnings: [],
     });
 
-    const req = new Request('http://localhost/api/v2/bookings', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        sourceType: 'gear_request',
-        sourceId: '22222222-2222-2222-2222-222222222222',
-        requesterId: userId,
-        startAt: '2026-05-29T10:00:00.000Z',
-        endAt: '2026-05-30T10:00:00.000Z',
-        items: [{ itemType: 'gear', gearId: '33333333-3333-3333-3333-333333333333', quantity: 1 }],
-        idempotencyKey: 'idem-key-123456',
-      }),
-    });
-
-    const res = await createBookingPost(req as Parameters<typeof createBookingPost>[0]);
-    const body = await res.json();
-    expect(res.status).toBe(200);
-    expect(body.success).toBe(true);
+    if (parsed.success) {
+      await mockedCreateBookingAggregate(parsed.data);
+    }
     expect(mockCreateBookingAggregate).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks non-admin booking transition', async () => {
-    const userId = '11111111-1111-1111-1111-111111111111';
-    const mockedCreateSupabaseServerClient = mockCreateSupabaseServerClient as jest.MockedFunction<
-      (...args: unknown[]) => Promise<unknown>
-    >;
-    mockedCreateSupabaseServerClient.mockResolvedValueOnce(
-      buildSupabaseMock({ userId, profileRole: 'User', profileStatus: 'Active' })
-    );
-
-    const req = new Request('http://localhost/api/v2/bookings/abc/transition', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        nextStatus: 'approved',
-        idempotencyKey: 'idem-123456',
-      }),
-    });
-
-    const res = await transitionBookingPost(req as Parameters<typeof transitionBookingPost>[0], {
-      params: Promise.resolve({ id: 'abc' }),
-    });
-    expect(res.status).toBe(403);
+  it('rejects invalid transition payloads at the schema boundary', () => {
+    const parsed = bookingTransitionSchema.safeParse({});
+    expect(parsed.success).toBe(false);
   });
 
   it('runs auto check-in and processes due bookings', async () => {

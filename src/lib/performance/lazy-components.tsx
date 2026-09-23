@@ -46,14 +46,6 @@ const TableLoadingFallback = () => (
  */
 
 // Dashboard Components
-export const LazyDashboardStats = dynamic(
-    () => import('@/components/admin/DashboardStats').then(m => m.default),
-    {
-        loading: () => <DashboardLoadingFallback />,
-        ssr: false,
-    }
-);
-
 export const LazyRequestStats = dynamic(
     () => import('@/components/admin/RequestStats').then(m => ({ default: m.RequestStats })),
     {
@@ -192,7 +184,6 @@ export const createLazyComponent = <P extends object>(
  */
 export const preloadComponents = {
     dashboard: () => {
-        import('@/components/admin/DashboardStats');
         import('@/components/admin/RequestStats');
     },
 
@@ -215,7 +206,6 @@ export const preloadComponents = {
 
 export default {
     // Dashboard
-    DashboardStats: LazyDashboardStats,
     RequestStats: LazyRequestStats,
     ActivitiesSection: LazyActivitiesSection,
     UtilizationSection: LazyUtilizationSection,

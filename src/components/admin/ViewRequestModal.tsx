@@ -122,21 +122,21 @@ function statusAccentClass(status: string) {
 
 function buildGearItems(gearNames: string[], gearRequestGears?: unknown[]): GearLineItem[] {
     if (Array.isArray(gearRequestGears) && gearRequestGears.length > 0) {
-        const items: GearLineItem[] = [];
-        gearRequestGears.forEach((raw, index) => {
-            const item = raw as GearRequestGearLine;
-            const gears = item.gears;
-            if (!gears?.name) return;
-            items.push({
-                id: gears.id || `gear-${index}`,
-                name: gears.name,
-                category: gears.category,
-                serial_number: gears.serial_number,
-                quantity: Math.max(1, Number(item.quantity ?? 1)),
-                status: gears.status,
-            });
-        });
-        return items;
+        return gearRequestGears
+            .map((raw, index): GearLineItem | null => {
+                const item = raw as GearRequestGearLine;
+                const gears = item.gears;
+                if (!gears?.name) return null;
+                return {
+                    id: gears.id || `gear-${index}`,
+                    name: gears.name,
+                    category: gears.category,
+                    serial_number: gears.serial_number,
+                    quantity: Math.max(1, Number(item.quantity ?? 1)),
+                    status: gears.status,
+                };
+            })
+            .filter((item): item is GearLineItem => item !== null);
     }
 
     return gearNames.map((entry, index) => {

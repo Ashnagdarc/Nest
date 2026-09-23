@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { mergeNotificationPreferences } from "@/components/settings/types";
+import type { Database } from "@/types/supabase";
+
+type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 
 const PROFILE_FIELDS =
   "id, email, full_name, avatar_url, phone, department, role, status, notification_preferences, created_at, updated_at";
@@ -61,7 +64,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = await req.json();
-    const update: Record<string, unknown> = {
+    const update: ProfileUpdate = {
       updated_at: new Date().toISOString(),
     };
 

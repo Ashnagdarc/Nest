@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { hasValidCronSecret } from '@/lib/api-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarReturnConfirmationEmail } from '@/lib/email';
-import { transitionBooking } from '@/lib/bookings-v2/service';
+import { syncBookingTransitionSoft } from '@/lib/bookings-v2/service';
 import { getBookedCarId, releaseCarIfNoOtherApproved } from '@/lib/car-bookings/car-status-sync';
 import { randomUUID } from 'crypto';
 import { sitePath } from '@/lib/site-url';
@@ -163,25 +163,24 @@ export async function POST(request: NextRequest) {
             console.warn('[Car Booking Complete] Failed to mark assigned car available:', syncError);
         }
 
-        try {
-            const aggregateQuery = admin
-                .from('bookings')
-                .select('id')
-                .eq('source_type', 'car_booking')
-                .eq('source_id', bookingId);
-            const { data: aggregate } = await aggregateQuery.maybeSingle();
-            if (aggregate?.id) {
-                await transitionBooking({
+        const aggregateQuery = admin
+            .from('bookings')
+            .select('id')
+            .eq('source_type', 'car_booking')
+            .eq('source_id', bookingId);
+        const { data: aggregate } = await aggregateQuery.maybeSingle();
+        if (aggregate?.id) {
+            await syncBookingTransitionSoft(
+                {
                     bookingId: aggregate.id,
                     nextStatus: 'completed',
                     changedBy: null,
                     reason: isCron ? 'Auto check-in completion' : 'Manual completion via legacy route',
                     metadata: { legacy_route: '/api/car-bookings/complete' },
                     idempotencyKey: `legacy-car-complete:${bookingId}`,
-                });
-            }
-        } catch (syncError) {
-            console.error('[Car Booking Complete] Failed syncing status to v2 booking lifecycle:', syncError);
+                },
+                'Car Booking Complete'
+            );
         }
 
         // Lookup assigned car and plate if any

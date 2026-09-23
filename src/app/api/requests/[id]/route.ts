@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { enqueuePushNotification, triggerPushWorker } from '@/lib/push-queue';
+import type { Database } from '@/types/supabase';
+
+type GearRequestUpdate = Database['public']['Tables']['gear_requests']['Update'];
 
 function isUuid(value: string) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -135,9 +138,11 @@ export async function GET(
             }
         }
 
-        // If no gear names found from junction table, try to fetch from gear_ids
-        const requestGearIds = (requestData as { gear_ids?: string[] | null }).gear_ids;
-        if (gearNames.length === 0 && Array.isArray(requestGearIds) && requestGearIds.length > 0) {
+        // Junction rows can exist without embedded gear names. Fall back to those gear ids.
+        const requestGearIds = (gearRequestGears ?? [])
+            .map((row) => row.gear_id)
+            .filter((gearId): gearId is string => Boolean(gearId));
+        if (gearNames.length === 0 && requestGearIds.length > 0) {
             const { data: gearsData, error: gearsError } = await supabase
                 .from('gears')
                 .select('id, name, category')
@@ -214,11 +219,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
             );
         }
 
-        const updatePayload: Record<string, unknown> = {};
+        const updatePayload: GearRequestUpdate = {
+            updated_at: new Date().toISOString(),
+        };
         if (normalizedStatus) updatePayload.status = normalizedStatus;
         if (body?.admin_notes !== undefined) updatePayload.admin_notes = body.admin_notes;
         if (body?.due_date !== undefined) updatePayload.due_date = body.due_date;
-        updatePayload.updated_at = new Date().toISOString();
 
         const { data, error } = await supabase
             .from('gear_requests')
@@ -262,10 +268,17 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
             return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
         }
 
-        // Get gear names for notification
+        // Get gear names for notification from the junction table.
+        // gear_requests no longer stores a gear_ids column.
         let gearNames = 'Equipment';
-        const cancelGearIds = (requestData as { gear_ids?: string[] | null }).gear_ids;
-        if (Array.isArray(cancelGearIds) && cancelGearIds.length > 0) {
+        const { data: gearLines } = await supabase
+            .from('gear_request_gears')
+            .select('gear_id')
+            .eq('gear_request_id', id);
+        const cancelGearIds = (gearLines ?? [])
+            .map((line) => line.gear_id)
+            .filter((gearId): gearId is string => Boolean(gearId));
+        if (cancelGearIds.length > 0) {
             const { data: gears } = await supabase
                 .from('gears')
                 .select('name')

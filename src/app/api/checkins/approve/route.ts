@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildGroupedCheckinEmail, sendCheckinApprovalEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
-import { transitionBooking } from '@/lib/bookings-v2/service';
+import { syncBookingTransitionSoft } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
 import { requireActiveAdmin } from '@/app/api/_utils/route-auth';
 import { sitePath } from '@/lib/site-url';
@@ -190,24 +190,27 @@ export async function POST(request: NextRequest) {
                     .maybeSingle();
 
                 if (aggregate?.id) {
-                    await transitionBooking({
-                        bookingId: aggregate.id,
-                        nextStatus,
-                        changedBy: null,
-                        reason: 'Legacy check-in approval sync',
-                        metadata: {
-                            checkin_id: checkinId,
-                            legacy_route: '/api/checkins/approve',
-                            requested_qty: requestedQty,
-                            completed_qty: completedQty,
-                            pending_count: pendingCount || 0,
+                    await syncBookingTransitionSoft(
+                        {
+                            bookingId: aggregate.id,
+                            nextStatus,
+                            changedBy: null,
+                            reason: 'Legacy check-in approval sync',
+                            metadata: {
+                                checkin_id: checkinId,
+                                legacy_route: '/api/checkins/approve',
+                                requested_qty: requestedQty,
+                                completed_qty: completedQty,
+                                pending_count: pendingCount || 0,
+                            },
+                            idempotencyKey: `legacy-checkin-approve:${checkinId}:${nextStatus}`,
                         },
-                        idempotencyKey: `legacy-checkin-approve:${checkinId}:${nextStatus}`,
-                    });
+                        'Check-in Approve'
+                    );
                 }
             }
         } catch (syncError) {
-            console.error('[Check-in Approve] Failed syncing status to v2 booking lifecycle:', syncError);
+            console.error('[Check-in Approve] Failed preparing v2 booking lifecycle sync:', syncError);
         }
 
         // Notify all admins of the approval action

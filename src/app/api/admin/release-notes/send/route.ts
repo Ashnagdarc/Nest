@@ -52,9 +52,14 @@ export async function POST(request: NextRequest) {
     const emailResults = await Promise.all(
         users.map(async (user) => {
             try {
+                if (!user.email) {
+                    errors.push(`Skipped email for user ${user.id}: no email address`);
+                    return false;
+                }
+
                 const html = buildReleaseNotesEmailHtml(draft, user.full_name || "there");
                 const result = await sendGearRequestEmail({
-                    to: user.email || '',
+                    to: user.email,
                     subject: emailSubject,
                     html,
                 });
