@@ -24,16 +24,16 @@ export interface Event {
 interface MaintenanceEvent {
     id: string;
     gear_id: string;
-    performed_at: string;
-    maintenance_type: string;
-    performed_by: string;
+    date: string;
+    description: string;
+    performed_by: string | null;
     status: string;
 }
 
 export function useUpcomingEvents() {
     const supabase = createClient();
     const [events, setEvents] = useState<Event[]>([]);
-    const [pendingEvents, setPendingEvents] = useState<unknown[]>([]);
+    const [pendingEvents, setPendingEvents] = useState<Array<{ id: string; created_at?: string | null }>>([]);
     const [loading, setLoading] = useState(true);
 
     // Memoize fetchEvents to prevent effect from re-running on every render
@@ -65,9 +65,9 @@ export function useUpcomingEvents() {
             try {
                 const { data, error } = await supabase
                     .from('gear_maintenance')
-                    .select('id, gear_id, performed_at, maintenance_type, performed_by, status')
+                    .select('id, gear_id, date, description, performed_by, status')
                     .eq('performed_by', session.user.id)
-                    .not('maintenance_type', 'eq', 'Status Change'); // Exclude status change events
+                    .not('description', 'eq', 'Status Change');
 
                 if (error) {
                     logger.warn(`Could not fetch maintenance with performed_by: ${error.message}`, {
@@ -110,7 +110,12 @@ export function useUpcomingEvents() {
             tomorrow.setDate(tomorrow.getDate() + 1);
 
             // Separate pending requests
-            const pendingRequests = (checkoutRequests || []).filter((r: unknown) => (r as { status?: string }).status === 'Pending');
+            const pendingRequests = (checkoutRequests || [])
+                .filter((r: unknown) => (r as { status?: string }).status === 'Pending')
+                .map((r: unknown) => {
+                    const req = r as { id: string; created_at?: string | null };
+                    return { id: req.id, created_at: req.created_at };
+                });
 
             // Process checkout events
             const checkoutEvents = (checkoutRequests || []).flatMap((request: unknown) => {
@@ -157,9 +162,9 @@ export function useUpcomingEvents() {
 
             // Process maintenance events - exclude status change events
             const maintenanceEventsFormatted = maintenanceEvents
-                .filter((event: MaintenanceEvent) => event.maintenance_type !== 'Status Change') // Additional safeguard
+                .filter((event: MaintenanceEvent) => event.description !== 'Status Change')
                 .map((event: MaintenanceEvent) => {
-                    const eventDate = new Date(event.performed_at);
+                    const eventDate = new Date(event.date);
                     let status: Event["status"] = "upcoming";
 
                     if (eventDate < now) {
@@ -170,8 +175,8 @@ export function useUpcomingEvents() {
 
                     return {
                         id: event.id,
-                        title: `${gearDetails[event.gear_id]?.name || 'Equipment'} ${event.maintenance_type || 'Maintenance'}`,
-                        date: event.performed_at,
+                        title: `${gearDetails[event.gear_id]?.name || 'Equipment'} Maintenance`,
+                        date: event.date,
                         type: "maintenance" as const,
                         status,
                         gear_id: event.gear_id,

@@ -5,11 +5,18 @@ const ALLOWED_UPDATE_FIELDS = ['full_name', 'role', 'status', 'phone', 'departme
 
 type AllowedUpdateField = (typeof ALLOWED_UPDATE_FIELDS)[number];
 
-function pickAllowedUpdates(body: Record<string, unknown>) {
-    const updates: Partial<Record<AllowedUpdateField, unknown>> = {};
+type ProfileUpdate = Partial<Record<AllowedUpdateField, string | null>>;
+
+function pickAllowedUpdates(body: Record<string, unknown>): ProfileUpdate {
+    const updates: ProfileUpdate = {};
     for (const field of ALLOWED_UPDATE_FIELDS) {
         if (field in body) {
-            updates[field] = body[field];
+            const value = body[field];
+            if (value === null || typeof value === 'string') {
+                updates[field] = value;
+            } else if (value !== undefined) {
+                updates[field] = String(value);
+            }
         }
     }
     return updates;

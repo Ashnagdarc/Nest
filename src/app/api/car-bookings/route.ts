@@ -171,9 +171,10 @@ export async function POST(request: NextRequest) {
                 }
             }
 
+            const preferredBookingId = data.id;
             const { error: assignErr } = await supabase
                 .from('car_assignment')
-                .insert({ booking_id: data.id, car_id: preferredCarId });
+                .insert({ booking_id: preferredBookingId, car_id: preferredCarId });
 
             if (!assignErr) {
                 preferredCarDetails = { label: requestedCar.label, plate: requestedCar.plate || undefined };
@@ -223,6 +224,11 @@ export async function POST(request: NextRequest) {
             return fail(500, 'Failed to initialize booking lifecycle.', 'We could not complete your booking right now. Please try again.', 'BOOKING_V2_CREATE_FAILED');
         }
 
+        const bookingId = data?.id;
+        if (!bookingId) {
+            return fail(500, 'Booking created without id.', 'We could not complete your booking right now. Please try again.', 'CAR_BOOKING_MISSING_ID');
+        }
+
         // Create in-app notification for user
         if (requesterId) {
             await supabase.from('notifications').insert({
@@ -243,7 +249,7 @@ export async function POST(request: NextRequest) {
                 user_id: requesterId,
                 title: pushTitle,
                 body: pushMessage,
-                data: { booking_id: data.id, type: 'car_booking_request' }
+                data: { booking_id: bookingId, type: 'car_booking_request' }
             });
 
             if (queueError) {
@@ -343,7 +349,7 @@ export async function POST(request: NextRequest) {
                         user_id: admin.id,
                         title: 'New Car Booking Request',
                         body: `${employeeName} requested a car booking for ${dateOfUse} (${timeSlot}). Please review.`,
-                        data: { booking_id: data.id, type: 'car_booking_request' }
+                        data: { booking_id: bookingId, type: 'car_booking_request' }
                     });
 
                     if (queueError) {

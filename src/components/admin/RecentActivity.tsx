@@ -8,25 +8,6 @@ import { AlertCircle, CheckCircle, Clock, Package, ArrowRight } from 'lucide-rea
 import { apiGet } from '@/lib/apiClient';
 import { logger } from '@/utils/logger';
 
-interface ActivityData {
-  id: string;
-  activity_type: string;
-  status: string;
-  created_at: string;
-  notes?: string;
-  profiles?: {
-    id: string;
-    full_name: string;
-    avatar_url?: string;
-  };
-  gears?: {
-    id: string;
-    name: string;
-    category?: string;
-    status?: string;
-  };
-}
-
 interface ActivityItem {
   id: string;
   type: string;

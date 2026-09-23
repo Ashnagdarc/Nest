@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
 import React from 'react';
+import type { Json } from '@/types/supabase';
 
 const EVENT_TYPES = [
     { key: 'gear_requests', label: 'Gear Requests' },
@@ -21,7 +22,7 @@ const CHANNELS = [
 ];
 
 export default function NotificationSettings() {
-    const [preferences, setPreferences] = useState<unknown>({});
+    const [preferences, setPreferences] = useState<Json>({});
     const [loading, setLoading] = useState(true);
     const supabase = createClient();
 

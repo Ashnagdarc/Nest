@@ -69,7 +69,7 @@ export function ViewItemModal({ item, open, onOpenChange }: ViewItemModalProps) 
                     <div className="flex items-center gap-2">
                         <Info className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium">Status:</span>
-                        {getStatusBadge(item.status)}
+                        {getStatusBadge(item.status || 'Unknown')}
                     </div>
 
                     {item.serial_number && (

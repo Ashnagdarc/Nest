@@ -101,6 +101,7 @@ export function EditItemModal({ itemId, open, onOpenChange, onSaved }: EditItemM
     }
 
     async function handleSave() {
+        if (!itemId) return;
         setSaving(true);
         try {
             const { error } = await supabase

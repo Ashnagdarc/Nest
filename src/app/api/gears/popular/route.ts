@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Check if the function exists first
-        const { data: functions, error: functionError } = await supabase
+        const { data: functions, error: functionError } = await (supabase as any)
             .from('pg_catalog.pg_proc')
             .select('proname')
             .eq('proname', 'get_popular_gears')

@@ -21,7 +21,7 @@ type GearRequestRow = {
   status: string | null;
   reason: string | null;
   destination: string | null;
-  created_at: string;
+  created_at: string | null;
   gear_request_gears?: Array<{
     gear_id?: string | null;
     quantity?: number | null;
@@ -66,7 +66,7 @@ export function mapRequestsToActivities(requests: GearRequestRow[]): ActivityIte
       id: request.id,
       type: "request",
       title: request.destination?.trim() || "Gear request",
-      date: new Date(request.created_at),
+      date: new Date(request.created_at || Date.now()),
       status: request.status || "Unknown",
       details: request.reason?.trim() || "Gear requested",
       destination: request.destination ?? null,

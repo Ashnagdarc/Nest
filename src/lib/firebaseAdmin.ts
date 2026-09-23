@@ -24,13 +24,23 @@ export function initFirebaseAdmin(): boolean {
 export async function sendMulticast(tokens: string[], payload: { notification?: { title?: string; body?: string }; data?: Record<string, string> }) {
   if (!initFirebaseAdmin()) throw new Error('Firebase Admin not initialized');
   try {
+    // firebase-admin v12+ removed sendMulticast; use sendEachForMulticast
+    const messaging = admin.messaging() as admin.messaging.Messaging & {
+      sendEachForMulticast?: (message: admin.messaging.MulticastMessage) => Promise<admin.messaging.BatchResponse>;
+      sendMulticast?: (message: admin.messaging.MulticastMessage) => Promise<admin.messaging.BatchResponse>;
+    };
     const message: admin.messaging.MulticastMessage = {
       tokens,
       notification: payload.notification,
       data: payload.data,
     };
-    const resp = await admin.messaging().sendMulticast(message);
-    return resp;
+    if (typeof messaging.sendEachForMulticast === 'function') {
+      return await messaging.sendEachForMulticast(message);
+    }
+    if (typeof messaging.sendMulticast === 'function') {
+      return await messaging.sendMulticast(message);
+    }
+    throw new Error('No multicast send API available on Firebase Messaging');
   } catch (err) {
     console.error('[firebaseAdmin] sendMulticast error', err);
     throw err;

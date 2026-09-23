@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
                     const image_url = item.gears?.image_url;
 
                     if (!gearCounts[gearName]) {
-                        gearCounts[gearName] = { count: 0, category, image_url };
+                        gearCounts[gearName] = { count: 0, category: category ?? undefined, image_url: image_url ?? undefined };
                     }
                     gearCounts[gearName].count += quantity;
                 });
@@ -181,8 +181,8 @@ export async function GET(request: NextRequest) {
                             }
                             requestGearsMap.get(requestId)!.push({
                                 name: item.gears.name,
-                                category: item.gears.category,
-                                image_url: item.gears.image_url,
+                                category: item.gears.category ?? undefined,
+                                image_url: item.gears.image_url ?? undefined,
                                 quantity: item.quantity || 1
                             });
                         }
@@ -223,7 +223,7 @@ export async function GET(request: NextRequest) {
                         return {
                             id: request.id,
                             type: activityType,
-                            timestamp: request.created_at,
+                            timestamp: request.created_at || new Date().toISOString(),
                             status: request.status || 'Unknown',
                             gearName: gears.length > 0 ? gears[0].name : 'Unknown',
                             gearCategory: gears.length > 0 ? gears[0].category : undefined,

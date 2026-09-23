@@ -9,8 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Clock } from "lucide-react";
 import { EventDateFormatter } from "./EventDateFormatter";
 
+interface PendingRequest {
+    id: string;
+    created_at?: string | null;
+}
+
 interface PendingRequestsSectionProps {
-    pendingEvents: any[];
+    pendingEvents: PendingRequest[];
 }
 
 export function PendingRequestsSection({ pendingEvents }: PendingRequestsSectionProps) {
@@ -28,14 +33,14 @@ export function PendingRequestsSection({ pendingEvents }: PendingRequestsSection
             </CardHeader>
             <CardContent>
                 <div className="space-y-3">
-                    {pendingEvents.map((request: unknown) => (
+                    {pendingEvents.map((request) => (
                         <div key={request.id} className="flex items-center justify-between p-3 bg-white rounded border">
                             <div className="flex-1">
                                 <p className="font-medium text-sm">
                                     Request #{request.id.slice(-6)}
                                 </p>
                                 <EventDateFormatter
-                                    date={request.created_at}
+                                    date={request.created_at || new Date().toISOString()}
                                     status="upcoming"
                                     className="text-xs"
                                 />

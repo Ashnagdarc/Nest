@@ -47,7 +47,7 @@ export function defaultNotificationPreferences(): NotificationPreferences {
 }
 
 export function mergeNotificationPreferences(
-  raw: Partial<NotificationPreferences> | Record<string, unknown> | string | number | boolean | null | undefined,
+  raw: Partial<NotificationPreferences> | Record<string, unknown> | string | number | boolean | null | undefined | unknown,
 ): NotificationPreferences {
   const defaults = defaultNotificationPreferences();
   if (!raw || typeof raw !== 'object') {

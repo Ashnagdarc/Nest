@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
         for (const notification of pendingNotifications) {
             try {
                 console.log(`[Push Worker] Processing notification ${notification.id} for user ${notification.user_id}`);
-                const dedupeKey = notification.data?.dedupe_key;
+                const dedupeKey = notification.dedupe_key;
 
                 if (dedupeKey) {
                     const { data: duplicate } = await supabase
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
                     .from('push_notification_queue')
                     .update({
                         status: 'processing',
-                        retry_count: notification.retry_count + 1,
+                        retry_count: (notification.retry_count ?? 0) + 1,
                         last_attempt_at: new Date().toISOString(),
                         processing_started_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
@@ -237,7 +237,7 @@ export async function GET(req: NextRequest) {
                         ? `All ${tokenRows.length} tokens failed - ${failureSummary}`
                         : `All ${tokenRows.length} tokens failed`;
                     const attemptsUsed = (notification.retry_count ?? 0) + 1;
-                    if (attemptsUsed < notification.max_retries) {
+                    if (attemptsUsed < (notification.max_retries ?? 3)) {
                         const backoffMinutes = Math.min(60, Math.max(1, Math.pow(2, attemptsUsed - 1)));
                         const nextAttemptAt = new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString();
                         await supabase

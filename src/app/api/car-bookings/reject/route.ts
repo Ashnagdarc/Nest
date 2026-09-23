@@ -110,9 +110,9 @@ export async function POST(request: NextRequest) {
             if (userEmail) {
                 await sendCarBookingRejectionEmail({
                     to: userEmail,
-                    userName: booking.employee_name,
-                    dateOfUse: booking.date_of_use,
-                    timeSlot: booking.time_slot,
+                    userName: booking.employee_name || 'User',
+                    dateOfUse: booking.date_of_use || '',
+                    timeSlot: booking.time_slot || '',
                     reason: reason || undefined,
                 });
             }
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
             await notifyGoogleChat(NotificationEventType.ADMIN_REJECT_REQUEST, {
                 adminName: userData.user.email,
                 adminEmail: userData.user.email,
-                userName: booking.employee_name,
+                userName: booking.employee_name || 'User',
                 userEmail: '',
                 gearNames: [`Car booking: ${booking.date_of_use} ${booking.time_slot}`],
                 dueDate: booking.date_of_use

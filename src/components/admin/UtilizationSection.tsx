@@ -53,7 +53,7 @@ export function UtilizationSection() {
                 // Group by category
                 const categories: Record<string, { total: number, used: number }> = {};
 
-                data.forEach((gear: { category?: string, status?: string }) => {
+                data.forEach((gear) => {
                     const category = gear.category || 'Uncategorized';
 
                     if (!categories[category]) {

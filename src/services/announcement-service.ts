@@ -212,7 +212,7 @@ export class AnnouncementService {
             const emailPromises = users.map(async (user: UserData) => {
                 try {
                     const emailResult = await sendAnnouncementEmail({
-                        to: user.email,
+                        to: user.email || '',
                         userName: user.full_name || 'User',
                         announcementTitle: announcement.title,
                         announcementContent: announcement.content,

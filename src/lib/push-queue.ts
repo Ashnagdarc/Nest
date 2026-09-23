@@ -1,3 +1,4 @@
+import type { Json } from '@/types/supabase';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { getSiteUrl } from '@/lib/site-url';
 
@@ -94,7 +95,7 @@ export async function enqueuePushNotification(
     user_id: userId,
     title,
     body,
-    data: data || {},
+    data: (data || {}) as Json,
     dedupe_key: dedupeKey,
     status: 'pending',
     next_attempt_at: new Date().toISOString(),

@@ -25,8 +25,8 @@ interface BookingItem {
 
 interface RequestItem {
     id: string;
-    reason: string;
-    created_at: string;
+    reason: string | null;
+    created_at: string | null;
     user_id: string;
     profiles?: {
         full_name: string;
@@ -143,7 +143,7 @@ export function UnifiedNotificationsPanel() {
                                                     By {request.profiles?.full_name || 'Unknown User'}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground mt-1">
-                                                    Reason: {request.reason?.substring(0, 50)}{request.reason?.length > 50 ? '...' : ''}
+                                                    Reason: {request.reason?.substring(0, 50)}{(request.reason?.length ?? 0) > 50 ? '...' : ''}
                                                 </p>
                                             </div>
                                             <Button asChild size="sm" variant="outline">

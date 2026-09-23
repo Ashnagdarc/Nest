@@ -318,7 +318,9 @@ export function useDashboardData() {
             pollingInterval: 30000
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            void subscription.unsubscribe();
+        };
     }, [fetchAllData]);
 
     return data;

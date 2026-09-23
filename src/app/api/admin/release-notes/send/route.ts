@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
             try {
                 const html = buildReleaseNotesEmailHtml(draft, user.full_name || "there");
                 const result = await sendGearRequestEmail({
-                    to: user.email,
+                    to: user.email || '',
                     subject: emailSubject,
                     html,
                 });

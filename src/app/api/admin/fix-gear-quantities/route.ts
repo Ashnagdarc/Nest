@@ -27,7 +27,6 @@ export async function POST(request: NextRequest) {
             // Run the emergency fix
             const result = await emergencyFixGearQuantities();
             return NextResponse.json({
-                success: true,
                 action: 'fix',
                 ...result
             });

@@ -7,7 +7,7 @@ import { ThemeLogo } from "@/components/ui/theme-logo";
 interface AuthCardProps {
     title: string;
     description?: string;
-    children: ReactNode;
+    children?: ReactNode;
     footer?: ReactNode;
 }
 

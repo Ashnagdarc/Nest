@@ -17,7 +17,14 @@ export type Gear = {
     serial_number?: string | null;
 };
 
-export function useCheckedOutGears(userId: string | null, toast: (params: { title: string; description: string; variant?: string }) => void) {
+export function useCheckedOutGears(
+  userId: string | null,
+  toast: (params: {
+    title: string;
+    description: string;
+    variant?: "default" | "destructive" | "success" | null;
+  }) => unknown,
+) {
     const supabase = createClient();
     const [checkedOutGears, setCheckedOutGears] = useState<ProcessedGear[]>([]);
     const [pendingCheckInCount, setPendingCheckInCount] = useState(0);

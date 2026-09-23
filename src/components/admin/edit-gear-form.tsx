@@ -40,7 +40,7 @@ const gearSchema = z.object({
     quantity: z.coerce.number().int().min(1, { message: "Quantity must be at least 1." }).default(1),
 });
 
-type GearFormValues = z.infer<typeof gearSchema>;
+export type GearFormValues = z.infer<typeof gearSchema>;
 
 interface EditGearFormProps {
     gear: {
@@ -48,8 +48,8 @@ interface EditGearFormProps {
         name?: string;
         category?: string;
         description?: string | null;
-        serial_number?: string;
-        status?: string;
+        serial_number?: string | null;
+        status?: string | null;
         purchase_date?: string | null;
         condition?: string | null;
         image_url?: string | null;

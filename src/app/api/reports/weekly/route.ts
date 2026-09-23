@@ -3,7 +3,9 @@ import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
 type WeeklyActivityRow = {
-    action: string;
+    request_count: number;
+    checkout_count: number;
+    checkin_count: number;
 };
 
 type UserActivityRow = {
@@ -75,7 +77,9 @@ export async function GET(request: NextRequest) {
         // Get popular gear data
         const { data: popularGear, error: popularError } = await supabase
             .rpc('get_popular_gears', {
-                days_limit: days
+                start_date: startDate.toISOString(),
+                end_date: endDate.toISOString(),
+                limit_count: 20,
             });
 
         if (popularError) {
@@ -112,9 +116,9 @@ export async function GET(request: NextRequest) {
 
         // Calculate summary metrics
         const typedGearActivity = (gearActivity || []) as WeeklyActivityRow[];
-        const totalRequests = typedGearActivity.filter((item) => item.action === 'Request').length;
-        const totalCheckouts = typedGearActivity.filter((item) => item.action === 'Checkout').length;
-        const totalCheckins = typedGearActivity.filter((item) => item.action === 'Checkin').length;
+        const totalRequests = typedGearActivity.reduce((sum, item) => sum + (item.request_count || 0), 0);
+        const totalCheckouts = typedGearActivity.reduce((sum, item) => sum + (item.checkout_count || 0), 0);
+        const totalCheckins = typedGearActivity.reduce((sum, item) => sum + (item.checkin_count || 0), 0);
         const totalDamageReports = damageReports?.length || 0;
 
         // Calculate active users (users with at least one activity)

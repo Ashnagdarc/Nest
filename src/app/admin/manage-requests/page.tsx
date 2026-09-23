@@ -167,7 +167,7 @@ function ManageRequestsContent() {
                 };
             });
 
-            setRequests(processed);
+            setRequests(processed as GearRequest[]);
             setTotal(response.total || 0);
             setSummaryRefreshKey((key) => key + 1);
         } catch (error: unknown) {

@@ -14,6 +14,8 @@ import { gearQueries } from '@/lib/api/queries';
 import { useDebounce } from '@/hooks/useDebounce';
 import { isFileList, isFile } from '@/lib/utils/browser-safe';
 import { useGearInventorySummary } from '@/hooks/admin/useGearInventorySummary';
+import type { AddGearFormValues } from '@/components/admin/add-gear-form';
+import type { GearFormValues } from '@/components/admin/edit-gear-form';
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
@@ -37,7 +39,7 @@ export function useManageGearsPage() {
   const [selectedGear, setSelectedGear] = useState<Gear | null>(null);
   const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>([]);
   const [loadingMaintenance, setLoadingMaintenance] = useState(false);
-  const [profile, setProfile] = useState<{ role: string; status: string | null } | null>(null);
+  const [profile, setProfile] = useState<{ role: string | null; status: string | null } | null>(null);
   const [isGearDetailsOpen, setIsGearDetailsOpen] = useState(false);
   const [showSqlDialog, setShowSqlDialog] = useState(false);
   const [sqlToRun, setSqlToRun] = useState('');
@@ -153,7 +155,7 @@ export function useManageGearsPage() {
     }
   }
 
-  const handleAddGear = async (data: Gear) => {
+  const handleAddGear = async (data: AddGearFormValues) => {
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -191,7 +193,7 @@ export function useManageGearsPage() {
 
       // Handle image upload if there is one
       let imageUrl = null;
-      if (data.image_url instanceof File) {
+      if (isFile(data.image_url)) {
         const fileExt = data.image_url.name.split('.')?.pop();
         const filePath = `gears/${gearId}/${Date.now()}.${fileExt}`;
         // Upload to the gear_images bucket
@@ -810,11 +812,20 @@ export function useManageGearsPage() {
       const { data: { user } } = await supabase.auth.getUser();
 
       // Add the maintenance record
+      if (!selectedGear?.id) {
+        toast({
+          title: 'Error',
+          description: 'No gear selected for maintenance.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from('gear_maintenance')
         .insert([
           {
-            gear_id: selectedGear?.id,
+            gear_id: selectedGear.id,
             status: values.status,
             description: values.description,
             date: values.date,
@@ -852,11 +863,13 @@ export function useManageGearsPage() {
 
         // Send Google Chat notification for maintenance (non-blocking)
         try {
-          const { data: adminProfile } = await supabase
-            .from('profiles')
-            .select('full_name, email')
-            .eq('id', user?.id)
-            .single();
+          const { data: adminProfile } = user?.id
+            ? await supabase
+                .from('profiles')
+                .select('full_name, email')
+                .eq('id', user.id)
+                .single()
+            : { data: null };
 
           await fetch('/api/notifications/google-chat', {
             method: 'POST',
@@ -923,7 +936,7 @@ export function useManageGearsPage() {
   };
 
   // Handle submit edits using a minimal approach
-  const handleSubmitEdits = async (data: Gear) => {
+  const handleSubmitEdits = async (data: GearFormValues) => {
     if (!editingGear) return;
 
     setIsSubmitting(true);

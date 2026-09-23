@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { requireActiveAdminRoute } from '@/lib/api/route-auth';
 
-function toIcsDate(dateStr: string, timeStr: string) {
+function toIcsDate(dateStr: string, timeStr: string | null) {
     // Expect time like "12:00-1:30 PM" or "10:00 AM"; produce DTSTART and DTEND in floating time
-    const startEnd = timeStr.includes('-') ? timeStr.split('-') : [timeStr, timeStr];
+    const slot = timeStr || '09:00';
+    const startEnd = slot.includes('-') ? slot.split('-') : [slot, slot];
     const parse = (t: string) => {
         const d = new Date(`${dateStr} ${t}`);
         const y = d.getFullYear();
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
         lines.push('VERSION:2.0');
         lines.push('PRODID:-//Nest//CarBookings//EN');
         for (const b of data || []) {
-            const { dtStart, dtEnd } = toIcsDate(b.date_of_use, b.time_slot);
+            const { dtStart, dtEnd } = toIcsDate(b.date_of_use || '', b.time_slot);
             const uid = `${b.id}@nest-car-bookings`;
             lines.push('BEGIN:VEVENT');
             lines.push(`UID:${uid}`);

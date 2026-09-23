@@ -383,8 +383,8 @@ export function subscribeToTable(
             const channelName = `public:${tableName}:${Date.now()}`;
             logger.info(`Setting up realtime subscription for ${tableName}`, 'Realtime');
 
-            const channel = supabase
-                .channel(channelName)
+            // SupabaseClient without Database generics rejects postgres_changes overloads
+            const channel = (supabase.channel(channelName) as any)
                 .on(
                     'postgres_changes',
                     { event, schema: 'public', table: tableName },
@@ -586,8 +586,7 @@ export async function isTableEnabledForRealtime(tableName: string): Promise<bool
         const channelName = `test-realtime-${tableName}-${Date.now()}`;
         let isEnabled = false;
 
-        const channel = supabase
-            .channel(channelName)
+        const channel = (supabase.channel(channelName) as any)
             .on('postgres_changes', { event: '*', schema: 'public', table: tableName }, () => { })
             .subscribe((status: any) => {
                 isEnabled = status === 'SUBSCRIBED';

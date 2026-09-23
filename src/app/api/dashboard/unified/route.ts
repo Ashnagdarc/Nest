@@ -354,7 +354,11 @@ export async function GET(_request: NextRequest) {
               );
 
         const recentActivity = [...requestActivity, ...checkinActivity, ...scopedCarActivity]
-            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .sort((a, b) => {
+                const aTs = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                const bTs = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                return bTs - aTs;
+            })
             .slice(0, 20);
 
         return NextResponse.json({

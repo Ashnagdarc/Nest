@@ -196,9 +196,9 @@ export async function POST(request: NextRequest) {
             if (userEmail) {
                 await sendCarBookingApprovalEmail({
                     to: userEmail,
-                    userName: booking.employee_name,
-                    dateOfUse: booking.date_of_use,
-                    timeSlot: booking.time_slot,
+                    userName: booking.employee_name || 'User',
+                    dateOfUse: booking.date_of_use || '',
+                    timeSlot: booking.time_slot || '',
                     destination: booking.destination || undefined,
                     carDetails: carDetails || undefined,
                 });
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
             await notifyGoogleChat(NotificationEventType.ADMIN_APPROVE_REQUEST, {
                 adminName: userData.user.email,
                 adminEmail: userData.user.email,
-                userName: booking.employee_name,
+                userName: booking.employee_name || 'User',
                 userEmail: '',
                 gearNames: [`Car booking: ${booking.date_of_use} ${booking.time_slot}`],
                 dueDate: booking.date_of_use
@@ -240,9 +240,9 @@ export async function POST(request: NextRequest) {
                                 sections: [{
                                     heading: 'Booking details',
                                     rows: [
-                                        { label: 'Employee', value: booking.employee_name },
-                                        { label: 'Date of use', value: booking.date_of_use },
-                                        { label: 'Time slot', value: booking.time_slot },
+                                        { label: 'Employee', value: booking.employee_name || 'User' },
+                                        { label: 'Date of use', value: booking.date_of_use || '' },
+                                        { label: 'Time slot', value: booking.time_slot || '' },
                                         { label: 'Assigned vehicle', value: carDetails || 'Not provided' },
                                     ]
                                 }],

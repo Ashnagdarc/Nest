@@ -236,9 +236,9 @@ export async function POST(request: NextRequest) {
             if (userEmail) {
                 await sendCarBookingCancellationEmail({
                     to: userEmail,
-                    userName: booking.employee_name,
-                    dateOfUse: booking.date_of_use,
-                    timeSlot: booking.time_slot,
+                    userName: booking.employee_name || 'User',
+                    dateOfUse: booking.date_of_use || '',
+                    timeSlot: booking.time_slot || '',
                     destination: booking.destination || undefined,
                     cancelledBy: isAdmin ? 'admin' : 'user',
                     reason: reason || undefined,

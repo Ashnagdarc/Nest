@@ -30,7 +30,7 @@ interface SubmitParams {
 }
 
 export function useCheckInSubmit(
-  toast: (params: { title: string; description?: string; variant?: "default" | "destructive" }) => void,
+  toast: (params: { title: string; description?: string; variant?: "default" | "destructive" }) => unknown,
 ) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
