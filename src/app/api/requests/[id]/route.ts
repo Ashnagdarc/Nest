@@ -278,13 +278,18 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         if (gearLinesError) {
             console.error('[Gear Request Cancel] Failed to load gear names:', gearLinesError);
         } else {
-            // Junction rows can repeat a gear. Count each gear once, matching a lookup by gear id.
+            // Junction rows can repeat a gear. Count each known gear id once.
+            // Rows with no gear id are kept individually so they are not collapsed together.
             const seenGearIds = new Set<string>();
             const names: string[] = [];
             for (const line of gearLines ?? []) {
                 const name = line.gears?.name;
-                if (!name || seenGearIds.has(line.gear_id)) continue;
-                seenGearIds.add(line.gear_id);
+                const gearId = line.gear_id;
+                if (!name) continue;
+                if (gearId) {
+                    if (seenGearIds.has(gearId)) continue;
+                    seenGearIds.add(gearId);
+                }
                 names.push(name);
             }
             if (names.length === 1) {
