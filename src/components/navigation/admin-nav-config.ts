@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import {
     BarChart3,
     Bell,
-    BusFront,
     Car,
     ClipboardCheck,
     LayoutDashboard,
@@ -42,7 +41,6 @@ export const adminNavGroups: AdminNavGroup[] = [
         label: "Fleet",
         items: [
             { href: "/admin/manage-car-bookings", label: "Car bookings", icon: Car },
-            { href: "/admin/live-bus", label: "Live bus", icon: BusFront },
         ],
     },
     {

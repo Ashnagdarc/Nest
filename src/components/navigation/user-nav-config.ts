@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
     Bell,
-    BusFront,
     Car,
     History,
     LayoutDashboard,
@@ -43,7 +42,6 @@ export const userNavGroups: UserNavGroup[] = [
         label: "Travel",
         items: [
             { href: "/user/car-booking", label: "Book a Car", icon: Car },
-            { href: "/user/live-bus", label: "Live Bus", icon: BusFront },
         ],
     },
     {

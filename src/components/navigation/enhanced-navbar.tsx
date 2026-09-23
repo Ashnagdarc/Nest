@@ -19,7 +19,6 @@ import {
     User,
     Package,
     ChevronDown,
-    BusFront,
     Car,
     Megaphone
 } from 'lucide-react';
@@ -61,12 +60,6 @@ const userNavItems: NavItem[] = [
         label: 'Book a Car',
         icon: Car,
         description: 'Request a car booking'
-    },
-    {
-        href: '/user/live-bus',
-        label: 'Live Bus',
-        icon: BusFront,
-        description: 'Realtime bus tracking'
     },
     {
         href: '/user/my-requests',
@@ -130,12 +123,6 @@ const adminNavItems: NavItem[] = [
         label: 'Manage Check-ins',
         icon: UploadCloud,
         description: 'Return processing'
-    },
-    {
-        href: '/admin/live-bus',
-        label: 'Live Bus',
-        icon: BusFront,
-        description: 'Realtime tracking map'
     },
     {
         href: '/admin/manage-users',

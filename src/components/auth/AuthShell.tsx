@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ReactNode } from "react";
-import { ArrowLeft, BusFront, Package, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Car, Package, ShieldCheck } from "lucide-react";
 import { ThemeLogo } from "@/components/ui/theme-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -14,7 +14,7 @@ interface AuthShellProps {
 
 const highlights = [
     { icon: Package, text: "Request and track production gear" },
-    { icon: BusFront, text: "Book cars and follow live bus routes" },
+    { icon: Car, text: "Book company cars for production trips" },
     { icon: ShieldCheck, text: "Secure access for Eden Oasis teams" },
 ];
 

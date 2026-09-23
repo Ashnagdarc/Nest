@@ -9,7 +9,6 @@ const USER_TO_ADMIN_PATH: Record<string, string> = {
     '/user/dashboard': '/admin/dashboard',
     '/user/settings': '/admin/settings',
     '/user/notifications': '/admin/notifications',
-    '/user/live-bus': '/admin/live-bus',
     '/user/announcements': '/admin/announcements',
 };
 

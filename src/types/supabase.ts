@@ -1071,48 +1071,6 @@ type GeneratedDatabase = {
           },
         ]
       }
-      live_locations: {
-        Row: {
-          accuracy_m: number | null
-          is_sharing: boolean
-          lat: number
-          lng: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          accuracy_m?: number | null
-          is_sharing?: boolean
-          lat: number
-          lng: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          accuracy_m?: number | null
-          is_sharing?: boolean
-          lat?: number
-          lng?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "live_locations_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "live_locations_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "user_activity_summary"
-            referencedColumns: ["user_id"]
-          },
-        ]
-      }
       notifications: {
         Row: {
           category: string | null
@@ -1320,54 +1278,6 @@ type GeneratedDatabase = {
           },
           {
             foreignKeyName: "read_announcements_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_activity_summary"
-            referencedColumns: ["user_id"]
-          },
-        ]
-      }
-      user_bus_stops: {
-        Row: {
-          created_at: string
-          lat: number
-          lng: number
-          radius_m: number
-          stop_key: string
-          stop_name: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          lat: number
-          lng: number
-          radius_m?: number
-          stop_key: string
-          stop_name?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          lat?: number
-          lng?: number
-          radius_m?: number
-          stop_key?: string
-          stop_name?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "user_bus_stops_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_bus_stops_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "user_activity_summary"
