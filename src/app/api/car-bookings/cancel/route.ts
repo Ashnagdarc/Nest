@@ -127,24 +127,30 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const { data: aggregate } = await admin
-            .from('bookings')
-            .select('id')
-            .eq('source_type', 'car_booking')
-            .eq('source_id', bookingId)
-            .maybeSingle();
-        if (aggregate?.id) {
-            await syncBookingTransitionSoft(
-                {
-                    bookingId: aggregate.id,
-                    nextStatus: 'cancelled',
-                    changedBy: userId,
-                    reason: reason || (isAdmin ? 'admin_cancel' : 'user_cancel'),
-                    metadata: { legacy_route: '/api/car-bookings/cancel' },
-                    idempotencyKey: `legacy-car-cancel:${bookingId}`,
-                },
-                'Car Booking Cancel'
-            );
+        try {
+            const { data: aggregate, error: aggregateError } = await admin
+                .from('bookings')
+                .select('id')
+                .eq('source_type', 'car_booking')
+                .eq('source_id', bookingId)
+                .maybeSingle();
+            if (aggregateError) {
+                console.error('[Car Booking Cancel] Failed to load v2 booking:', aggregateError);
+            } else if (aggregate?.id) {
+                await syncBookingTransitionSoft(
+                    {
+                        bookingId: aggregate.id,
+                        nextStatus: 'cancelled',
+                        changedBy: userId,
+                        reason: reason || (isAdmin ? 'admin_cancel' : 'user_cancel'),
+                        metadata: { legacy_route: '/api/car-bookings/cancel' },
+                        idempotencyKey: `legacy-car-cancel:${bookingId}`,
+                    },
+                    'Car Booking Cancel'
+                );
+            }
+        } catch (syncError) {
+            console.error('[Car Booking Cancel] Failed syncing status to v2 booking lifecycle:', syncError);
         }
 
         // Delete car assignment if exists (frees the car)

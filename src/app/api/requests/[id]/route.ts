@@ -268,29 +268,23 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
             return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
         }
 
-        // Get gear names for notification from the junction table.
-        // gear_requests no longer stores a gear_ids column.
+        // gear_requests has no gear_ids column. Names come from the junction embed.
         let gearNames = 'Equipment';
-        const { data: gearLines } = await supabase
+        const { data: gearLines, error: gearLinesError } = await supabase
             .from('gear_request_gears')
-            .select('gear_id')
+            .select('gears(name)')
             .eq('gear_request_id', id);
-        const cancelGearIds = (gearLines ?? [])
-            .map((line) => line.gear_id)
-            .filter((gearId): gearId is string => Boolean(gearId));
-        if (cancelGearIds.length > 0) {
-            const { data: gears } = await supabase
-                .from('gears')
-                .select('name')
-                .in('id', cancelGearIds);
 
-            if (gears && gears.length > 0) {
-                const names = gears.map(g => g.name).filter(Boolean);
-                if (names.length === 1) {
-                    gearNames = names[0];
-                } else if (names.length > 1) {
-                    gearNames = `${names[0]} and ${names.length - 1} other item${names.length > 2 ? 's' : ''}`;
-                }
+        if (gearLinesError) {
+            console.error('[Gear Request Cancel] Failed to load gear names:', gearLinesError);
+        } else {
+            const names = (gearLines ?? [])
+                .map((line) => line.gears?.name)
+                .filter((name): name is string => Boolean(name));
+            if (names.length === 1) {
+                gearNames = names[0];
+            } else if (names.length > 1) {
+                gearNames = `${names[0]} and ${names.length - 1} other item${names.length > 2 ? 's' : ''}`;
             }
         }
 

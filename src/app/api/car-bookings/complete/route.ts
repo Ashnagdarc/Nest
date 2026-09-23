@@ -163,24 +163,30 @@ export async function POST(request: NextRequest) {
             console.warn('[Car Booking Complete] Failed to mark assigned car available:', syncError);
         }
 
-        const aggregateQuery = admin
-            .from('bookings')
-            .select('id')
-            .eq('source_type', 'car_booking')
-            .eq('source_id', bookingId);
-        const { data: aggregate } = await aggregateQuery.maybeSingle();
-        if (aggregate?.id) {
-            await syncBookingTransitionSoft(
-                {
-                    bookingId: aggregate.id,
-                    nextStatus: 'completed',
-                    changedBy: null,
-                    reason: isCron ? 'Auto check-in completion' : 'Manual completion via legacy route',
-                    metadata: { legacy_route: '/api/car-bookings/complete' },
-                    idempotencyKey: `legacy-car-complete:${bookingId}`,
-                },
-                'Car Booking Complete'
-            );
+        try {
+            const { data: aggregate, error: aggregateError } = await admin
+                .from('bookings')
+                .select('id')
+                .eq('source_type', 'car_booking')
+                .eq('source_id', bookingId)
+                .maybeSingle();
+            if (aggregateError) {
+                console.error('[Car Booking Complete] Failed to load v2 booking:', aggregateError);
+            } else if (aggregate?.id) {
+                await syncBookingTransitionSoft(
+                    {
+                        bookingId: aggregate.id,
+                        nextStatus: 'completed',
+                        changedBy: null,
+                        reason: isCron ? 'Auto check-in completion' : 'Manual completion via legacy route',
+                        metadata: { legacy_route: '/api/car-bookings/complete' },
+                        idempotencyKey: `legacy-car-complete:${bookingId}`,
+                    },
+                    'Car Booking Complete'
+                );
+            }
+        } catch (syncError) {
+            console.error('[Car Booking Complete] Failed syncing status to v2 booking lifecycle:', syncError);
         }
 
         // Lookup assigned car and plate if any

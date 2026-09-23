@@ -123,24 +123,30 @@ export async function POST(request: NextRequest) {
             console.warn('[Car Booking Approve] Failed to mark assigned car in service:', syncError);
         }
 
-        const { data: aggregate } = await admin
-            .from('bookings')
-            .select('id,status')
-            .eq('source_type', 'car_booking')
-            .eq('source_id', bookingId)
-            .maybeSingle();
-        if (aggregate?.id) {
-            await syncBookingTransitionSoft(
-                {
-                    bookingId: aggregate.id,
-                    nextStatus: 'approved',
-                    changedBy: approverId,
-                    reason: 'Legacy car approval route sync',
-                    metadata: { legacy_route: '/api/car-bookings/approve' },
-                    idempotencyKey: `legacy-car-approve:${bookingId}`,
-                },
-                'Car Booking Approve'
-            );
+        try {
+            const { data: aggregate, error: aggregateError } = await admin
+                .from('bookings')
+                .select('id,status')
+                .eq('source_type', 'car_booking')
+                .eq('source_id', bookingId)
+                .maybeSingle();
+            if (aggregateError) {
+                console.error('[Car Booking Approve] Failed to load v2 booking:', aggregateError);
+            } else if (aggregate?.id) {
+                await syncBookingTransitionSoft(
+                    {
+                        bookingId: aggregate.id,
+                        nextStatus: 'approved',
+                        changedBy: approverId,
+                        reason: 'Legacy car approval route sync',
+                        metadata: { legacy_route: '/api/car-bookings/approve' },
+                        idempotencyKey: `legacy-car-approve:${bookingId}`,
+                    },
+                    'Car Booking Approve'
+                );
+            }
+        } catch (syncError) {
+            console.error('[Car Booking Approve] Failed syncing status to v2 booking lifecycle:', syncError);
         }
 
         // Get assigned car details early so subsequent notifications can use it safely

@@ -46,24 +46,30 @@ export async function POST(request: NextRequest) {
         }).eq('id', bookingId);
         if (error) return fail(400, error.message, 'Could not reject booking right now.', 'CAR_BOOKING_REJECT_FAILED');
 
-        const { data: aggregate } = await admin
-            .from('bookings')
-            .select('id')
-            .eq('source_type', 'car_booking')
-            .eq('source_id', bookingId)
-            .maybeSingle();
-        if (aggregate?.id) {
-            await syncBookingTransitionSoft(
-                {
-                    bookingId: aggregate.id,
-                    nextStatus: 'failed',
-                    changedBy: actorId,
-                    reason: reason || 'Booking rejected via legacy route',
-                    metadata: { legacy_route: '/api/car-bookings/reject' },
-                    idempotencyKey: `legacy-car-reject:${bookingId}`,
-                },
-                'Car Booking Reject'
-            );
+        try {
+            const { data: aggregate, error: aggregateError } = await admin
+                .from('bookings')
+                .select('id')
+                .eq('source_type', 'car_booking')
+                .eq('source_id', bookingId)
+                .maybeSingle();
+            if (aggregateError) {
+                console.error('[Car Booking Reject] Failed to load v2 booking:', aggregateError);
+            } else if (aggregate?.id) {
+                await syncBookingTransitionSoft(
+                    {
+                        bookingId: aggregate.id,
+                        nextStatus: 'failed',
+                        changedBy: actorId,
+                        reason: reason || 'Booking rejected via legacy route',
+                        metadata: { legacy_route: '/api/car-bookings/reject' },
+                        idempotencyKey: `legacy-car-reject:${bookingId}`,
+                    },
+                    'Car Booking Reject'
+                );
+            }
+        } catch (syncError) {
+            console.error('[Car Booking Reject] Failed syncing status to v2 booking lifecycle:', syncError);
         }
 
         if (booking.requester_id) {
