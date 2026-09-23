@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingCancellationEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
-import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
+import { getBookedCarId, releaseCarIfNoOtherApproved } from '@/lib/car-bookings/car-status-sync';
 import { normalizeNotificationInsert } from '@/lib/notification-type';
 import { randomUUID } from 'crypto';
 import { sitePath } from '@/lib/site-url';
@@ -53,12 +53,15 @@ export async function POST(request: NextRequest) {
             return fail(403, 'Unauthorized', 'You are not allowed to cancel this booking.', 'CAR_BOOKING_UNAUTHORIZED');
         }
 
+        // Cast at boundary: SupabaseClient vs structural SupabaseAdminLike in car-status-sync
+        const statusAdmin = admin as unknown as Parameters<typeof getBookedCarId>[0];
+
         // Idempotency: if already cancelled, return success
         if (booking.status === 'Cancelled') {
             try {
-                const carId = await getBookedCarId(admin, bookingId);
+                const carId = await getBookedCarId(statusAdmin, bookingId);
                 if (carId) {
-                    await setCarStatus(admin, carId, 'Available');
+                    await releaseCarIfNoOtherApproved(statusAdmin, carId, bookingId);
                 }
             } catch (syncError) {
                 console.warn('[Car Booking Cancel] Failed to sync already-cancelled car status:', syncError);
@@ -76,7 +79,7 @@ export async function POST(request: NextRequest) {
 
         let assignedCarId: string | null = null;
         try {
-            assignedCarId = await getBookedCarId(admin, bookingId);
+            assignedCarId = await getBookedCarId(statusAdmin, bookingId);
         } catch (syncError) {
             console.warn('[Car Booking Cancel] Failed to read assigned car before cancellation:', syncError);
         }
@@ -118,7 +121,7 @@ export async function POST(request: NextRequest) {
 
         if (assignedCarId) {
             try {
-                await setCarStatus(admin, assignedCarId, 'Available');
+                await releaseCarIfNoOtherApproved(statusAdmin, assignedCarId, bookingId);
             } catch (syncError) {
                 console.warn('[Car Booking Cancel] Failed to mark assigned car available:', syncError);
             }

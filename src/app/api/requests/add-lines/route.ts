@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
         if (!authContext.isActiveAdmin) {
             const { data: requestRow, error: requestLookupError } = await authContext.authSupabase
                 .from('gear_requests')
-                .select('user_id')
+                .select('user_id, status')
                 .eq('id', requestId)
                 .maybeSingle();
 
@@ -56,9 +56,42 @@ export async function POST(request: NextRequest) {
             if (requestRow.user_id !== authContext.user.id) {
                 return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
             }
+
+            if (requestRow.status !== 'Pending') {
+                return NextResponse.json({
+                    success: false,
+                    error: 'Lines can only be added while the request is Pending',
+                    details: { status: requestRow.status },
+                }, { status: 409 });
+            }
         }
 
         const supabase = await createSupabaseServerClient(true);
+
+        // Enforce Pending for admins too (owner path already checked above).
+        if (authContext.isActiveAdmin) {
+            const { data: requestRow, error: requestLookupError } = await supabase
+                .from('gear_requests')
+                .select('status')
+                .eq('id', requestId)
+                .maybeSingle();
+
+            if (requestLookupError) {
+                return NextResponse.json({ success: false, error: 'Failed to verify request status' }, { status: 500 });
+            }
+
+            if (!requestRow) {
+                return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+            }
+
+            if (requestRow.status !== 'Pending') {
+                return NextResponse.json({
+                    success: false,
+                    error: 'Lines can only be added while the request is Pending',
+                    details: { status: requestRow.status },
+                }, { status: 409 });
+            }
+        }
 
         // Verify gear IDs exist and check available quantities
         const uniqueIds = Array.from(requestedByGear.keys());

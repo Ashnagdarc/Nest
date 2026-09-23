@@ -10,8 +10,9 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const nextConfig = {
   /* config options here */
   typescript: {
-    // Only ignore build errors in production
-    ignoreBuildErrors: process.env.NODE_ENV === 'production',
+    // Surface type errors during `next build` (do not ignore in production).
+    // Residual typecheck debt remains; run `npm run typecheck` and track separately.
+    ignoreBuildErrors: false,
   },
   // Turbopack is enabled by default in Next.js 16
   turbopack: {},

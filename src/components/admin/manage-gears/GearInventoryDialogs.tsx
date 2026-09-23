@@ -20,8 +20,6 @@ import { getGearStatusClass } from "@/components/admin/manage-gears/gear-status"
 import type { ManageGearsPageState } from "@/hooks/admin/useManageGearsPage";
 import type { Gear } from "@/types/supabase";
 
-import type { ManageGearsPageState } from "@/hooks/admin/useManageGearsPage";
-
 interface GearInventoryDialogsProps {
     state: ManageGearsPageState;
 }
@@ -83,7 +81,7 @@ export function GearInventoryDialogs({ state }: GearInventoryDialogsProps) {
                 </DialogContent>
             </Dialog>
 
-            {profile?.role === "Admin" ? (
+            {profile?.role === "Admin" && profile?.status === "Active" ? (
                 <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                     <DialogContent className="flex max-h-[min(90dvh,820px)] w-[95vw] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-[640px]">
                         <DialogHeader className="shrink-0 space-y-1 border-b px-6 py-4 text-left">

@@ -3,7 +3,7 @@ import { autoReturnDueCarBookings, type SupabaseAdminLike } from '../auto-return
 
 const mockTransitionBooking = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<void>>;
 const mockGetBookedCarId = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<string | null>>;
-const mockSetCarStatus = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<void>>;
+const mockReleaseCarIfNoOtherApproved = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<boolean>>;
 
 jest.mock('@/lib/bookings-v2/service', () => ({
   transitionBooking: (...args: unknown[]) => mockTransitionBooking(...args),
@@ -11,7 +11,7 @@ jest.mock('@/lib/bookings-v2/service', () => ({
 
 jest.mock('@/lib/car-bookings/car-status-sync', () => ({
   getBookedCarId: (...args: unknown[]) => mockGetBookedCarId(...args),
-  setCarStatus: (...args: unknown[]) => mockSetCarStatus(...args),
+  releaseCarIfNoOtherApproved: (...args: unknown[]) => mockReleaseCarIfNoOtherApproved(...args),
 }));
 
 function buildAdminMock(options?: {
@@ -82,7 +82,7 @@ describe('autoReturnDueCarBookings', () => {
     });
 
     mockGetBookedCarId.mockResolvedValueOnce('car-1');
-    mockSetCarStatus.mockResolvedValueOnce(undefined);
+    mockReleaseCarIfNoOtherApproved.mockResolvedValueOnce(true);
     mockTransitionBooking.mockResolvedValueOnce(undefined);
 
     const result = await autoReturnDueCarBookings(admin, {
@@ -93,7 +93,26 @@ describe('autoReturnDueCarBookings', () => {
     expect(result.releasedCars).toBe(1);
     expect(result.failed).toBe(0);
     expect(mockTransitionBooking).toHaveBeenCalledTimes(1);
-    expect(mockSetCarStatus).toHaveBeenCalledWith(expect.anything(), 'car-1', 'Available');
+    expect(mockReleaseCarIfNoOtherApproved).toHaveBeenCalledWith(expect.anything(), 'car-1', 'booking-1');
+  });
+
+  it('does not count a release when another Approved booking still holds the car', async () => {
+    const admin = buildAdminMock({
+      dueBookings: [{ id: 'booking-1', status: 'Approved', date_of_use: '2026-06-02' }],
+      aggregateIdByBookingId: { 'booking-1': 'aggregate-1' },
+    });
+
+    mockGetBookedCarId.mockResolvedValueOnce('car-1');
+    mockReleaseCarIfNoOtherApproved.mockResolvedValueOnce(false);
+    mockTransitionBooking.mockResolvedValueOnce(undefined);
+
+    const result = await autoReturnDueCarBookings(admin, {
+      cutoffDate: '2026-06-03',
+    });
+
+    expect(result.processed).toBe(1);
+    expect(result.releasedCars).toBe(0);
+    expect(result.failed).toBe(0);
   });
 
   it('returns no work when there are no due bookings', async () => {

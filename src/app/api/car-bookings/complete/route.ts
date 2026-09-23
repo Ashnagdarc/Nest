@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { hasValidCronSecret } from '@/lib/api-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarReturnConfirmationEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
-import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
+import { getBookedCarId, releaseCarIfNoOtherApproved } from '@/lib/car-bookings/car-status-sync';
 import { randomUUID } from 'crypto';
 import { sitePath } from '@/lib/site-url';
 
@@ -13,8 +14,8 @@ export async function POST(request: NextRequest) {
     const fail = (status: number, error: string, userMessage: string, errorCode: string) =>
         NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: userMessage, error_code: errorCode, correlation_id: correlationId, error }, { status });
     try {
-        const authHeader = request.headers.get('authorization');
-        const isCron = Boolean(process.env.CRON_SECRET) && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+        // User-or-cron: valid CRON_SECRET Bearer OR authenticated owner/Active-admin path below
+        const isCron = hasValidCronSecret(request);
         let currentUserId: string | null = null;
         if (!isCron) {
             const authClient = await createSupabaseServerClient();
@@ -48,11 +49,13 @@ export async function POST(request: NextRequest) {
             }
         }
         // Idempotency: if already completed, succeed
+        // Cast at boundary: SupabaseClient vs structural SupabaseAdminLike in car-status-sync
+        const statusAdmin = admin as unknown as Parameters<typeof getBookedCarId>[0];
         if (existing.status === 'Completed') {
             try {
-                const carId = await getBookedCarId(admin, bookingId);
+                const carId = await getBookedCarId(statusAdmin, bookingId);
                 if (carId) {
-                    await setCarStatus(admin, carId, 'Available');
+                    await releaseCarIfNoOtherApproved(statusAdmin, carId, bookingId);
                 }
             } catch (syncError) {
                 console.warn('[Car Booking Complete] Failed to sync already-completed car status:', syncError);
@@ -151,9 +154,9 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-            const carId = await getBookedCarId(admin, bookingId);
+            const carId = await getBookedCarId(statusAdmin, bookingId);
             if (carId) {
-                await setCarStatus(admin, carId, 'Available');
+                await releaseCarIfNoOtherApproved(statusAdmin, carId, bookingId);
             }
         } catch (syncError) {
             console.warn('[Car Booking Complete] Failed to mark assigned car available:', syncError);

@@ -3,9 +3,10 @@ import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { sendGearRequestEmail } from '@/lib/email';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { sitePath } from '@/lib/site-url';
+import { hasValidCronSecret } from '@/lib/api-auth';
 
 export async function POST(req: NextRequest) {
-    if (process.env.CRON_SECRET && req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!hasValidCronSecret(req)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

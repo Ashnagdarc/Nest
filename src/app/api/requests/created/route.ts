@@ -98,11 +98,12 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Admin email(s): find admins from profiles
+        // Admin email(s): only Active admins receive privileged notifications
         const { data: admins } = await supabase
             .from('profiles')
             .select('email, full_name, role')
-            .eq('role', 'Admin');
+            .eq('role', 'Admin')
+            .eq('status', 'Active');
         if (admins && admins.length) {
             for (const admin of admins) {
                 if (!admin.email) continue;

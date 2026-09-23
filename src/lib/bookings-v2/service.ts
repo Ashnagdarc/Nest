@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { sendBookingLifecycleEmail } from '@/lib/email';
+import { resolveLegacyStatusForSource } from './legacy-status';
 import type { BookingCreateInput, BookingLifecycleStatus, BookingTransitionInput } from './types';
 
 type RpcError = { message: string } | null;
@@ -43,17 +44,6 @@ const TRANSITIONS: Record<BookingLifecycleStatus, BookingLifecycleStatus[]> = {
   cancelled: [],
   overdue: ['completed', 'failed'],
   failed: [],
-};
-
-const toLegacyBookingStatus = (status: BookingLifecycleStatus): string => {
-  if (status === 'approved') return 'Approved';
-  if (status === 'checked_out') return 'Approved';
-  if (status === 'active') return 'Approved';
-  if (status === 'overdue') return 'Approved';
-  if (status === 'completed') return 'Completed';
-  if (status === 'cancelled') return 'Cancelled';
-  if (status === 'failed') return 'Rejected';
-  return 'Pending';
 };
 
 export async function createBookingAggregate(input: BookingCreateInput) {
@@ -130,17 +120,36 @@ export async function transitionBooking(input: BookingTransitionInput) {
   if (!updatedBooking) throw new Error('Atomic transition returned no booking payload');
 
   if (updatedBooking.source_type === 'car_booking' && updatedBooking.source_id) {
+    const { status: legacyStatus } = resolveLegacyStatusForSource({
+      sourceType: 'car_booking',
+      nextStatus: input.nextStatus,
+    });
     await supabase
       .from('car_bookings')
-      .update({ status: toLegacyBookingStatus(input.nextStatus), updated_at: new Date().toISOString() })
+      .update({ status: legacyStatus, updated_at: new Date().toISOString() })
       .eq('id', updatedBooking.source_id);
   }
 
   if (updatedBooking.source_type === 'gear_request' && updatedBooking.source_id) {
-    await supabase
+    const { data: currentRequest } = await supabase
       .from('gear_requests')
-      .update({ status: toLegacyBookingStatus(input.nextStatus), updated_at: new Date().toISOString() })
-      .eq('id', updatedBooking.source_id);
+      .select('status')
+      .eq('id', updatedBooking.source_id)
+      .maybeSingle();
+
+    const { status: legacyStatus, skip } = resolveLegacyStatusForSource({
+      sourceType: 'gear_request',
+      nextStatus: input.nextStatus,
+      currentLegacyStatus: currentRequest?.status ?? null,
+    });
+
+    // Prefer preserving richer legacy labels (e.g. Overdue) over a worse overwrite.
+    if (!skip) {
+      await supabase
+        .from('gear_requests')
+        .update({ status: legacyStatus, updated_at: new Date().toISOString() })
+        .eq('id', updatedBooking.source_id);
+    }
   }
 
   const { data: requesterProfile } = await supabase

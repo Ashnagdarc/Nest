@@ -9,6 +9,9 @@ const limiter = rateLimit({
     uniqueTokenPerInterval: 500, // Max 500 users per minute
 });
 
+const ALLOWED_ROLES = new Set(['User', 'Admin']);
+const ALLOWED_STATUSES = new Set(['Active', 'Inactive', 'Suspended']);
+
 export async function POST(request: NextRequest) {
     try {
         // Rate limit check
@@ -23,6 +26,9 @@ export async function POST(request: NextRequest) {
         if ('errorResponse' in adminContext) {
             return adminContext.errorResponse;
         }
+
+        const safeRole = typeof role === 'string' && ALLOWED_ROLES.has(role) ? role : 'User';
+        const safeStatus = typeof status === 'string' && ALLOWED_STATUSES.has(status) ? status : 'Active';
 
         const supabase = await createSupabaseAdminClient();
 
@@ -55,23 +61,17 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const profileUpdates: { role?: string; status?: string } = {};
-        if (typeof role === 'string' && role.trim()) profileUpdates.role = role;
-        if (typeof status === 'string' && status.trim()) profileUpdates.status = status;
-
-        if (Object.keys(profileUpdates).length > 0) {
-            const { error: profileUpdateError } = await supabase
-                .from('profiles')
-                .update(profileUpdates)
-                .eq('id', authData.user.id);
-            if (profileUpdateError) {
-                console.error('Error updating created profile:', profileUpdateError);
-            }
+        const { error: profileUpdateError } = await supabase
+            .from('profiles')
+            .update({ role: safeRole, status: safeStatus })
+            .eq('id', authData.user.id);
+        if (profileUpdateError) {
+            console.error('Error updating created profile:', profileUpdateError);
         }
 
         const { data: createdProfile, error: createdProfileError } = await supabase
             .from('profiles')
-            .select('*')
+            .select('id, email, full_name, role, status')
             .eq('id', authData.user.id)
             .single();
 
@@ -80,8 +80,17 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({
-            user: authData.user,
-            profile: createdProfile,
+            user: {
+                id: authData.user.id,
+                email: authData.user.email,
+            },
+            profile: createdProfile ?? {
+                id: authData.user.id,
+                email: authData.user.email ?? email,
+                full_name: fullName ?? null,
+                role: safeRole,
+                status: safeStatus,
+            },
         });
 
     } catch (error) {
@@ -91,4 +100,4 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
-} 
+}

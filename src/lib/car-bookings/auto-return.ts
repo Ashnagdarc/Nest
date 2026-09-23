@@ -1,5 +1,5 @@
 import { transitionBooking } from '@/lib/bookings-v2/service';
-import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
+import { getBookedCarId, releaseCarIfNoOtherApproved, type SupabaseAdminLike as StatusAdminLike } from '@/lib/car-bookings/car-status-sync';
 
 type BookingRow = {
   id: string;
@@ -82,10 +82,13 @@ export async function autoReturnDueCarBookings(
         }
       }
 
-      const carId = await getBookedCarId(admin as unknown as Parameters<typeof getBookedCarId>[0], booking.id);
+      const statusAdmin = admin as unknown as StatusAdminLike;
+      const carId = await getBookedCarId(statusAdmin, booking.id);
       if (carId) {
-        await setCarStatus(admin as unknown as Parameters<typeof setCarStatus>[0], carId, 'Available');
-        releasedCars += 1;
+        const released = await releaseCarIfNoOtherApproved(statusAdmin, carId, booking.id);
+        if (released) {
+          releasedCars += 1;
+        }
       }
 
       processed += 1;

@@ -5,7 +5,7 @@ import type { NextRequest } from 'next/server';
 const mockCreateSupabaseServerClient = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
 const mockTransitionBooking = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<void>>;
 const mockGetBookedCarId = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<string | null>>;
-const mockSetCarStatus = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<void>>;
+const mockReleaseCarIfNoOtherApproved = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<boolean>>;
 
 jest.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: (...args: unknown[]) => mockCreateSupabaseServerClient(...args),
@@ -17,7 +17,7 @@ jest.mock('@/lib/bookings-v2/service', () => ({
 
 jest.mock('@/lib/car-bookings/car-status-sync', () => ({
   getBookedCarId: (...args: unknown[]) => mockGetBookedCarId(...args),
-  setCarStatus: (...args: unknown[]) => mockSetCarStatus(...args),
+  releaseCarIfNoOtherApproved: (...args: unknown[]) => mockReleaseCarIfNoOtherApproved(...args),
 }));
 
 jest.mock('@/lib/email', () => ({
@@ -120,7 +120,7 @@ describe('car booking complete route', () => {
     const adminClient: BookingCompleteClient = buildClient('user-1', 'user-1');
     mockCreateSupabaseServerClient.mockImplementation(((isAdmin: unknown) => Promise.resolve((isAdmin ? adminClient : authClient) as unknown)) as (...args: unknown[]) => Promise<unknown>);
     mockGetBookedCarId.mockResolvedValue('car-1');
-    mockSetCarStatus.mockResolvedValue(undefined);
+    mockReleaseCarIfNoOtherApproved.mockResolvedValue(true);
     mockTransitionBooking.mockResolvedValue(undefined);
 
     const req = new Request('http://localhost/api/car-bookings/complete', {

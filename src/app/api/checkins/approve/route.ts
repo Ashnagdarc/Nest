@@ -154,7 +154,34 @@ export async function POST(request: NextRequest) {
                     .eq('request_id', legacyRequestId)
                     .eq('status', 'Pending Admin Approval');
 
-                const nextStatus = (pendingCount || 0) > 0 ? 'active' : 'completed';
+                const { data: requestLines } = await supabase
+                    .from('gear_request_gears')
+                    .select('quantity')
+                    .eq('gear_request_id', legacyRequestId);
+
+                const requestedQty = (requestLines || []).reduce(
+                    (sum, line) => sum + Math.max(1, Number(line.quantity ?? 1)),
+                    0
+                );
+
+                const { data: completedRows } = await supabase
+                    .from('checkins')
+                    .select('quantity')
+                    .eq('request_id', legacyRequestId)
+                    .eq('status', 'Completed');
+
+                const completedQty = (completedRows || []).reduce(
+                    (sum, row) => sum + Math.max(1, Number(row.quantity ?? 1)),
+                    0
+                );
+
+                // Gate completed on full returned qty — pending-count alone is not enough.
+                const fullyReturned =
+                    (pendingCount || 0) === 0 &&
+                    requestedQty > 0 &&
+                    completedQty >= requestedQty;
+                const nextStatus = fullyReturned ? 'completed' : 'active';
+
                 const { data: aggregate } = await supabase
                     .from('bookings')
                     .select('id')
@@ -168,7 +195,13 @@ export async function POST(request: NextRequest) {
                         nextStatus,
                         changedBy: null,
                         reason: 'Legacy check-in approval sync',
-                        metadata: { checkin_id: checkinId, legacy_route: '/api/checkins/approve' },
+                        metadata: {
+                            checkin_id: checkinId,
+                            legacy_route: '/api/checkins/approve',
+                            requested_qty: requestedQty,
+                            completed_qty: completedQty,
+                            pending_count: pendingCount || 0,
+                        },
                         idempotencyKey: `legacy-checkin-approve:${checkinId}:${nextStatus}`,
                     });
                 }

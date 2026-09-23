@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import webPush from 'web-push';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
+import { hasValidCronSecret } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 
@@ -28,11 +29,7 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 }
 
 export async function GET(req: NextRequest) {
-    const authHeader = req.headers.get('authorization');
-    const isBearerAuthorized = !!process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
-    const isVercelCron = req.headers.has('x-vercel-cron');
-    // Allow either explicit bearer auth or Vercel cron invocations.
-    if (!isBearerAuthorized && !isVercelCron) {
+    if (!hasValidCronSecret(req)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     try {

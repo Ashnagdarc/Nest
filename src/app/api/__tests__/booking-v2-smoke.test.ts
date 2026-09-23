@@ -154,6 +154,7 @@ describe('Booking V2 smoke tests', () => {
   });
 
   it('runs auto check-in and processes due bookings', async () => {
+    process.env.CRON_SECRET = 'test-cron-secret';
     const dueBookings = [
       { id: 'b1', status: 'active', source_type: 'car_booking', end_at: '2026-05-28T10:00:00.000Z' },
       { id: 'b2', status: 'overdue', source_type: 'car_booking', end_at: '2026-05-28T10:00:00.000Z' },
@@ -170,7 +171,7 @@ describe('Booking V2 smoke tests', () => {
 
     const req = new Request('http://localhost/api/internal/auto-checkin-cars', {
       method: 'GET',
-      headers: { 'x-vercel-cron': '1' },
+      headers: { authorization: 'Bearer test-cron-secret' },
     });
     const res = await autoCheckinGet(req as Parameters<typeof autoCheckinGet>[0]);
     const body = await res.json();
@@ -182,7 +183,8 @@ describe('Booking V2 smoke tests', () => {
     expect(mockTransitionBooking).toHaveBeenCalledTimes(2);
   });
 
-  it('allows the auto-return route to run via Vercel cron header', async () => {
+  it('allows the auto-return route to run with a valid cron secret', async () => {
+    process.env.CRON_SECRET = 'test-cron-secret';
     const mockedCreateSupabaseServerClient = mockCreateSupabaseServerClient as jest.MockedFunction<
       (...args: unknown[]) => Promise<unknown>
     >;
@@ -199,7 +201,7 @@ describe('Booking V2 smoke tests', () => {
 
     const req = new Request('http://localhost/api/internal/auto-return-cars', {
       method: 'GET',
-      headers: { 'x-vercel-cron': '1' },
+      headers: { authorization: 'Bearer test-cron-secret' },
     });
 
     const res = await autoReturnGet(req as Parameters<typeof autoReturnGet>[0]);

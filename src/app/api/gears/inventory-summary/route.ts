@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseApiClient } from "@/lib/supabase/api-client";
 import { computeGearInventoryStats } from "@/lib/gear/inventory-stats";
+import { requireActiveAdminRouteUser } from "@/lib/api-auth";
 
 const STATS_PAGE_SIZE = 1000;
 
@@ -43,6 +44,14 @@ async function fetchGearRowsForStats(supabase: ReturnType<typeof createSupabaseA
 
 export async function GET() {
     try {
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
+            return NextResponse.json(
+                { data: null, error: (await authContext.errorResponse.json()).error },
+                { status: authContext.errorResponse.status }
+            );
+        }
+
         const supabase = createSupabaseApiClient(true);
         const gears = await fetchGearRowsForStats(supabase);
         const data = computeGearInventoryStats(gears);

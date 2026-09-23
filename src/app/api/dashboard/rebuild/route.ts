@@ -1,33 +1,20 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthenticatedRouteUser } from '@/lib/api-auth';
 
 export async function GET(request: NextRequest) {
     try {
-        // Use user-scoped client for auth checks
-        const supabase = await createSupabaseServerClient();
+        const authContext = await requireAuthenticatedRouteUser();
+        if ('errorResponse' in authContext) {
+            return authContext.errorResponse;
+        }
+
         const admin = await createSupabaseServerClient(true);
 
-        // Get authenticated user
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // Get user profile to determine role
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-        if (profileError) {
-            return NextResponse.json({ error: 'Failed to get user profile' }, { status: 500 });
-        }
-
-        const isAdmin = profile?.role === 'Admin';
-
-        // Call durable RPC that returns the full dashboard JSON
-        const { data: rpcData, error: rpcError } = await admin.rpc('get_user_dashboard', { p_user_id: user.id });
+        // Call durable RPC that returns the full dashboard JSON for the caller
+        const { data: rpcData, error: rpcError } = await admin.rpc('get_user_dashboard', {
+            p_user_id: authContext.user.id,
+        });
         if (rpcError) {
             throw rpcError;
         }

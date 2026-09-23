@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { transitionBooking } from '@/lib/bookings-v2/service';
+import { hasValidCronSecret } from '@/lib/api-auth';
 
 async function handleAutoCheckin(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const isBearerAuthorized = !!process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
-  const isVercelCron = request.headers.has('x-vercel-cron');
-
-  if (!isBearerAuthorized && !isVercelCron) {
+  if (!hasValidCronSecret(request)) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 

@@ -1,10 +1,20 @@
 import { test, expect, Page } from '@playwright/test';
 
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(
+      `Missing required env var ${name}. Set it before running e2e tests (e.g. in .env.test.local or CI secrets). Do not hardcode credentials.`,
+    );
+  }
+  return value;
+}
+
 const BASE = process.env.BASE_URL || 'http://localhost:9002';
-const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL || 'adira@edenoasisrealty.com';
-const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || 'Edenoasis123';
-const USER_EMAIL = process.env.TEST_USER_EMAIL || 'gfx2@edenoasisrealty.com';
-const USER_PASSWORD = process.env.TEST_USER_PASSWORD || 'Samueldaniel12@';
+const ADMIN_EMAIL = requireEnv('TEST_ADMIN_EMAIL');
+const ADMIN_PASSWORD = requireEnv('TEST_ADMIN_PASSWORD');
+const USER_EMAIL = requireEnv('TEST_USER_EMAIL');
+const USER_PASSWORD = requireEnv('TEST_USER_PASSWORD');
 
 type ApiResult = {
   status: number;

@@ -357,7 +357,7 @@ export async function POST(request: NextRequest) {
                     destination: body.destination || null,
                     expected_duration: body.expected_duration || null,
                     team_members: body.team_members || null,
-                    status: body.status || 'Pending',
+                    status: 'Pending',
                     due_date: body.due_date || null,
                     client_submission_id: clientSubmissionId || null,
                 })

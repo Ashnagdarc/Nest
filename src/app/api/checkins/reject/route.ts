@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildGroupedCheckinEmail, sendCheckinRejectionEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
-import { transitionBooking } from '@/lib/bookings-v2/service';
 import { randomUUID } from 'crypto';
 import { requireActiveAdmin } from '@/app/api/_utils/route-auth';
 import { sitePath } from '@/lib/site-url';
@@ -135,34 +134,9 @@ export async function POST(request: NextRequest) {
             console.log('[Check-in Reject] Push notification queued for user');
         }
 
-        try {
-            const { data: checkinRow } = await supabase
-                .from('checkins')
-                .select('request_id')
-                .eq('id', checkinId)
-                .maybeSingle();
-            const legacyRequestId = checkinRow?.request_id;
-            if (legacyRequestId) {
-                const { data: aggregate } = await supabase
-                    .from('bookings')
-                    .select('id')
-                    .eq('source_type', 'gear_request')
-                    .eq('source_id', legacyRequestId)
-                    .maybeSingle();
-                if (aggregate?.id) {
-                    await transitionBooking({
-                        bookingId: aggregate.id,
-                        nextStatus: 'active',
-                        changedBy: null,
-                        reason: `Check-in rejected: ${reason}`,
-                        metadata: { checkin_id: checkinId, legacy_route: '/api/checkins/reject' },
-                        idempotencyKey: `legacy-checkin-reject:${checkinId}`,
-                    });
-                }
-            }
-        } catch (syncError) {
-            console.error('[Check-in Reject] Failed syncing status to v2 booking lifecycle:', syncError);
-        }
+        // Reject is notify-only for booking lifecycle. Gear remains out; forcing
+        // nextStatus `active` was invalid from `overdue` and dual-wrote legacy
+        // gear_requests back to Approved via the old mapper. Leave v2/legacy status as-is.
 
         // Notify all admins of the rejection action
         try {

@@ -1,26 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { emergencyFixGearQuantities, validateGearQuantities } from '@/lib/utils/fix-gear-quantities';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = await createSupabaseServerClient(true);
-
-        // Verify admin access
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // Check if user is admin (you may need to adjust this based on your admin check logic)
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-        if (profileError || !profile || profile.role !== 'Admin') {
-            return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 });
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
+            return NextResponse.json(
+                { success: false, error: (await authContext.errorResponse.json()).error },
+                { status: authContext.errorResponse.status }
+            );
         }
 
         // Get the action from request body
@@ -61,23 +50,12 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
     try {
-        const supabase = await createSupabaseServerClient(true);
-
-        // Verify admin access
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // Check if user is admin
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-        if (profileError || !profile || profile.role !== 'Admin') {
-            return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 });
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
+            return NextResponse.json(
+                { success: false, error: (await authContext.errorResponse.json()).error },
+                { status: authContext.errorResponse.status }
+            );
         }
 
         // Return validation results

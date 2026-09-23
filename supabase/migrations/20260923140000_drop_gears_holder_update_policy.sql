@@ -1,0 +1,70 @@
+-- =============================================================================
+-- Purpose (H-03): Remove broad holder UPDATE access on public.gears
+--
+-- APPLY ORDER (series 20260923140*):
+--   1) 20260923140000_drop_gears_holder_update_policy.sql  ← this file
+--   2) 20260923140100_expand_request_checkin_status_checks.sql
+--   3) 20260923140200_car_booking_overlap_only_lock.sql
+--   Apply in this order on staging first, then production. Do not skip/reorder.
+--
+-- STAGING CHECKLIST (whole series — humans only; DO NOT MCP-apply / db push):
+--   [ ] Confirm remote migration history does NOT yet list 20260923140000–40200
+--   [ ] Snapshot / backup staging (or note restore point) before apply
+--   [ ] Run VERIFY SQL in each file header (read-only) and record results
+--   [ ] Apply 40000 → 40100 → 40200 via SQL editor or controlled `supabase db push`
+--   [ ] Re-run post-apply VERIFY SQL; exercise smoke paths below
+--   [ ] Only then repeat on production with the same order and verify steps
+--   OUT OF SCOPE: delete_user_cascade — not in repo migrations; edge function
+--   supabase/functions/delete-user/index.ts calls it if present remotely. Do NOT
+--   invent/add a cascade wipe RPC as part of this series.
+--
+-- Context:
+--   Policy "users_can_update_their_checked_out_gears" (20241201_fix_rls_policies)
+--   allows any authenticated user with checked_out_to = auth.uid() to UPDATE the
+--   entire gears row, including inventory columns (available_quantity, quantity,
+--   status, due_date, current_request_id). That bypasses allocation RPCs
+--   (approve_gear_request_atomic / recompute_gear_holder).
+--
+--   Allocation model (20260923114500_gear_allocation_checkout): request lines are
+--   the source of truth; gears.checked_out_to is a display cache. Stock mutations
+--   belong to SECURITY DEFINER RPCs (service_role only) and admin paths.
+--
+--   App grep: non-admin clients do not UPDATE gears (check-in writes checkins;
+--   admin UI uses admins_can_update_gears). Safe to DROP holder UPDATE policy.
+--
+-- Verify (read-only — before/after apply):
+--   -- Policy should be ABSENT after apply
+--   SELECT polname, polcmd, pg_get_expr(polqual, polrelid) AS using_expr
+--   FROM pg_policy
+--   WHERE polrelid = 'public.gears'::regclass
+--     AND polname = 'users_can_update_their_checked_out_gears';
+--   -- Expect: 0 rows after apply
+--
+--   -- Admin UPDATE policy still present
+--   SELECT polname FROM pg_policy
+--   WHERE polrelid = 'public.gears'::regclass
+--     AND polcmd = 'w';
+--
+-- Smoke (staging):
+--   Non-admin holder cannot UPDATE gears via PostgREST; admin can; check-in /
+--   allocate still works via RPCs.
+--
+-- Rollback:
+--   Recreate the policy ONLY if a legitimate holder self-update is reintroduced
+--   and then restrict columns (column grants or trigger). Do not restore as-is:
+--
+--   CREATE POLICY "users_can_update_their_checked_out_gears"
+--     ON public.gears FOR UPDATE TO authenticated
+--     USING (checked_out_to = auth.uid())
+--     WITH CHECK (checked_out_to = auth.uid());
+--
+-- DO NOT auto-apply to remote:
+--   Review in PR; apply manually via SQL editor after staging verification.
+--   This file is local-only until a human applies it. Prefer not blind
+--   `supabase db push` / MCP apply_migration.
+-- =============================================================================
+
+DROP POLICY IF EXISTS "users_can_update_their_checked_out_gears" ON public.gears;
+
+-- Keep admin UPDATE (unchanged). Idempotent note: policy may already be absent
+-- on environments that never applied 20241201 or already dropped it.

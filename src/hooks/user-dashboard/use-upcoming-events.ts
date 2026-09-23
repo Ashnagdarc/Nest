@@ -53,7 +53,7 @@ export function useUpcomingEvents() {
                 .from('gear_requests')
                 .select('id, created_at, status, due_date, approved_at, gear_request_gears(gear_id)')
                 .eq('user_id', session.user.id)
-                .in('status', ['Approved', 'Pending', 'CheckedOut']);
+                .in('status', ['Approved', 'Pending', 'Checked Out', 'Partially Checked Out']);
 
             if (checkoutError) {
                 throw checkoutError;
@@ -115,7 +115,7 @@ export function useUpcomingEvents() {
             // Process checkout events
             const checkoutEvents = (checkoutRequests || []).flatMap((request: unknown) => {
                 const req = request as { id: string; user_id: string; created_at: string; status: string; due_date: string; approved_at?: string; gear_request_gears?: Array<{ gear_id: string }> };
-                if (req.status === 'CheckedOut') {
+                if (req.status === 'Checked Out' || req.status === 'Partially Checked Out') {
                     const gearIdList = req.gear_request_gears?.map(grg => grg.gear_id) || [];
                     return gearIdList.filter(Boolean).map((gearId) => {
                         const gearIdStr = String(gearId);

@@ -104,7 +104,11 @@ export function useCheckInSubmit(
           throw new Error(`Failed to create check-in record: ${checkinError.message}`);
         }
 
-        const { data: admins } = await supabase.from("profiles").select("id").eq("role", "Admin");
+        const { data: admins } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("role", "Admin")
+          .eq("status", "Active");
         if (admins) {
           for (const admin of admins) {
             await createSystemNotification(

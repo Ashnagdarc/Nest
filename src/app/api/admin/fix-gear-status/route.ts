@@ -1,50 +1,33 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { emergencyFixGearQuantities, fixGearStatusAvailabilitySync, validateGearQuantities } from '@/lib/utils/fix-gear-quantities';
+import { requireActiveAdminRouteUser } from '@/lib/api-auth';
 
 /**
  * POST /api/admin/fix-gear-status
- * 
+ *
  * Fixes gear status/availability sync issues where:
  * - Status is 'Partially Available' but available_quantity = quantity
  * - Status is 'Checked Out' but all items are returned
  * - Status is 'Pending Check-in' but no pending check-ins exist
- * 
- * Requires admin role.
+ *
+ * Requires Active admin role.
  */
 export async function POST() {
     try {
-        const supabase = await createSupabaseServerClient();
-        
-        // Check authentication and admin role
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
-        if (authError || !user) {
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
             return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-        
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-        
-        if (profile?.role !== 'Admin') {
-            return NextResponse.json(
-                { success: false, error: 'Admin access required' },
-                { status: 403 }
+                { success: false, error: (await authContext.errorResponse.json()).error },
+                { status: authContext.errorResponse.status }
             );
         }
 
-        console.log('[Fix Gear Status] Starting fix by admin:', user.id);
+        console.log('[Fix Gear Status] Starting fix by admin:', authContext.user.id);
 
         // Run both fix functions
         const quantitiesResult = await emergencyFixGearQuantities();
         const statusResult = await fixGearStatusAvailabilitySync();
-        
+
         // Validate after fixes
         const validationResult = await validateGearQuantities();
 
@@ -80,9 +63,9 @@ export async function POST() {
     } catch (error) {
         console.error('[Fix Gear Status] Error:', error);
         return NextResponse.json(
-            { 
-                success: false, 
-                error: error instanceof Error ? error.message : 'Unknown error' 
+            {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
             },
             { status: 500 }
         );
@@ -91,34 +74,17 @@ export async function POST() {
 
 /**
  * GET /api/admin/fix-gear-status
- * 
+ *
  * Returns validation report of gear status/availability issues without fixing.
- * Requires admin role.
+ * Requires Active admin role.
  */
 export async function GET() {
     try {
-        const supabase = await createSupabaseServerClient();
-        
-        // Check authentication and admin role
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
-        if (authError || !user) {
+        const authContext = await requireActiveAdminRouteUser();
+        if ('errorResponse' in authContext) {
             return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-        
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-        
-        if (profile?.role !== 'Admin') {
-            return NextResponse.json(
-                { success: false, error: 'Admin access required' },
-                { status: 403 }
+                { success: false, error: (await authContext.errorResponse.json()).error },
+                { status: authContext.errorResponse.status }
             );
         }
 
@@ -137,9 +103,9 @@ export async function GET() {
     } catch (error) {
         console.error('[Fix Gear Status] Validation error:', error);
         return NextResponse.json(
-            { 
-                success: false, 
-                error: error instanceof Error ? error.message : 'Unknown error' 
+            {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
             },
             { status: 500 }
         );

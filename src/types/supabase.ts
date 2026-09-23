@@ -1,3 +1,9 @@
+/**
+ * Generated Database types — do NOT hand-edit wholesale.
+ * Regen when linked (deferred until project is linked locally):
+ *   npx supabase link --project-ref <PROJECT_REF>
+ *   npx supabase gen types typescript --linked > src/types/supabase.ts
+ */
 export type Json =
     | string
     | number

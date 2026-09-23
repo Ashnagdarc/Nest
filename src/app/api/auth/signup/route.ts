@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import rateLimit from 'next-rate-limit';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { sendWelcomeEmail } from '@/lib/email';
+import { strongPasswordSchema } from '@/lib/auth/password-schema';
 
 const limiter = rateLimit({
     interval: 60 * 1000, // 1 minute
@@ -21,6 +22,14 @@ export async function POST(request: NextRequest) {
 
         if (!email || !password || !fullName) {
             return NextResponse.json({ error: 'Email, password, and full name are required' }, { status: 400 });
+        }
+
+        const passwordCheck = strongPasswordSchema.safeParse(password);
+        if (!passwordCheck.success) {
+            return NextResponse.json(
+                { error: passwordCheck.error.issues[0]?.message || 'Password does not meet requirements' },
+                { status: 400 }
+            );
         }
 
         // Create Supabase client with proper server-side auth

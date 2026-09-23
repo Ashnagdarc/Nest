@@ -27,10 +27,10 @@ export function UserHeader() {
                             Browse Gears
                         </Link>
                         <Link
-                            href="/user/checkout"
+                            href="/user/history"
                             className="transition-colors hover:text-foreground/80"
                         >
-                            Checkout History
+                            History
                         </Link>
                     </nav>
                 </div>

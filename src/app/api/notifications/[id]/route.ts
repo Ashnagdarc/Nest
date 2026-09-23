@@ -29,11 +29,11 @@ export async function PUT(
         // Check if user can update this notification (must be the owner or admin)
         const { data: profile } = await adminSupabase
             .from('profiles')
-            .select('role')
+            .select('role, status')
             .eq('id', user.id)
             .single();
 
-        const isAdmin = profile?.role === 'Admin';
+        const isAdmin = profile?.role === 'Admin' && profile?.status === 'Active';
         const isOwner = notification.user_id === user.id;
 
         if (!isAdmin && !isOwner) {
@@ -86,11 +86,11 @@ export async function DELETE(
         // Check permissions: owner or admin profile
         const { data: profile } = await adminSupabase
             .from('profiles')
-            .select('role')
+            .select('role, status')
             .eq('id', user.id)
             .single();
 
-        const isAdmin = profile?.role === 'Admin';
+        const isAdmin = profile?.role === 'Admin' && profile?.status === 'Active';
         const isOwner = notification.user_id === user.id;
 
         if (!isAdmin && !isOwner) {

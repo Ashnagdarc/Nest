@@ -4,6 +4,7 @@ import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingApprovalEmail } from '@/lib/email';
 import { transitionBooking } from '@/lib/bookings-v2/service';
 import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
+import { findApprovedSlotConflict } from '@/lib/car-bookings/overlap';
 import { randomUUID } from 'crypto';
 import { sitePath } from '@/lib/site-url';
 
@@ -38,6 +39,8 @@ export async function POST(request: NextRequest) {
         }
 
         const admin = await createSupabaseServerClient(true);
+        // Cast at boundary: SupabaseClient vs structural SupabaseAdminLike in car-status-sync
+        const statusAdmin = admin as unknown as Parameters<typeof getBookedCarId>[0];
         const { bookingId } = await request.json();
         if (!bookingId) return fail(400, 'bookingId is required', 'Missing booking reference.', 'BOOKING_ID_REQUIRED');
 
@@ -45,9 +48,9 @@ export async function POST(request: NextRequest) {
         if (selErr || !booking) return fail(404, selErr?.message || 'Not found', 'Booking not found.', 'CAR_BOOKING_NOT_FOUND');
         if (booking.status === 'Approved') {
             try {
-                const carId = await getBookedCarId(admin, bookingId);
+                const carId = await getBookedCarId(statusAdmin, bookingId);
                 if (carId) {
-                    await setCarStatus(admin, carId, 'In Service');
+                    await setCarStatus(statusAdmin, carId, 'In Service');
                 }
             } catch (syncError) {
                 console.warn('[Car Booking Approve] Failed to sync already-approved car status:', syncError);
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
             return fail(400, 'Assign a car before approval.', 'Assign a vehicle before approval.', 'CAR_ASSIGNMENT_REQUIRED');
         }
 
-        // Prevent approval if car is already assigned/checked out by another approved booking
+        // Exclusivity is date/slot based (not a global lock while any Approved booking exists).
         const { data: assignments, error: aErr } = await admin
             .from('car_assignment')
             .select('booking_id, car_id')
@@ -91,19 +94,13 @@ export async function POST(request: NextRequest) {
 
             if (relatedErr) return fail(400, relatedErr.message, 'Could not verify booking conflicts.', 'CAR_CONFLICT_CHECK_FAILED');
 
-            const approvedConflicts = (relatedBookings || []).filter(b => b.status === 'Approved');
-
-            // Check for exact slot conflict first for clearer error messaging
-            const slotConflict = approvedConflicts.find(
-                (b) => b.date_of_use === booking.date_of_use && b.time_slot === booking.time_slot
-            );
+            const slotConflict = findApprovedSlotConflict(relatedBookings || [], {
+                id: bookingId,
+                date_of_use: booking.date_of_use,
+                time_slot: booking.time_slot,
+            });
             if (slotConflict) {
                 return fail(409, 'Car is already assigned and approved for this specific time slot.', 'Car is already assigned for this time slot.', 'CAR_SLOT_CONFLICT');
-            }
-
-            const checkedOut = approvedConflicts[0];
-            if (checkedOut) {
-                return fail(409, 'Vehicle is currently checked out by another user. It must be returned (marked as Completed) before this booking can be approved.', 'Vehicle is currently checked out and unavailable.', 'CAR_ALREADY_CHECKED_OUT');
             }
         }
 
@@ -120,7 +117,7 @@ export async function POST(request: NextRequest) {
 
         try {
             if (assignment?.car_id) {
-                await setCarStatus(admin, assignment.car_id, 'In Service');
+                await setCarStatus(statusAdmin, assignment.car_id, 'In Service');
             }
         } catch (syncError) {
             console.warn('[Car Booking Approve] Failed to mark assigned car in service:', syncError);

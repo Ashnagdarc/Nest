@@ -1,15 +1,24 @@
 import { createSupabaseApiClient } from '@/lib/supabase/api-client';
 import { NextRequest, NextResponse } from 'next/server';
-import { requireActiveAdminRouteUser } from '@/lib/api-auth';
+import { getRouteAuthContext, requireActiveAdminRouteUser } from '@/lib/api-auth';
 
 export async function GET(request: NextRequest) {
     try {
+        const authContext = await getRouteAuthContext();
+        if ('errorResponse' in authContext) {
+            return NextResponse.json(
+                { data: null, error: (await authContext.errorResponse.json()).error },
+                { status: authContext.errorResponse.status }
+            );
+        }
 
-
-        let supabase;
+        // Active admins may use service-role for full inventory; others stay on RLS-scoped auth client.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let supabase: any;
         try {
-            supabase = createSupabaseApiClient(true);
-
+            supabase = authContext.isActiveAdmin
+                ? createSupabaseApiClient(true)
+                : authContext.authSupabase;
         } catch (error) {
             console.error('[Gears API] Failed to create Supabase client:', error);
             return NextResponse.json({ data: null, error: 'Failed to create database connection' }, { status: 500 });
@@ -31,53 +40,52 @@ export async function GET(request: NextRequest) {
         const limit = pageSize;
 
         // Helper to build query with search (now only name and serial_number)
-        type SearchQueryable<T> = T & { or: (filters: string) => T };
-        type ExclusionQueryable<T> = T & {
-            neq: (column: string, value: string) => T;
-            not: (column: string, operator: string, value: string) => T;
+        type SearchQueryable = { or: (filters: string) => SearchQueryable };
+        type ExclusionQueryable = {
+            neq: (column: string, value: string) => ExclusionQueryable;
+            not: (column: string, operator: string, value: string) => ExclusionQueryable;
+        };
+        type StatusQueryable = {
+            in: (column: string, values: string[]) => StatusQueryable;
+            eq: (column: string, value: string) => StatusQueryable;
+            gt: (column: string, value: number) => StatusQueryable;
         };
 
-        function applySearch<T>(query: SearchQueryable<T>, search: string | null): SearchQueryable<T> {
+        function applySearch<T extends SearchQueryable>(query: T, search: string | null): T {
             if (search && search.trim() !== '') {
                 const searchTerm = `%${search.trim()}%`;
-                return query.or(`name.ilike.${searchTerm},serial_number.ilike.${searchTerm}`);
+                return query.or(`name.ilike.${searchTerm},serial_number.ilike.${searchTerm}`) as T;
             }
             return query;
         }
 
-        const applyExclusions = <T,>(query: ExclusionQueryable<T>): ExclusionQueryable<T> => {
+        const applyExclusions = <T extends ExclusionQueryable>(query: T): T => {
             if (excludeCategories) {
                 const list = excludeCategories.split(',').map(s => s.trim()).filter(Boolean);
                 if (list.length === 1) {
-                    return query.neq('category', list[0]);
+                    return query.neq('category', list[0]) as T;
                 }
                 const tuple = `(${list.join(',')})`;
-                return query.not('category', 'in', tuple);
+                return query.not('category', 'in', tuple) as T;
             }
             return query;
         };
 
-        type StatusQueryable<T> = T & {
-            in: (column: string, values: string[]) => T;
-            eq: (column: string, value: string) => T;
-            gt: (column: string, value: number) => T;
-        };
-
         /** Apply status filter consistently to both count and data queries. */
-        const applyStatusFilter = <T,>(query: StatusQueryable<T>): StatusQueryable<T> => {
+        const applyStatusFilter = <T extends StatusQueryable>(query: T): T => {
             if (!status || status === 'all') {
                 return query;
             }
             if (status === 'Available') {
-                return query.in('status', ['Available', 'Partially Available']).gt('available_quantity', 0);
+                return query.in('status', ['Available', 'Partially Available']).gt('available_quantity', 0) as T;
             }
-            return query.eq('status', status);
+            return query.eq('status', status) as T;
         };
 
         /** Exclude soft-deleted inventory from default listings and stats. */
-        const applyActiveInventoryFilter = <T,>(query: ExclusionQueryable<T>): ExclusionQueryable<T> => {
+        const applyActiveInventoryFilter = <T extends ExclusionQueryable>(query: T): T => {
             if (!status || status === 'all') {
-                return query.neq('status', 'Deleted');
+                return query.neq('status', 'Deleted') as T;
             }
             return query;
         };

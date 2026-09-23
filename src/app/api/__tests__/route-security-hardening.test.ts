@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { NextResponse } from 'next/server';
 import { PUT as updateGear } from '@/app/api/gears/[id]/route';
+import { GET as listGears } from '@/app/api/gears/route';
+import { GET as inventorySummary } from '@/app/api/gears/inventory-summary/route';
 import { POST as sendPush } from '@/app/api/push/send/route';
 import { POST as sendGoogleChat } from '@/app/api/notifications/google-chat/route';
 import { GET as getWeeklyReport } from '@/app/api/reports/weekly/route';
 import { POST as writeLog } from '@/app/api/log/route';
+import { GET as goodMorningGet } from '@/app/api/notifications/good-morning/route';
+import { hasValidCronSecret } from '@/lib/api-auth';
 
 const mockRequireActiveAdminRouteUser = jest.fn<() => Promise<unknown>>();
 const mockRequireAuthenticatedRouteUser = jest.fn<() => Promise<unknown>>();
@@ -16,11 +20,18 @@ jest.mock('@/lib/api-auth', () => ({
   requireActiveAdminRouteUser: () => mockRequireActiveAdminRouteUser(),
   requireAuthenticatedRouteUser: () => mockRequireAuthenticatedRouteUser(),
   getRouteAuthContext: () => mockGetRouteAuthContext(),
+  hasValidCronSecret: jest.requireActual<typeof import('@/lib/api-auth')>('@/lib/api-auth').hasValidCronSecret,
 }));
 
 jest.mock('@/lib/supabase/server', () => ({
   createSupabaseAdminClient: () => mockCreateSupabaseAdminClient(),
   createSupabaseServerClient: jest.fn(),
+}));
+
+jest.mock('@/lib/supabase/api-client', () => ({
+  createSupabaseApiClient: jest.fn(() => {
+    throw new Error('should not reach service-role client without auth');
+  }),
 }));
 
 jest.mock('@/utils/googleChat', () => ({
@@ -34,6 +45,7 @@ jest.mock('@/utils/googleChat', () => ({
 describe('Route security hardening', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    delete process.env.CRON_SECRET;
   });
 
   it('blocks unauthenticated gear updates', async () => {
@@ -51,6 +63,25 @@ describe('Route security hardening', () => {
       params: Promise.resolve({ id: 'gear-1' }),
     });
 
+    expect(res.status).toBe(401);
+  });
+
+  it('blocks unauthenticated gear list access', async () => {
+    mockGetRouteAuthContext.mockResolvedValueOnce({
+      errorResponse: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    });
+
+    const req = new Request('http://localhost/api/gears', { method: 'GET' });
+    const res = await listGears(req as Parameters<typeof listGears>[0]);
+    expect(res.status).toBe(401);
+  });
+
+  it('blocks unauthenticated gear inventory summary', async () => {
+    mockRequireActiveAdminRouteUser.mockResolvedValueOnce({
+      errorResponse: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    });
+
+    const res = await inventorySummary();
     expect(res.status).toBe(401);
   });
 
@@ -145,5 +176,37 @@ describe('Route security hardening', () => {
 
     const res = await writeLog(req);
     expect(res.status).toBe(401);
+  });
+
+  it('cron auth fails closed when CRON_SECRET is missing', () => {
+    const req = new Request('http://localhost/api/internal/auto-checkin-cars', {
+      method: 'GET',
+      headers: { 'x-vercel-cron': '1' },
+    });
+    expect(hasValidCronSecret(req as Parameters<typeof hasValidCronSecret>[0])).toBe(false);
+  });
+
+  it('cron auth rejects x-vercel-cron without Bearer secret', () => {
+    process.env.CRON_SECRET = 'test-cron-secret';
+    const req = new Request('http://localhost/api/internal/auto-checkin-cars', {
+      method: 'GET',
+      headers: { 'x-vercel-cron': '1' },
+    });
+    expect(hasValidCronSecret(req as Parameters<typeof hasValidCronSecret>[0])).toBe(false);
+  });
+
+  it('cron auth rejects missing secret on good-morning', async () => {
+    const req = new Request('http://localhost/api/notifications/good-morning', { method: 'GET' });
+    const res = await goodMorningGet(req as Parameters<typeof goodMorningGet>[0]);
+    expect(res.status).toBe(401);
+  });
+
+  it('cron auth accepts valid Bearer secret', () => {
+    process.env.CRON_SECRET = 'test-cron-secret';
+    const req = new Request('http://localhost/api/notifications/good-morning', {
+      method: 'GET',
+      headers: { authorization: 'Bearer test-cron-secret' },
+    });
+    expect(hasValidCronSecret(req as Parameters<typeof hasValidCronSecret>[0])).toBe(true);
   });
 });

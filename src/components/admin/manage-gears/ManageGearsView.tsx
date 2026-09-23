@@ -19,7 +19,7 @@ export function ManageGearsView() {
             className="space-y-6 pb-8"
         >
             <GearInventoryHeader
-                canManage={state.profile?.role === "Admin"}
+                canManage={state.profile?.role === "Admin" && state.profile?.status === "Active"}
                 onExport={state.handleExport}
                 onImportClick={state.handleImportDialogOpen}
                 onAddClick={() => state.setIsAddModalOpen(true)}

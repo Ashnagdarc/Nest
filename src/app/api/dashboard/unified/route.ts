@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         // Get user profile to determine role
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, status')
             .eq('id', user.id)
             .single();
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Failed to get user profile' }, { status: 500 });
         }
 
-        const isAdmin = profile?.role === 'Admin';
+        const isAdmin = profile?.role === 'Admin' && profile?.status === 'Active';
 
         // Fetch all dashboard data in parallel using existing tables plus cars
         const [

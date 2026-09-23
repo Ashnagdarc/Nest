@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingRequestEmail } from '@/lib/email';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
+import { findApprovedSlotConflict } from '@/lib/car-bookings/overlap';
 import { randomUUID } from 'crypto';
 import { sitePath } from '@/lib/site-url';
 
@@ -159,9 +160,14 @@ export async function POST(request: NextRequest) {
                     return fail(400, relatedBookingsError.message, 'Could not verify selected vehicle availability.', 'CAR_BOOKING_PREFERRED_CAR_CHECK_FAILED');
                 }
 
-                const blocked = (relatedBookings || []).find((b) => b.status === 'Approved');
+                // Exclusivity is date/slot based (not a global lock while any Approved booking exists).
+                const blocked = findApprovedSlotConflict(relatedBookings || [], {
+                    id: data.id,
+                    date_of_use: dateOfUse,
+                    time_slot: timeSlot,
+                });
                 if (blocked) {
-                    return fail(409, 'Preferred car currently checked out', 'Selected vehicle is currently checked out by another approved booking.', 'CAR_BOOKING_PREFERRED_CAR_LOCKED');
+                    return fail(409, 'Preferred car already booked for this time slot', 'Selected vehicle is already booked for this date and time slot.', 'CAR_BOOKING_PREFERRED_CAR_SLOT_CONFLICT');
                 }
             }
 
@@ -177,6 +183,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Dual-run synchronization: keep v2 aggregate in lock-step with legacy row creation.
+        // On failure, compensate by deleting the legacy row (mirrors gear requests path).
         try {
             if (requesterId && data?.id) {
                 await createBookingAggregate({
@@ -196,7 +203,24 @@ export async function POST(request: NextRequest) {
                 });
             }
         } catch (syncError) {
-            console.error('[Car Booking] Failed to sync booking to v2 aggregate:', syncError);
+            console.error('[Car Booking] Failed to create v2 booking aggregate. Rolling back legacy booking.', syncError);
+            if (data?.id) {
+                const { error: assignmentDeleteError } = await supabase
+                    .from('car_assignment')
+                    .delete()
+                    .eq('booking_id', data.id);
+                if (assignmentDeleteError) {
+                    console.error('[Car Booking] Failed to rollback car_assignment:', assignmentDeleteError, 'Booking ID:', data.id);
+                }
+                const { error: deleteError } = await supabase
+                    .from('car_bookings')
+                    .delete()
+                    .eq('id', data.id);
+                if (deleteError) {
+                    console.error('[Car Booking] Failed to rollback car_bookings:', deleteError, 'Booking ID:', data.id);
+                }
+            }
+            return fail(500, 'Failed to initialize booking lifecycle.', 'We could not complete your booking right now. Please try again.', 'BOOKING_V2_CREATE_FAILED');
         }
 
         // Create in-app notification for user

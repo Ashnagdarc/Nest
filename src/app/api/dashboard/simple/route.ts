@@ -15,7 +15,7 @@ export async function GET() {
         // Get user profile to check role
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, status')
             .eq('id', user.id)
             .single();
 
@@ -23,7 +23,7 @@ export async function GET() {
             return NextResponse.json({ error: 'Failed to get user profile' }, { status: 500 });
         }
 
-        const isAdmin = profile?.role === 'Admin';
+        const isAdmin = profile?.role === 'Admin' && profile?.status === 'Active';
 
         // Get basic data with proper RLS
         const { data: gears, error: gearsError } = await supabase

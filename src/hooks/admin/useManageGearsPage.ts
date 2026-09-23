@@ -37,7 +37,7 @@ export function useManageGearsPage() {
   const [selectedGear, setSelectedGear] = useState<Gear | null>(null);
   const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>([]);
   const [loadingMaintenance, setLoadingMaintenance] = useState(false);
-  const [profile, setProfile] = useState<{ role: string } | null>(null);
+  const [profile, setProfile] = useState<{ role: string; status: string | null } | null>(null);
   const [isGearDetailsOpen, setIsGearDetailsOpen] = useState(false);
   const [showSqlDialog, setShowSqlDialog] = useState(false);
   const [sqlToRun, setSqlToRun] = useState('');
@@ -104,7 +104,7 @@ export function useManageGearsPage() {
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, status')
           .eq('id', user.id)
           .single();
         setProfile(profile);
@@ -165,16 +165,19 @@ export function useManageGearsPage() {
         });
         return;
       }
-      // Ensure user has Admin/SuperAdmin role before proceeding (matches RLS)
+      // Ensure user is an Active Admin/SuperAdmin before proceeding (matches RLS)
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, status')
         .eq('id', user.id)
         .single();
-      if (!profile || (profile.role !== 'Admin' && profile.role !== 'SuperAdmin')) {
+      const isActivePrivileged =
+        profile?.status === 'Active' &&
+        (profile.role === 'Admin' || profile.role === 'SuperAdmin');
+      if (!isActivePrivileged) {
         toast({
           title: 'Permission denied',
-          description: 'Only Admins can add gear.',
+          description: 'Only active Admins can add gear.',
           variant: 'destructive',
         });
         return;

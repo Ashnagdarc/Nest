@@ -20,7 +20,7 @@ export function isActiveAdminProfile(profile: ProfileRole | null | undefined): b
 export function getDashboardPathForProfile(
     profile: ProfileRole | null | undefined,
 ): '/admin/dashboard' | '/user/dashboard' {
-    return profile?.role === 'Admin' ? '/admin/dashboard' : '/user/dashboard';
+    return isActiveAdminProfile(profile) ? '/admin/dashboard' : '/user/dashboard';
 }
 
 /** Map a user-portal path to the closest admin equivalent, if any. */

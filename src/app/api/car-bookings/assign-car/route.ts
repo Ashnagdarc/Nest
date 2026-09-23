@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getBookedCarId, setCarStatus } from '@/lib/car-bookings/car-status-sync';
+import { getBookedCarId, releaseCarIfNoOtherApproved, setCarStatus } from '@/lib/car-bookings/car-status-sync';
+import { findApprovedSlotConflict } from '@/lib/car-bookings/overlap';
 
 function isCarConflictError(message?: string | null) {
     const msg = (message || '').toLowerCase();
@@ -27,6 +28,8 @@ export async function POST(request: NextRequest) {
         }
 
         const admin = await createSupabaseServerClient(true);
+        // Cast at boundary: SupabaseClient vs structural SupabaseAdminLike in car-status-sync
+        const statusAdmin = admin as unknown as Parameters<typeof getBookedCarId>[0];
         const { bookingId, carId } = await request.json();
         if (!bookingId || !carId) return NextResponse.json({ success: false, error: 'bookingId and carId are required' }, { status: 400 });
 
@@ -50,12 +53,12 @@ export async function POST(request: NextRequest) {
 
         let previousCarId: string | null = null;
         try {
-            previousCarId = await getBookedCarId(admin, bookingId);
+            previousCarId = await getBookedCarId(statusAdmin, bookingId);
         } catch (syncError) {
             console.warn('[Car Booking Assign] Failed to read previous assigned car:', syncError);
         }
 
-        // Prevent double assignment and hard-lock cars with any active approved booking
+        // Exclusivity is date/slot based (not a global lock while any Approved booking exists).
         const { data: assignments, error: aErr } = await admin
             .from('car_assignment')
             .select('booking_id, car_id')
@@ -71,20 +74,13 @@ export async function POST(request: NextRequest) {
                 .neq('id', bookingId);
             if (relatedErr) return NextResponse.json({ success: false, error: relatedErr.message }, { status: 400 });
 
-            const approvedConflicts = (relatedBookings || []).filter(b => b.status === 'Approved');
-            const slotConflict = approvedConflicts.find(
-                (b) => b.date_of_use === booking.date_of_use && b.time_slot === booking.time_slot
-            );
+            const slotConflict = findApprovedSlotConflict(relatedBookings || [], {
+                id: bookingId,
+                date_of_use: booking.date_of_use,
+                time_slot: booking.time_slot,
+            });
             if (slotConflict) {
                 return NextResponse.json({ success: false, error: 'Car is already assigned to another approved booking for this date and time slot.' }, { status: 409 });
-            }
-
-            const activeLock = approvedConflicts[0];
-            if (activeLock) {
-                return NextResponse.json({
-                    success: false,
-                    error: 'Vehicle is currently checked out by another user. It must be returned (marked as Completed) before it can be assigned to a new booking.'
-                }, { status: 409 });
             }
         }
 
@@ -100,9 +96,9 @@ export async function POST(request: NextRequest) {
         if (booking.status === 'Approved') {
             try {
                 if (previousCarId && previousCarId !== carId) {
-                    await setCarStatus(admin, previousCarId, 'Available');
+                    await releaseCarIfNoOtherApproved(statusAdmin, previousCarId, bookingId);
                 }
-                await setCarStatus(admin, carId, 'In Service');
+                await setCarStatus(statusAdmin, carId, 'In Service');
             } catch (syncError) {
                 console.warn('[Car Booking Assign] Failed to sync car statuses after assignment:', syncError);
             }

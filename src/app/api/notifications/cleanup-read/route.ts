@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { hasValidCronSecret } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  const isBearerAuthorized = !!process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
-  const isVercelCron = req.headers.has('x-vercel-cron');
-
-  if (!isBearerAuthorized && !isVercelCron) {
+  if (!hasValidCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

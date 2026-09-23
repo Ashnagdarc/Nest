@@ -147,6 +147,21 @@ describe('Car Booking: Integrity & Isolation', () => {
       expect(booking1.car_id).toBe(booking2.car_id);
       expect(booking1.user_id).not.toBe(booking2.user_id);
     });
+
+    it('allows same car for non-overlapping Approved date/slots', () => {
+      const related = [
+        { id: 'b1', status: 'Approved', date_of_use: '2026-09-22', time_slot: 'Morning' },
+        { id: 'b2', status: 'Approved', date_of_use: '2026-09-23', time_slot: 'Afternoon' },
+      ];
+      const target = { id: 'b3', date_of_use: '2026-09-23', time_slot: 'Morning' };
+      const slotConflicts = related.filter(
+        (b) =>
+          b.status === 'Approved' &&
+          b.date_of_use === target.date_of_use &&
+          b.time_slot === target.time_slot,
+      );
+      expect(slotConflicts).toHaveLength(0);
+    });
   });
 });
 

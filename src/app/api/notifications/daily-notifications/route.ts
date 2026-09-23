@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { normalizeNotificationInsert, normalizeNotificationType } from '@/lib/notification-type';
 import { sendOverdueReminderEmail } from '@/lib/email';
+import { hasValidCronSecret } from '@/lib/api-auth';
 
 const DUE_SOON_TYPE = 'Due Soon';
 const DUE_SOON_SUBTYPE = 'due_soon';
@@ -38,8 +39,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    // Secure with CRON_SECRET
-    if (process.env.CRON_SECRET && req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!hasValidCronSecret(req)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -324,7 +324,11 @@ async function handlePendingRequests() {
         // Since notifications are user-based, we'll check against a system user or the first admin.
 
         let sent = 0;
-        const { data: admins } = await supabase.from('profiles').select('id, email').eq('role', 'Admin');
+        const { data: admins } = await supabase
+            .from('profiles')
+            .select('id, email')
+            .eq('role', 'Admin')
+            .eq('status', 'Active');
         if (!admins || admins.length === 0) return { message: 'No admins found.', sent: 0 };
 
         for (const req of pendingRequests) {
