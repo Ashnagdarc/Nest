@@ -788,7 +788,25 @@ function RequestGearContent() {
           </header>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <form
+              onSubmit={form.handleSubmit(onSubmit, (errors) => {
+                const message =
+                  errors.selectedGears?.message ||
+                  errors.reason?.message ||
+                  errors.otherReason?.message ||
+                  errors.bookForUserId?.message ||
+                  errors.destination?.message ||
+                  errors.duration?.message ||
+                  errors.conditionConfirmed?.message ||
+                  "Please complete the required fields before submitting.";
+                toast({
+                  title: "Request not submitted",
+                  description: message,
+                  variant: "destructive",
+                });
+              })}
+              className="space-y-8"
+            >
               <Card className="border-border/50">
                 <CardHeader className="pb-4">
                   <CardTitle className="text-base font-semibold">

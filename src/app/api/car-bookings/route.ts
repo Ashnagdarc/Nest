@@ -206,14 +206,16 @@ export async function POST(request: NextRequest) {
         } catch (syncError) {
             console.error('[Car Booking] Failed to create v2 booking aggregate. Rolling back legacy booking.', syncError);
             if (data?.id) {
-                const { error: assignmentDeleteError } = await supabase
+                // Requesters can insert their own booking, but RLS does not let them delete it.
+                const adminSupabase = await createSupabaseServerClient(true);
+                const { error: assignmentDeleteError } = await adminSupabase
                     .from('car_assignment')
                     .delete()
                     .eq('booking_id', data.id);
                 if (assignmentDeleteError) {
                     console.error('[Car Booking] Failed to rollback car_assignment:', assignmentDeleteError, 'Booking ID:', data.id);
                 }
-                const { error: deleteError } = await supabase
+                const { error: deleteError } = await adminSupabase
                     .from('car_bookings')
                     .delete()
                     .eq('id', data.id);
