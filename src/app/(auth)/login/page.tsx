@@ -35,7 +35,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
     return (
-        <Suspense fallback={<AuthShell><AuthCard title="Welcome back" description="Loading sign in…" /></AuthShell>}>
+        <Suspense fallback={<AuthShell><AuthCard title="Sign in" /></AuthShell>}>
             <LoginPageContent />
         </Suspense>
     );
@@ -198,13 +198,12 @@ function LoginPageContent() {
     return (
         <AuthShell>
             <AuthCard
-                title="Welcome back"
-                description="Sign in to access your Nest dashboard"
+                title="Sign in"
                 footer={
                     <>
-                        Don&apos;t have an account?{" "}
+                        New to Nest?{" "}
                         <Link href="/signup" className="font-medium text-primary hover:underline">
-                            Create one
+                            Create account
                         </Link>
                     </>
                 }
@@ -246,7 +245,7 @@ function LoginPageContent() {
                         <div className="flex justify-end">
                             <Link
                                 href="/forgot-password"
-                                className="text-sm text-muted-foreground transition-colors hover:text-primary"
+                                className="text-sm font-medium text-primary hover:underline"
                             >
                                 Forgot password?
                             </Link>

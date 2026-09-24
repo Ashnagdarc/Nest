@@ -82,7 +82,7 @@ function PasswordFieldControl({
                 <button
                     type="button"
                     aria-label={show ? "Hide password" : "Show password"}
-                    className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+                    className="absolute right-1 top-1/2 flex h-6 min-h-6 w-6 min-w-6 -translate-y-1/2 items-center justify-center rounded-md text-neutral-300 transition-colors hover:text-white"
                     onClick={() => setShow((current) => !current)}
                 >
                     {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -97,12 +97,12 @@ function PasswordFieldControl({
                                 key={index}
                                 className={cn(
                                     "h-1 flex-1 rounded-full transition-colors",
-                                    index < score ? "bg-primary" : "bg-muted"
+                                    index < score ? "bg-primary" : "bg-white/25"
                                 )}
                             />
                         ))}
                     </div>
-                    <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
+                    <ul className="grid grid-cols-1 gap-1 text-xs">
                         {REQUIREMENTS.map((requirement) => {
                             const met = checks[requirement.key];
                             return (
@@ -110,7 +110,7 @@ function PasswordFieldControl({
                                     key={requirement.key}
                                     className={cn(
                                         "flex items-center gap-1.5",
-                                        met ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"
+                                        met ? "text-emerald-400" : "text-neutral-400"
                                     )}
                                 >
                                     {met ? (

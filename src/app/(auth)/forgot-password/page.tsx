@@ -74,7 +74,7 @@ export default function ForgotPasswordPage() {
                 }
             >
                 {emailSent ? (
-                    <div className="space-y-4 rounded-lg border border-border/60 bg-muted/30 p-4 text-center">
+                    <div className="space-y-4 rounded-lg border border-neutral-500 p-4 text-center">
                         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
                             <MailCheck className="h-6 w-6" />
                         </div>

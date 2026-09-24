@@ -138,10 +138,9 @@ export default function SignupPage() {
     };
 
     return (
-        <AuthShell backHref="/login" backLabel="Back to sign in">
+        <AuthShell>
             <AuthCard
-                title="Create your account"
-                description="Join Nest to request gear, book transport, and stay updated"
+                title="Create account"
                 footer={
                     <>
                         Already have an account?{" "}
@@ -186,42 +185,6 @@ export default function SignupPage() {
                             )}
                         />
 
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <FormField
-                                control={form.control}
-                                name="phone"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Phone (optional)</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                                type="tel"
-                                                autoComplete="tel"
-                                                placeholder="(555) 555-5555"
-                                                value={field.value || ""}
-                                                onChange={(event) => field.onChange(formatPhone(event.target.value))}
-                                                onBlur={(event) => field.onChange(formatPhone(event.target.value))}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="department"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Department (optional)</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Production" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        </div>
-
                         <FormField
                             control={form.control}
                             name="password"
@@ -251,34 +214,70 @@ export default function SignupPage() {
                             )}
                         />
 
-                        <FormField
-                            control={form.control}
-                            name="profilePicture"
-                            render={({ field: { onChange, onBlur, name, ref } }) => (
-                                <FormItem>
-                                    <FormLabel>Profile photo (optional)</FormLabel>
-                                    <FormControl>
-                                        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground">
-                                            <Upload className="h-4 w-4" />
-                                            <span>Upload an image</span>
+                        <fieldset className="space-y-4">
+                            <legend className="text-sm text-muted-foreground">Optional</legend>
+                            <FormField
+                                control={form.control}
+                                name="phone"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Phone</FormLabel>
+                                        <FormControl>
                                             <Input
-                                                type="file"
-                                                accept="image/*"
-                                                className="hidden"
-                                                name={name}
-                                                ref={ref}
-                                                onBlur={onBlur}
-                                                onChange={(event) => {
-                                                    const file = event.target.files?.[0];
-                                                    onChange(file);
-                                                }}
+                                                type="tel"
+                                                autoComplete="tel"
+                                                placeholder="(555) 555-5555"
+                                                value={field.value || ""}
+                                                onChange={(event) => field.onChange(formatPhone(event.target.value))}
+                                                onBlur={(event) => field.onChange(formatPhone(event.target.value))}
                                             />
-                                        </label>
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="department"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Department</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Production" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="profilePicture"
+                                render={({ field: { onChange, onBlur, name, ref } }) => (
+                                    <FormItem>
+                                        <FormLabel>Profile photo</FormLabel>
+                                        <FormControl>
+                                            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-500 px-4 py-3 text-sm text-neutral-300 transition-colors hover:border-primary hover:text-foreground">
+                                                <Upload className="h-4 w-4" />
+                                                <span>Upload an image</span>
+                                                <Input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    name={name}
+                                                    ref={ref}
+                                                    onBlur={onBlur}
+                                                    onChange={(event) => {
+                                                        const file = event.target.files?.[0];
+                                                        onChange(file);
+                                                    }}
+                                                />
+                                            </label>
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </fieldset>
 
                         <FormField
                             control={form.control}
@@ -290,10 +289,10 @@ export default function SignupPage() {
                                     </FormControl>
                                     <div className="space-y-1 leading-none">
                                         <FormLabel className="text-sm font-normal">
-                                            I accept the terms of use for internal Eden Oasis use
+                                            I accept the terms of use.
                                         </FormLabel>
                                         <Link href="/terms" className="text-sm font-medium text-primary underline underline-offset-2">
-                                            Read the terms of use
+                                            Terms of use
                                         </Link>
                                         <FormMessage />
                                     </div>

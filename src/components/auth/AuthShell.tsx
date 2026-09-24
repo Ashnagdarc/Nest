@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ReactNode } from "react";
-import { ArrowLeft, Car, Package, ShieldCheck } from "lucide-react";
 import { ThemeLogo } from "@/components/ui/theme-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -12,71 +11,30 @@ interface AuthShellProps {
     backLabel?: string;
 }
 
-const highlights = [
-    { icon: Package, text: "Request and track production gear" },
-    { icon: Car, text: "Book company cars for production trips" },
-    { icon: ShieldCheck, text: "Secure access for Eden Oasis teams" },
-];
-
-export function AuthShell({
-    children,
-    backHref = "/",
-    backLabel = "Back to Home",
-}: AuthShellProps) {
+export function AuthShell({ children, backHref, backLabel }: AuthShellProps) {
     return (
-        <div className="flex min-h-screen">
-            <aside className="relative hidden overflow-hidden bg-primary text-primary-foreground lg:flex lg:w-[42%] xl:w-[38%]">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
-                <div className="relative flex w-full flex-col justify-between p-10 xl:p-12">
-                    <div className="flex items-center gap-3">
-                        <ThemeLogo width={40} height={40} className="h-10 w-10 rounded-lg bg-white/10 p-1" />
-                        <div>
-                            <p className="text-lg font-semibold">Nest</p>
-                            <p className="text-sm text-primary-foreground/80">by Eden Oasis</p>
-                        </div>
-                    </div>
-
-                    <div className="space-y-6">
-                        <div className="space-y-2">
-                            <h1 className="text-3xl font-bold tracking-tight xl:text-4xl">
-                                Your production hub
-                            </h1>
-                            <p className="max-w-md text-sm leading-relaxed text-primary-foreground/85 xl:text-base">
-                                Manage equipment, bookings, and team updates in one place.
-                            </p>
-                        </div>
-                        <ul className="space-y-3">
-                            {highlights.map(({ icon: Icon, text }) => (
-                                <li key={text} className="flex items-center gap-3 text-sm text-primary-foreground/90">
-                                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
-                                        <Icon className="h-4 w-4" />
-                                    </span>
-                                    {text}
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-
-                    <p className="text-xs text-primary-foreground/70">
-                        © {new Date().getFullYear()} Eden Oasis. Internal use only.
-                    </p>
-                </div>
-            </aside>
-
-            <main className="flex flex-1 flex-col">
-                <div className="flex items-center justify-between px-4 py-4 sm:px-8">
-                    <Link
-                        href={backHref}
-                        className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                        <ArrowLeft className="h-4 w-4" />
-                        {backLabel}
-                    </Link>
+        <div className="dark flex min-h-screen flex-col bg-background text-foreground [color-scheme:dark]">
+            <header className="flex items-center justify-between px-4 py-4">
+                <Link href="/" className="inline-flex items-center gap-2.5 rounded-md">
+                    <ThemeLogo width={32} height={32} className="h-8 w-8" priority />
+                    <span className="text-sm font-semibold tracking-tight">Nest</span>
+                </Link>
+                <div className="flex items-center gap-1">
+                    {backHref && backLabel ? (
+                        <Link
+                            href={backHref}
+                            className="rounded-md px-2 text-sm text-muted-foreground hover:text-foreground"
+                        >
+                            {backLabel}
+                        </Link>
+                    ) : null}
                     <ThemeToggle />
                 </div>
+            </header>
 
-                <div className="flex flex-1 items-center justify-center px-4 pb-8 sm:px-8">
-                    <div className="w-full max-w-md">{children}</div>
+            <main className="flex flex-1 flex-col px-4 pb-10">
+                <div className="mx-auto my-auto w-full max-w-[400px] py-4 [&_input]:border-neutral-500">
+                    {children}
                 </div>
             </main>
         </div>

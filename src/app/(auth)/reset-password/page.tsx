@@ -109,11 +109,11 @@ export default function ResetPasswordPage() {
                 }
             >
                 {!sessionReady && !sessionChecked ? (
-                    <div className="space-y-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                    <div className="space-y-3 rounded-lg border border-dashed border-neutral-500 p-4 text-sm text-muted-foreground">
                         <p>Preparing your secure reset session…</p>
                     </div>
                 ) : !sessionReady ? (
-                    <div className="space-y-3 rounded-lg border border-dashed p-4 text-sm">
+                    <div className="space-y-3 rounded-lg border border-dashed border-neutral-500 p-4 text-sm">
                         <p className="font-medium text-foreground">This reset link is missing or has expired.</p>
                         <p className="text-muted-foreground">
                             Open the latest link from your email, or request a new one. Reset links only work for a
