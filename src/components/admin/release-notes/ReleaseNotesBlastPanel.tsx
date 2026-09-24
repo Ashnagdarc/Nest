@@ -214,7 +214,7 @@ export function ReleaseNotesBlastPanel() {
 
     return (
         <>
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(380px,1fr)] lg:items-start 2xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,1fr)]">
+            <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start">
                 {/* —— Left: compose —— */}
                 <div className="space-y-4">
                     <div className="grid gap-3 sm:grid-cols-3">

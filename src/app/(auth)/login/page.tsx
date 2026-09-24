@@ -24,6 +24,7 @@ import {
     type BlockedAccountStatus,
 } from "@/lib/auth/account-status";
 import { getDashboardPathForProfile } from "@/lib/auth/role-routing";
+import { getSafeReturnPath } from "@/lib/auth/return-path";
 
 const loginSchema = z.object({
     email: z.string().email({ message: "Enter a valid email address." }),
@@ -81,7 +82,8 @@ function LoginPageContent() {
 
             if (!profile) return;
 
-            window.location.href = getDashboardPathForProfile(profile);
+            window.location.href =
+                getSafeReturnPath(searchParams.get("next"), profile) ?? getDashboardPathForProfile(profile);
         });
     }, [searchParams, supabase]);
 
@@ -152,7 +154,6 @@ function LoginPageContent() {
                     method: "password",
                     error: `account_${normalizeAccountStatus(profile.status)}`,
                 });
-                form.reset({ email: form.getValues("email"), password: "" });
                 return;
             }
 
@@ -172,7 +173,8 @@ function LoginPageContent() {
                 description: "Redirecting to your dashboard…",
             });
 
-            window.location.href = getDashboardPathForProfile(profile);
+            window.location.href =
+                getSafeReturnPath(searchParams.get("next"), profile) ?? getDashboardPathForProfile(profile);
         } catch (error: unknown) {
             setCooldownUntil(Date.now() + 5000);
             const errorMessage =
@@ -186,7 +188,6 @@ function LoginPageContent() {
                 variant: "destructive",
             });
 
-            form.reset({ email: form.getValues("email"), password: "" });
         } finally {
             setIsLoading(false);
         }
@@ -250,14 +251,22 @@ function LoginPageContent() {
                                 Forgot password?
                             </Link>
                         </div>
-                        <Button type="submit" className="w-full" disabled={isLoading || isCoolingDown}>
+                        {isCoolingDown ? (
+                            <p id="login-cooldown" role="status" className="text-sm text-destructive">
+                                Too many attempts. Try again shortly.
+                            </p>
+                        ) : null}
+                        <Button
+                            type="submit"
+                            className="w-full"
+                            disabled={isLoading}
+                            aria-describedby={isCoolingDown ? "login-cooldown" : undefined}
+                        >
                             {isLoading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     Signing in…
                                 </>
-                            ) : isCoolingDown ? (
-                                "Please wait…"
                             ) : (
                                 "Sign in"
                             )}

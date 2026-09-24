@@ -7,35 +7,27 @@ import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import EnhancedNavbar from "@/components/navigation/enhanced-navbar";
 import { UserSidebar } from "@/components/navigation/UserSidebar";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { SkipLink } from "@/components/SkipLink";
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
-    const isMobile = useIsMobile();
-
-    if (isMobile) {
-        return (
-            <div className="min-h-screen bg-background">
-                <EnhancedNavbar variant="user" />
-                <div className="pt-16 sm:pt-18">
-                    <div className="container mx-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-                        {children}
-                    </div>
-                </div>
-                <AnnouncementPopup />
-            </div>
-        );
-    }
-
     return (
-        <SidebarProvider defaultOpen>
-            <UserSidebar />
-            <SidebarInset>
-                <DashboardHeader userType="user" />
-                <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-                    <div className="mx-auto w-full max-w-7xl">{children}</div>
-                </div>
-            </SidebarInset>
-            <AnnouncementPopup />
-        </SidebarProvider>
+        <>
+            <SkipLink />
+            <div className="md:hidden">
+                <EnhancedNavbar variant="user" />
+            </div>
+            <SidebarProvider defaultOpen>
+                <UserSidebar />
+                <SidebarInset id="main-content" tabIndex={-1} className="min-w-0 overflow-x-hidden outline-none">
+                    <div className="hidden md:block">
+                        <DashboardHeader userType="user" />
+                    </div>
+                    <div className="min-w-0 flex-1 overflow-x-hidden pt-16 md:pt-0">
+                        <div className="mx-auto w-full min-w-0 max-w-7xl p-4 md:p-6 lg:p-8">{children}</div>
+                    </div>
+                </SidebarInset>
+                <AnnouncementPopup />
+            </SidebarProvider>
+        </>
     );
 }

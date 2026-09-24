@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Check, Circle, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { FormControl, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { FormControl, FormItem, FormLabel, FormMessage, useFormField } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
 
 interface PasswordFieldProps {
@@ -26,6 +26,114 @@ function computeStrength(password: string) {
     return { checks, score: Object.values(checks).filter(Boolean).length };
 }
 
+const REQUIREMENTS = [
+    { key: "length", label: "At least 8 characters" },
+    { key: "upper", label: "One uppercase letter" },
+    { key: "lower", label: "One lowercase letter" },
+    { key: "number", label: "One number" },
+    { key: "special", label: "One special character" },
+] as const;
+
+function PasswordFieldControl({
+    id,
+    placeholder,
+    value,
+    onChange,
+    showChecklist,
+    show,
+    setShow,
+    checks,
+    score,
+}: {
+    id: string;
+    placeholder: string;
+    value: string;
+    onChange: (value: string) => void;
+    showChecklist: boolean;
+    show: boolean;
+    setShow: (value: boolean | ((current: boolean) => boolean)) => void;
+    checks: ReturnType<typeof computeStrength>["checks"];
+    score: number;
+}) {
+    const { error, formMessageId, formDescriptionId } = useFormField();
+    const describedBy = [
+        showChecklist && value.length > 0 ? `${id}-requirements` : null,
+        error ? formMessageId : formDescriptionId,
+    ]
+        .filter(Boolean)
+        .join(" ");
+
+    return (
+        <>
+            <div className="relative">
+                <FormControl>
+                    <Input
+                        id={id}
+                        type={show ? "text" : "password"}
+                        placeholder={placeholder}
+                        value={value}
+                        onChange={(event) => onChange(event.target.value)}
+                        autoComplete={showChecklist ? "new-password" : "current-password"}
+                        aria-invalid={error ? true : undefined}
+                        aria-describedby={describedBy || undefined}
+                        className="pr-12"
+                    />
+                </FormControl>
+                <button
+                    type="button"
+                    aria-label={show ? "Hide password" : "Show password"}
+                    className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setShow((current) => !current)}
+                >
+                    {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+            </div>
+
+            {showChecklist && value.length > 0 ? (
+                <div id={`${id}-requirements`} aria-live="polite" className="space-y-2">
+                    <div className="flex gap-1" aria-hidden="true">
+                        {Array.from({ length: 5 }).map((_, index) => (
+                            <span
+                                key={index}
+                                className={cn(
+                                    "h-1 flex-1 rounded-full transition-colors",
+                                    index < score ? "bg-primary" : "bg-muted"
+                                )}
+                            />
+                        ))}
+                    </div>
+                    <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
+                        {REQUIREMENTS.map((requirement) => {
+                            const met = checks[requirement.key];
+                            return (
+                                <li
+                                    key={requirement.key}
+                                    className={cn(
+                                        "flex items-center gap-1.5",
+                                        met ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"
+                                    )}
+                                >
+                                    {met ? (
+                                        <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                    ) : (
+                                        <Circle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                    )}
+                                    <span>
+                                        {requirement.label}
+                                        <span className="sr-only">{met ? ", met" : ", not met"}</span>
+                                    </span>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            ) : null}
+
+            <FormMessage />
+        </>
+    );
+}
+
 export function PasswordField({
     id = "password",
     label = "Password",
@@ -40,63 +148,17 @@ export function PasswordField({
     return (
         <FormItem>
             <FormLabel htmlFor={id}>{label}</FormLabel>
-            <FormControl>
-                <div className="relative">
-                    <Input
-                        id={id}
-                        type={show ? "text" : "password"}
-                        placeholder={placeholder}
-                        value={value}
-                        onChange={(e) => onChange(e.target.value)}
-                        autoComplete={showChecklist ? "new-password" : "current-password"}
-                        aria-describedby={showChecklist ? `${id}-requirements` : undefined}
-                        className="pr-10"
-                    />
-                    <button
-                        type="button"
-                        aria-label={show ? "Hide password" : "Show password"}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
-                        onClick={() => setShow((current) => !current)}
-                    >
-                        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                </div>
-            </FormControl>
-
-            {showChecklist && value.length > 0 ? (
-                <div id={`${id}-requirements`} aria-live="polite" className="space-y-2">
-                    <div className="flex gap-1">
-                        {Array.from({ length: 5 }).map((_, index) => (
-                            <span
-                                key={index}
-                                className={cn(
-                                    "h-1 flex-1 rounded-full transition-colors",
-                                    index < score ? "bg-primary" : "bg-muted"
-                                )}
-                            />
-                        ))}
-                    </div>
-                    <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
-                        <li className={checks.length ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
-                            At least 8 characters
-                        </li>
-                        <li className={checks.upper ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
-                            One uppercase letter
-                        </li>
-                        <li className={checks.lower ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
-                            One lowercase letter
-                        </li>
-                        <li className={checks.number ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
-                            One number
-                        </li>
-                        <li className={checks.special ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
-                            One special character
-                        </li>
-                    </ul>
-                </div>
-            ) : null}
-
-            <FormMessage />
+            <PasswordFieldControl
+                id={id}
+                placeholder={placeholder}
+                value={value}
+                onChange={onChange}
+                showChecklist={showChecklist}
+                show={show}
+                setShow={setShow}
+                checks={checks}
+                score={score}
+            />
         </FormItem>
     );
 }

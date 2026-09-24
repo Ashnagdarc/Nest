@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { FileText, BookOpen, Code, Users, Wrench, Package, FileCode, GitBranch, Home, Menu, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const navItems = [
   { 
@@ -60,13 +60,23 @@ export function DocsNavigation() {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMobileMenuOpen]);
+
   return (
     <>
       {/* Mobile Menu Button */}
       <button
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 bg-white dark:bg-black p-3 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 transition-colors"
-        aria-label="Toggle menu"
+        className="lg:hidden fixed top-4 left-4 z-50 bg-background p-3 rounded-xl shadow-lg border-2 border-border hover:border-foreground/20 transition-colors"
+        aria-label={isMobileMenuOpen ? "Close documentation menu" : "Open documentation menu"}
+        aria-expanded={isMobileMenuOpen}
       >
         {isMobileMenuOpen ? (
           <X className="w-5 h-5 text-black dark:text-white" />

@@ -7,20 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Menu,
     X,
-    Home,
-    Search,
-    PlusSquare,
-    ListChecks,
-    UploadCloud,
-    History,
-    Bell,
-    Settings,
     LogOut,
-    User,
-    Package,
     ChevronDown,
-    Car,
-    Megaphone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -28,6 +16,9 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { useUserProfile } from '@/components/providers/user-profile-provider';
 import { createClient } from '@/lib/supabase/client';
 import { ThemeLogo } from "@/components/ui/theme-logo";
+import { LogoutConfirmDialog } from "@/components/auth/LogoutConfirmDialog";
+import { adminNavGroups, isAdminNavActive } from '@/components/navigation/admin-nav-config';
+import { isUserNavActive, userNavGroups } from '@/components/navigation/user-nav-config';
 
 interface NavItem {
     href: string;
@@ -36,119 +27,19 @@ interface NavItem {
     description?: string;
 }
 
-const userNavItems: NavItem[] = [
-    {
-        href: '/user/dashboard',
-        label: 'Dashboard',
-        icon: Home,
-        description: 'Overview and statistics'
-    },
-    {
-        href: '/user/browse',
-        label: 'Browse Equipment',
-        icon: Search,
-        description: 'Find available gear'
-    },
-    {
-        href: '/user/request',
-        label: 'Request Gear',
-        icon: PlusSquare,
-        description: 'Submit new requests'
-    },
-    {
-        href: '/user/car-booking',
-        label: 'Book a Car',
-        icon: Car,
-        description: 'Request a car booking'
-    },
-    {
-        href: '/user/my-requests',
-        label: 'My Requests',
-        icon: ListChecks,
-        description: 'Track your requests'
-    },
-    {
-        href: '/user/check-in',
-        label: 'Check-in Gear',
-        icon: UploadCloud,
-        description: 'Return equipment'
-    },
-    {
-        href: '/user/history',
-        label: 'History',
-        icon: History,
-        description: 'Past activities'
-    },
-    {
-        href: '/user/announcements',
-        label: 'Announcements',
-        icon: Megaphone,
-        description: 'Latest company updates'
-    },
-    {
-        href: '/user/notifications',
-        label: 'Notifications',
-        icon: Bell,
-        description: 'Stay updated'
-    },
-    {
-        href: '/user/settings',
-        label: 'Settings',
-        icon: Settings,
-        description: 'Account preferences'
-    },
-];
+function flattenNav(groups: { label: string; items: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] }[]): NavItem[] {
+    return groups.flatMap((group) =>
+        group.items.map((item) => ({
+            href: item.href,
+            label: item.label,
+            icon: item.icon,
+            description: group.label,
+        })),
+    );
+}
 
-const adminNavItems: NavItem[] = [
-    {
-        href: '/admin/dashboard',
-        label: 'Dashboard',
-        icon: Home,
-        description: 'Admin overview'
-    },
-    {
-        href: '/admin/manage-gears',
-        label: 'Manage Equipment',
-        icon: Package,
-        description: 'Equipment management'
-    },
-    {
-        href: '/admin/manage-requests',
-        label: 'Manage Requests',
-        icon: ListChecks,
-        description: 'Request approvals'
-    },
-    {
-        href: '/admin/manage-checkins',
-        label: 'Manage Check-ins',
-        icon: UploadCloud,
-        description: 'Return processing'
-    },
-    {
-        href: '/admin/manage-users',
-        label: 'Manage Users',
-        icon: User,
-        description: 'User management'
-    },
-    {
-        href: '/admin/announcements',
-        label: 'Announcements',
-        icon: Bell,
-        description: 'System announcements'
-    },
-    {
-        href: '/admin/reports',
-        label: 'Reports',
-        icon: History,
-        description: 'Analytics & reports'
-    },
-    {
-        href: '/admin/settings',
-        label: 'Settings',
-        icon: Settings,
-        description: 'System settings'
-    },
-];
+const userNavItems = flattenNav(userNavGroups);
+const adminNavItems = flattenNav(adminNavGroups);
 
 interface EnhancedNavbarProps {
     variant?: 'user' | 'admin';
@@ -164,8 +55,11 @@ export default function EnhancedNavbar({
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isScrolled, setIsScrolled] = useState(false);
+    const [logoutOpen, setLogoutOpen] = useState(false);
 
     const navItems = variant === 'admin' ? adminNavItems : userNavItems;
+    const isItemActive = (href: string) =>
+        variant === "admin" ? isAdminNavActive(pathname, href) : isUserNavActive(pathname, href);
 
     // Handle scroll effect
     useEffect(() => {
@@ -181,6 +75,18 @@ export default function EnhancedNavbar({
         setIsMenuOpen(false);
         setIsUserMenuOpen(false);
     }, [pathname]);
+
+    useEffect(() => {
+        if (!isMenuOpen && !isUserMenuOpen) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setIsMenuOpen(false);
+                setIsUserMenuOpen(false);
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [isMenuOpen, isUserMenuOpen]);
 
     // Prevent body scroll when mobile menu is open
     useEffect(() => {
@@ -238,7 +144,8 @@ export default function EnhancedNavbar({
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-muted/50 ${pathname === item.href
+                                aria-current={isItemActive(item.href) ? "page" : undefined}
+                                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-muted/50 ${isItemActive(item.href)
                                     ? 'bg-primary/10 text-primary border border-primary/20'
                                     : 'text-muted-foreground hover:text-foreground'
                                     }`}
@@ -258,7 +165,11 @@ export default function EnhancedNavbar({
                             variant="ghost"
                             size="sm"
                             className="h-10 px-3"
-                            onClick={handleLogout}
+                            onClick={() => {
+                                setIsMenuOpen(false);
+                                setIsUserMenuOpen(false);
+                                setLogoutOpen(true);
+                            }}
                         >
                             <LogOut className="h-4 w-4 mr-2" />
                             Logout
@@ -320,7 +231,11 @@ export default function EnhancedNavbar({
                                                     variant="ghost"
                                                     size="sm"
                                                     className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                    onClick={handleLogout}
+                                                    onClick={() => {
+                                setIsMenuOpen(false);
+                                setIsUserMenuOpen(false);
+                                setLogoutOpen(true);
+                            }}
                                                 >
                                                     <LogOut className="h-4 w-4 mr-3" />
                                                     Logout
@@ -342,6 +257,7 @@ export default function EnhancedNavbar({
                             className="p-2 h-10 w-10"
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
                             aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+                            aria-expanded={isMenuOpen}
                         >
                             <AnimatePresence mode="wait">
                                 {isMenuOpen ? (
@@ -411,6 +327,7 @@ export default function EnhancedNavbar({
                                     size="sm"
                                     className="p-2 h-12 w-12 flex-shrink-0 ml-3"
                                     onClick={() => setIsMenuOpen(false)}
+                                    aria-label="Close menu"
                                 >
                                     <X className="h-6 w-6" />
                                 </Button>
@@ -423,14 +340,15 @@ export default function EnhancedNavbar({
                                         <Link
                                             key={item.href}
                                             href={item.href}
-                                            className={`block w-full p-4 rounded-xl transition-all duration-200 ${pathname === item.href
+                                            aria-current={isItemActive(item.href) ? "page" : undefined}
+                                            className={`block w-full p-4 rounded-xl transition-all duration-200 ${isItemActive(item.href)
                                                 ? 'bg-primary/10 text-primary border border-primary/20'
                                                 : 'hover:bg-muted/50 text-foreground'
                                                 }`}
                                             onClick={() => setIsMenuOpen(false)}
                                         >
                                             <div className="flex items-start gap-4">
-                                                <div className={`p-2.5 rounded-lg flex-shrink-0 ${pathname === item.href ? 'bg-primary/20' : 'bg-muted'
+                                                <div className={`p-2.5 rounded-lg flex-shrink-0 ${isItemActive(item.href) ? 'bg-primary/20' : 'bg-muted'
                                                     }`}>
                                                     <item.icon className="h-5 w-5" />
                                                 </div>
@@ -449,7 +367,11 @@ export default function EnhancedNavbar({
                                 <Button
                                     variant="outline"
                                     className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 h-12"
-                                    onClick={handleLogout}
+                                    onClick={() => {
+                                setIsMenuOpen(false);
+                                setIsUserMenuOpen(false);
+                                setLogoutOpen(true);
+                            }}
                                 >
                                     <LogOut className="h-5 w-5 mr-3" />
                                     Logout
@@ -459,6 +381,11 @@ export default function EnhancedNavbar({
                     </>
                 )}
             </AnimatePresence>
+            <LogoutConfirmDialog
+                open={logoutOpen}
+                onOpenChange={setLogoutOpen}
+                onConfirm={() => void handleLogout()}
+            />
         </nav>
     );
 } 

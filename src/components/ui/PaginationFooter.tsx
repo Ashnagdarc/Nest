@@ -46,10 +46,6 @@ export function PaginationFooter({
     const showPageControls = !hideWhenSinglePage || totalPages > 1;
     const hasControls = showPageControls || Boolean(onPageSizeChange && pageSizeOptions?.length);
 
-    if (total === 0 && !summary) {
-        return null;
-    }
-
     return (
         <div
             className={cn(

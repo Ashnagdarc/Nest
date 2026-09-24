@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -37,6 +37,7 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
         maintenance_alerts: true,
         system_notifications: true,
     });
+    const savedPreferences = useRef<EmailPreferences>(preferences);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const { toast } = useToast();
@@ -60,7 +61,7 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
                 | undefined;
 
             if (prefs?.email) {
-                setPreferences({
+                const next = {
                     gear_requests: prefs.email.gear_requests ?? true,
                     gear_approvals: prefs.email.gear_approvals ?? true,
                     gear_rejections: prefs.email.gear_rejections ?? true,
@@ -69,7 +70,9 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
                     overdue_reminders: prefs.email.overdue_reminders ?? true,
                     maintenance_alerts: prefs.email.maintenance_alerts ?? true,
                     system_notifications: prefs.email.system_notifications ?? true,
-                });
+                };
+                savedPreferences.current = next;
+                setPreferences(next);
             }
         } catch (error) {
             console.error('Error loading notification preferences:', error);
@@ -114,6 +117,7 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
 
             if (error) throw error;
 
+            savedPreferences.current = preferences;
             toast({
                 title: 'Settings Saved',
                 description: 'Your email notification preferences have been updated.',
@@ -121,9 +125,10 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
             });
         } catch (error) {
             console.error('Error saving preferences:', error);
+            setPreferences(savedPreferences.current);
             toast({
                 title: 'Error',
-                description: 'Failed to save notification preferences. Please try again.',
+                description: 'Failed to save notification preferences. The switches were restored.',
                 variant: 'destructive',
             });
         } finally {
@@ -283,6 +288,7 @@ export default function EmailNotificationSettings({ userId }: NotificationSettin
                                             checked={notification.key === 'overdue_reminders' ? true : preferences[notification.key]}
                                             disabled={notification.key === 'overdue_reminders'}
                                             onCheckedChange={(checked) => handlePreferenceChange(notification.key, checked)}
+                                            aria-label={`${notification.title}, ${notification.key === 'overdue_reminders' || preferences[notification.key] ? "on" : "off"}`}
                                         />
                                     </div>
                                 );

@@ -12,6 +12,22 @@ const USER_TO_ADMIN_PATH: Record<string, string> = {
     '/user/announcements': '/admin/announcements',
 };
 
+/** Staff-only pages that land on the admin dashboard, with the admin screen to use instead. */
+export const USER_ONLY_ROUTE_HINTS: Record<string, { href: string; label: string }> = {
+    '/user/browse': { href: '/admin/manage-gears', label: 'Manage gears' },
+    '/user/request': { href: '/admin/manage-requests', label: 'Manage requests' },
+    '/user/car-booking': { href: '/admin/manage-car-bookings', label: 'Car bookings' },
+};
+
+export function adminRedirectUrl(pathname: string): string | null {
+    const adminPath = getAdminRedirectForUserPath(pathname);
+    if (!adminPath) return null;
+    if (adminPath === '/admin/dashboard' && pathname !== '/user/dashboard') {
+        return `${adminPath}?redirectedFrom=${encodeURIComponent(pathname)}`;
+    }
+    return adminPath;
+}
+
 export function isActiveAdminProfile(profile: ProfileRole | null | undefined): boolean {
     return profile?.role === 'Admin' && isAccountActive(profile.status);
 }

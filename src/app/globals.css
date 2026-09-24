@@ -290,8 +290,8 @@
     --popover-foreground: 240 10% 3.9%;
     /* Dark Gray */
 
-    --primary: 24 96% 53%;
-    /* Orange primary color #ff6300 */
+    --primary: 24 96% 38%;
+    /* Darker brand orange so text and buttons clear 4.5:1 on white */
     --primary-foreground: 0 0% 98%;
     /* White */
 
@@ -310,46 +310,53 @@
     --accent-foreground: 240 5.9% 10%;
     /* Darker Gray */
 
-    --destructive: 0 84.2% 60.2%;
-    /* Red */
+    --destructive: 0 72% 42%;
+    /* Darker red so 14px error text and button labels clear 4.5:1 */
     --destructive-foreground: 0 0% 98%;
     /* Light Gray */
 
     --border: 240 5.9% 90%;
     /* Light Gray */
-    --input: 240 5.9% 90%;
-    /* Light Gray */
-    --ring: 24 96% 53%;
-    /* Orange primary color */
+    --input: 240 4% 42%;
+    /* Input border, at least 3:1 against white */
+    --ring: 24 96% 38%;
+    /* Focus ring, same darker brand orange */
 
     --radius: 0.75rem;
 
-    --chart-1: 24 96% 53%;
+    --chart-1: 24 96% 38%;
     /* Orange */
-    --chart-2: 210 9% 47%;
+    --chart-2: 210 9% 40%;
     /* Gray */
-    --chart-3: 215 20.2% 65.1%;
+    --chart-3: 215 20% 42%;
     /* Mid Gray */
-    --chart-4: 0 84.2% 60.2%;
+    --chart-4: 0 72% 42%;
     /* Red */
-    --chart-5: 142 76% 36%;
+    --chart-5: 142 72% 28%;
     /* Apple Green */
+    --chart-requests: #1d4ed8;
+    --chart-checkouts: #065f46;
+    --chart-checkins: #5b21b6;
+    --chart-muted-series: #475569;
+    --chart-status-pending: #92400e;
+    --chart-status-rejected: #991b1b;
+    --chart-legend: #111827;
 
     --sidebar-background: 240 4.8% 95.9%;
     /* Very Light Gray */
     --sidebar-foreground: 240 5.9% 10%;
     /* Darker Gray */
-    --sidebar-primary: 24 96% 53%;
+    --sidebar-primary: 24 96% 38%;
     /* Orange */
     --sidebar-primary-foreground: 0 0% 100%;
     /* White */
     --sidebar-accent: 24 96% 95%;
     /* Light Orange Accent */
-    --sidebar-accent-foreground: 24 96% 40%;
-    /* Darker Orange */
+    --sidebar-accent-foreground: 24 96% 32%;
+    /* Active label, at least 4.5:1 on the accent background */
     --sidebar-border: 214.3 31.8% 91.4%;
     /* Light Gray Border */
-    --sidebar-ring: 24 96% 53%;
+    --sidebar-ring: 24 96% 38%;
     /* Orange Ring */
   }
 
@@ -421,15 +428,38 @@
 
     --chart-1: 24 96% 60%;
     /* Orange */
-    --chart-2: 210 9% 47%;
-    /* Gray */
-    --chart-3: 215 20.2% 65.1%;
+    --chart-2: 210 9% 72%;
+    /* Gray, lighter so it clears the black background */
+    --chart-3: 215 16% 74%;
     /* Mid Gray */
-    --chart-4: 0 85% 60%;
+    --chart-4: 0 85% 68%;
     /* Red */
-    --chart-5: 142 76% 36%;
+    --chart-5: 142 60% 48%;
     /* Apple Green */
+    --chart-axis: 0 0% 82%;
+    --chart-requests: #93c5fd;
+    --chart-checkouts: #6ee7b7;
+    --chart-checkins: #c4b5fd;
+    --chart-muted-series: #cbd5e1;
+    --chart-status-pending: #fdba74;
+    --chart-status-rejected: #fca5a5;
+    --chart-legend: #f3f4f6;
   }
+}
+
+.recharts-cartesian-axis-tick text,
+.recharts-polar-angle-axis-tick text {
+  fill: hsl(240 6% 28%);
+}
+
+.recharts-legend-item-text {
+  fill: var(--chart-legend) !important;
+  color: var(--chart-legend);
+}
+
+.dark .recharts-cartesian-axis-tick text,
+.dark .recharts-polar-angle-axis-tick text {
+  fill: hsl(var(--chart-axis));
 }
 
 /* Add the grid pattern styles after existing styles */

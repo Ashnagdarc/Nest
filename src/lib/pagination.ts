@@ -17,7 +17,7 @@ export function getPageRange(page: number, pageSize: number, total: number) {
 
 export function formatPageSummary(page: number, pageSize: number, total: number, itemLabel = "item") {
     const { from, to } = getPageRange(page, pageSize, total);
-    if (total === 0) return `No ${itemLabel}s`;
+    if (total === 0) return `Showing 0 ${itemLabel}s`;
     const plural = total === 1 ? itemLabel : `${itemLabel}s`;
     return `Showing ${from}–${to} of ${total} ${plural}`;
 }

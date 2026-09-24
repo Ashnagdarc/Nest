@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { apiGet } from '@/lib/apiClient';
 import { isAccountActive, normalizeAccountStatus } from '@/lib/auth/account-status';
-import { getAdminRedirectForUserPath } from '@/lib/auth/role-routing';
+import { adminRedirectUrl } from '@/lib/auth/role-routing';
 export type UserProfile = {
     id: string;
     email?: string;
@@ -71,7 +71,7 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 isAccountActive(profileData.status) &&
                 pathname.startsWith('/user')
             ) {
-                const adminPath = getAdminRedirectForUserPath(pathname);
+                const adminPath = adminRedirectUrl(pathname);
                 if (adminPath) {
                     router.replace(adminPath);
                 }

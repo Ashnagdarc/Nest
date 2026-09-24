@@ -123,6 +123,7 @@ export function TimeWheelPicker({ value, onChange, className }: TimeWheelPickerP
           type="button"
           variant="outline"
           className={cn("h-11 w-full justify-between px-3 font-normal", className)}
+          aria-label="Start time"
         >
           <span className="flex items-center gap-2">
             <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />

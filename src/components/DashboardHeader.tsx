@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useUserProfile } from "@/components/providers/user-profile-provider";
 import { NotificationBell } from "@/components/NotificationBell";
+import { LogoutConfirmDialog } from "@/components/auth/LogoutConfirmDialog";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -38,6 +39,7 @@ function getInitials(name: string | null | undefined) {
 export function DashboardHeader({ userType = "user" }: DashboardHeaderProps) {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [logoutOpen, setLogoutOpen] = useState(false);
     const supabase = createClient();
     const { profile: currentUser } = useUserProfile();
 
@@ -119,17 +121,20 @@ export function DashboardHeader({ userType = "user" }: DashboardHeaderProps) {
                         <DropdownMenuItem
                             className="cursor-pointer text-destructive focus:text-destructive"
                             disabled={isLoading}
-                            onSelect={(event) => {
-                                event.preventDefault();
-                                void handleLogout();
-                            }}
+                            onSelect={() => setLogoutOpen(true)}
                         >
                             <LogOut className="mr-2 h-4 w-4" />
-                            {isLoading ? "Logging out..." : "Logout"}
+                            Logout
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
+            <LogoutConfirmDialog
+                open={logoutOpen}
+                confirming={isLoading}
+                onOpenChange={setLogoutOpen}
+                onConfirm={() => void handleLogout()}
+            />
         </header>
     );
 }

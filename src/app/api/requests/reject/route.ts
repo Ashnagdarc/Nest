@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestRejectionEmail, sendGearRequestEmail } from '@/lib/email';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
@@ -18,7 +18,8 @@ async function requireAdminContext() {
         };
     }
 
-    const adminSupabase = await createSupabaseServerClient(true);
+    // Same constraint as approval: release_gear_request_atomic is service_role only.
+    const adminSupabase = await createSupabaseAdminClient();
     const { data: profile, error: profileError } = await adminSupabase
         .from('profiles')
         .select('role, status')

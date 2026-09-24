@@ -314,6 +314,10 @@ function ManageRequestsContent() {
         userFilter !== "all" ||
         gearFilter !== "all" ||
         Boolean(dateRange?.from);
+    const hasClientFilters =
+        keyword !== "" || userFilter !== "all" || gearFilter !== "all" || Boolean(dateRange?.from);
+    const visibleTotal = hasClientFilters ? filteredRequests.length : total;
+    const visiblePage = hasClientFilters ? 1 : page;
 
     const handleClearAllFilters = () => {
         setFilterStatus("all");
@@ -367,7 +371,7 @@ function ManageRequestsContent() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4 }}
-            className="space-y-6 pb-8"
+            className="min-w-0 space-y-6 overflow-x-hidden pb-8"
         >
             <RequestPageHeader
                 isRefreshing={isRefreshing}
@@ -440,21 +444,23 @@ function ManageRequestsContent() {
                     )}
                 </CardContent>
 
-                {filteredRequests.length > 0 && (
+                {!(loading && requests.length === 0) && (
                     <CardFooter className="border-t bg-muted/10 px-4 py-4">
                         <PaginationFooter
-                            page={page}
+                            page={visiblePage}
                             pageSize={pageSize}
-                            total={total}
+                            total={visibleTotal}
                             onPageChange={setPage}
                             pageSizeOptions={PAGE_SIZE_OPTIONS}
                             onPageSizeChange={setPageSize}
                             pageSizeLabel="Rows per page"
                             itemLabel="request"
                             summary={
-                                selectedRequests.length > 0
-                                    ? `${selectedRequests.length} selected · ${total} total`
-                                    : undefined
+                                hasClientFilters
+                                    ? undefined
+                                    : selectedRequests.length > 0
+                                      ? `${selectedRequests.length} selected · ${visibleTotal} total`
+                                      : undefined
                             }
                             className="w-full border-0 bg-transparent p-0"
                         />

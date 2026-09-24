@@ -42,13 +42,13 @@ export function AnnouncementFormDialog({
 }: AnnouncementFormDialogProps) {
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
-    const [sendNotifications, setSendNotifications] = useState(true);
+    const [sendNotifications, setSendNotifications] = useState(false);
 
     useEffect(() => {
         if (!open) return;
         setTitle(announcement?.title ?? '');
         setContent(announcement?.content ?? '');
-        setSendNotifications(mode === 'create');
+        setSendNotifications(false);
     }, [open, announcement, mode]);
 
     const handleSubmit = async (event: React.FormEvent) => {
@@ -101,7 +101,7 @@ export function AnnouncementFormDialog({
                             />
                             <div className="space-y-1">
                                 <Label htmlFor="send-notifications" className="text-sm font-medium">
-                                    Notify all users
+                                    Notify everyone
                                 </Label>
                                 <p className="text-xs text-muted-foreground">
                                     Send in-app notifications and emails when this is published.

@@ -4,7 +4,18 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { Database } from '@/types/supabase';
 import { isAccountActive, normalizeAccountStatus } from '@/lib/auth/account-status';
-import { getAdminRedirectForUserPath } from '@/lib/auth/role-routing';
+import { adminRedirectUrl } from '@/lib/auth/role-routing';
+
+function loginRedirect(request: NextRequest, preserveNext: boolean) {
+    const loginUrl = new URL('/login', request.url);
+    if (preserveNext) {
+        const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+        if (next.startsWith('/user') || next.startsWith('/admin')) {
+            loginUrl.searchParams.set('next', next);
+        }
+    }
+    return NextResponse.redirect(loginUrl);
+}
 
 function buildBlockedLoginRedirect(
     request: NextRequest,
@@ -80,14 +91,14 @@ export async function proxy(request: NextRequest) {
 
     if (adminRoutes.some((route) => pathname.startsWith(route))) {
         if (!user) {
-            return NextResponse.redirect(new URL('/login', request.url));
+            return loginRedirect(request, true);
         }
 
         try {
             const profile = await getProfileAccess(supabase, user.id);
 
             if (!profile || profile.role !== 'Admin') {
-                return NextResponse.redirect(new URL('/login', request.url));
+                return loginRedirect(request, false);
             }
 
             if (!isAccountActive(profile.status)) {
@@ -98,13 +109,13 @@ export async function proxy(request: NextRequest) {
             }
         } catch (error) {
             console.error('[Proxy] Error checking admin access:', error);
-            return NextResponse.redirect(new URL('/login', request.url));
+            return loginRedirect(request, false);
         }
     }
 
     if (userRoutes.some((route) => pathname.startsWith(route))) {
         if (!user) {
-            return NextResponse.redirect(new URL('/login', request.url));
+            return loginRedirect(request, true);
         }
 
         try {
@@ -117,14 +128,14 @@ export async function proxy(request: NextRequest) {
             }
 
             if (profile?.role === 'Admin' && isAccountActive(profile.status)) {
-                const adminPath = getAdminRedirectForUserPath(pathname);
+                const adminPath = adminRedirectUrl(pathname);
                 if (adminPath) {
                     return NextResponse.redirect(new URL(adminPath, request.url));
                 }
             }
         } catch (error) {
             console.error('[Proxy] Error checking user account status:', error);
-            return NextResponse.redirect(new URL('/login', request.url));
+            return loginRedirect(request, false);
         }
     }
 

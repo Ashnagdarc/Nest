@@ -56,6 +56,7 @@ export function UserSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
+                <nav aria-label="User">
                 {userNavGroups.map((group) => (
                     <SidebarGroup key={group.label}>
                         <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
@@ -84,6 +85,7 @@ export function UserSidebar() {
                         </SidebarGroupContent>
                     </SidebarGroup>
                 ))}
+                </nav>
             </SidebarContent>
 
             <SidebarSeparator />

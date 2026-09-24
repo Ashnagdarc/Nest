@@ -76,7 +76,7 @@ export function MarkdownRenderer({ content, title }: MarkdownRendererProps) {
           prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-a:font-medium prose-a:decoration-2 prose-a:underline-offset-2
           prose-strong:text-black dark:prose-strong:text-white prose-strong:font-bold
           prose-code:text-pink-600 dark:prose-code:text-pink-400 prose-code:bg-gray-100 dark:prose-code:bg-gray-900 prose-code:px-2 prose-code:py-0.5 prose-code:rounded-md prose-code:before:content-[''] prose-code:after:content-[''] prose-code:font-mono prose-code:text-sm
-          prose-pre:bg-gray-900 dark:prose-pre:bg-black prose-pre:border-2 prose-pre:border-gray-700 dark:prose-pre:border-gray-800 prose-pre:rounded-xl prose-pre:shadow-lg
+          prose-pre:bg-gray-900 dark:prose-pre:bg-black prose-pre:border-2 prose-pre:border-gray-700 dark:prose-pre:border-gray-800 prose-pre:rounded-xl prose-pre:shadow-lg prose-pre:overflow-x-auto prose-pre:max-w-full
           prose-blockquote:border-l-4 prose-blockquote:border-blue-600 dark:prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-950 prose-blockquote:py-2 prose-blockquote:px-6 prose-blockquote:rounded-r-lg prose-blockquote:my-6 prose-blockquote:not-italic
           prose-ul:list-disc prose-ul:ml-6 prose-ul:my-4
           prose-ol:list-decimal prose-ol:ml-6 prose-ol:my-4
@@ -92,6 +92,9 @@ export function MarkdownRenderer({ content, title }: MarkdownRendererProps) {
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeRaw]}
             components={{
+              pre: ({ node, className, ...props }) => (
+                <pre {...props} className={`${className ?? ""} max-w-full overflow-x-auto`} />
+              ),
               h1: ({node, ...props}) => {
                 const text = props.children?.toString() || '';
                 const id = text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');

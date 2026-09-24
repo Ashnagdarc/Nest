@@ -124,7 +124,7 @@ export default function UserDashboardPage() {
 
     return (
         <ErrorBoundary>
-            <div className="w-full max-w-7xl mx-auto space-y-6 sm:space-y-8">
+            <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6 overflow-x-hidden sm:space-y-8">
                 {/* Header */}
                 <motion.header
                     initial={{ opacity: 0, y: -10 }}

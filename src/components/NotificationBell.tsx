@@ -101,8 +101,9 @@ export function NotificationBell({ userType, userId, className = "" }: Notificat
 
     if (isLoading) {
         return (
-            <Button variant="ghost" size="sm" className={`relative ${className}`} disabled>
+            <Button variant="ghost" size="sm" className={`relative ${className}`} disabled aria-label="Notifications">
                 <Bell className="h-5 w-5" />
+                <span className="sr-only">Notifications</span>
             </Button>
         );
     }
@@ -113,9 +114,10 @@ export function NotificationBell({ userType, userId, className = "" }: Notificat
             size="sm"
             className={`relative ${className}`}
             onClick={handleNotificationClick}
-            title={`${unreadCount} unread notifications`}
+            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
         >
             <Bell className="h-5 w-5" />
+            <span className="sr-only">Notifications</span>
             {unreadCount > 0 && (
                 <Badge
                     variant="destructive"

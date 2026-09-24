@@ -12,10 +12,10 @@ export default function DocumentationPage() {
             {/* Header */}
             <header className="bg-white shadow-sm border-b">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center py-6">
-                        <div className="flex items-center">
+                    <div className="flex flex-wrap items-center justify-between gap-3 py-6">
+                        <div className="flex min-w-0 flex-wrap items-center gap-3">
                             <h1 className="text-2xl font-bold text-gray-900">Nest Documentation</h1>
-                            <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <span className="ml-3 inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                                 Internal Use Only
                             </span>
                         </div>

@@ -3,7 +3,7 @@ import { Megaphone } from "lucide-react";
 
 export default function AdminReleaseNotesPage() {
     return (
-        <div className="w-full space-y-6">
+        <div className="w-full min-w-0 space-y-6 overflow-x-hidden">
             <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 space-y-1">
                     <div className="flex items-center gap-2.5">

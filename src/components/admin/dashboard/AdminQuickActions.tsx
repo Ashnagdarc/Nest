@@ -74,12 +74,12 @@ export function AdminQuickActions({ onRefresh }: AdminQuickActionsProps) {
                 <CardTitle className="text-lg font-semibold">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
                     <Dialog open={addGearOpen} onOpenChange={setAddGearOpen}>
                         <DialogTrigger asChild>
-                            <Button className="min-h-[100px] h-auto w-full flex-col gap-2 rounded-xl">
+                            <Button className="h-auto min-h-[100px] w-full min-w-0 flex-col gap-2 !whitespace-normal rounded-xl px-2 py-3 text-center">
                                 <Plus className="h-5 w-5" />
-                                <span className="text-sm font-medium">Add Equipment</span>
+                                <span className="text-sm font-medium leading-snug break-words">Add Equipment</span>
                             </Button>
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-md">
@@ -93,6 +93,7 @@ export function AdminQuickActions({ onRefresh }: AdminQuickActionsProps) {
                     {actions.map((action, index) => (
                         <motion.div
                             key={action.label}
+                            className="min-w-0"
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.05, duration: 0.3 }}
@@ -100,12 +101,12 @@ export function AdminQuickActions({ onRefresh }: AdminQuickActionsProps) {
                             <Button
                                 asChild
                                 variant={action.variant}
-                                className="min-h-[100px] h-auto w-full flex-col gap-2 rounded-xl text-center"
+                                className="h-auto min-h-[100px] w-full min-w-0 flex-col gap-2 !whitespace-normal rounded-xl px-2 py-3 text-center"
                             >
-                                <Link href={action.href}>
-                                    <action.icon className="h-5 w-5" />
-                                    <span className="text-sm font-medium">{action.label}</span>
-                                    <span className="text-xs text-muted-foreground line-clamp-2">
+                                <Link href={action.href} className="min-w-0">
+                                    <action.icon className="h-5 w-5 shrink-0" />
+                                    <span className="w-full text-sm font-medium leading-snug break-words">{action.label}</span>
+                                    <span className="w-full text-xs leading-snug break-words text-muted-foreground">
                                         {action.description}
                                     </span>
                                 </Link>

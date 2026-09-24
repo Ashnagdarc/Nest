@@ -149,8 +149,9 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
 
     return (
         <Form {...form}>
-            <div className="max-h-[100dvh] overflow-y-auto px-1 pb-32 sm:pb-8">
-                <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <form onSubmit={form.handleSubmit(handleFormSubmit)} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
                     <FormField
                         control={form.control}
                         name="name"
@@ -318,7 +319,8 @@ export default function EditGearForm({ gear, onSubmit, isSubmitting }: EditGearF
                         />
                     </div>
 
-                    <DialogFooter className="pt-4">
+                    </div>
+                    <DialogFooter className="shrink-0 border-t bg-background pt-4">
                         <DialogClose asChild>
                             <Button type="button" variant="outline" onClick={clearDraft}>
                                 Cancel

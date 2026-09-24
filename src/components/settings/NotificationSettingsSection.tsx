@@ -68,19 +68,23 @@ export function NotificationSettingsSection({
     }
   }, [pushPermission, checkSubscription]);
 
-  const persistPreferences = async (next: NotificationPreferences) => {
+  const persistPreferences = async (previous: NotificationPreferences, next: NotificationPreferences) => {
     onPreferencesChange(next);
-    const { error } = await apiPatch<{ data: unknown; error: string | null }>("/api/users/profile", {
-      notification_preferences: next,
-    });
-    if (error) {
+    try {
+      const { error } = await apiPatch<{ data: unknown; error: string | null }>("/api/users/profile", {
+        notification_preferences: next,
+      });
+      if (error) {
+        throw new Error(error);
+      }
+      toast({ title: "Notification preferences saved" });
+    } catch (error) {
+      onPreferencesChange(previous);
       toast({
         title: "Save failed",
-        description: error,
+        description: error instanceof Error ? error.message : "Could not save notification preferences.",
         variant: "destructive",
       });
-    } else {
-      toast({ title: "Notification preferences saved" });
     }
   };
 
@@ -92,7 +96,7 @@ export function NotificationSettingsSection({
         [eventKey]: checked,
       },
     });
-    void persistPreferences(next);
+    void persistPreferences(preferences, next);
   };
 
   const handleEnablePush = async () => {
@@ -227,6 +231,7 @@ export function NotificationSettingsSection({
                       checked={preferences[channel]?.[event.key] ?? true}
                       disabled={isPushChannel && (!isPushSupported || !pushReady)}
                       onCheckedChange={(checked) => handleToggle(channel, event.key, checked)}
+                      aria-label={`${meta.title} ${event.label} notifications, ${(preferences[channel]?.[event.key] ?? true) ? "on" : "off"}`}
                     />
                   </div>
                 ))}

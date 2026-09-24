@@ -319,7 +319,7 @@ function NewBookingTab({
   isSubmitting,
 }: {
   carStatus: CarStatusRow[];
-  onSubmit: (data: CarBookingFormValues) => Promise<void>;
+  onSubmit: (data: CarBookingFormValues) => Promise<boolean>;
   isSubmitting: boolean;
 }) {
   const {
@@ -344,8 +344,8 @@ function NewBookingTab({
   const today = new Date().toISOString().split("T")[0];
 
   const handleFormSubmit = async (data: CarBookingFormValues) => {
-    await onSubmit(data);
-    reset();
+    const saved = await onSubmit(data);
+    if (saved) reset();
   };
 
   return (
@@ -360,10 +360,12 @@ function NewBookingTab({
           </CardHeader>
           <CardContent className="space-y-5">
             <div>
-              <label className="mb-2 block text-sm font-medium text-foreground">
+              <label htmlFor="employee-name" className="mb-2 block text-sm font-medium text-foreground">
                 Employee name <span className="text-destructive">*</span>
               </label>
               <Input
+                id="employee-name"
+                autoComplete="name"
                 placeholder="Your full name"
                 {...register("employeeName", {
                   required: "Employee name is required",
@@ -377,11 +379,12 @@ function NewBookingTab({
 
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div>
-                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+                <label htmlFor="date-of-use" className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   Date of use <span className="text-destructive">*</span>
                 </label>
                 <Input
+                  id="date-of-use"
                   type="date"
                   min={today}
                   {...register("dateOfUse", { required: "Date is required" })}
@@ -910,19 +913,21 @@ export default function UserCarBookingPageRefactored() {
           description: "Your booking request has been submitted!",
         });
         await loadData();
-      } else {
-        toast({
-          title: "Error",
-          description: res.user_message || "Failed to submit booking",
-          variant: "destructive",
-        });
+        return true;
       }
+      toast({
+        title: "Error",
+        description: res.user_message || "Failed to submit booking",
+        variant: "destructive",
+      });
+      return false;
     } catch {
       toast({
         title: "Error",
         description: "An unexpected error occurred",
         variant: "destructive",
       });
+      return false;
     } finally {
       setIsFormSubmitting(false);
     }

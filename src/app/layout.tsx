@@ -13,6 +13,7 @@ import { Favicon } from "@/components/ui/theme-favicon";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SessionRecoveryInitializer } from "@/components/SessionRecoveryInitializer";
+import { DocumentTitle } from "@/components/DocumentTitle";
 import { getSiteUrl } from "@/lib/site-url";
 
 // Patch console.error for Supabase real-time polling fallback
@@ -121,8 +122,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#ffffff' },
     { media: '(prefers-color-scheme: dark)', color: '#09090b' }
@@ -147,8 +146,6 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Nest" />
-        {/* Prevent zoom on input focus for iOS */}
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
       </head>
       <body className={`${lato.variable} font-sans antialiased`}>
         <SessionRecoveryInitializer />
@@ -159,6 +156,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <Favicon />
+          <DocumentTitle />
           <UserProfileProvider>
             <NotificationProvider>
               <SupabaseErrorBoundary>

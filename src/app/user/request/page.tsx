@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { motion } from "framer-motion";
 import { useSearchParams, useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -195,6 +195,8 @@ function RequestGearContent() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [bookingType, setBookingType] = useState<"self" | "other" | null>(null);
+  const [typeDialogOpen, setTypeDialogOpen] = useState(true);
+  const typeDialogOpenerRef = useRef<HTMLButtonElement | null>(null);
   const [availableGears, setAvailableGears] = useState<Gear[]>([]);
   const [availableUsers, setAvailableUsers] = useState<SelectableUser[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -675,8 +677,21 @@ function RequestGearContent() {
   return (
     <div className="w-full min-h-screen">
       {/* Booking Type Selection Modal */}
-      <Dialog open={bookingType === null}>
-        <DialogContent className="max-w-md rounded-2xl p-0 gap-0 overflow-hidden">
+      <Dialog
+        open={typeDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) setTypeDialogOpen(false);
+        }}
+      >
+        <DialogContent
+          className="max-w-md rounded-2xl p-0 gap-0 overflow-hidden"
+          onCloseAutoFocus={(event) => {
+            const opener = typeDialogOpenerRef.current;
+            if (!opener) return;
+            event.preventDefault();
+            opener.focus();
+          }}
+        >
           <DialogHeader className="px-6 pt-6 pb-4">
             <DialogTitle className="text-lg font-semibold">
               Who is this request for?
@@ -688,7 +703,10 @@ function RequestGearContent() {
           <div className="px-6 pb-6 space-y-3">
             <button
               type="button"
-              onClick={() => setBookingType("self")}
+              onClick={() => {
+                setBookingType("self");
+                setTypeDialogOpen(false);
+              }}
               className="w-full flex items-center gap-4 rounded-xl border border-border p-4 text-left hover:bg-muted/50 transition-colors"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -703,7 +721,10 @@ function RequestGearContent() {
             </button>
             <button
               type="button"
-              onClick={() => setBookingType("other")}
+              onClick={() => {
+                setBookingType("other");
+                setTypeDialogOpen(false);
+              }}
               className="w-full flex items-center gap-4 rounded-xl border border-border p-4 text-left hover:bg-muted/50 transition-colors"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -719,6 +740,21 @@ function RequestGearContent() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {!bookingType && !typeDialogOpen ? (
+        <div className="mx-auto w-full max-w-md space-y-3">
+          <h1 className="text-2xl font-bold tracking-tight">Who is this request for?</h1>
+          <p className="text-sm text-muted-foreground">
+            Choose whether you are booking for yourself or a colleague.
+          </p>
+          <Button type="button" className="w-full" onClick={() => setBookingType("self")}>
+            For myself
+          </Button>
+          <Button type="button" variant="outline" className="w-full" onClick={() => setBookingType("other")}>
+            For someone else
+          </Button>
+        </div>
+      ) : null}
 
       {bookingType && (
         <div className="w-full max-w-4xl mx-auto space-y-6">
@@ -741,7 +777,10 @@ function RequestGearContent() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => setBookingType(null)}
+                onClick={(event) => {
+                  typeDialogOpenerRef.current = event.currentTarget;
+                  setTypeDialogOpen(true);
+                }}
               >
                 Change
               </Button>
@@ -765,6 +804,7 @@ function RequestGearContent() {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
+                      aria-label="Search gear"
                       placeholder="Search by name, category, or serial..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
@@ -990,6 +1030,7 @@ function RequestGearContent() {
                           <p className="text-xs text-muted-foreground">
                             You agree to return equipment in the same condition you received it.
                           </p>
+                          <FormMessage />
                         </div>
                       </FormItem>
                     )}

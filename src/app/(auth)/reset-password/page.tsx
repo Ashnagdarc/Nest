@@ -25,6 +25,7 @@ export default function ResetPasswordPage() {
     const { toast } = useToast();
     const [isLoading, setIsLoading] = useState(false);
     const [sessionReady, setSessionReady] = useState(false);
+    const [sessionChecked, setSessionChecked] = useState(false);
     const [sessionError, setSessionError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -43,17 +44,24 @@ export default function ResetPasswordPage() {
             }
         });
 
+        const timeout = window.setTimeout(() => setSessionChecked(true), 1500);
+
         void supabase.auth.getSession().then(({ data, error }) => {
             if (error) {
                 setSessionError(error.message);
+                setSessionChecked(true);
                 return;
             }
             if (data.session) {
                 setSessionReady(true);
             }
+            setSessionChecked(true);
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            window.clearTimeout(timeout);
+            subscription.unsubscribe();
+        };
     }, [supabase]);
 
     const form = useForm<ResetPasswordValues>({
@@ -100,14 +108,21 @@ export default function ResetPasswordPage() {
                     </>
                 }
             >
-                {!sessionReady ? (
+                {!sessionReady && !sessionChecked ? (
                     <div className="space-y-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                         <p>Preparing your secure reset session…</p>
-                        <p>
-                            If this page does not load the form, open the reset link from your email again. Links
-                            expire after a short time.
+                    </div>
+                ) : !sessionReady ? (
+                    <div className="space-y-3 rounded-lg border border-dashed p-4 text-sm">
+                        <p className="font-medium text-foreground">This reset link is missing or has expired.</p>
+                        <p className="text-muted-foreground">
+                            Open the latest link from your email, or request a new one. Reset links only work for a
+                            short time.
                         </p>
                         {sessionError ? <p className="text-destructive">{sessionError}</p> : null}
+                        <Button asChild variant="outline" className="w-full">
+                            <Link href="/forgot-password">Request a new link</Link>
+                        </Button>
                     </div>
                 ) : (
                     <Form {...form}>

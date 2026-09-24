@@ -18,7 +18,14 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { AdminReportData } from '@/lib/reports/types';
 
-const STATUS_COLORS = ['#2563eb', '#f59e0b', '#ef4444', '#10b981', '#64748b', '#8b5cf6'];
+const STATUS_COLORS = [
+    'var(--chart-requests)',
+    'var(--chart-status-pending)',
+    'var(--chart-status-rejected)',
+    'var(--chart-checkouts)',
+    'var(--chart-muted-series)',
+    'var(--chart-checkins)',
+];
 
 interface ReportChartsProps {
     report: AdminReportData | null;
@@ -53,9 +60,9 @@ export function ReportCharts({ report, loading = false }: ReportChartsProps) {
                                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={32} />
                                 <Tooltip />
                                 <Legend />
-                                <Line type="monotone" dataKey="requests" name="Requests" stroke="#2563eb" strokeWidth={2} dot={false} />
-                                <Line type="monotone" dataKey="checkouts" name="Check-outs" stroke="#10b981" strokeWidth={2} dot={false} />
-                                <Line type="monotone" dataKey="checkins" name="Check-ins" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+                                <Line type="monotone" dataKey="requests" name="Requests" stroke="var(--chart-requests)" strokeWidth={2} dot={false} />
+                                <Line type="monotone" dataKey="checkouts" name="Check-outs" stroke="var(--chart-checkouts)" strokeWidth={2} dot={false} />
+                                <Line type="monotone" dataKey="checkins" name="Check-ins" stroke="var(--chart-checkins)" strokeWidth={2} dot={false} />
                             </LineChart>
                         </ResponsiveContainer>
                     ) : (
@@ -119,8 +126,8 @@ export function ReportCharts({ report, loading = false }: ReportChartsProps) {
                                 <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} />
                                 <Tooltip />
                                 <Legend />
-                                <Bar dataKey="unitsRequested" name="Units requested" fill="#2563eb" radius={[0, 4, 4, 0]} />
-                                <Bar dataKey="requestCount" name="Request lines" fill="#94a3b8" radius={[0, 4, 4, 0]} />
+                                <Bar dataKey="unitsRequested" name="Units requested" fill="var(--chart-requests)" radius={[0, 4, 4, 0]} />
+                                <Bar dataKey="requestCount" name="Request lines" fill="var(--chart-muted-series)" radius={[0, 4, 4, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     ) : (

@@ -8,8 +8,8 @@ const MOBILE_BREAKPOINT = 768;
  * Returns true for screens smaller than 768px (Tailwind's md breakpoint)
  */
 export const useIsMobile = (): boolean => {
-    // Default to true on the server or during initial client render to prevent layout shifts
-    const [isMobile, setIsMobile] = useState(true);
+    // Desktop first so the sidebar is the first paint. CSS hides it below the md breakpoint.
+    const [isMobile, setIsMobile] = useState(false);
 
     useEffect(() => {
         // Function to check if window width is less than our breakpoint

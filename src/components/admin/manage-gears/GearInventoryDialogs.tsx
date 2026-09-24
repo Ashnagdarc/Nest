@@ -104,8 +104,8 @@ export function GearInventoryDialogs({ state }: GearInventoryDialogsProps) {
             />
 
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent className="w-[95vw] max-w-full sm:max-w-[625px]">
-                    <DialogHeader>
+                <DialogContent className="flex max-h-[min(800px,calc(100dvh-2rem))] w-[95vw] max-w-full flex-col gap-4 overflow-hidden sm:max-w-[625px]">
+                    <DialogHeader className="shrink-0">
                         <DialogTitle>Edit Gear</DialogTitle>
                         <DialogDescription>Update the details for {editingGear?.name}.</DialogDescription>
                     </DialogHeader>

@@ -38,7 +38,7 @@ export default function NavbarDemo() {
                     <NavbarLogo />
                     <NavItems items={navItems} />
                     <div className="flex items-center gap-4">
-                        <NavbarButton variant="secondary">Login</NavbarButton>
+                        <NavbarButton variant="secondary">Sign in</NavbarButton>
                         <NavbarButton variant="primary">Book a call</NavbarButton>
                     </div>
                 </NavBody>
@@ -73,7 +73,7 @@ export default function NavbarDemo() {
                                 variant="primary"
                                 className="w-full"
                             >
-                                Login
+                                Sign in
                             </NavbarButton>
                             <NavbarButton
                                 onClick={() => setIsMobileMenuOpen(false)}

@@ -176,7 +176,7 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+    const { state, openMobile, setOpenMobile } = useSidebar()
 
     if (collapsible === "none") {
       return (
@@ -193,33 +193,29 @@ const Sidebar = React.forwardRef<
       )
     }
 
-    if (isMobile) {
-      return (
-        <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
-          <SheetContent
-            data-sidebar="sidebar"
-            data-mobile="true"
-            className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
-            style={
-              {
-                "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
-              } as React.CSSProperties
-            }
-            side={side}
-          >
-            <VisuallyHidden asChild>
-              <SheetPrimitive.Title>Main Navigation</SheetPrimitive.Title>
-            </VisuallyHidden>
-            <div className="flex h-full w-full flex-col">{children}</div>
-          </SheetContent>
-        </Sheet>
-      )
-    }
-
     return (
+      <>
+      <Sheet open={openMobile} onOpenChange={setOpenMobile}>
+        <SheetContent
+          data-sidebar="sidebar"
+          data-mobile="true"
+          className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden md:hidden"
+          style={
+            {
+              "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+            } as React.CSSProperties
+          }
+          side={side}
+        >
+          <VisuallyHidden asChild>
+            <SheetPrimitive.Title>Main Navigation</SheetPrimitive.Title>
+          </VisuallyHidden>
+          <div className="flex h-full w-full flex-col">{children}</div>
+        </SheetContent>
+      </Sheet>
       <div
         ref={ref}
-        className="group peer hidden md:block text-sidebar-foreground"
+        className="group peer hidden text-sidebar-foreground md:block"
         data-state={state}
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-variant={variant}
@@ -258,6 +254,7 @@ const Sidebar = React.forwardRef<
           </div>
         </div>
       </div>
+      </>
     )
   }
 )
@@ -557,6 +554,7 @@ const SidebarMenuButton = React.forwardRef<
     const childProps = {
       'data-sidebar': 'menu-button',
       'data-state': isActive ? 'active' : undefined,
+      'aria-current': isActive ? 'page' as const : undefined,
       className: buttonClasses,
     };
 
@@ -617,6 +615,7 @@ const SidebarMenuButton = React.forwardRef<
             type="button"
             data-sidebar="menu-button"
             data-state={isActive ? "active" : undefined}
+            aria-current={isActive ? "page" : undefined}
             className={buttonClasses}
             {...props}
           >
@@ -637,6 +636,7 @@ const SidebarMenuButton = React.forwardRef<
       type="button"
       data-sidebar="menu-button"
       data-state={isActive ? "active" : undefined}
+      aria-current={isActive ? "page" : undefined}
       className={buttonClasses}
       {...props}
     >

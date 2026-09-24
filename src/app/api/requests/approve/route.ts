@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
 import { sendGearRequestApprovalEmail, sendGearRequestEmail } from '@/lib/email';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
@@ -16,7 +16,9 @@ async function requireAdminContext() {
         };
     }
 
-    const adminSupabase = await createSupabaseServerClient(true);
+    // Cookie-backed clients send the admin's user JWT, so PostgREST runs as
+    // authenticated. approve_gear_request_atomic is granted to service_role only.
+    const adminSupabase = await createSupabaseAdminClient();
     const { data: profile, error: profileError } = await adminSupabase
         .from('profiles')
         .select('role, status')

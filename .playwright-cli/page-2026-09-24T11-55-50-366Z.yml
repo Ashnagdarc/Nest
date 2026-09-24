@@ -1,0 +1,50 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e3]:
+    - complementary [ref=f1e4]:
+      - generic [ref=f1e6]:
+        - generic [ref=f1e7]:
+          - img "Nest Logo" [ref=f1e8]
+          - generic [ref=f1e9]:
+            - paragraph [ref=f1e10]: Nest
+            - paragraph [ref=f1e11]: by Eden Oasis
+        - generic [ref=f1e12]:
+          - generic [ref=f1e13]:
+            - heading "Your production hub" [level=1] [ref=f1e14]
+            - paragraph [ref=f1e15]: Manage equipment, bookings, and team updates in one place.
+          - list [ref=f1e16]:
+            - listitem [ref=f1e17]: Request and track production gear
+            - listitem [ref=f1e23]: Book company cars for production trips
+            - listitem [ref=f1e29]: Secure access for Eden Oasis teams
+        - paragraph [ref=f1e34]: © 2026 Eden Oasis. Internal use only.
+    - main [ref=f1e35]:
+      - generic [ref=f1e36]:
+        - link "Back to Home" [ref=f1e37] [cursor=pointer]:
+          - /url: /
+        - button "Toggle theme" [ref=f1e40] [cursor=pointer]
+      - generic [ref=f1e44]:
+        - generic [ref=f1e46]:
+          - heading "Welcome back" [level=3] [ref=f1e47]
+          - paragraph [ref=f1e48]: Sign in to access your Nest dashboard
+        - generic [ref=f1e49]:
+          - generic [ref=f1e50]:
+            - generic [ref=f1e51]:
+              - text: Email
+              - textbox "Email" [ref=f1e52]:
+                - /placeholder: you@edenoasisrealty.com
+            - generic [ref=f1e53]:
+              - text: Password
+              - generic [ref=f1e54]:
+                - textbox "Password" [ref=f1e55]:
+                  - /placeholder: Enter your password
+                - button "Show password" [ref=f1e56] [cursor=pointer]
+            - link "Forgot password?" [ref=f1e61] [cursor=pointer]:
+              - /url: /forgot-password
+            - button "Sign in" [ref=f1e62] [cursor=pointer]
+          - generic [ref=f1e63]:
+            - text: Don't have an account?
+            - link "Create one" [ref=f1e64] [cursor=pointer]:
+              - /url: /signup
+  - region "Notifications (F8)":
+    - list
+  - button "Open Next.js Dev Tools" [ref=f1e70] [cursor=pointer]
+  - alert [ref=f1e74]

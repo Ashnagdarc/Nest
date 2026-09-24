@@ -35,7 +35,7 @@ export function NotificationBell() {
 
     if (!mounted) {
         return (
-            <Button variant="ghost" size="icon" className="relative">
+            <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
                 <Bell className="h-5 w-5 opacity-0" />
             </Button>
         );

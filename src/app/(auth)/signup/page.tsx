@@ -50,7 +50,6 @@ export default function SignupPage() {
     const router = useRouter();
     const { toast } = useToast();
     const [isLoading, setIsLoading] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const supabase = createClient();
 
     useEffect(() => {
@@ -196,6 +195,8 @@ export default function SignupPage() {
                                         <FormLabel>Phone (optional)</FormLabel>
                                         <FormControl>
                                             <Input
+                                                type="tel"
+                                                autoComplete="tel"
                                                 placeholder="(555) 555-5555"
                                                 value={field.value || ""}
                                                 onChange={(event) => field.onChange(formatPhone(event.target.value))}
@@ -239,28 +240,14 @@ export default function SignupPage() {
                             control={form.control}
                             name="confirmPassword"
                             render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Confirm password</FormLabel>
-                                    <FormControl>
-                                        <div className="relative">
-                                            <Input
-                                                type={showConfirmPassword ? "text" : "password"}
-                                                autoComplete="new-password"
-                                                placeholder="Re-enter your password"
-                                                className="pr-10"
-                                                {...field}
-                                            />
-                                            <button
-                                                type="button"
-                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
-                                                onClick={() => setShowConfirmPassword((current) => !current)}
-                                            >
-                                                {showConfirmPassword ? "Hide" : "Show"}
-                                            </button>
-                                        </div>
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
+                                <PasswordField
+                                    id="signup-confirm-password"
+                                    value={field.value || ""}
+                                    onChange={field.onChange}
+                                    label="Confirm password"
+                                    placeholder="Re-enter your password"
+                                    showChecklist={false}
+                                />
                             )}
                         />
 
@@ -303,8 +290,11 @@ export default function SignupPage() {
                                     </FormControl>
                                     <div className="space-y-1 leading-none">
                                         <FormLabel className="text-sm font-normal">
-                                            I accept the terms and conditions for internal Eden Oasis use
+                                            I accept the terms of use for internal Eden Oasis use
                                         </FormLabel>
+                                        <Link href="/terms" className="text-sm font-medium text-primary underline underline-offset-2">
+                                            Read the terms of use
+                                        </Link>
                                         <FormMessage />
                                     </div>
                                 </FormItem>

@@ -39,20 +39,24 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
   return (
     <>
       <DocsNavigation />
-      <div className="lg:pl-64">
-        <main className="min-h-screen bg-white dark:bg-black">
-          <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-            {/* Back Button */}
+      <div className="lg:pl-80">
+        <main className="min-h-screen bg-background pt-16 lg:pt-0">
+          <div className="max-w-7xl mx-auto min-w-0 py-8 px-4 sm:px-6 lg:px-8">
+            <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
             <Link 
               href="/docs" 
-              className="inline-flex items-center space-x-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mb-8 group transition-colors"
+              className="inline-flex items-center space-x-2 text-primary hover:underline group transition-colors"
             >
               <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
               <span className="font-medium">Back to Documentation Home</span>
             </Link>
+            <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              Internal use only
+            </span>
+            </div>
 
             {/* Content */}
-            <div className="bg-white dark:bg-black rounded-2xl border-2 border-gray-200 dark:border-gray-800 overflow-hidden">
+            <div className="min-w-0 rounded-2xl border-2 border-border bg-background">
               <MarkdownRenderer 
                 content={content} 
                 title={data.title || slug.replace(/-/g, ' ')} 

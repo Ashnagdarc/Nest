@@ -64,10 +64,11 @@ export function QuickActions() {
                 <CardTitle className="text-lg font-semibold">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 w-full">
+                <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-6">
                     {actions.map((action, index) => (
                         <motion.div
                             key={action.label}
+                            className="min-w-0"
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.05, duration: 0.3 }}
@@ -77,15 +78,15 @@ export function QuickActions() {
                             <Button
                                 asChild
                                 variant={action.variant}
-                                className="w-full min-h-[100px] flex flex-col items-center justify-center gap-3 rounded-xl text-center break-words transition-all duration-200"
+                                className="flex h-auto min-h-[100px] w-full min-w-0 flex-col items-center justify-center gap-2 !whitespace-normal rounded-xl px-2 py-3 text-center transition-all duration-200"
                                 aria-label={action.label}
                             >
                                 <Link href={action.href} prefetch={false} tabIndex={0}>
-                                    <div className="flex flex-col items-center gap-2">
+                                    <div className="flex w-full min-w-0 flex-col items-center gap-2">
                                         {action.icon}
-                                        <div className="flex flex-col w-full text-center space-y-1">
-                                            <span className="text-sm font-medium break-words">{action.label}</span>
-                                            <span className="text-xs font-normal text-muted-foreground break-words leading-relaxed">{action.description}</span>
+                                        <div className="flex w-full min-w-0 flex-col space-y-1 text-center">
+                                            <span className="text-sm font-medium leading-snug break-words">{action.label}</span>
+                                            <span className="text-xs font-normal leading-snug break-words text-muted-foreground">{action.description}</span>
                                         </div>
                                     </div>
                                 </Link>

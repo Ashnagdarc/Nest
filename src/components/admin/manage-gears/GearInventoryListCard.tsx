@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Box, Edit, MoreHorizontal, Search, Trash2, Wrench, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -473,48 +474,49 @@ function GearRowActions({
 
     return (
         <div className="inline-flex justify-end gap-0.5">
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-full"
-                        onClick={onEdit}
-                    >
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit</span>
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent>Edit</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-full"
-                        onClick={onMaintenance}
-                    >
-                        <Wrench className="h-4 w-4 text-amber-600" />
-                        <span className="sr-only">Maintenance</span>
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent>Maintenance</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-full text-destructive hover:text-destructive"
-                        onClick={onDelete}
-                    >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Delete</span>
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent>Delete</TooltipContent>
-            </Tooltip>
+            <RowTooltipButton label="Edit" onClick={onEdit}>
+                <Edit className="h-4 w-4" />
+            </RowTooltipButton>
+            <RowTooltipButton label="Maintenance" onClick={onMaintenance}>
+                <Wrench className="h-4 w-4 text-amber-600" />
+            </RowTooltipButton>
+            <RowTooltipButton label="Delete" onClick={onDelete} className="text-destructive hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+            </RowTooltipButton>
         </div>
+    );
+}
+
+function RowTooltipButton({
+    label,
+    onClick,
+    className,
+    children,
+}: {
+    label: string;
+    onClick: () => void;
+    className?: string;
+    children: ReactNode;
+}) {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <Tooltip open={open} onOpenChange={setOpen}>
+            <TooltipTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-8 w-8 rounded-full ${className ?? ""}`}
+                    onClick={() => {
+                        setOpen(false);
+                        onClick();
+                    }}
+                >
+                    {children}
+                    <span className="sr-only">{label}</span>
+                </Button>
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
     );
 }

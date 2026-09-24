@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Switch } from "@/components/ui/switch";
 import { Bell, Mail, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ const CHANNELS = [
 
 export default function NotificationSettings() {
     const [preferences, setPreferences] = useState<Json>({});
+    const savedPreferences = useRef<Json>({});
     const [loading, setLoading] = useState(true);
     const supabase = createClient();
 
@@ -33,7 +34,9 @@ export default function NotificationSettings() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const { data: profile } = await supabase.from('profiles').select('notification_preferences').eq('id', user.id).single();
-                setPreferences(profile?.notification_preferences || {});
+                const next = profile?.notification_preferences || {};
+                savedPreferences.current = next;
+                setPreferences(next);
             }
             setLoading(false);
         }
@@ -54,8 +57,18 @@ export default function NotificationSettings() {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-            await supabase.from('profiles').update({ notification_preferences: preferences }).eq('id', user.id);
-            toast({ title: 'Preferences Saved', description: 'Your notification preferences have been updated.' });
+            const { error } = await supabase.from('profiles').update({ notification_preferences: preferences }).eq('id', user.id);
+            if (error) {
+                setPreferences(savedPreferences.current);
+                toast({
+                    title: 'Could not save preferences',
+                    description: 'The switches were restored to their previous values.',
+                    variant: 'destructive',
+                });
+            } else {
+                savedPreferences.current = preferences;
+                toast({ title: 'Preferences Saved', description: 'Your notification preferences have been updated.' });
+            }
         }
         setLoading(false);
     };
@@ -87,6 +100,7 @@ export default function NotificationSettings() {
                                             checked={!!(preferences as any)?.[channel.key]?.[event.key]}
                                             onCheckedChange={val => handleToggle(channel.key, event.key, val)}
                                             disabled={loading}
+                                            aria-label={`${event.label} ${channel.label} notifications, ${(preferences as any)?.[channel.key]?.[event.key] ? "on" : "off"}`}
                                         />
                                     </td>
                                 ))}

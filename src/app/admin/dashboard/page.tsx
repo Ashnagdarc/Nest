@@ -24,6 +24,7 @@ import {
 import { buildAdminAttentionItems } from "@/components/admin/dashboard/admin-attention";
 import { useUnifiedDashboard } from "@/hooks/dashboard/use-unified-dashboard";
 import { apiGet } from "@/lib/apiClient";
+import { USER_ONLY_ROUTE_HINTS } from "@/lib/auth/role-routing";
 
 interface AdminProfile {
     full_name: string | null;
@@ -53,9 +54,12 @@ export default function AdminDashboardPage() {
     const { data, loading, error, refetch } = useUnifiedDashboard();
     const [mounted, setMounted] = useState(false);
     const [profile, setProfile] = useState<AdminProfile | null>(null);
+    const [redirectedFrom, setRedirectedFrom] = useState<string | null>(null);
 
     useEffect(() => {
         setMounted(true);
+        const from = new URLSearchParams(window.location.search).get("redirectedFrom");
+        if (from?.startsWith("/user/")) setRedirectedFrom(from);
         void apiGet<{ data: AdminProfile | null }>("/api/users/profile").then((response) => {
             if (response.data) setProfile(response.data);
         });
@@ -134,6 +138,25 @@ export default function AdminDashboardPage() {
                         </Button>
                     </div>
                 </motion.header>
+
+                {redirectedFrom ? (
+                    <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground" role="status">
+                        <p className="font-medium">You were sent to the admin dashboard.</p>
+                        <p className="mt-1 text-muted-foreground">
+                            {USER_ONLY_ROUTE_HINTS[redirectedFrom] ? (
+                                <>
+                                    That page is for staff accounts. Use{" "}
+                                    <Link href={USER_ONLY_ROUTE_HINTS[redirectedFrom].href} className="font-medium text-primary underline underline-offset-2">
+                                        {USER_ONLY_ROUTE_HINTS[redirectedFrom].label}
+                                    </Link>{" "}
+                                    instead.
+                                </>
+                            ) : (
+                                "That page is for staff accounts, so Nest opened the admin dashboard."
+                            )}
+                        </p>
+                    </div>
+                ) : null}
 
                 {error ? (
                     <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

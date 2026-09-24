@@ -57,6 +57,7 @@ export function AdminSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
+                <nav aria-label="Admin">
                 {adminNavGroups.map((group) => (
                     <SidebarGroup key={group.label}>
                         <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
@@ -85,6 +86,7 @@ export function AdminSidebar() {
                         </SidebarGroupContent>
                     </SidebarGroup>
                 ))}
+                </nav>
             </SidebarContent>
 
             <SidebarSeparator />
