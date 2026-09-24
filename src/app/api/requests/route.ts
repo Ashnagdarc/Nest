@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
             const requesterId = authContext.user.id;
 
             // Create Supabase client with admin privileges
-            const supabase = await createSupabaseServerClient(true);
+            const supabase = await createSupabaseAdminClient();
 
             // Parse the request body
             const body = await request.json();

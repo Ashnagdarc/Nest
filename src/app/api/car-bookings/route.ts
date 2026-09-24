@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingRequestEmail } from '@/lib/email';
 import { createBookingAggregate } from '@/lib/bookings-v2/service';
@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
             console.error('[Car Booking] Failed to create v2 booking aggregate. Rolling back legacy booking.', syncError);
             if (data?.id) {
                 // Requesters can insert their own booking, but RLS does not let them delete it.
-                const adminSupabase = await createSupabaseServerClient(true);
+                const adminSupabase = await createSupabaseAdminClient();
                 const { error: assignmentDeleteError } = await adminSupabase
                     .from('car_assignment')
                     .delete()
@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
         // Send notification email to all admins
         try {
             // Create admin client to bypass RLS for querying profiles
-            const adminSupabase = await createSupabaseServerClient(true);
+            const adminSupabase = await createSupabaseAdminClient();
             const { data: admins } = await adminSupabase
                 .from('profiles')
                 .select('id, email, full_name')

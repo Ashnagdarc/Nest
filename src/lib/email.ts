@@ -1,6 +1,6 @@
 import { Resend } from 'resend';
 import { createHash } from 'crypto';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { getSiteUrl, sitePath } from '@/lib/site-url';
 
 
@@ -1571,7 +1571,7 @@ export async function sendBookingLifecycleEmail({
   let normalizedItems = items;
   if (normalizedItems.length === 0 && booking.source_type === 'car_booking' && booking.source_id) {
     try {
-      const supabase = await createSupabaseServerClient(true);
+      const supabase = await createSupabaseAdminClient();
 
       const { data: assignment } = await supabase
         .from('car_assignment')
@@ -1649,7 +1649,7 @@ export async function sendBookingLifecycleEmail({
     ctaHref: sitePath('/user/my-requests'),
   });
 
-  const supabase = await createSupabaseServerClient(true);
+  const supabase = await createSupabaseAdminClient();
   const nowIso = new Date().toISOString();
   const { data: existingLog } = await supabase
     .from('email_logs')

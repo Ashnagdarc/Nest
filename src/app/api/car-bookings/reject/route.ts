@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingRejectionEmail } from '@/lib/email';
 import { syncBookingTransitionSoft } from '@/lib/bookings-v2/service';
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
             return fail(403, 'Admin access required', 'Only active admins can reject car bookings.', 'CAR_BOOKING_ADMIN_REQUIRED');
         }
 
-        const admin = await createSupabaseServerClient(true);
+        const admin = await createSupabaseAdminClient();
         const { bookingId, reason } = await request.json();
         if (!bookingId) return fail(400, 'bookingId is required', 'Missing booking reference.', 'BOOKING_ID_REQUIRED');
 

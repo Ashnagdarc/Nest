@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
 import { createBookingAggregate, transitionBooking } from '@/lib/bookings-v2/service';
 
 export async function POST(request: NextRequest) {
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const admin = await createSupabaseServerClient(true);
+    const admin = await createSupabaseAdminClient();
 
     const { data: reqRow, error: reqErr } = await admin
       .from('gear_requests')

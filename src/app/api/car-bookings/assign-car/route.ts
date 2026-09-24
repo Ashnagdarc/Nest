@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
 import { getBookedCarId, releaseCarIfNoOtherApproved, setCarStatus } from '@/lib/car-bookings/car-status-sync';
 import { findApprovedSlotConflict } from '@/lib/car-bookings/overlap';
 
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 });
         }
 
-        const admin = await createSupabaseServerClient(true);
+        const admin = await createSupabaseAdminClient();
         // Cast at boundary: SupabaseClient vs structural SupabaseAdminLike in car-status-sync
         const statusAdmin = admin as unknown as Parameters<typeof getBookedCarId>[0];
         const { bookingId, carId } = await request.json();

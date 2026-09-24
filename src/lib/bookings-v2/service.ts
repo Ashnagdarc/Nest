@@ -7,7 +7,7 @@
  * Dual-write helpers: createBookingAggregate, transitionBooking,
  * syncBookingTransitionSoft. See INDEX.md for call sites and failure policy.
  */
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { enqueuePushNotification } from '@/lib/push-queue';
 import { sendBookingLifecycleEmail } from '@/lib/email';
 import { resolveLegacyStatusForSource } from './legacy-status';
@@ -37,7 +37,7 @@ type BookingAggregateRpcResult = {
   idempotent?: boolean;
 };
 
-type RpcCapableSupabase = Awaited<ReturnType<typeof createSupabaseServerClient>> & {
+type RpcCapableSupabase = Awaited<ReturnType<typeof createSupabaseAdminClient>> & {
   rpc: (
     fn: string,
     args: Record<string, unknown>
@@ -56,7 +56,7 @@ const TRANSITIONS: Record<BookingLifecycleStatus, BookingLifecycleStatus[]> = {
 };
 
 export async function createBookingAggregate(input: BookingCreateInput) {
-  const supabase = await createSupabaseServerClient(true);
+  const supabase = await createSupabaseAdminClient();
   const rpcSupabase = supabase as RpcCapableSupabase;
   const itemsPayload = input.items.map((item, index) => ({
     itemType: item.itemType,
@@ -95,7 +95,7 @@ export async function createBookingAggregate(input: BookingCreateInput) {
 }
 
 export async function transitionBooking(input: BookingTransitionInput) {
-  const supabase = await createSupabaseServerClient(true);
+  const supabase = await createSupabaseAdminClient();
 
   const { data: booking, error: bookingErr } = await supabase
     .from('bookings')

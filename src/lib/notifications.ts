@@ -1,3 +1,4 @@
+import { normalizeNotificationType } from '@/lib/notification-type';
 import { createClient } from './supabase/client';
 
 export async function createGearNotification(
@@ -159,7 +160,7 @@ export async function createSystemNotification(
             user_id: userId,
             title,
             message,
-            type: type || 'System', // Use valid type from constraint
+            type: normalizeNotificationType(type),
             is_read: false,
             created_at: new Date().toISOString()
         }));

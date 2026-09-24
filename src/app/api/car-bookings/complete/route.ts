@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hasValidCronSecret } from '@/lib/api-auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarReturnConfirmationEmail } from '@/lib/email';
 import { syncBookingTransitionSoft } from '@/lib/bookings-v2/service';
 import { getBookedCarId, releaseCarIfNoOtherApproved } from '@/lib/car-bookings/car-status-sync';
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
             currentUserId = userData.user.id;
         }
 
-        const admin = await createSupabaseServerClient(true);
+        const admin = await createSupabaseAdminClient();
         const { bookingId } = await request.json();
         if (!bookingId) return fail(400, 'bookingId is required', 'Missing booking reference.', 'BOOKING_ID_REQUIRED');
 

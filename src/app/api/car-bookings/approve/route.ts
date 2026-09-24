@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyGoogleChat, NotificationEventType } from '@/utils/googleChat';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingApprovalEmail } from '@/lib/email';
 import { syncBookingTransitionSoft } from '@/lib/bookings-v2/service';
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
             return fail(403, 'Admin access required', 'Only active admins can approve car bookings.', 'CAR_BOOKING_ADMIN_REQUIRED');
         }
 
-        const admin = await createSupabaseServerClient(true);
+        const admin = await createSupabaseAdminClient();
         // Cast at boundary: SupabaseClient vs structural SupabaseAdminLike in car-status-sync
         const statusAdmin = admin as unknown as Parameters<typeof getBookedCarId>[0];
         const { bookingId } = await request.json();

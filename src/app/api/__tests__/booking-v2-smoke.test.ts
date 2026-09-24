@@ -10,6 +10,7 @@ const mockAutoReturnDueCarBookings = jest.fn();
 
 jest.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: (...args: unknown[]) => mockCreateSupabaseServerClient(...args),
+  createSupabaseAdminClient: () => mockCreateSupabaseServerClient(true),
 }));
 
 jest.mock('@/lib/bookings-v2/service', () => ({

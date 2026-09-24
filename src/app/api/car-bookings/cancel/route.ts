@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server';
 import { minimalEmailLayout, sendGearRequestEmail, sendCarBookingCancellationEmail } from '@/lib/email';
 import { syncBookingTransitionSoft } from '@/lib/bookings-v2/service';
 import { getBookedCarId, releaseCarIfNoOtherApproved } from '@/lib/car-bookings/car-status-sync';
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         NextResponse.json({ success: false, booking: null, items: [], warnings: [], user_message: userMessage, error_code: errorCode, correlation_id: correlationId, error }, { status });
     try {
         const userClient = await createSupabaseServerClient();
-        const admin = await createSupabaseServerClient(true);
+        const admin = await createSupabaseAdminClient();
         const { data: authData, error: authError } = await userClient.auth.getUser();
         const userId = authData.user?.id || null;
         if (authError || !userId) {
